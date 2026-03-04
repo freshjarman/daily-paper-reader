@@ -202,10 +202,11 @@ jobs:
           uv pip install --system -r /tmp/req.txt
 
       - name: Download raw file artifact
+        id: download_raw_artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.fetch_precheck.outputs.artifact_name }}
-          path: ${{ github.workspace }}
+          path: ${{ github.workspace }}/.dpr_artifacts
 
       - name: Run sync_supabase_public
         env:
@@ -215,9 +216,23 @@ jobs:
           set -x
           echo "::group::1.2.sync_supabase_public (sync + embedding + upsert)"
           RAW_PATH="${GITHUB_WORKSPACE}/archive/${{ needs.fetch_precheck.outputs.run_date }}/raw/${{ needs.fetch_precheck.outputs.raw_filename }}"
+          FALLBACK_PATH="${GITHUB_WORKSPACE}/.dpr_artifacts/archive/${{ needs.fetch_precheck.outputs.run_date }}/raw/${{ needs.fetch_precheck.outputs.raw_filename }}"
+          if [ ! -f "$RAW_PATH" ] && [ -f "$FALLBACK_PATH" ]; then
+            RAW_PATH="$FALLBACK_PATH"
+          elif [ ! -f "$RAW_PATH" ]; then
+            FOUND="$(find "${GITHUB_WORKSPACE}/.dpr_artifacts" -type f -name "${{ needs.fetch_precheck.outputs.raw_filename }}" | head -n 1 || true)"
+            if [ -n "$FOUND" ]; then
+              RAW_PATH="$FOUND"
+            fi
+          fi
           echo "[INFO] 准备下载 raw artifact：name=${{ needs.fetch_precheck.outputs.artifact_name }}"
           ls -R "${GITHUB_WORKSPACE}/archive/${{ needs.fetch_precheck.outputs.run_date }}/raw" || true
+          ls -R "${GITHUB_WORKSPACE}/.dpr_artifacts" || true
           echo "[INFO] fetch 预检通过，准备执行同步：count=${FETCH_COUNT}，raw_path=${RAW_PATH}"
+          if [ ! -f "$RAW_PATH" ]; then
+            echo "[ERROR] 未找到可用原始文件：${RAW_PATH}"
+            exit 1
+          fi
           /opt/hostedtoolcache/Python/3.11.14/x64/bin/python src/1.2.sync_supabase_public.py --raw-input "$RAW_PATH"
           echo "::endgroup::"
 
