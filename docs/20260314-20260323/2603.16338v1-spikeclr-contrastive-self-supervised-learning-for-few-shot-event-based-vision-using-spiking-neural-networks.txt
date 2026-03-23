@@ -1,0 +1,306 @@
+Title: SpikeCLR: Contrastive Self-Supervised Learning for Few-Shot Event-Based Vision using Spiking Neural Networks
+
+URL Source: https://arxiv.org/pdf/2603.16338v1
+
+Published Time: Wed, 18 Mar 2026 00:57:29 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# SpikeCLR: Contrastive Self-Supervised Learning for Few-Shot Event-Based Vision using Spiking Neural Networks 
+
+Maxime Vaillant 1,2,4 , Axel Carlier 1,3 , Lai Xing Ng 1,4 , Christophe Hurter 1,3 , and Benoit R. Cottereau 1,5 
+
+> 1
+
+CNRS, IPAL IRL 2955, Singapore  
+
+> 2
+
+Université de Toulouse, IRIT, France  
+
+> 3
+
+Fédération ENAC ISAE-SUPAERO ONERA, Université de Toulouse, France  
+
+> 4
+
+Institute for Infocomm Research, A*STAR, Singapore  
+
+> 5
+
+CerCo, CNRS UMR 5549, Université de Toulouse, France 
+
+maxime.vaillant@utoulouse.fr, axel.carlier@isae-supaero.fr, ng_lai_xing@a-star.edu.sg, christophe.hurter@enac.fr, benoit.cottereau@cnrs.fr 
+
+Abstract. Event-based vision sensors provide significant advantages for high-speed perception, including microsecond temporal resolution, high dynamic range, and low power consumption. When combined with Spik-ing Neural Networks (SNNs), they can be deployed on neuromorphic hardware, enabling energy-efficient applications on embedded systems. However, this potential is severely limited by the scarcity of large-scale labeled datasets required to effectively train such models. In this work, we introduce SpikeCLR , a contrastive self-supervised learning framework that enables SNNs to learn robust visual representations from unlabeled event data. We adapt prior frame-based methods to the spiking domain using surrogate gradient training and introduce a suite of event-specific augmentations that leverage spatial, temporal, and polarity transforma-tions. Through extensive experiments on CIFAR10-DVS, N-Caltech101, N-MNIST, and DVS-Gesture benchmarks, we demonstrate that self-supervised pretraining with subsequent fine-tuning outperforms super-vised learning in low-data regimes, achieving consistent gains in few-shot and semi-supervised settings. Our ablation studies reveal that combin-ing spatial and temporal augmentations is critical for learning effective spatio-temporal invariances in event data. We further show that learned representations transfer across datasets, contributing to efforts for pow-erful event-based models in label-scarce settings. 
+
+Keywords: Self-supervised learning · Event-based vision · Spiking Neu-ral Networks · Contrastive learning 
+
+# 1 Introduction 
+
+Event-based vision sensors, or Dynamic Vision Sensors (DVS), depart from frame-based imaging by measuring per-pixel changes in log-intensity asynchronously,  
+
+> arXiv:2603.16338v1 [cs.CV] 17 Mar 2026 2M. Vaillant et al.
+
+producing sparse streams of events rather than full frames at fixed intervals. This yields microsecond-level temporal resolution, high dynamic range ( >120 dB), and low power consumption, making event cameras well-suited for fast motion, challenging lighting, and resource-constrained platforms. The asynchronous, spike-based nature of event data aligns with Spiking Neu-ral Networks (SNNs) [42], which process information as discrete spike sequences. Because SNNs explicitly model time through spiking dynamics, they are a natu-ral fit for event streams: each neuron integrates incoming currents into its mem-brane potential and emits a spike when a threshold is exceeded, enabling sparse and energy-efficient processing. Despite these advantages, deploying SNNs for event-based vision faces a criti-cal bottleneck: the scarcity of large-scale labeled datasets. Annotating event data is costly, current benchmarks are far smaller than frame-based counterparts, and most are constructed by re-recording static images with moving cameras rather than capturing naturally dynamic scenes. Models therefore often learn from syn-thetic motion patterns that only partially reflect deployment conditions, making label-efficient training especially important. Self-supervised learning (SSL) has emerged as a powerful paradigm to learn visual representations without labels by exploiting the structure inherent in un-labeled data. Contrastive methods such as SimCLR [5] have achieved strong results in conventional vision by learning invariances through data augmenta-tion. However, their application to event-based data and SNNs remains largely unexplored. Key challenges include: (i) designing meaningful augmentations for sparse, polarity-based event representations, and (ii) training SNNs with con-trastive objectives in the presence of discrete, non-differentiable spike operations. Beyond standard linear evaluation, label scarcity is also evident in few-shot scenarios: for many event datasets, only a handful of labeled recordings per class are available when adapting to a new sensor, domain, or acquisition protocol. Few-shot evaluation therefore provides a practical stress test for representation quality: a good encoder should separate classes with a small classifier trained on k ∈ { 1, 10 , 20 , 50 } examples per class, rather than relying on large supervised fine-tuning sets. To address this label scarcity, we introduce SpikeCLR , a con-trastive self-supervised learning framework for event-based vision with Spiking Neural Networks, and evaluate how pretrained features become informative in few-shot and semi-supervised settings. Our main contributions are: 
+
+– We introduce SpikeCLR, a novel contrastive SSL framework for SNNs, which enables effective learning with spike-based representations using surrogate gradient training. 
+
+– SpikeCLR is the first contrastive SSL framework for SNNs to be systemati-cally evaluated under few-shot label scarcity. 
+
+– We design a family of event-specific augmentations (spatial, temporal, and polarity transformations) that preserve semantic content while encouraging robust feature learning. Overall, SpikeCLR improves data efficiency in both few-shot and semi-supervised regimes, while keeping the pipeline compatible with standard SNN training SpikeCLR 3
+
+via surrogate gradients. Code is available at https://github.com/maxime-vaillant/SpikeCLR .
+
+# 2 Related Work 
+
+2.1 Contrastive Learning for Frame-Based Vision 
+
+SSL has become a dominant paradigm for learning transferable visual features without labels. Contrastive approaches [4,6,21,39] such as SimCLR [5] or MoCo [20] learn representations by maximizing agreement between different augmented views of the same sample, while simultaneously contrasting them against rep-resentations of other samples in the batch, which act as negative examples to prevent representational collapse. Non-contrastive methods such as BYOL [17] or SimSiam [7] remove explicit negatives and prevent collapse through architectural asymmetry and optimization constraints. These methods have demonstrated impressive results on ImageNet and other large-scale RGB datasets, achieving strong performance with supervised pretraining when sufficient unlabeled data is available. However, their direct application to event-based data and spiking architectures remains largely unexplored. 
+
+2.2 Augmentation Strategies for Event Data 
+
+Data augmentation is a critical component of contrastive learning [5,41], as it de-termines the invariance encoded in the learned representations. While augmenta-tion strategies for frame-based vision are well established, their direct application to sparse, asynchronous event streams is challenging. Early work [11] primarily focused on supervised learning, with EventDrop [19] introducing temporal aug-mentations such as random event dropping or spatio-temporal removal. Other methods like EventMix [34] and EventAugment [18] explored mixing strategies and learned policies. However, augmentations designed for supervised robustness are not necessarily optimal for contrastive learning [5], which aims for broader invariance rather than specific robustness. In this work, we systematically eval-uate event-specific spatial, temporal, and polarity augmentations to identify the most effective combination for self-supervised learning, demonstrating that a carefully designed strategy is key to learning good representations. 
+
+2.3 Self-Supervised Learning for SNNs and Event Data 
+
+Self-supervised learning for spiking neural networks and event data is still in its early stages. A first line of work tackles the problem through multi-modal fusion, aligning event streams with conventional RGB frames. For instance, [35] trains an SNN encoder that jointly embeds paired frame-event inputs, while [40] fol-lows a similar cross-modal alignment strategy using a standard ANN backbone. Although both demonstrate improved representations, they fundamentally de-pend on the availability of synchronized frame-event datasets, which limits their applicability when only event data is available. 4 M. Vaillant et al. 
+
+Closer to our setting, several recent methods investigate SSL using event data alone. Neuromorphic Data Augmentation (NDA) [26] and NeuroMOCO [30] adapt established SSL frameworks to SNNs (SimSiam and MoCo, respectively) and report promising results in high-data regimes; however, neither releases suffi-cient code and implementation details to enable full reproducibility. Similarly, [2] explores a non-contrastive objective based on VICReg [3], eliminating the need for negative pairs via variance, invariance, and covariance regularization. De-spite differences in objective functions, these works share a common limitation: they do not investigate the few-shot (low-label) regime. In contrast, SpikeCLR provides a systematic study of SSL pretraining for SNNs under label scarcity, explicitly quantifying improvements in data efficiency and generalization. 
+
+# 3 Methods 
+
+3.1 Event-Based Vision and Representations 
+
+Event-based cameras [15] output a stream of events of the form e = ⟨t, x, y, p ⟩,where t denotes the timestamp, (x, y ) the pixel location, and p ∈ {− 1, +1 }
+
+the polarity of the brightness change [27]. Their asynchronous nature enables microsecond-level temporal resolution and high dynamic range, which has mo-tivated applications in recognition, tracking, and high-speed perception. For learning-based pipelines, event streams are often converted into grid-based rep-resentations (e.g., accumulated event frames [31], voxel grids [28, 43] or time surfaces [8, 22, 36]) to leverage convolutional architectures while retaining key spatio-temporal information. In this work, we use a sequence of normalized event histograms as input. Specifically, we partition the event stream into T consec-utive time bins and aggregate events within each bin into a two-channel frame corresponding to positive and negative polarities. This yields a spatio-temporal tensor x ∈ RT ×2×H×W , which preserves the temporal structure of the data and allows the SNN to integrate information over time. 
+
+3.2 Spiking Neural Networks 
+
+Spiking Neural Networks (SNNs) [14,16,23,38] process information using discrete events (spikes) rather than continuous values, closely mimicking biological neural processing. This event-driven nature makes them naturally suited for processing asynchronous data streams from event cameras. In this work, we employ the Leaky Integrate-and-Fire (LIF) [29, 37] neuron model. The dynamics of a LIF neuron i at layer l are governed by its membrane potential u(l) 
+
+> i
+
+(t). In the discrete time domain, the update rule is given by: 
+
+u(l) 
+
+> i
+
+[t] = βu (l) 
+
+> i
+
+[t − 1] + X
+
+> j
+
+wij s(l−1)  
+
+> j
+
+[t] − (u(l) 
+
+> i
+
+[t − 1] − Vreset )s(l) 
+
+> i
+
+[t − 1] , (1) where β ∈ (0 , 1) is the decay factor representing the membrane leak, wij are the synaptic weights connecting neuron j in the previous layer to neuron i,SpikeCLR 5
+
+s(l−1)  
+
+> j
+
+[t] ∈ { 0, 1} represents the input spike, and Vreset is the reset potential. A neuron emits a spike s(l) 
+
+> i
+
+[t] when its membrane potential exceeds a firing threshold Vth :
+
+s(l) 
+
+> i
+
+[t] = Θ(u(l) 
+
+> i
+
+[t] − Vth ), (2) where Θ(·) is the Heaviside step function. After firing, the membrane potential is reset to Vreset (hard reset). In our implementation, we set Vreset = 0 , causing the membrane potential to return to zero after each spike. 
+
+Training. The non-differentiable nature of the spike generation function pre-vents standard backpropagation. To address this issue, we use the surrogate gradient method [32] during the backward pass. We approximate the gradient of the Heaviside function with a smooth function (e.g., arctan derivative), al-lowing gradients to flow through the spiking layers to update synaptic weights. In practice, we unroll the SNN dynamics over time and optimize the resulting computation graph with Backpropagation Through Time (BPTT). 
+
+Backbone. We adopt SEW-ResNet-18 [13] as our main SNN backbone. This model adapts ResNet-18 to the spiking domain via Spiking Element-Wise (SEW) operations and residual blocks built from spiking neurons. ResNet-18 is a widely used architecture in conventional (frame-based) vision, making it a natural ref-erence point for our spiking encoder. In addition, we evaluate a separable-convolution [9] lightweight variant and a Spiking VGG9 backbone to check that our conclusions are not architecture-specific. 
+
+3.3 Datasets 
+
+We consider two kinds of neuromorphic datasets: (i) static-image-derived datasets obtained by re-recording conventional image datasets with a moving event cam-era (re-display setup), and (ii) dynamic event-stream datasets that capture nat-urally time-varying motions and actions. Our main experiments are conducted on CIFAR10-DVS and also on DVS-Gesture, covering both regimes. We addi-tionally report results on N-Caltech101 and N-MNIST for broader comparison. 
+
+Static-Image-Derived Datasets. CIFAR10-DVS [25], N-Caltech101 [33], and N-MNIST [33] follow a re-display protocol, where events are induced by controlled camera motion over static images. For CIFAR10-DVS in particular, samples are commonly recorded with a DVS128/DAVIS sensor at  128 × 128  resolution while the camera performs predefined motion patterns in front of a monitor, yielding short event sequences per image and class. It contains approximately 10,000 event sequences across 10 object classes. As no official split is provided, we apply a 90/10 train/validation split for our experiments. 
+
+Dynamic Event-Stream Dataset. DVS-Gesture [1] is recorded with a DVS sensor (also  128 ×128 ) while subjects perform hand/arm gestures in front of the camera. Compared to re-display datasets, the events here are generated by real motion and temporal structure (gesture execution), which makes it a good testbed for spatio-temporal representations. It contains 11 gesture classes performed by 29 subjects, for a total of 1,342 recordings. We follow the official split provided with the dataset (1,176 training sequences / 166 test sequences). 6 M. Vaillant et al. 
+
+3.4 Contrastive Learning 
+
+Our approach builds on SimCLR [5], a contrastive self-supervised learning frame-work that learns visual representations by bringing together different augmented views of the same sample while pushing apart views coming from different sam-ples. In our setting, each event recording is first converted into a grid-based representation (event histogram), on which we apply stochastic augmentations to generate two correlated views. 
+
+Architecture. Given an input representation x, we sample two augmentations to obtain x1 and x2. Both views are processed by an encoder f (·) (SEW-ResNet-18 in our experiments), producing features h1 = f (x1) and h2 = f (x2). We append a small spiking projection head g(·) to map features to a contrastive space: z1 = g(h1) and z2 = g(h2). Similarity is computed in this space using cosine similarity after ℓ2 normalization. 
+
+Contrastive Objective (NT-Xent). Training is performed on mini-batches of size 
+
+N . Each sample yields two views, resulting in 2N embeddings. For an anchor embedding zi, its positive zj corresponds to the other view of the same original sample, while the remaining 2N − 2 embeddings act as negatives. The NT-Xent loss is defined as: 
+
+ℓi,j = − log exp (sim( zi, zj )/τ )
+
+P2Nk=1 1[k̸ =i] exp (sim( zi, zk)/τ ) , (3) where sim( ·, ·) denotes cosine similarity and τ is a temperature hyperparameter. The final objective averages this loss over all positive pairs in the batch. 
+
+Temporal Aspect. Unlike standard SimCLR with ANN backbones, our spiking encoder is run for T discrete timesteps and produces a sequence of represen-tations. Concretely, for each view xv (v ∈ { 1, 2}) we obtain time-indexed em-beddings {zv [t]}Tt=1 (a temporal batch of size T ). To use the usual batch-wise NT-Xent objective, we collapse this temporal dimension into a single vector per view by time-averaging: ¯zv = 1
+
+> T
+
+PTt=1 zv [t]. The contrastive loss in Eq. (3) is computed on ¯z1 and ¯z2 (and their negatives) exactly as in SimCLR. We also ex-plored alternative ways of applying the contrastive loss across timesteps, inspired by TET [10], e.g . computing the loss at each timestep independently before av-eraging; results and further discussion are provided in the ablation study. 
+
+3.5 Augmentations 
+
+Augmentation design is central to self-supervised learning: the two views must be sufficiently different to avoid trivial matching, while preserving the semantic content required by the downstream task. For event-based data, this choice is less straightforward than for RGB images, since events encode sparse spatio-temporal changes and polarity rather than color channels. In this work, we apply augmentations to a grid-based representation of the event stream (event histograms). This choice aligns with SimCLR, where trans-formations are typically defined on images, and allows us to use standard con-volutional backbones without altering the event-to-grid encoding. We group SpikeCLR 7        
+
+> (a) Original (b) Spatial (c) Polarity (d) Temporal
+> Fig. 1: Effect of each augmentation family on an event histogram from CIFAR10-DVS. (a) Original sample. (b) Spatial: rolling shifts the content spatially. (c) Polarity: brightness scaling modifies event intensities. (d) Temporal: cropping a different time window changes the motion phase. More examples in Supplementary Material.
+
+event augmentations into three families: (i) spatial transformations, (ii) polar-ity/intensity transformations, and (iii) temporal transformations. 
+
+Spatial augmentations. We directly reuse classical geometric transforms that pre-serve object identity while changing viewpoint and spatial support. Concretely, we apply random resized cropping, horizontal flipping, and rolling to the event histogram. These operations encourage invariance to translation, scale, and left– right symmetry, and they are well defined for event images. As illustrated in Figure 1(b), rolling translates the object cyclically within the frame, altering the geometric layout while keeping the event content intact. 
+
+Polarity and intensity augmentations (colorimetric analogues). Photometric aug-mentations used in SimCLR ( e.g . brightness/contrast/saturation/hue jitter) are not directly meaningful for events. Instead, we interpret their role as induc-ing controlled changes in the distribution of pixel intensities while preserving structure. For event histograms, we implement this effect by applying a global scaling (brightness-like) and/or a mean shift per channel (contrast-like) to the accumulated event values, with optional clipping to keep the representation bounded. When histograms are polarity-separated (positive/negative channels), these transforms can be applied per-channel to encourage robustness to sensor gain/threshold changes while maintaining polarity semantics. Figure 1(c) shows how brightness scaling visibly changes the intensity distribution across the two polarity channels without modifying the spatial structure. 
+
+Temporal augmentations. While our main pipeline operates on event histograms, temporal variability can still be introduced before histogram construction by sampling a random temporal window (temporal crop) from the event stream. This encourages invariance to event timing and motion phase while keeping the underlying content consistent. In practice, we generate two views by indepen-dently sampling temporal windows (or by cropping time within a fixed recording) and then converting each window to a histogram. As shown in Figure 1(d), crop-ping a different time window captures a different phase of the camera motion, producing a histogram with a noticeably different event distribution yet the same underlying semantic content. Overall, our augmentation pipeline aims to mimic the function of SimCLR augmentations, learning invariances to geometry, intensity statistics, and tem-8 M. Vaillant et al. 
+
+poral sampling, while respecting the sparse, polarity-based nature of event data. Figure 1 provides a visual comparison of these three augmentation families. 
+
+# 4 Experiments 
+
+We evaluate the effectiveness of the SpikeCLR framework on four event-based datasets, using a two-phase protocol of self-supervised pretraining followed by downstream evaluation to assess data efficiency and representation quality. 
+
+Experimental Protocol. In the first phase, we pretrain a SEW-ResNet18 back-bone without using any labels, following the SimCLR contrastive approach. We employ the three augmentation families described in Section 3: spatial, polar-ity/intensity, and temporal augmentations. For the event representation, we pri-marily use normalized event histograms, but we also evaluated non-normalized histograms and Voxel Grid [43] representations, finding that the overall behav-ior and conclusions remain unchanged. Following standard SimCLR practice, the projection head g(·) is discarded after pretraining; only the encoder f (·)
+
+is retained for downstream evaluation. Our SNN models are implemented us-ing SpikingJelly [12], and event-specific data augmentations are applied via the Tonic library [24]. Detailed results for alternative event representations, along with all implementation details, are provided in the Supplementary Material. In the second phase, we evaluate the quality of the learned representations using two standard protocols: 1. Linear Probing (LP): The backbone weights are frozen, and only a sin-gle linear classifier is trained on top of the representations. This protocol directly probes the linear separability of the learned feature space: if classes are linearly separable without any further adaptation of the backbone, it demonstrates that the encoder has captured semantically meaningful struc-ture during pretraining alone. From a practical standpoint, training only a linear head requires updating a minimal number of parameters, making it highly parameter-efficient and computationally lightweight, particularly attractive for energy-constrained deployments on neuromorphic hardware, where re-training the full SNN backbone would be prohibitive. 2. Fine-tuning (FT): The entire network (backbone and linear classifier) is fine-tuned end-to-end. This evaluates the transferability of the pretrained initialization for downstream supervised tasks, allowing the model to adapt its representations to the target distribution. As a baseline, we compare against fully supervised learning trained from scratch (Supervised) using standard augmentations. To assess data efficiency, we perform evaluations under various labeled data regimes, ranging from few-shot scenarios (k ∈ { 1, 10 , 20 , 50 } samples per class; for CIFAR10-DVS, 9-shot and 45-shot re-spectively correspond to ≈1% and ≈5% of the training set) to the full dataset. For all experiments, we report the mean and standard deviation across indepen-dent random label splits, using 10 splits to increase robustness over the random label selection when computationally feasible, and 3 splits otherwise to limit computational cost. SpikeCLR 9  
+
+> (a) (b)
+> Fig. 2: Classification accuracy on CIFAR10-DVS. (a) Few-shot comparison across methods (averaged across 10 random subsets). (b) Accuracy as a function of the per-centage of labeled training data (averaged across 3 random subsets).
+
+4.1 Results on Static-Image-Derived Datasets 
+
+We first evaluate performance on CIFAR10-DVS, where the model is both pre-trained and evaluated on the same dataset. This in-domain setting allows us to assess the effectiveness of our self-supervised approach when unlabeled and labeled data come from the same distribution. Figure 2 presents the quantitative results. In the few-shot regime (Figure 2a), our self-supervised method consistently outperforms the supervised baseline for both Linear Probing and Fine-Tuning protocols. This demonstrates that con-trastive pretraining yields robust features that generalize well even with limited supervision. The performance gap is particularly pronounced in the most extreme low-data scenarios, where self-supervised pretraining provides the encoder with rich prior knowledge about event-based spatio-temporal patterns. As the amount of labeled data increases (Figure 2b), fine-tuning remains superior to supervised learning across all regimes, validating the benefits of self-supervised initialization. The pretrained representations provide a better start-ing point, enabling faster convergence and higher final accuracy. Linear Probing is competitive in low-data regimes, demonstrating linear separability of the fea-tures, but saturates earlier than FT or supervised learning when fine-grained adaptation is needed. We observe the same qualitative trends on N-Caltech101; the corresponding results are provided in the Supplementary Material. 
+
+Impact of Backbone Architecture. To assess the generality of our approach across different network architectures, we evaluate three SNN backbones with vary-ing capacities and computational characteristics. Figure 3 reports the few-shot accuracy for each configuration. Results demonstrate that the benefits of self-supervised pretraining generalize across different architectures. All three back-bones exhibit the same qualitative behavior: fine-tuned models consistently out-perform their supervised counterparts across all few-shot regimes. The SEW-ResNet-18 with separable convolutions achieves competitive accuracy (20.1%, 10 M. Vaillant et al.    
+
+> Fig. 3: Few-shot accuracy on CIFAR10-DVS across different SNN backbones (averaged across 3 random subsets). †denote separable convolution.
+
+33.1%, 45.7%) while reducing the parameter count by nearly 10 × (from 11.2M to 1.4M), making it particularly attractive for resource-constrained or on-device de-ployments. The Spiking VGG9 (9.2M parameters) architecture yields the strongest overall performance, reaching 50.1% in the 45-shot scenario and achieving 79.5% accuracy when fine-tuned on the full CIFAR10-DVS dataset. These results con-firm that our self-supervised approach is architecture-agnostic and can be effec-tively applied to diverse SNN designs. 
+
+4.2 Ablation Study 
+
+Augmentations A critical component of SimCLR is the composition of data augmentations. We conduct an ablation study to identify which transformations are most important for learning invariant event representations. We evaluate performance in 1-shot, 9-shot, and 45-shot scenarios, where 9-shot and 45-shot represent 1% and 5% of the dataset, respectively. Results in Table 1 reveal the distinct contributions of different augmentation families. When used in isolation, temporal augmentations yield the strongest performance (18.1%, 32.1%, 44.3%), followed by polarity augmentations (17.4%, 30.2%, 41.8%), and spatial augmentations (17.4%, 27.7%, 39.9%). Notably, spa-tial augmentations alone provide only marginal improvements over the super-vised baseline, with gains of 5.5%, 1.7%, and 1.1% across the three settings. This suggests that spatial invariances, while important, are less critical for event-based representations than their temporal and polarity counterparts. Temporal augmentations emerge as particularly crucial, achieving the best single-family performance and providing gains of 6.2%, 6.1%, and 5.5% over the supervised baseline. This underscores the importance of learning temporal invariances for processing the inherently dynamic nature of event streams. Polarity augmenta-tions also contribute meaningfully, with improvements of 5.5%, 4.2%, and 3.0%, demonstrating that robustness to polarity variations is beneficial for representa-tion quality. Combining augmentation families leads to synergistic improvements. The spatial and temporal combination achieves the best 1-shot performance (20.3%) and competitive results across all settings, confirming that these two families SpikeCLR 11                                                                                             
+
+> Table 1: Ablation study of augmentation families on CIFAR10-DVS. Few-shot fine-tuning accuracy (%) reported as mean ±std over 3 random subsets. Augmentation Set 1-shot 9-shot 45-shot EventDrop [19] 18.4 (±2.5) 30.1 (±0.5) 42.5 (±0.8)
+> NDA †[26] 16.3 (±2.9) 28.9 (±0.4) 41.3 (±2.2)
+> Spatial only 17.4 (±2.0) 27.7 (±0.9) 39.9 (±1.2)
+> Temporal only 18.1 (±2.7) 32.1 (±0.7) 44.3 (±1.0)
+> Polarity only 17.4 (±1.5) 30.2 (±2.2) 41.8 (±2.2)
+> Spatial + Temporal 20.3 (±2.7) 34.7 (±0.3) 47.1 (±1.6)
+> Spatial + Polarity 17.5 (±2.5) 31.7 (±1.8) 44.4 (±0.8)
+> Temporal + Polarity 19.1 (±1.6) 31.6 (±0.9) 44.4 (±1.1)
+> Full Pipeline 20.2 (±2.8) 35.2 (±0.7) 48.3 (±1.7)
+> Supervised 11.9 (±1.3) 26.0 (±0.2) 38.8 (±0.8)
+> †Our implementation.
+> Table 2: Ablation study of contrastive loss computation on CIFAR10-DVS. Few-shot fine-tuning accuracy (%) reported as mean ±std over 3 random subsets. Loss 1-shot 9-shot 45-shot NT-Xent 20.2 (±2.8) 35.2 (±0.7) 48.3 (±1.7)
+> Temporal NT-Xent 21.2 (±3.8) 37.3 (±1.6) 49.4 (±1.1)
+> Supervised 11.9 (±1.3) 26.0 (±0.2) 38.8 (±0.8)
+
+complement each other effectively. The full augmentation pipeline, incorporating all three families, achieves the overall best performance in 9-shot and 45-shot scenarios (35.2% and 48.3%), with consistent gains of 8.3%, 9.2%, and 9.5% over the supervised baseline. This validates our design choice to leverage the unique characteristics of event data through specialized augmentations across spatial, temporal, and polarity dimensions. We also compare against EventDrop [19] and NDA [26]. Both improve over the supervised baseline, but neither matches our full pipeline in the few-shot regime, suggesting that augmentations optimised for classification do not straight-forwardly transfer to the contrastive setting. This gap is consistent with the abla-tion: NDA is essentially a spatial strategy and EventDrop acts as a temporal one, so their individual performance mirrors that of the corresponding single-family variants in our study. 
+
+Contrastive Loss We analyze the impact of the temporal aggregation strategy for the contrastive loss. Since SNNs produce a sequence of embeddings over time, we can either: (i) average the embeddings over time and compute the NT-Xent loss once on the mean representation (’NT-Xent’), or (ii) compute the NT-Xent loss at each timestep independently and then average the per-timestep loss values (’Temporal NT-Xent’). Table 2 compares these two strategies; both use the full augmentation pipeline so that the only variable is the loss aggregation. All main experiments in this paper use the standard NT-Xent strategy (i). We observe that 12 M. Vaillant et al.   
+
+> (a) (b)
+> Fig. 4: Classification accuracy on DVS-Gesture. (a) Few-shot comparison across meth-ods (mean and std over 10 random subsets). (b) Accuracy as a function of the percent-age of labeled training data (mean and std over 3 random subsets).
+
+Temporal NT-Xent yields better downstream accuracy (+1.0% to +2.1%) over NT-Xent here. This suggests that forcing the representation to be discriminative at every timestep provides a stronger learning signal than optimizing the mean alone, and represents a promising direction for future work. 
+
+4.3 Results on Dynamic Event-Stream Dataset 
+
+To further validate generalizability, we evaluate on DVS-Gesture, which contains naturally recorded event streams. Figure 4 reports the results. In the few-shot regime (Figure 4a), SpikeCLR consistently improves over training from scratch under both LP and FT. As more labels become available (Figure 4b), the gap with the supervised baseline progressively shrinks, becoming marginal beyond 
+
+∼50% of the training set, which we attribute to the small dataset size (1,176 sequences). These results confirm that SpikeCLR is effective for both re-display and dynamic event-stream datasets. 
+
+4.4 Transfer Learning 
+
+To assess cross-dataset transfer, we evaluate models pretrained on one event dataset and adapted to a different target dataset. We consider three target do-mains (CIFAR10-DVS, DVS-Gesture, and N-Caltech101) and for each we com-pare in-domain pretraining, cross-domain pretraining, and training from scratch. This protocol tests whether the learned spatio-temporal features capture dataset-agnostic structure rather than overfitting to a single acquisition protocol. This setting is practically relevant when unlabeled data are available in one domain but labels are scarce in the deployment domain. In our transfer experiments, we focus on static-to-dynamic transfer: models pretrained on a static-image-derived dataset (CIFAR10-DVS or N-Caltech101) are adapted to a dynamic dataset (DVS-Gesture), but not the reverse. This direc-tion is the most practically relevant, as large collections of re-display recordings SpikeCLR 13                                                                       
+
+> Table 3: Cross-dataset transfer learning results. Few-shot fine-tuning accuracy (%) reported as mean ±std over 3 random subsets. Models pretrained on different event datasets are fine-tuned on distinct target datasets and evaluated in few-shot scenarios. Dataset 1-shot 9-shot 45-shot Pretrain Target CIFAR10-DVS CIFAR10-DVS 20.2 (±2.8) 35.2 (±0.7) 48.3 (±1.7)
+> N-Caltech101 CIFAR10-DVS 18.6 (±1.7) 31.2 (±1.4) 42.6 (±0.9)
+> -CIFAR10-DVS 11.9 (±1.3) 26.0 (±0.2) 38.8 (±0.8)
+> DVS-Gesture DVS-Gesture 34.2 (±2.2) 65.8 (±2.9) 84.3 (±2.4)
+> CIFAR10-DVS DVS-Gesture 35.1 (±2.4) 67.4 (±4.5) 84.5 (±1.0)
+> -DVS-Gesture 21.7 (±4.2) 59.7 (±3.1) 83.5 (±1.9)
+> N-Caltech101 N-Caltech101 21.0 (±3.2) 51.0 (±0.9) 72.1 (±0.8)
+> CIFAR10-DVS N-Caltech101 16.8 (±2.6) 49.8 (±0.8) 71.7 (±1.3)
+> -N-Caltech101 8.6 (±1.1) 43.4 (±0.8) 68.7 (±0.1)
+
+are far easier to obtain than labeled real-motion sequences. Note that CIFAR10-DVS and N-Caltech101 were recorded with different hardware and motion pat-terns, so the transfer between them is non-trivial. Results in Table 3 show that SpikeCLR representations transfer across datasets. When pretraining on N-Caltech101 and adapting to CIFAR10-DVS, we observe consistent gains over training from scratch in the few-shot regime, indicating that the encoder captures reusable spatio-temporal primitives. Conversely, pre-training on CIFAR10-DVS also improves few-shot performance on N-Caltech101 compared to the supervised-from-scratch baseline, despite the larger number of classes and different recording statistics. Across CIFAR10-DVS and N-Caltech101 datasets, in-domain pretraining re-mains better. Cross-dataset transfer is further constrained by domain-specific event statistics and acquisition artifacts. Nevertheless, the cross-dataset im-provements confirm that self-supervised pretraining provides a strong generic initialization when labeled data in the target domain are scarce. However, we note that even in-domain pretraining can be less optimal compared to trans-fer when dealing with DVS-Gesture, this might be due to the difference in the amount of pretraining data. This observation motivates studying how increasing the amount of unlabeled pretraining data affects the learned representations, which we investigate next. 
+
+4.5 Effect of Unlabeled Data Quantity 
+
+Finally, we analyze how the size of the pretraining dataset affects representa-tion quality. Using N-MNIST, we compare pretraining on the full dataset (60K samples) versus a reduced subset (10K samples), then evaluate the learned rep-resentations in few-shot classification scenarios. Results in Table 4 demonstrate that increasing the amount of unlabeled data during pretraining consistently improves downstream performance across all few-shot regimes. The model pretrained on 60K samples achieves 4.4% higher 14 M. Vaillant et al.                         
+
+> Table 4: Impact of pretraining dataset size on N-MNIST. Few-shot fine-tuning ac-curacy (%) reported as mean ±std over 10 random subsets. Models pretrained with different amounts of unlabeled data are compared against supervised baselines. Amount of pretrained data 1-shot 10-shot 50-shot 10K 56.9 (±7.3) 91.6 (±0.8) 96.6 (±0.3)
+> 60K 61.3 (±7.8) 94.4 (±0.4) 97.5 (±0.3)
+> Supervised 21.3 (±5.0) 51.7 (±4.9) 95.2 (±0.3)
+
+accuracy in the 1-shot setting and 2.8% improvement in the 10-shot regime compared to using only 10K samples. This trend confirms the scalability of our self-supervised approach: as more unlabeled data becomes available, the learned representations become increasingly robust and generalizable. Notably, both pretraining configurations substantially outperform the supervised baseline in low-data regimes, with the performance gap narrowing as more labeled data is available for fine-tuning. 
+
+# 5 Conclusion 
+
+In many event-based applications, labels are the bottleneck and models must be adapted from only a few annotated samples. In this work, we introduced Spike-CLR, a contrastive self-supervised framework designed to train Spiking Neural Networks for event-based vision. Our results demonstrate that by leveraging event-specific augmentations, SpikeCLR learns robust and transferable repre-sentations from unlabeled event data, significantly improving data efficiency in low-data regimes. We showed consistent gains over supervised baselines on CIFAR10-DVS, N-Caltech101, N-MNIST, and DVS-Gesture, particularly in few-shot and semi-supervised settings. Our ablation study highlighted the critical role of temporal and polarity augmentations, which proved more impactful than traditional spatial transformations for learning meaningful invariances in event streams. Additionally, we found that computing the contrastive loss at each timestep independently provides a stronger learning signal than optimizing the mean representation alone. Furthermore, we demonstrated the transferability of learned features across datasets and sensor types, and confirmed that represen-tation quality scales with the amount of unlabeled pretraining data. Our current approach inherits a practical constraint of SimCLR-style con-trastive learning: strong performance typically relies on large effective batch sizes (or memory banks) to provide enough negatives, which quickly becomes a memory bottleneck for spiking models and long event sequences. A possibility to overcome these limitations could be to explore non-contrastive approaches (e.g ., SimSiam, BYOL) that can reduce the need of large batches. Finally, ex-tending this self-supervised approach to other downstream tasks, such as object detection, depth estimation, or optical flow, will be crucial for improving the capabilities of event-based vision systems. SpikeCLR 15 
+
+# Acknowledgements 
+
+This work is under the programme DesCartes and is supported by the National Research Foundation, Prime Minister’s Office, Singapore, under its Campus for Research Excellence and Technological Enterprise (CREATE) programme. This work was also supported by the ANR grant ANR-11-LABX-0040 within the French State Programme “Investissements d’Avenir”. 
+
+# References 
+
+1. Amir, A., Taba, B., Berg, D., Melano, T., McKinstry, J., Di Nolfo, C., Nayak, T., Andreopoulos, A., Garreau, G., Mendoza, M., et al.: A low power, fully event-based gesture recognition system. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 7243–7252 (2017) 2. Barchid, S., Mennesson, J., Djéraba, C.: Exploring Joint Embedding Architectures and Data Augmentations for Self-Supervised Representation Learning in Event-Based Vision. In: CVPR. pp. 3903–3912. IEEE, Vancouver, BC, Canada (Jun 2023). https://doi.org/10.1109/CVPRW59228.2023.00405 
+
+3. Bardes, A., Ponce, J., LeCun, Y.: Vicregl: Self-supervised learning of local visual features. NeurIPS 35 , 8799–8810 (2022) 4. Caron, M., Misra, I., Mairal, J., Goyal, P., Bojanowski, P., Joulin, A.: Unsupervised learning of visual features by contrasting cluster assignments. NeurIPS 33 , 9912– 9924 (2020) 5. Chen, T., Kornblith, S., Norouzi, M., Hinton, G.: A simple framework for con-trastive learning of visual representations. In: ICML. pp. 1597–1607. PmLR (2020) 6. Chen, T., Kornblith, S., Swersky, K., Norouzi, M., Hinton, G.E.: Big Self-Supervised Models are Strong Semi-Supervised Learners. In: NeurIPS. vol. 33, pp. 22243–22255. Curran Associates, Inc. (2020) 7. Chen, X., He, K.: Exploring Simple Siamese Representation Learning. In: CVPR. pp. 15745–15753. IEEE, Nashville, TN, USA (Jun 2021). https://doi.org/10. 1109/CVPR46437.2021.01549 
+
+8. Chen, Z., Wu, J., Hou, J., Li, L., Dong, W., Shi, G.: Ecsnet: Spatio-temporal feature learning for event camera. IEEE Transactions on Circuits and Systems for Video Technology 33 (2), 701–712 (2022) 9. Chollet, F.: Xception: Deep learning with depthwise separable convolutions. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 1251–1258 (2017) 10. Deng, S., Li, Y., Zhang, S., Gu, S.: Temporal efficient training of spiking neural network via gradient re-weighting. In: ICLR (2022), https://openreview.net/ forum?id=_XNtisL32jv 
+
+11. Duan, P., Wang, Z.W., Zhou, X., Ma, Y., Shi, B.: Eventzoom: Learning to denoise and super resolve neuromorphic events. In: CVPR. pp. 12824–12833 (2021) 12. Fang, W., Chen, Y., Ding, J., Yu, Z., Masquelier, T., Chen, D., Huang, L., Zhou, H., Li, G., Tian, Y.: Spikingjelly: An open-source machine learning infrastructure platform for spike-based intelligence. Science Advances 9(40), eadi1480 (2023) 13. Fang, W., Yu, Z., Chen, Y., Huang, T., Masquelier, T., Tian, Y.: Deep Resid-ual Learning in Spiking Neural Networks. In: NeurIPS. vol. 34, pp. 21056–21069. Curran Associates, Inc. (2021) 16 M. Vaillant et al. 14. Fang, W., Yu, Z., Chen, Y., Masquelier, T., Huang, T., Tian, Y.: Incorporat-ing Learnable Membrane Time Constant to Enhance Learning of Spiking Neural Networks. In: ICCV. pp. 2641–2651. IEEE, Montreal, QC, Canada (Oct 2021). 
+
+https://doi.org/10.1109/ICCV48922.2021.00266 
+
+15. Gallego, G., Delbrück, T., Orchard, G., Bartolozzi, C., Taba, B., Censi, A., Leutenegger, S., Davison, A.J., Conradt, J., Daniilidis, K., et al.: Event-based vision: A survey. IEEE transactions on pattern analysis and machine intelligence 
+
+44 (1), 154–180 (2020) 16. Ghosh-Dastidar, S., Adeli, H.: Spiking neural networks. International journal of neural systems 19 (04), 295–308 (2009) 17. Grill, J.B., Strub, F., Altché, F., Tallec, C., Richemond, P., Buchatskaya, E., Do-ersch, C., Avila Pires, B., Guo, Z., Gheshlaghi Azar, M., Piot, B., kavukcuoglu, k., Munos, R., Valko, M.: Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning. In: NeurIPS. vol. 33, pp. 21271–21284. Curran Associates, Inc. (2020) 18. Gu, F., Dou, J., Li, M., Long, X., Guo, S., Chen, C., Liu, K., Jiao, X., Li, R.: EventAugment: Learning Augmentation Policies From Asynchronous Event-Based Data. IEEE Transactions on Cognitive and Developmental Systems 16 (4), 1521– 1532 (Aug 2024). https://doi.org/10.1109/TCDS.2024.3380907 
+
+19. Gu, F., Sng, W., Hu, X., Yu, F.: EventDrop: Data augmentation for event-based learning (Jun 2021). https://doi.org/10.48550/arXiv.2106.05836 
+
+20. He, K., Fan, H., Wu, Y., Xie, S., Girshick, R.: Momentum contrast for unsupervised visual representation learning. In: CVPR. pp. 9729–9738 (2020) 21. Ho, C.H., Nvasconcelos, N.: Contrastive learning with adversarial examples. NeurIPS 33 , 17081–17093 (2020) 22. Lagorce, X., Orchard, G., Galluppi, F., Shi, B.E., Benosman, R.B.: HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition. IEEE TPAMI 
+
+39 (7), 1346–1359 (Jul 2017). https://doi.org/10.1109/TPAMI.2016.2574707 
+
+23. Lee, J.H., Delbruck, T., Pfeiffer, M.: Training deep spiking neural networks using backpropagation. Frontiers in neuroscience 10 , 508 (2016) 24. Lenz, G., Chaney, K., Shrestha, S.B., Oubari, O., Picaud, S., Zarrella, G.: Tonic: event-based datasets and transformations. (Jul 2021). https://doi.org/10.5281/ zenodo.5079802 , https://doi.org/10.5281/zenodo.5079802 , Documentation available under https://tonic.readthedocs.io 25. Li, H., Liu, H., Ji, X., Li, G., Shi, L.: CIFAR10-DVS: An Event-Stream Dataset for Object Classification. Frontiers in Neuroscience 11 , 309 (May 2017). https: //doi.org/10.3389/fnins.2017.00309 
+
+26. Li, Y., Kim, Y., Park, H., Geller, T., Panda, P.: Neuromorphic data augmentation for training spiking neural networks. In: ECCV. pp. 631–649. Springer (2022) 27. Lichtsteiner, P., Posch, C., Delbruck, T.: A 128$\times$128 120 dB 15 $\mu$s La-tency Asynchronous Temporal Contrast Vision Sensor. IEEE Journal of Solid-State Circuits 43 (2), 566–576 (2008). https://doi.org/10.1109/JSSC.2007.914337 
+
+28. Liu, D., Wang, T., Sun, C.: Voxel-based multi-scale transformer network for event stream processing. IEEE Transactions on Circuits and Systems for Video Technol-ogy 34 (4), 2112–2124 (2023) 29. Liu, Y.H., Wang, X.J.: Spike-frequency adaptation of a generalized leaky integrate-and-fire model neuron. Journal of computational neuroscience 10 (1), 25–45 (2001) 30. Ma, Y., Wang, H., Shen, H., Chen, X., Duan, S., Wen, S.: Neuromoco: a neuro-morphic momentum contrast learning method for spiking neural networks. Applied Intelligence 55 (2), 97 (2025) SpikeCLR 17 31. Maqueda, A.I., Loquercio, A., Gallego, G., Garcia, N., Scaramuzza, D.: Event-Based Vision Meets Deep Learning on Steering Prediction for Self-Driving Cars. In: CVPR. pp. 5419–5427. IEEE, Salt Lake City, UT (Jun 2018). https://doi. org/10.1109/CVPR.2018.00568 
+
+32. Neftci, E.O., Mostafa, H., Zenke, F.: Surrogate gradient learning in spiking neural networks: Bringing the power of gradient-based optimization to spiking neural networks. IEEE Signal Processing Magazine 36 (6), 51–63 (2019) 33. Orchard, G., Jayawant, A., Cohen, G.K., Thakor, N.: Converting static image datasets to spiking neuromorphic datasets using saccades. Frontiers in neuroscience 
+
+9, 437 (2015) 34. Shen, G., Zhao, D., Zeng, Y.: EventMix: An efficient data augmentation strategy for event-based learning. Information Sciences 644 , 119170 (Oct 2023). https: //doi.org/10.1016/j.ins.2023.119170 
+
+35. Singhal, R., Finkbeiner, J., Neftci, E.: Self-supervised pre-training of spiking neu-ral networks by contrasting events and frames. In: UniReps: 2nd Edition of the Workshop on Unifying Representations in Neural Models 36. Sironi, A., Brambilla, M., Bourdis, N., Lagorce, X., Benosman, R.: Hats: His-tograms of averaged time surfaces for robust event-based object classification. In: CVPR. pp. 1731–1740 (2018) 37. Tal, D., Schwartz, E.L.: Computing with the leaky integrate-and-fire neuron: loga-rithmic computation and multiplication. Neural computation 9(2), 305–318 (1997) 38. Tavanaei, A., Ghodrati, M., Kheradpisheh, S.R., Masquelier, T., Maida, A.: Deep learning in spiking neural networks. Neural networks 111 , 47–63 (2019) 39. Tian, Y., Sun, C., Poole, B., Krishnan, D., Schmid, C., Isola, P.: What makes for good views for contrastive learning? NeurIPS 33 , 6827–6839 (2020) 40. Yang, Y., Pan, L., Liu, L.: Event camera data pre-training. In: ICCV. pp. 10699– 10709 (2023) 41. Zhang, J., Ma, K.: Rethinking the augmentation module in contrastive learning: Learning hierarchical augmentation invariance with expanded views. In: CVPR. pp. 16650–16659 (2022) 42. Zhou, C., Zhang, H., Yu, L., Ye, Y., Zhou, Z., Huang, L., Ma, Z., Fan, X., Zhou, H., Tian, Y.: Direct training high-performance deep spiking neural networks: A review of theories and methods. Frontiers in Neuroscience 18 (Jul 2024). https: //doi.org/10.3389/fnins.2024.1383844 
+
+43. Zhu, A.Z., Yuan, L., Chaney, K., Daniilidis, K.: Unsupervised Event-Based Learn-ing of Optical Flow, Depth, and Egomotion. In: CVPR. pp. 989–997 (2019)

@@ -1,0 +1,536 @@
+Title: Modeling Matches as Language: A Generative Transformer Approach for Counterfactual Player Valuation in Football
+
+URL Source: https://arxiv.org/pdf/2603.15212v1
+
+Published Time: Tue, 17 Mar 2026 06:46:38 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Modeling Matches as Language: A Generative Transformer Approach for Counterfactual Player Valuation in Football 
+
+Miru Hong 1, Minho Lee 2, Geonhee Jo 1, Hyeokje Jo 1, Pascal Bauer 2,4, and Sang-Ki Ko 1 
+
+> 1
+
+Department of Artificial Intelligence, University of Seoul, Seoul, Republic of Korea 
+
+{mirunoyume,geonhee,brandon56,sangkiko}@uos.ac.kr  
+
+> 2
+
+Institute for Sports and Preventive Medicine, Saarland University, Saarbrücken, Germany minho.lee@uni-saarland.de  
+
+> 3
+
+Chair for Sports Analytics, Saarland University; Deutscher Fussball-Bund (DFB), Germany pascal.bauer@uni-saarland.de 
+
+Abstract. Evaluating football player transfers is challenging because player actions depend strongly on tactical systems, teammates, and match context. Despite this complexity, recruitment decisions often rely on static statistics and subjective expert judgment, which do not fully ac-count for these contextual factors. This limitation stems largely from the absence of counterfactual simulation mechanisms capable of predicting outcomes in hypothetical scenarios. To address these challenges, we pro-pose ScoutGPT, a generative model that treats football match events as sequential tokens within a language modeling framework. Utilizing a NanoGPT-based Transformer architecture trained on next-token predic-tion, ScoutGPT learns the dynamics of match event sequences to simu-late event sequences under hypothetical lineups, demonstrating superior predictive performance compared to existing baseline models. Leveraging this capability, the model employs Monte Carlo sampling to enable coun-terfactual simulation, allowing for the assessment of unobserved scenar-ios. Experiments on K League data show that simulated player transfers lead to measurable changes in offensive progression and goal probabil-ities, indicating that ScoutGPT captures player-specific impact beyond traditional static metrics. 
+
+Keywords: Sports Event Sequence Modeling · Counterfactual Transfer Simulation · Player Valuation · Autoregressive Transformer 
+
+## 1 Introduction 
+
+Evaluating individual contribution is challenging in complex multi-agent envi-ronments, where behavior depends not only on an agent’s own ability but also on interactions with surrounding agents and context. Football provides a partic-ularly demanding instance of this problem: player actions are shaped by tactical roles, teammates, opponents, and match state. As a result, player transfer eval-uation cannot be reduced to a like-for-like replacement problem, since moving a  
+
+> arXiv:2603.15212v1 [cs.AI] 16 Mar 2026 2Authors Suppressed Due to Excessive Length
+
+player to a new team alters the tactical configuration and reshapes interaction patterns on the pitch. Transfer evaluation therefore requires estimating how a player will behave under this distribution shift, rather than extrapolating di-rectly from past performance alone. Existing methods only partially address this problem. Traditional valuation frameworks such as Expected Threat (xT) [21] and Valuing Actions by Esti-mating Probabilities (VAEP) [7,8] quantify the value of observed events, but they do not generate how action sequences would evolve under a new tactical context. Projection systems in other sports typically operate at the level of ag-gregate season outcomes and therefore do not capture the micro-interactions that shape football actions on the pitch. Recent generative approaches in sports analytics often focus on continuous trajectories, which represent spatial move-ment but not the tactical semantics of discrete football events [5,24,6]. Prior work has also studied event-based sequence modeling for next-event prediction in football [20,26,15], but these approaches are generally designed to predict observed continuations rather than generate event sequences under hypotheti-cal transfer scenarios. Another line of work estimates On-Ball Value (OBV) by predicting future tokens in an event sequence, enabling counterfactual continu-ation of play [12]. However, these approaches generate only short fragments of a sequence, limiting value estimation to that small segment of play. In contrast, evaluating transfer scenarios requires generating full event sequences under a new context, enabling value computation over the entire simulated possession. To address this problem, we introduce ScoutGPT, an autoregressive gen-erative framework for football event streams related to Large Event Models (LEMs) [16]. ScoutGPT treats a match as a structured sequence in which each event is decomposed into discrete attributes through tokenization and predicted sequentially via next-token prediction, conditioned on player identity and match context. Alongside next-action prediction, the model estimates scoring and con-ceding probabilities at each step, aligning generated sequences with match value (VAEP) and supporting event-level simulation of hypothetical player transfers under new tactical environments [2,9,15]. To summarize, our main contributions are as follows: 
+
+– Structured Event Modeling for Context-Aware Simulation: We intro-duce a fine-grained tokenization scheme that decomposes football events into semantic components (e.g., actor, location, and action type). This structure enables ScoutGPT to capture dependencies across event attributes and model football event sequences at a finer granularity. 
+
+– Value-Aware Generative Modeling: We propose a multi-task learning objective that combines next-token prediction with explicit scoring and con-ceding probability estimation. This design encourages the model to reflect both event likelihood and match value, and improves predictive performance over non-value-aware variants. 
+
+– Counterfactual Simulation for Player Recruitment: We show that Scout-GPT can simulate how a player’s on-ball contribution profile shifts in a new tactical environment, supporting data-driven analysis of transfer fit. Generative Transformer for Counterfactual Player Valuation 3Counterfactual Simulation       
+
+> What if Player A had replaced
+> player B at that moment?
+> De Bruyne Away CM
+> McTominay
+> Carry
+> GPT
+> Højlund
+> Context Away
+> Carry
+> ...
+> 61
+> 71
+> ...
+> Away RW
+> Unknown
+> CM
+> Away
+> De Bruyne
+> Unknown De Bruyne Carry 61
+> 39
+> ...
+> Away Success
+> Success
+
+Active lineup 
+
+Tactical roles 
+
+Pre-episode 
+
+Game state 
+
+> Event Sequence
+
+Team, Player, 
+
+Type,  x, y,
+
+End  x, End  y... 
+
+Event 
+
+sequence Context 
+
+Shared GPT 
+
+Backbone 
+
+> True
+> Tocken
+> Prediction
+> Loss
+> : Ignored
+> Context
+> Lead in
+> Sequence
+> tokens
+> Player
+> Scout
+> GPT
+> Sturctural
+> Constraints
+> VERSA
+> Logit Masking
+> ?
+> 50
+> ?
+
+Output 
+
+Sequence   
+
+> True
+> Prediction of Goal Scoring
+> and Conceding Probabilities
+> within 15 Seconds
+> 10:20 10:30 10:37
+> Goal
+> Scored
+> False
+> Probability
+> loss
+> Auxiliary
+> Head
+
+Episode 
+
+Component 
+
+Home   
+
+> Next Token
+> Head
+> 10:20 10:30 10:37
+
+Away   
+
+> True True False
+> True True False
+> Minutes
+> Gs
+> Minutes
+> Gc
+> Monte Carlo Simulation for Statistical Stability
+
+Fig. 1. Overview of the ScoutGPT framework. Our nanoGPT-based Transformer model autoregressively predicts event tokens, enabling counterfactual ‘what-if’ sim-ulations. For instance, replacing Kevin De Bruyne with Scott McTominay could alter actions (e.g., pass/shot) or modify the same action with a different location, outcome, or VAEP. 
+
+## 2 Related Work 
+
+Our work sits at the intersection of three lines of research: data-driven player valuation, generative modeling of sports event streams, and counterfactual sim-ulation for player transfers. 
+
+Data-Driven Player Valuation Action-value frameworks have become the standard for data-driven player valuation. VAEP quantifies player contribu-tion by aggregating short-horizon changes in scoring and conceding probabilities across all on-ball actions [7], while EPV decomposes instantaneous possession value into interpretable subcomponents [11]. PlayeRank extends this further by constructing multi-dimensional, role-aware player ratings from large-scale event logs [18]. Collectively, these methods provide strong discriminative estimators for observed behavior. However, they evaluate actions that have already occurred and are not designed to generate counterfactual event sequences under hypo-thetical team configurations—a requirement that arises when assessing transfer fit. 
+
+Generative Modeling of Sports Data Seq2Event [20] and Large Event Mod-els (LEMs) [16] frame football events as structured sequential prediction prob-4 Authors Suppressed Due to Excessive Length 
+
+lems, decomposing each event into multiple attributes and supporting match continuation rollouts from a given game state. NMSTPP [25] and related neu-ral point process models [10,29] extend event-sequence modeling to continuous-time streams with explicit timing and mark distributions. Despite strong short-horizon predictive accuracy, these approaches optimize primarily for sequence likelihood and do not incorporate goal-oriented supervision. Moreover, entity-conditioning for player substitution is either absent or indirect, making it diffi-cult to hold the surrounding context fixed while replacing a specific player—a requirement for counterfactual transfer simulation. 
+
+Sequence Modeling for Event Streams Transformer-based architectures [23,4] have been applied to sports event streams by treating matches as sequences of discrete tokens to be predicted autoregressively [1,3,17,15]. These models cap-ture complex long-range dependencies across event sequences more effectively than recurrent alternatives. Standard next-token objectives, however, prioritize frequent actions and do not account for the tactical value of decisions or their impact on match outcomes. In addition, unconstrained generation can produce logically inconsistent event transitions over longer horizons. ScoutGPT addresses both limitations by pairing the autoregressive objective with explicit value su-pervision and VERSA-based constraint masking [13]. 
+
+Counterfactual Simulation in Sports Macro-level transfer forecasting— including baseball projection systems (ZiPS, PECOTA) and soccer ability-curve regression [2]—predicts aggregate season statistics from historical data and age curves, but operates at a coarse granularity that cannot capture event-level tactical dynamics. Graph-based methods represent players as nodes in a rela-tional network to recommend positionally similar replacements [27], but do not model how a player’s behavior would change in a new team context. At the mi-cro level, hierarchical Bayesian xG estimation [14] and causal player evaluation frameworks [22] isolate the counterfactual impact of individual actions, yet they cannot generate the sequential tactical event sequences needed to assess a full transfer scenario. TacEleven [28] leverages language models to explore attacking tactics but focuses on fragmented tactical paths and does not account for the systemic behavioral distribution shift that arises when a player moves to a new team. EventGPT [12] applies generative language modeling to football event se-quences, but its generation is limited to short fragments of play, requiring the remaining value to be approximated via residual OBV instead of being computed from fully simulated sequences. 
+
+## 3 Methodology 
+
+This section describes ScoutGPT, including VERSA-based data verification [13], structured tokenization, and a value-aware multi-task objective. Generative Transformer for Counterfactual Player Valuation 5
+
+3.1 Data Representation and Verification 
+
+Reliable generative modeling requires training data that satisfies football’s log-ical and physical constraints. Raw event streams often contain inconsistencies such as missing events or temporal ordering errors, so we preprocess all data with VERSA. VERSA uses a formal state-transition model to enforce validity rules and automatically correct anomalies (e.g., inserting missing Pass Received 
+
+events or reordering physically impossible sequences). This preprocessing yields logically consistent training sequences and prevents the model from internalizing annotation errors as valid tactical behaviors. 
+
+3.2 Problem Formulation 
+
+We represent a football match as a collection of discrete episodes, M = {E1, E 2, . . . , E K }.Each episode Ek is a coherent phase of play (e.g., a possession chain starting from a recovery or set-piece), consisting of a global context Ck and an event sequence Ek = {e1, e 2, . . . , e T }.In the raw data, each event eraw  
+
+> t
+
+∈ E k is recorded as a 12-dimensional tuple, including explicit labels for goal occurrences: 
+
+eraw  
+
+> t
+
+= ( ht, pos t, p t, a t, x start  
+
+> t
+
+, y start  
+
+> t
+
+, x end  
+
+> t
+
+, y end  
+
+> t
+
+, ∆t t, o t, gs t, gc t),
+
+where gs t, gc t ∈ { 0, 1} indicate whether a goal was scored or conceded at step t.Crucially, to prevent label leakage during the autoregressive generation process, we remove gs t and gc t from the input sequence. Thus, the model observes a 10-dimensional input tuple: 
+
+et = ( ht, pos t, p t, a t, x start  
+
+> t
+
+, y start  
+
+> t
+
+, x end  
+
+> t
+
+, y end  
+
+> t
+
+, ∆t t, o t).
+
+Our objective is to model the joint probability P (et, gs t, gc t | Ck, e <t ), jointly predicting next-action components and estimating strategic value (goal-scoring/conceding probabilities) for the current state. 
+
+3.3 Structured Event Tokenization 
+
+To process this hybrid data structure with a Transformer [23], we use a tokeniza-tion strategy that separately encodes context and events. 
+
+Context Encoding The initial match state C is encoded into a fixed sequence of Nctx = 56 tokens, capturing lineups (11 tuples of Position and Player ID per team) and metadata such as period and score. This conditions the model on agent capabilities and match state before event generation. 6 Authors Suppressed Due to Excessive Length 
+
+Event Encoding Each 10-dimensional input event et is flattened into a se-quence of atomic tokens. Continuous variables (coordinates, time deltas) are quantized into discrete bins (0-105). The global sequence S for an episode is constructed by concatenating the context tokens and the flattened event tokens: 
+
+S = [ c1, . . . , c 56 
+
+| {z }
+
+> Context
+
+, s 1,1, . . . , s 1,10 
+
+| {z }
+
+> e1
+
+, . . . , s T, 1, . . . , s T, 10 
+
+| {z }
+
+> eT
+
+],
+
+where each event corresponds to a fixed block of 10 tokens. To handle varying episode length, we impose a maximum sequence length 
+
+Lmax . If an episode exceeds this limit (e.g., T > 100 ), we apply a sliding window with fixed stride (e.g., 50 events), creating overlapping chunks while keeping the context window fixed. Explicit position tokens are masked from the input to encourage the model to learn player representations from broader event context rather than direct position labels; we verify this effect in the player-embedding analysis. 
+
+3.4 ScoutGPT Architecture 
+
+We utilize the nanoGPT architecture 4, an efficient implementation of the GPT-2 decoder-only Transformer [19]. 
+
+Backbone Given the input sequence S, we map tokens to dense vectors using a learned token embedding matrix Wwte and add learned absolute positional embeddings Wwpe . The model employs a stack of Pre-LayerNorm Transformer blocks. Let x(l) denote the input to the l-th Transformer block. The block computes: 
+
+˜x(l) = x(l) + MSA (LN (x(l))) 
+
+x(l+1) = ˜ x(l) + MLP (LN (˜ x(l))) ,
+
+where MSA is Causal Multi-Head Self-Attention and MLP is a feed-forward network with GELU activation. 
+
+Auxiliary Heads for Value Estimation To model action value, we attach two auxiliary classification heads (Head GS and Head GC ) to the model’s final hidden state h(L):logit GS  
+
+> t
+
+= Head GS (h(L)
+
+> t, outcome
+
+) and logit GC  
+
+> t
+
+= Head GC (h(L)
+
+> t, outcome
+
+).
+
+Unlike the language modeling head, which predicts every next token, these auxiliary heads are activated only at Outcome-token indices ( ot), i.e., the last token of each event block. This lets the model estimate immediate scoring and conceding probabilities after each action outcome.   
+
+> 4https://github.com/karpathy/nanoGPT Generative Transformer for Counterfactual Player Valuation 7
+
+3.5 Multi-Task Training Objective 
+
+We train ScoutGPT using a composite loss function that balances generative capability with value estimation. 
+
+Generative Loss ( Lgen ) The primary objective is the cross-entropy loss for next-token prediction. We apply a masking strategy to ignore padding tokens and, where applicable, mask specific fields (e.g., player IDs) to prevent overfit-ting or to focus learning on tactical dynamics. In particular, player-ID prediction is excluded because, during inference, player identity is injected based on posi-tional assignment rather than generated through unconstrained autoregressive decoding. This keeps the training objective consistent with the generation pro-cedure: 
+
+Lgen = − X
+
+> i
+
+log P (si+1 | s≤i).
+
+Goal-Oriented Auxiliary Loss ( Laux ) We compute auxiliary Cross-Entropy (CE) losses for Goal Scored (GS) and Goal Conceded (GC) predictions at outcome-token positions. For each outcome position, the model predicts whether the cur-rent action leads to a goal scored or conceded event: 
+
+Laux = X
+
+> t∈T out
+
+CE(ˆ yGS t , y GS t ) + CE(ˆ yGC t , y GC t ) ,
+
+where Tout is the set of indices corresponding to outcome tokens, and yGS  
+
+> t
+
+, y GC 
+
+> t
+
+are the ground-truth labels retrieved from the raw data. 
+
+Total Loss The final objective is a weighted sum: 
+
+Ltotal = Lgen + Laux .
+
+3.6 Inference with Structural Constraints 
+
+Generating realistic football sequences requires strict game-rule and logical con-sistency. Standard sampling can produce syntactically valid but physically in-valid sequences, so we use State-Dependent Logit Masking with a spatial heuris-tic for agent resolution. 
+
+Hierarchical Decoding and State-Dependent Masking The model gener-ates tokens in the fixed hierarchical order defined in Section 3.3. At each step t,we apply a validity mask Mt to the output logits based on the partial state s<t :
+
+P (st | s<t ) ∝ softmax (zt + Mt),
+
+where Mt(k) = −∞ for tokens that are invalid under the current partial state. The masking strategy is field-dependent. Team tokens are restricted to the valid 8 Authors Suppressed Due to Excessive Length 
+
+team set defined by the context, action tokens are filtered using the VERSA transition validator, and spatial coordinates are restricted to admissible pitch ranges. In addition, several local consistency rules are enforced during decoding. For example, immediate self-receptions such as Pass Received or Ball Received 
+
+by the same player as the previous actor are disallowed, and defensive actions such as Block and Interception are suppressed when possession is retained by the same team. This procedure ensures that token generation respects both event-transition logic and local interaction constraints. 
+
+Spatial-Aware Entity Resolution After a team token is generated, the model first predicts a compatible position token. Given the resulting (team , position )
+
+pair, the player token is then deterministically selected from the corresponding candidate set defined by the context lineup. When multiple candidate players share the same team and position, ScoutGPT selects the candidate whose refer-ence location is closest to the currently generated event coordinates (xt, y t):
+
+p∗ = argmin 
+
+> p∈P (ht,pos t)
+
+∥(xt, y t) − μp∥2 ,
+
+where P(ht, pos t) denotes the set of candidate players matching the generated team and position, and μp is the reference location associated with player p. For known players, this reference is derived from average observed event locations; otherwise, a position-dependent default location is used. Furthermore, when pos-session is maintained across consecutive events, the generator can preserve the same acting player through an ownership-lock mechanism, which further stabi-lizes local event continuity. 
+
+Dynamic Episode Termination Episode generation uses semantic stopping rules rather than only a generic EOS token. Decoding stops when: (1) an EOS token is produced, (2) a newly generated action starts a new episode, (3) a successful shot or penalty kick results in a goal, or (4) an event from a predefined set of episode-ending actions is generated. These rules prevent generation beyond the logical boundary of the current phase of play. 
+
+## 4 Experiments 
+
+We evaluate ScoutGPT on K League event data across three axes: next-event prediction accuracy, value estimation quality, and counterfactual transfer simu-lation. We first describe the experimental setup, then report main results and ablations, and finally assess simulation fidelity via self-to-self reconstruction. 
+
+4.1 Experimental Setup Generative Transformer for Counterfactual Player Valuation 9 
+
+> Table 1. Summary of the dataset
+
+Statistic Value 
+
+Seasons 2021 - 2025 Number of matches 2,283 Number of episodes 222,940 Events per episode 27.50 Number of players 1,490 
+
+Dataset We evaluated our model using event data from five seasons of the KLeague 1 and 2, spanning from 2021 to 
+
+2025 . We standardized all data according to the VERSA event representation. To an-alyze the continuous flow of a match, we segmented the match events into discrete units, episodes . We define an episode as the period between ball-out-of-play in-stances. Specifically, an episode begins when a player puts the ball back into play following a stoppage—such as a corner kick, free kick, or throw-in—and concludes at the next stoppage. Each episode is composed of two primary com-ponents, which are context tokens and event tokens. The context represents the match state at the onset of the episode, encom-passing the list of players on the pitch, their role, the current scoreline for both home and away teams. We structure each individual event into 10 tokens. While the model processes up to 100 events per episode, we implemented a sliding window mechanism for the cases where an episode exceeds this limit. In such in-stances, the system preserves the context tokens but truncates the earliest event tokens to maintain a sequence length of up to 100 events. We partitioned the dataset chronologically for model training and evaluation. We utilized data from the 2021 , 2022 , and 2023 seasons as the training set and used the 2024 season as the validation set. We reserved the 2025 season for final testing. Detailed dataset statistics can be found in Table 1. 
+
+Baselines We compare our model against sequence-based event prediction ap-proaches derived from prior work on next-event modeling. However, existing models such as Seq2Event and NMSTPP are not directly comparable in their original form, because they predict only coarse-grained action types (e.g., pass, dribble, shot) and do not model additional event attributes such as player iden-tity, spatial coordinates, temporal intervals, or action value. Furthermore, these models typically do not incorporate player conditioning, which is central to our evaluation of transfer fit. To enable a fair comparison, we adapt the Trans-former backbone introduced in NMSTPP to our output formulation: preserving the architecture while replacing the output prediction heads with those that match our multi-attribute event representation. We denote this baseline as LEM Transformer. 
+
+4.2 Main Results 
+
+In Table 2, we first evaluate short-horizon value prediction (within 15 seconds) using AUC, Brier score, and ECE. The auxiliary head is better calibrated for GC-related risk signals (higher GC AUC and lower calibration errors), while CatBoost yields stronger GS discrimination and calibration (higher GS AUC with lower ECE). This complementary pattern supports our design choice: cou-pling autoregressive sequence modeling with explicit value supervision improves goal-related signal quality beyond pure token prediction. 10 Authors Suppressed Due to Excessive Length                                                                                      
+
+> Table 2. Performance comparison on predicting goals scored (GS) and goals conceded (GC) within 15 seconds.
+> Method Goals Scored (GS) Goals Conceded (GC) AUC Brier ECE AUC Brier ECE
+> ScoutGPT with Auxiliary Head 0.8344 0.0069 0.0024 0.8153 0.0016 0.00081
+> CatBoost [8] 0.8424 0.0075 0.0003 0.8051 0.0021 0.00082
+> Table 3. Performance comparison across categorical and continuous attributes. For categorical attributes, Accuracy / F1 are reported; for continuous attributes, R2/MAE are reported.
+> Group Attribute LEM LEM Trans. ScoutGPT (Ours) Event Format VERSA VERSA VERSA SPADL Categorical Team 66.49 / 0.37 96.10 / 0.49 92.11 / 0.92 91.12 / 0.91 Pos. 71.01 / 0.32 44.52 / 0.22 63.38 / 0.47 62.56 / 0.51
+> Type 71.46 / 0.20 76.52 / 0.43 78.25 /0.53 77.88 / 0.50 Out. 92.18 / 0.14 89.02 / 0.61 94.68 /0.86 94.43 / 0.86 Continuous Start x0.91 / 2.14 0.78 / 4.59 0.96 /0.97 0.94 / 1.10 Start y0.94 / 1.63 0.78 / 4.09 0.93 / 1.00 0.94 / 0.97 End x0.48 / 6.27 0.67 / 8.12 0.89 /4.11 0.87 / 4.24 End y0.76 / 5.16 0.66 / 7.18 0.82 /3.85 0.80 / 4.00 Time 0.46 / 1.03 0.54 / 1.42 0.71 /0.75 0.63 / 0.78
+
+Table 3 then reports end-to-end event modeling across event formats and model families. The ScoutGPT-VERSA setting is strongest on structurally im-portant generation targets, including type (78.25 / 0.53), outcome (94.68 / 0.86), end coordinates (0.89 / 4.11 and 0.82 / 3.85), and time (0.71 / 0.75), and also achieves the best start-x accuracy/precision (0.96 / 0.97). Compared with LEM Transformer, gains are especially pronounced on continuous control variables (e.g., start-x MAE 4.59 → 0.97 and time MAE 1.42 → 0.75), indicating much better spatial-temporal fidelity during rollout. While other settings remain com-petitive on selected metrics (e.g., team or position accuracy, and start-y tie in 
+
+R2), ScoutGPT-VERSA provides the most reliable overall trade-off for realistic sequence continuation. 
+
+4.3 Ablation Study 
+
+To isolate what drives these gains, Table 4 compares ablations on lineup and con-text usage. Removing lineup/context can improve a few isolated metrics (e.g., Position or Time), but the full model remains strongest on most high-impact targets, particularly Team consistency, Type F1, and spatial end-point quality (End x, End y). This pattern suggests that lineup-aware context is most benefi-cial for preserving coherent tactical structure, even when simplified variants can Generative Transformer for Counterfactual Player Valuation 11 
+
+Table 4. Ablation study on lineup information and the context block. The Ours column reports the absolute performance of the full model. The remaining columns report changes relative to the full model after removing each component. For Acc., F1, and R2,positive changes indicate improvement, whereas for MAE, negative changes indicate improvement. Green and red denote improvement and degradation, respectively. 
+
+Group Attr. Ours w/o Context w/o Lineup w/o Both 
+
+Categorical Team 92.11 / 0.92 −0.32 / +0 .00 −0.76 / −0.01 −0.28 / +0 .00 
+
+Pos. 63.38 / 0.47 +0 .16 / +0 .05 −9.01 / −0.16 −6.88 / −0.13 
+
+Type 78.25 / 0.53 +0 .05 / −0.02 +0 .56 / −0.03 −0.44 / −0.03 
+
+Out. 94.68 / 0.86 −0.07 / +0 .00 −0.10 / +0 .00 −0.05 / +0 .01 
+
+Continuous Start x 0.96 / 0.97 +0 .00 / +0 .05 +0 .01 / −0.02 +0 .01 / −0.07 
+
+Start y 0.93 / 1.00 −0.02 / +0 .11 −0.03 / +0 .16 −0.01 / +0 .01 
+
+End x 0.89 / 4.11 −0.01 / +0 .14 −0.01 / +0 .09 −0.02 / +0 .16 
+
+End y 0.82 / 3.85 −0.02 / +0 .16 −0.02 / +0 .12 −0.01 / +0 .07 
+
+Time 0.71 / 0.75 −0.18 / +0 .07 +0 .01 / −0.01 −0.21 / +0 .10 
+
+fit specific marginals slightly better. Taken together, these results indicate that ScoutGPT improves both event realism and value-awareness, which is critical for reliable counterfactual transfer simulation. 
+
+Table 5. Average VAEP under different match minute and score-state conditions. The control value corresponds to the fully controlled reference condition and is fixed at 0.02672 for all rows. ∆ denotes the change relative to this reference ( ∆ = Simulated −
+
+Original). 
+
+Minute Score state Original Simulated ∆
+
+0Drawing 0.02678 0.023477 −0.003303 Trailing 0.02678 0.025916 −0.000864 Leading 0.02678 0.026392 −0.000388 40 Drawing 0.02678 0.029647 +0.002867 Trailing 0.02678 0.029864 +0.003084 Leading 0.02678 0.029644 +0.002864 
+
+To further examine whether ScoutGPT captures context-dependent player impact under controlled perturbations, we conduct a context intervention ab-lation on episodes of Jeonbuk Hyundai FC and report aggregated team-level episode VAEP under different combinations of match minute and score state. As summarized in Table 5, the intervention produces negative effects across all score states at minute 0, with ∆ = −0.0033 when drawing, ∆ = −0.0009 when trailing, and ∆ = −0.0004 when leading. This pattern suggests that, in the early part of the second half, teams tend to adopt a generally cautious style of play, resulting in lower VAEP than the common control condition regardless of the 12 Authors Suppressed Due to Excessive Length 1 5 10 20     
+
+> 0
+> 0.5
+> 1
+> 1.5
+> 2
+> ·10 −3
+> Number of samples Per-episode mean 1510 20
+> 0
+> 0.5
+> 1
+> 1.5
+> Number of samples Cumulative mean
+> Fig. 2. Comparison of the mean absolute delta under different numbers of samples. The left shows the per-episode mean absolute delta, while the right shows the cumulative mean absolute delta.
+
+scoreline. The effect is most pronounced when the team is drawing, indicating es-pecially conservative game management in tied situations. In contrast, the effects become consistently positive at minute 40, yielding gains of ∆ = +0 .0029 when drawing, ∆ = +0 .0031 when trailing, and ∆ = +0 .0029 when leading. This indicates that, by the later stage of the second half, teams shift toward more proactive play regardless of the score state, leading to higher VAEP overall. The tendency is strongest when trailing, which is consistent with the intuition that losing teams become the most aggressive in search of recovery. Overall, these results suggest that ScoutGPT captures not only context-dependent adaptation over time but also meaningful differences in strategic behavior across score states. Figure 2 summarizes the discrepancy between ground-truth (GT) and self-to-self simulated episode VAEP across different numbers of samples. Here, the left histogram refers to the per-episode average VAEP and the right one refers to the cumulative episode VAEP. As the number of samples increases, both the per-episode mean and cumulative absolute differences consistently decrease. This indicates that larger sample sizes lead to more stable self-to-self simulation results and improve the agreement with the GT episode VAEP.             
+
+> Table 6. Cross-season player retrieval performance using player embeddings learned from the 2021–2023 seasons. For each query embedding of a player from one season, retrieval is performed over embeddings from other seasons only. Evaluation is restricted to players who appear in at least two seasons. A query is counted as correct if an embedding of the same player from a different season is retrieved. ㄴ
+> Model Top-1 (%) Top-5 (%) Top-10 (%) ScoutGPT (Ours) 9.20 21.97 30.90
+> w/o position masking 8.48 20.02 27.05 Statistics-based embedding 8.98 21.36 30.34 Generative Transformer for Counterfactual Player Valuation 13
+
+## 5 Applications 
+
+Beyond next-event prediction, ScoutGPT supports two applications that lever-age the learned player representations and counterfactual generation capability: embedding-based player retrieval and hypothetical transfer simulation. 
+
+5.1 Player Embedding for Similar Player Retrieval 
+
+Table 6 provides a quantitative retrieval view of the same embedding space. Here, position masking means that during event prediction, position tokens are masked so that future event prediction must rely on player identity and the surrounding event context rather than explicit position labels. This prevents position information from being used as a shortcut bias and encourages embed-dings to encode player-specific behavioral patterns. The result is consistently better same-player retrieval (Top-1/Top-5/Top-10: 9.20/21.97/30.90) than both the variant without position masking (8.48/20.02/27.05) and the stats-based embedding baseline (8.98/21.36/30.34), indicating that more meaningful player embeddings are learned when positional bias is controlled. To examine whether the learned player embeddings capture meaningful clus-tering structures related to on-field roles, we project the player embedding vec-tors into two dimensions using t-Distributed Stochastic Neighbor Embedding (t-SNE), as illustrated in Figure 3. t-SNE is a non-linear visualization technique adept at preserving high-dimensional local neighborhood structures, making it highly effective for revealing distinct player archetypes. Each point corresponds to a single player, and colors denote coarse positional categories (e.g., defenders, wing backs, central midfielders, attacking midfielders, wingers, and goalkeepers). Figure 3 shows the visualization results of player ID embeddings using t-SNE. Position information was pre-masked from the input data. The model separated players by position using only the surrounding event context information. This indicates that the model spontaneously learned the players’ tactical roles. The hierarchy of clusters within the embedding space aligns with the spatial intuition of actual soccer. Defensive midfielders are positioned between the center back cluster on the right and the attacking midfielder cluster on the left. Fullback clusters appear separated vertically based on their tactical positions on the field. For instance, Jinsub Park exists between the defensive midfielder and center back clusters. Seungwon Jeong is distributed at the boundary between fullbacks and midfielders. Sangho Na and Masatoshi Ishida also exhibit complex char-acteristics at role group boundaries. Notably, these embedding patterns align well with their actual playing profiles, as all four players are known for their positional versatility and have performed across multiple roles in real matches. 
+
+5.2 Hypothetical Transfer Simulation 
+
+Table 7 evaluates transfer-fit prediction by comparing simulated post-transfer episode VAEP against ground truth and a naive baseline. Here, the naive pro-jection estimates a player’s next-season performance by simply extrapolating 14 Authors Suppressed Due to Excessive Length   
+
+> Fig. 3. t-SNE projection of ScoutGPT player embeddings from the 2024 K League
+> season, colored by positional role.
+
+from the previous season’s VAEP while adjusting only for playing time, without accounting for changes in tactical context, team structure, or role. Across all 40 transferred players, ScoutGPT reduces mean absolute error from 1.86 (naive) to 1.28 (simulated), corresponding to a substantial relative error reduction. This indicates that the model captures context-dependent changes in player contri-bution more reliably than static carry-over assumptions. The representative ex-amples also show that improvements are not confined to one role: gains appear for full-backs, wingers, and central midfielders, suggesting that the framework generalizes across distinct tactical functions. Jinsu Kim provides a clear example of the practical value of context-aware simulation. The naive estimate (7.00) substantially underestimates his observed post-transfer contribution (GT sum = 11.07), whereas ScoutGPT predicts 11.63, yielding a much smaller error (0.56 vs. 4.07). In other words, our prediction is markedly more accurate than the naive projection for this transfer case. This aligns with real-world outcomes: his move was widely regarded as highly suc-cessful relative to initial expectations, and he was appointed team captain in the following season. This case highlights how counterfactual sequence modeling can identify upside that is missed by static baseline forecasts. 
+
+## 6 Conclusions 
+
+We present ScoutGPT, a player-conditioned and value-aware autoregressive frame-work for football event modeling. By jointly predicting event attributes and resid-Generative Transformer for Counterfactual Player Valuation 15 
+
+Table 7. Comparison of post-transfer episode VAEP in 2025 using naive and simulated estimates against ground truth (GT). The top 40 transferred players are selected by post-transfer minutes and used to compute the overall average. Only five players are shown for readability. Columns “Naive”, “GT”, and “Sim” report episode VAEP sums, while |GT − Sim| and |GT − Naive| report absolute errors with respect to GT. 
+
+Role Player Episode VAEP Sum Absolute Error w.r.t. GT Naive GT Sim |GT − Sim| |GT − Naive| 
+
+Average 4.89 4.74 4.64 1.25 1.88 Left Back Jinsu Kim 7.00 11.07 11.63 0.56 4.07 Left Wing Reis 16.15 12.19 12.06 0.13 3.96 Center Back Hoik Jang 3.79 4.78 5.83 1.05 0.99 
+
+Central Midfielder Jihoon Cho 8.83 5.09 5.31 0.22 3.74 Left Back Juyong Lee 4.61 6.51 7.31 0.80 1.90 
+
+ual on-ball value, the model captures both local action structure and downstream tactical impact. ScoutGPT outperforms sequence-based baselines in next-event prediction, spatial precision, and future contribution estimation, while learn-ing interpretable player embeddings without positional supervision. Counterfac-tual player substitution further enables transfer-fit evaluation under new tactical contexts. Future work will integrate tracking-based trajectory signals to better model off-ball behavior and extend generation to full-possession or match-level simulation. 
+
+## References 
+
+1. Adjileye, A.A.: Risingballer: A player is a token, a match is a sentence, a path towards a foundational model for football players data analytics (2024) 2. van Arem, K., Goes-Smit, F., Söhl, J.: Forecasting the future development in quality and value of professional football players. Applied Sciences (2025). https: //doi.org/10.3390/app15168916 
+
+3. Baron, E., Hocevar, D., Salehe, Z.: A foundation model for soccer. arXiv preprint arXiv:2407.14558 (2024). https://doi.org/10.48550/arXiv.2407.14558 
+
+4. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., Nee-lakantan, A., Shyam, P., Sastry, G., Askell, A., Agarwal, S., Herbert-Voss, A., Krueger, G., Henighan, T., Child, R., Ramesh, A., Ziegler, D., Wu, J., Win-ter, C., Amodei, D.: Language models are few-shot learners. arXiv preprint arXiv:2005.14165 (2020). https://doi.org/10.48550/arXiv.2005.14165 
+
+5. Capellera, G., Ferraz, L., Rubio, A., Agudo, A., Moreno-Noguer, F.: Transport-mer: A holistic approach to trajectory understanding in multi-agent sports. In: Proceedings of the asian conference on computer vision. pp. 1652–1670 (2024) 6. Capellera, G., Ferraz, L., Rubio, A., Alahi, A., Agudo, A.: Jointdiff: Bridg-ing continuous and discrete in multi-agent trajectory generation. arXiv preprint arXiv:2509.22522 (2025) 7. Decroos, T., Bransen, L., Van Haaren, J., Davis, J.: Actions speak louder than goals: Valuing player actions in soccer. In: Proceedings of the 25th ACM SIGKDD 16 Authors Suppressed Due to Excessive Length international conference on knowledge discovery & data mining. pp. 1851–1861 (2019) 8. Decroos, T., Bransen, L., Van Haaren, J., Davis, J.: Vaep: An objective approach to valuing on-the-ball actions in soccer (extended abstract). In: Proceedings of the 29th International Joint Conference on Artificial Intelligence (IJCAI). pp. 4696– 4700 (07 2020). https://doi.org/10.24963/ijcai.2020/648 
+
+9. Dinsdale, D., Gallagher, J.: Transfer portal: Accurately forecasting the impact of a player transfer in soccer. arXiv preprint arXiv:2201.11533 (2022). https://doi. org/10.48550/arXiv.2201.11533 
+
+10. Du, N., Dai, H., Trivedi, R., Upadhyay, U., Gomez-Rodriguez, M., Song, L.: Re-current marked temporal point processes: Embedding event history to vector. In: Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining. pp. 1555–1564 (2016) 11. Fernández, J., Bornn, L., Cervone, D.: A framework for the fine-grained evalua-tion of the instantaneous expected value of soccer possessions. Machine Learning 
+
+110 (6), 1389–1427 (2021) 12. Hong, M., Lee, M., Jo, G., So, J.H., Bauer, P., Ko, S.K.: Eventgpt: Capturing player impact from team action sequences using gpt-based framework. arXiv preprint arXiv:2512.17266 (2025) 13. Jo, G., Kang, M., Lee, K., Lee, M., Bauer, P., Ko, S.K.: Versa: Verified event data format for reliable soccer analytics (2026) 14. Mahmudlu, M., Karakuş, O., Arkadaş, H.: What if they took the shot? a hi-erarchical bayesian framework for counterfactual expected goals. arXiv preprint arXiv:2511.23072 (2025) 15. Mendes-Neves, T., Meireles, L., Mendes-Moreira, J.: Forecasting events in soccer matches through language. arXiv preprint arXiv:2402.06820 (2024) 16. Mendes-Neves, T., Meireles, L., Mendes-Moreira, J.: A scalable approach for unified large events models in soccer. In: Machine Learning and Knowledge Discovery in Databases (ECML PKDD). vol. 16022 (2026) 17. Mendes-Neves, T., Meireles, L., Moreira, J.: Towards a foundation large events model for soccer. Machine Learning 113 , 8687–8709 (2024). https://doi.org/ 10.1007/s10994-024-06606-y 
+
+18. Pappalardo, L., Cintia, P., Ferragina, P., Massucco, E., Pedreschi, D., Giannotti, F.: Playerank: data-driven performance evaluation and player ranking in soccer via a machine learning approach. ACM Transactions on Intelligent Systems and Technology (TIST) 10 (5), 1–27 (2019) 19. Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., Sutskever, I., et al.: Language models are unsupervised multitask learners. OpenAI blog 1(8), 9 (2019) 20. Simpson, I., Beal, R.J., Locke, D., Norman, T.J.: Seq2event: Learning the language of soccer using transformer-based match event prediction. In: Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining. pp. 3898–3908 (2022). https://doi.org/10.1145/3534678.3539138 
+
+21. Singh, K.: Expected threat. https://karun.in/blog/expected-threat.html 
+
+(2019), accessed: 2025-07-19 22. Susmann, H.P., D’Alessandro, A.: The counterfactual combine: A causal framework for player evaluation. arXiv preprint arXiv:2602.23233 (2026). https://doi.org/ 10.48550/arXiv.2602.23233 
+
+23. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., Polosukhin, I.: Attention is all you need. Advances in neural information pro-cessing systems 30 (2017) Generative Transformer for Counterfactual Player Valuation 17 24. Xu, Y., Fu, Y.: Sports-traj: A unified trajectory generation model for multi-agent movement in sports. arXiv preprint arXiv:2405.17680 (2024) 25. Yeung, C., Sit, T., Fujii, K.: Transformer-based neural marked spatio-temporal point process model for analyzing football match events. Applied Intelligence 55 (5) (2025) 26. Yeung, C., Sit, T., Fujii, K.: Transformer-based neural marked spatio temporal point process model for analyzing football match events: C. yeung et al. Applied Intelligence 55 (5), 335 (2025) 27. Yılmaz, Ö.İ., Öğüdücü, Ş.G.: Learning football player features using graph embeddings for player recommendation system. In: Proceedings of the 37th ACM/SIGAPP Symposium on Applied Computing. pp. 577–584 (2022). https: //doi.org/10.1145/3477314.3507257 
+
+28. Zhao, S., Ma, H., Pu, Z., Huang, J., Pan, Y., Wang, S., Ming, Z.: Taceleven: generative tactic discovery for football open play. arXiv preprint arXiv:2511.13326 (2025). https://doi.org/10.48550/arXiv.2511.13326 
+
+29. Zuo, S., Jiang, H., Li, Z., Zhao, T., Zha, H.: Transformer hawkes process. In: International conference on machine learning. pp. 11692–11702. PMLR (2020) 
+
+## A Appendix 
+
+A.1 Episode Component 
+
+<CTX> TrueTeam t(H) p(H)1 u(H)1 · · · p(H)11 u(H)11 
+
+| FalseTeam t(A) p(A)1 u(A)1 · · · p(A)11 u(A)11 
+
+ϕ(period , minute , score , cards ) </CTX> 
+
+(1) 
+
+Table 8. Structure of the context block used in the input sequence. The block encodes team identity, on-pitch lineup, and compact match-state information. Symbol Description 
+
+t(H), t (A) Home and away team tokens 
+
+pi Position token of the i-th player 
+
+ui Player token of the i-th player 
+
+ϕ(·) Match-state summary function (period, minute, home goals, away goals, yellow/red cards) 18 Authors Suppressed Due to Excessive Length 
+
+A.2 Multi-Position Players 
+
+Table 9. Positional distribution of representative multi-role players. Minutes indicate total playing time in each position. 
+
+Player Played positions (minutes) 
+
+Jinsub Park CB (4,383), CDM (2,081), CM (1,849) Masatoshi Ishida CM (2,282), CAM (1,693), RW (287), CF (237), RF (141), LM (90), LW (77), LF (67) Sangho Na LW (3,670), RW (1,508), LM (1,073), RM (692), CF (451), LF (405), RF (90) Seungwon Jeong RWB (2,355), CM (2,021), RW (450), RM (270), RB (199), CAM (90)
