@@ -1,0 +1,435 @@
+Title: Robust Dynamic Object Detection in Cluttered Indoor Scenes via Learned Spatiotemporal Cues
+
+URL Source: https://arxiv.org/pdf/2603.15826v1
+
+Published Time: Wed, 18 Mar 2026 00:12:28 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Robust Dynamic Object Detection in Cluttered Indoor Scenes via Learned Spatiotemporal Cues 
+
+Juan Rached 1, Yixuan Jia 1, Kota Kondo 1, Jonathan P. How 1LV -DOT 
+
+Dynablox 
+
+STORM 
+
+Missed 
+
+Missed 
+
+Detected 
+
+GT 
+
+Fig. 1: BEV of LV-DOT [1] (top row), Dynablox [2] (middle row), and STORM (bottom row) across three experiments with increasing levels of clutter. LV-DOT struggles with proximity-induced false negatives in all experiments. Dynablox misses detections due to partial occlusions in columns 1 and 3 and due to proximity-induced false negatives in column 2. STORM detects all obstacles across all experiments. 
+
+Abstract — Reliable dynamic object detection in cluttered environments remains a critical challenge for autonomous navigation. Purely geometric LiDAR pipelines that rely on clustering and heuristic filtering can miss dynamic obstacles when they move in close proximity to static structure or are only partially observed. Vision-augmented approaches can provide additional semantic cues, but are often limited by closed-set detectors and camera field-of-view constraints, reducing robustness to novel obstacles and out-of-frustum events. In this work, we present a LiDAR-only framework that fuses temporal occupancy-grid-based motion segmentation with a learned bird’s-eye-view (BEV) dynamic prior. A fusion module prioritizes 3D detections when available, while using the learned dynamic grid to recover detections that would otherwise be lost due to proximity-induced false negatives. Experiments with motion-capture ground truth show our method achieves 28 .67 %
+
+higher recall and 18 .50 % higher F1 score than the state-of-the-art in substantially cluttered environments while maintaining comparable precision and position error. 
+
+This work is supported in part by DSTA. 
+
+> 1
+
+Massachusetts Institute of Technology, Cambridge, MA 02139, USA. 
+
+{jrached, yixuany, kkondo, jhow }@mit.edu .
+
+SUPPLEMENTARY MATERIAL 
+
+Video : https://youtu.be/_ZHGz-BkQzg 
+
+Code : To be released soon. I. I NTRODUCTION 
+
+Reliable detection of dynamic obstacles is crucial for safe autonomous navigation in cluttered environments. In particular, indoor scenes contain frequent close-proximity interactions between moving objects and static structure, and these interactions can produce sparse, partially occluded Li-DAR returns. As a result, dynamic object detection systems must remain robust in such scenarios while maintaining real-time performance. A widely used strategy for LiDAR-based dynamic obstacle detection builds on occupancy-grid reasoning across time: space is discretized into voxels, and objects that “enter” regions previously observed as free are marked as dynamic. This principle provides a strong geometric prior and can be implemented efficiently using occupancy grid maps (OGMs), followed by clustering to obtain object-level detections [2]. 1
+
+> arXiv:2603.15826v1 [cs.RO] 16 Mar 2026
+
+However, in cluttered indoor environments this pipeline can suffer miss detections when dynamic objects move close to static structure. In such cases, subsequent filtering steps (e.g., nearest-neighbor consistency checks used to suppress spurious artifacts) may inadvertently remove true dynamic returns. These effects are most pronounced when the moving object is partially occluded or when only a small fraction of its surface is visible, reducing the evidence available to clustering and denoising heuristics. This paper proposes a hybrid dynamic object detection system that couples a classical 3D temporal-occupancy pipeline with a complementary learned, class-agnostic dy-namic prior in a lower-dimensional bird’s-eye-view (BEV) representation. Our approach runs two detection pipelines in parallel. The first pipeline, inspired by Dynablox [2], performs moving object segmentation in a temporal OGM and clusters dynamic voxels to produce 3D detections, which are subsequently tracked using an Extended Kalman Filter (EKF) [3]. The second pipeline aggregates a short history of LiDAR scans (and corresponding vehicle states), encodes them using the PointPillars encoder [4], and models temporal context using a Long Short Term Memory (LSTM) module. The network outputs a 2D dynamic grid in which each cell represents whether the corresponding vertical column in 3D contains dynamic motion. Importantly, this representation is class-agnostic: rather than recognizing a closed set of semantic categories, it learns to predict dynamic regions from short-term spatiotemporal cues. To exploit the complementary strengths of these two pipelines, we introduce STORM (Spatio Temporal-cues and 
+
+Occupancy-based Robust Motion detection), a detection fusion procedure that prioritizes 3D OGM-based detections when available, while using 2D dynamic-grid evidence to recover tracks that would otherwise be lost due to proximity-induced false negatives (see Figure 1). We evaluate the proposed system on real-world exper-iments in cluttered indoor environments and show that the learned dynamic prior significantly reduces false neg-atives caused by dynamic-static proximity. We additionally compare against a LiDAR–visual baseline to highlight the limitations of vision-based approaches in cluttered indoor scenes, including restricted camera field-of-view and closed-set semantics. In summary, our contributions are:  
+
+> •
+
+a spatiotemporal network that predicts class-agnostic BEV dynamic grids from short LiDAR histories and ego-motion;  
+
+> •
+
+a fusion strategy that uses the learned dynamic grid to recover missed 3D detections and maintain tracks during proximity and occlusion-induced failures;  
+
+> •
+
+extensive validation with real-world data on indoor scenes with complex static obstacle configurations and multiple dynamic obstacle classes reporting higher re-call and F1 score than the state-of-the-art. II. R ELATED WORK 
+
+A. LiDAR-based Dynamic Object Detection 
+
+A common approach to LiDAR-based dynamic object de-tection [5]–[10] is to reason about motion through temporal consistency in an occupancy representation [11]. Within this family, Dynablox [2] is a representative work that performs moving object segmentation by explicitly reasoning over temporal occupancy and free-space consistency, and then applies clustering to obtain object-level detections. While effective in outdoor autonomous driving scenarios, these pipelines can suffer false negatives in cluttered indoor scenes when dynamic objects move near static structure or are only partially observed: dynamic and static returns can spatially overlap, and subsequent clustering or denoising heuristics can suppress the sparse traces of true motion. This motivates complementary mechanisms that aggregate short-term temporal cues and provide a prior for regions where instantaneous geometric cues are weak. In addition to LiDAR-only pipelines, vision-augmented methods leverage semantic cues to improve detection of dy-namic objects from background. However, these approaches are often constrained by closed-set labels and by the camera field-of-view (FOV), and can therefore miss novel obstacles or objects outside the image frustum. For example, LV-DOT [1] uses an RGB-D camera to provide additional visual cues, including an RGB detector based on a pretrained closed-set model (i.e., YOLO [12]) that identifies dynamic obstacles from predefined classes [1]. In addition, because the visual cues are only available within the camera frustum, LV-DOT may fail when obstacles are outside the camera FOV, even if they are observed by LiDAR. 
+
+B. Learning-based Moving Object Segmentation 
+
+Learning-based moving object segmentation (MOS) labels observations as moving versus static by leveraging spatiotem-poral cues from sequential LiDAR data, typically without requiring explicit semantic categories [13]–[17]. Chen et al . [14] show that exploiting temporal information in 3D LiDAR sequences can substantially improve MOS compared to single-scan reasoning. Subsequent work has advanced both representations and learning strategies for MOS, including sparse 4D convolutions for spatiotemporal processing [15], map-based MOS that builds volumetric beliefs in dynamic environments [16], and automatic labeling procedures for scalable online MOS training data generation [18]. BEV-centric online MOS methods have also been proposed, com-bining appearance and motion cues in a BEV representation for efficiency [17]. III. M ETHOD 
+
+Our approach consists of two parallel detection pipelines. One uses the temporal occupancy information of voxels in an OGM and clustering to generate the positions of dynamic objects in 3D. This is covered in Section III-A. The other compresses point cloud information from multiple scans into a sequence of pseudo-images that are fed into a Long Short Term Memory (LSTM) module. The embeddings produced 2Fig. 2: System architecture of the proposed detection framework: point cloud and ego state information are processed in parallel by our OGM and learning-based MOS pipelines. The cluster centroids of the dynamic point cloud produced by the OGM module and GridNet’s 2D dynamic grids are fused to generate dynamic obstacle detections. 
+
+by the LSTM are reconstructed into 2D dynamic grids where each square in the grid map represents either a static or dynamic column in 3D. These dynamic columns can be used to recover dynamic object detections that are lost in the clustering step of the 3D pipeline. This is covered in Section III-B. 
+
+A. Temporal Occupancy Grid Map Detector 1) Moving Object Segmentation: The MOS module of our 3D obstacle detection pipeline leverages the temporal information of each voxel in an OGM as in Dynablox [2]. It works under the assumption that, if space is split into free and occupied regions, anything that moves into free space must be dynamic. This principle allows us to solve the MOS problem, and use dynamic point cloud segments as candidates for dynamic object detections. To distinguish between free and non-free space, the OGM keeps track of how long each voxel has been occupied and unoccupied. To that end, the internal state of each voxel in the grid map is augmented with variables t(t) 
+
+> o
+
+and t(t) 
+
+> u
+
+, representing the last time that voxel was occupied and unoccupied respectively. The complete state of each voxel, a(t), is defined as follows, 
+
+a(t) = {o(t),t(t) 
+
+> o
+
+,t(t) 
+
+> u
+
+, f (t)}, (1) where o(t) ∈ { 0, 1}, represents whether the voxel is occupied and f (t) ∈ { 0, 1} whether it is considered free space at time 
+
+t. At each timestep, if the voxel is occupied, the occupancy duration of that voxel, t(t) 
+
+> o
+
+, is updated. Once that number exceeds a threshold, τo, the voxel is considered not free (i.e. 
+
+f (t) = 0). Similarly, if the voxel is unoccupied, the amount of time the voxel has been unoccupied, t(t) 
+
+> u
+
+, is updated. Once that value exceeds a threshold, τu, the voxel is marked as free (i.e. f (t) = 1). Any object that moves into free space, that is a voxel with fields f (t) = 1 and o(t) = 1, is considered dynamic and any voxel with f (t) = 0 is considered static. Clustering and nearest-neighbors checks are applied to the dynamic subsets of the point cloud scans to compute position estimates and reduce potential false positives caused by noisy LiDAR readings. Unlike Dynablox, our OGM contains no hierarchical spatial structures as mapping potentially unbounded environments is not the focus of this work. In addition, our approach relies on cluster density heuristics, as opposed to point-count heuristics, to filter out noise, as we found it better handles artifacts introduced by large static surfaces. 
+
+2) Association and Estimation: For each dynamic cluster, we construct a bounding box that contains all points belong-ing to that cluster and represent its position in 3D space using the cluster’s centroid. Through our detection fusion procedure, discussed in more detail in Section III-C, cluster centroids are assigned an Extended Kalman Filter (EKF) estimate using greedy associations. To accurately capture a wide range of obstacle trajectories, including nonlinear motion, we use a constant acceleration Dubins plane model. We define each obstacle’s state as, 
+
+x = x y z θ φ v⊤ (2) Where x, y, z are the coordinates of the obstacle in R3, θ and 
+
+φ are the heading and the climb angles respectively, and v
+
+is the magnitude of the velocity of the object. The dynamics evolve as follows, ˙x = v c φ cθ , v c φ sθ , v s φ , ˙θ , ˙φ , aT (3) Where cθ and sθ are shorthand for cos θ and sin θ , respec-tively. Following the standard EKF procedure, the right hand side of (3) is discretized and linearized about the current best estimate to generate the state transition function f (·) and the state transition Jacobian Fk. The dynamics are propagated using, ˆxk|k−1 = f (ˆxk−1|k−1, uk−1)
+
+Pk|k−1 = FkPk−1|k−1F⊤ 
+
+> k
+
++ Qk
+
+Here, ˆxk|k−1 and Pk|k−1 are the predicted estimate and covariance at k using measurements up to k − 1. Qk is the process noise covariance matrix. We follow the standard EKF 3TABLE I: Performance of methods on precision, recall, F1 score, and position error metrics across three distance thresholds on a set of experiments with 1-3 human dynamic obstacles. For each metric, the highest performing method is highlighted in green and the second highest in light green . For precision, recall, and F1 score, higher is better. For position error, lower is better. # Obs is the number of static obstacles in the room.                                                                                                                                                                                                            
+
+> # Obs Method DistThresh = 0.75m DistThresh = 0.5m DistThresh = 0.25m Precision Recall F1 Pos Err ( m)Precision Recall F1 Pos Err ( m)Precision Recall F1 Pos Err ( m)4
+> LV-DOT 0.96 0.75 0.84 0.14 0.96 0.75 0.84 0.14 0.96 0.74 0.83 0.13
+> LV-DOT NC 0.96 0.75 0.84 0.14 0.96 0.75 0.84 0.14 0.96 0.74 0.83 0.13
+> Dynablox 1.00 0.91 0.95 0.16 1.00 0.91 0.95 0.16 1.00 0.90 0.95 0.15
+> STORM NG 0.99 0.91 0.95 0.15 0.99 0.91 0.95 0.15 0.99 0.89 0.94 0.13
+> STORM (Ours) 0.99 0.96 0.97 0.16 0.99 0.96 0.97 0.15 0.98 0.96 0.97 0.13
+> 16
+> LV-DOT 0.54 0.14 0.22 0.16 0.52 0.13 0.21 0.13 0.51 0.12 0.20 0.12
+> LV-DOT NC 0.95 0.05 0.10 0.13 0.95 0.05 0.10 0.13 0.94 0.05 0.10 0.12
+> Dynablox 1.00 0.60 0.75 0.17 1.00 0.60 0.75 0.17 1.00 0.56 0.72 0.14
+> STORM NG 1.00 0.66 0.79 0.18 1.00 0.65 0.79 0.17 1.00 0.61 0.76 0.14
+> STORM (Ours) 1.00 0.72 0.84 0.18 1.00 0.72 0.84 0.17 1.00 0.68 0.81 0.14
+> 31
+> LV-DOT 0.64 0.12 0.20 0.17 0.63 0.11 0.19 0.15 0.61 0.11 0.18 0.13
+> LV-DOT NC 0.78 0.06 0.10 0.16 0.77 0.05 0.10 0.15 0.75 0.05 0.09 0.13
+> Dynablox 1.00 0.48 0.65 0.18 1.00 0.48 0.65 0.18 1.00 0.43 0.60 0.15
+> STORM NG 1.00 0.55 0.71 0.18 1.00 0.55 0.71 0.18 1.00 0.50 0.67 0.15
+> STORM (Ours) 1.00 0.60 0.75 0.18 1.00 0.60 0.75 0.18 1.00 0.55 0.71 0.15
+
+update, 
+
+yk = zk − h(ˆxk|k−1) (4) 
+
+Sk = HkPk|k−1H⊤ 
+
+> k
+
++ Rk (5) 
+
+Kk = Pk|k−1H⊤ 
+
+> k
+
+S−1 
+
+> k
+
+(6) ˆxk|k = ˆxk|k−1 + Kkyk (7) Where ˆ xk|k is the current best state estimate, zk the mea-surement at the current time step, Rk the measurement noise covariance matrix, h(·) is the measurement function, which outputs the position of the obstacle, and Hk the measurement Jacobian. 
+
+B. Learned 2D Gridmaps 
+
+In the following discussion, we treat dynamic objects as positive detections and static objects as negatives. A core limitation of clustering-based dynamic object detection is missed detections when in proximity to static obstacles, known as false negatives. For systems that cluster the point cloud before performing MOS, as in [1], true positives and true negatives can be bundled into the same cluster, leading to the whole cluster being classified as static. We observe the same failure mode on methods that perform MOS before clustering as in [2]. In these cases, however, the false negatives are not generated in the clustering step, but in subsequent nearest-neighbors checks intended to reduce the presence of artifacts attributed to noisy LiDAR readings. In this section, we introduce GridNet, an approach for encoding point cloud information across time and generating 2D dynamic grids that can help us recover lost detections from the aforementioned false negatives. 
+
+1) Architecture: We use a PointPillars encoder [4] to project each LiDAR scan into a BEV pseudo-image and thus represent a sequence of T point clouds as a BEV feature sequence. Concretely, for each scan we discretize the ground plane into vertical pillars, compute per-pillar features with a PointNet-style [19] pillar feature network, and scatter them into a dense BEV feature map. We further compress each BEV feature map into a latent embedding using 2D convolu-tions, concatenate it with an MLP embedding of the vehicle’s body-frame velocity, and feed the resulting sequence to an LSTM of length T to model temporal dynamics. The LSTM output is decoded with 2D convolutions into a binary BEV grid, where each cell indicates whether the corresponding 3D vertical column contains dynamic motion. Operating in BEV keeps the network lightweight and scalable to high resolutions compared to methods that learn directly in 3D (e.g., 3D convolutions on voxel grids). The coordinates of the 2D dynamic grid map are used to recover 3D detections in the detection fusion procedure (see Section III-C). 
+
+2) Loss: The target grids are generated by projecting the position of dynamic obstacles into 2D BEV plane. Since the fraction of the image that is dynamic is substantially smaller than the fraction that is not, training a neural network to identify dynamic obstacles in the 2D grid means solving a highly unbalanced binary segmentation problem. To address this, we use a Binary Cross Entropy (BCE) loss with a Dice Score term to reward overlap between prediction and ground truth. We define our loss as, 
+
+Ltotal = wBCE LBCE + wDice LDice , (8) with, 
+
+LBCE = −wy log (p) − (1 − y) log (1 − p), (9) and 
+
+LDice = 2|Y ∩ P||Y | + |P| , (10) 4where y ∈ { 0, 1} is the ground truth (whether the pixel is dynamic), p ∈ [0, 1] is the predicted probability of the pixel being dynamic, Y is the set of ground truth elements, and P the set of predicted probabilities. w is a weight that determines the severity of computing false positives. The weights wBCE and wDice determine which term is favored in the total loss. The training and validation losses steadily decreased with wBCE = 0.7 and wDice = 0.3. 
+
+C. Fusing Detections 
+
+The detection fusion procedure is summarized in Algo-rithm 1. At each timestep, we receive the sets of all 3D, 
+
+S1, and 2D, S2, detections corresponding to that timestep as well as the set of EKF estimates, K , computed in the previous timestep. We first process the 3D detections. For each detection, s1, we iterate through the Kalman filter estimates, K , and greedily assign to it the closest estimate under the ℓ2 norm. The selected estimate is then marked as assigned, and the corresponding detection is labeled with the estimate’s id. Finally, the estimate is propagated into the current timestep and updated with the 3D detection’s position measurement, s1.pos t . We process the 2D detections S2
+
+analogously. For each s2 ∈ S2, we consider only those filter estimates that did not receive an associated 3D measurement. The missing estimates are greedily assigned a detection as in the 3D case and propagated into the current timestep. What makes this step different from the previous loop is that if a dynamic object is missed by the 3D detector, but is still indeed moving, then the 2D dynamic grid network, which has access to point cloud information over a short temporal window, can still detect the dynamic object. If the Kalman filter estimate corresponding to that object is propagated into one of the 2D grid’s ”dynamic columns”, we can recover that estimate. Formally, we can define the set of recovered estimates, Kr, as follows, 
+
+{ k ∈ K | ∥ s.pos t −k.pos t−1∥2 < dmin ∧ ¬ k.assigned } (11) Where s ∈ S2 is the 2D measurement greedily associated with k and dmin is the greedy distance threshold. We update every recovered estimate, k ∈ Kr, with the x, y coordinates from the 2D measurement, x(t) 
+
+> s
+
+and y(t) 
+
+> s
+
+, enhanced with the z
+
+coordinate from that estimate, z(t−1) 
+
+> k
+
+, at the previous timestep. So that the measurement used in the update step becomes, 
+
+s(t) 
+
+> 2
+
+=
+
+h
+
+x(t) 
+
+> s
+
+y(t) 
+
+> s
+
+z(t−1)
+
+> k
+
+i⊤
+
+(12) This works under the assumption that the height of the obstacle does not dramatically change between each 3D read-ing, which is true of most dynamic objects at 100 ms intervals (a common LiDAR scanning period). This scheme enables us to recover 3D estimates efficiently, while maintaining near-zero false positives, and favoring 3D detections when available. IV. E XPERIMENTS AND RESULTS 
+
+We evaluate our approach in two sets of experiments. The first compares the performance of state-of-the-art detection 
+
+Algorithm 1 Detection Fusion Procedure  
+
+> 1:
+
+S1 ← Set of 3D detections  
+
+> 2:
+
+S2 ← Set of 2D detections  
+
+> 3:
+
+K ← Set of EKF estimates  
+
+> 4:
+
+for s1 ∈ S1 do  
+
+> 5:
+
+dmin ← distance tolerance  
+
+> 6:
+
+for k ∈ K do  
+
+> 7:
+
+d1 ← ∥ s1.pos t − k.pos t−1∥2 
+
+> 8:
+
+if d1 < dmin then  
+
+> 9:
+
+dmin ← d1 
+
+> 10:
+
+s1.estimate id ← k.id  
+
+> 11:
+
+k.assigned ← True  
+
+> 12:
+
+k.predict ()  
+
+> 13:
+
+k.update (s1.pos t ) 
+
+> 14:
+
+end if  
+
+> 15:
+
+end for  
+
+> 16:
+
+end for  
+
+> 17:
+
+for s2 ∈ S2 do  
+
+> 18:
+
+dmin ← distance tolerance  
+
+> 19:
+
+for k ∈ K do  
+
+> 20:
+
+if k.assigned = False then  
+
+> 21:
+
+d2 ← ∥ s2.pos t − k.pos t−1∥2 
+
+> 22:
+
+if d2 < dmin then  
+
+> 23:
+
+s2.estimate id ← k.id  
+
+> 24:
+
+k.assigned ← True  
+
+> 25:
+
+s2.pos t .z ← k.pos t−1.z 
+
+> 26:
+
+k.predict ()  
+
+> 27:
+
+k.update (s2.pos t ) 
+
+> 28:
+
+end if  
+
+> 29:
+
+end if  
+
+> 30:
+
+end for  
+
+> 31:
+
+end for  
+
+> 32:
+
+return K
+
+systems on human dynamic obstacles inside progressively more cluttered environments. The other compares the perfor-mance of the same methods in scenarios where the dynamic obstacle is a quadcopter. GridNet was trained on data con-taining no quadcopter as obstacles; consequently, no training LiDAR scans contain quadcopter returns. The success of 
+
+STORM in those experiments indicates that the model learns motion cues, generalizing to and detecting previously unseen obstacles. Between training, validation, and testing data we ran over 40 experiments lasting between 2-10 minutes each, producing about 84 , 000 labeled data points. Roughly, 57% of those data points correspond to training, 7% to validation, and 36% to testing data. 
+
+A. Experimental Setup 
+
+Point cloud and odometry data were collected using a Mid-360 Livox LiDAR, operated at 10 Hz , mounted on a Holybro x500 quadcopter and a Vicon motion capture system. The Vicon motion capture system was also used to obtain the obstacle ground truth positions for each experiment. Since the motion capture system produces ground truth position as a point mass in R3 as opposed to 3D bounding boxes, we 5TABLE II: Performance of methods on precision, recall, F1 score, and position error metrics across three distance thresholds on a set of experiments with a quadcopter dynamic obstacle. For each metric, the highest performing method is highlighted in green and the second highest in light green . For precision, recall, and F1 score, higher is better. For position error, lower is better. # Obs is the number of static obstacles in the room. We omit LV-DOT ’s rows as it achieved zero precision, recall, and F1 score on these experiments.                                                                                                                                 
+
+> # Obs Method DistThresh = 0.75m DistThresh = 0.5m DistThresh = 0.25m Precision Recall F1 Pos Err ( m)Precision Recall F1 Pos Err ( m)Precision Recall F1 Pos Err ( m)0
+> Dynablox 1.00 0.42 0.59 0.21 1.00 0.42 0.59 0.21 1.00 0.36 0.53 0.18
+> STORM NG 1.00 0.49 0.66 0.19 1.00 0.49 0.66 0.19 1.00 0.44 0.61 0.16
+> STORM (Ours) 0.99 0.82 0.90 0.23 0.99 0.81 0.89 0.22 0.99 0.74 0.85 0.17
+> 11
+> Dynablox 1.00 0.50 0.67 0.20 1.00 0.50 0.67 0.20 1.00 0.42 0.59 0.16
+> STORM NG 1.00 0.40 0.57 0.18 1.00 0.40 0.57 0.18 1.00 0.34 0.51 0.15
+> STORM (Ours) 1.00 0.52 0.69 0.21 1.00 0.52 0.68 0.21 1.00 0.43 0.61 0.16
+> 26
+> Dynablox 1.00 0.41 0.58 0.21 1.00 0.41 0.58 0.21 1.00 0.32 0.48 0.17
+> STORM NG 0.98 0.40 0.57 0.18 0.98 0.40 0.57 0.18 0.98 0.35 0.52 0.15
+> STORM (Ours) 0.97 0.46 0.62 0.20 0.97 0.45 0.62 0.19 0.97 0.39 0.56 0.15
+
+Fig. 3: Precision, recall, and F1 score in an experiment where a pedestrian traverses a room with 21 static obstacles. The dense obstacle configuration forces frequent strong occlusions and proximity-induced false negatives. STORM recovers information lost during those failure modes, achieving higher recall and F1 score than other methods. 
+
+Fig. 4: Precision, recall, and F1 score in an experiment where a quadcopter flies at high speeds (0-5 m/s) in an empty room. 
+
+STORM captures the high speed motion of the vehicle, achieving significantly higher recall and F1 score than other methods with comparable precision. 
+
+define the association threshold threshold = 1 − distT hresh 
+
+as a proxy for intersection over union thresholds. Where 
+
+distT hresh is the maximum euclidean distance for a detec-tion to be associated to its ground truth. A high association threshold means a low maximum valid distance between detection and ground truth. We used collapsible tables and interlocking foam panels to build a wide range of static obstacle configurations inside of 
+
+Fig. 5: Experimental setup with 31 static obstacles. Quadcopter is pictured at the center of the room, surrounded by tables and foam pillars. The dense obstacle arrangement generates multiple partial occlusions and narrow corridors that clustering-based systems strug-gle with. 
+
+a 10x10 m2 room. In between experiments, static obstacles were incrementally introduced to the space, raising the complexity of the environment and the presence of false negatives due to partial occlusions and obstacle proximity. The occupancy gridmap MOS module as well as the state estimation module were implemented in C++. The GridNet model was designed using Pytorch. We used ROS2 as the system’s communication framework. All tests were run on a Lenovo Soundwave laptop with an Intel-i9 CPU and NVIDIA GEFORCE RTX 4090 GPU. For the OGM-based systems a grid resolution of 0 .2 m and a maximum radius of 11 m were used throughout all experiments. The GridNet model was trained using the same dimensions and a scan history of T = 3. For all experiments, we compare the performance of 
+
+STORM with Dynablox [2] and LV-DOT [1]. We also include the results of running LV-DOT without a color image (LV-DOT NC ) as well as STORM without the GridNet model (STORM NG ) to highlight the performance benefits of the learning components of these systems. We use precision, recall, F1 score, and position error metrics, across distance thresholds ranging from 0 m to 1 m, to quantify detection rate and quality of the aforementioned methods. We particularly 6care about the F1 score, as it captures both detection rate and quality. 
+
+B. Qualitative Results and Failure Analysis 
+
+We constructed complex static environments (e.g. Fig-ure 5) inside the same room to replicate the challenge of detecting dynamic obstacles in cluttered scenes in acontrolled space with reliable ground truth. The arranged ob-stacle configurations generated strong partial occlusions and narrow gaps for dynamic objects to navigate through. While these environments exploited the limitations of Dynablox 
+
+and LV-DOT , STORM consistently demonstrated robustness to these failure modes. Figure 1 contains snapshots from three different experiments across all methods. The top row corresponds to LV-DOT , middle to Dynablox , bottom to 
+
+STORM , and the number of static objects in each experiment increases from left to right. For clarity, the ground truth ob-stacle positions are marked with red rings and the bounding boxes generated by our detection system are visualized as multi-colored rectangles in each image. The second column of Figure 1 highlights a common failure mode of LV-DOT .A pedestrian in the bottom-right corner of the image is squeezed between two foam pillars. Even though the indi-vidual is not occluded, its proximity to the pillar makes them invisible to LV-DOT . Similarly, on column three, a moving obstacle travels near static one, at some timestep the dynamic and static obstacles are clustered together, then the dynamic obstacle moves away, but the static one remains misclassified as dynamic for several seconds (notice the dynamic obstacles are on the opposite side of the room by the time the snapshot is taken). Dynablox is most affected by partial occlusions as it relies on hand-tuned parameters to tell small dynamic obstacles apart from noise. When only a fraction of the obstacle is visible, the number of dynamic points belonging to that object can fall short of a predefined threshold and the detection is missed by the system. In column one, we observe Dynablox as it fails to detect a pedestrian that walks behind a static obstacle, even though a fraction of the person is visible all throughout that trajectory, while 
+
+STORM successfully detects the pedestrian during frames containing partial occlusions. Although that is Dynablox ’s primary source of false negatives, nearest neighbor checks can subtract dynamic points from a moving obstacle when in proximity to a static one, leading to missed detections even when the obstacle is fully in the sensor’s line of sight (see pedestrian in bottom right corner of column two). Our method, instead, is robust to varying dynamic obstacle size and density as it has access to a history of point cloud scans at every timestep. 
+
+C. Detector Performance on Human Obstacles 
+
+For this set of experiments, pedestrians walked in between static obstacles as a quadcopter equipped with a LiDAR sensor was placed at the center of the room. Each pedestrian wore a hardhat with six motion capture spheres glued to its surface to generate ground truth positions. Several ex-periments were performed, starting with empty rooms and adding 4-6 obstacles between tests. As illustrated in Figure 3, generated from an experiment containing 21 static obstacles, 
+
+STORM performs particularly well relative to other methods in crowded rooms. For the sake of brevity, Table I only contains experi-ments in environments cluttered with 4, 16, and 31 static obstacles with 1-3 pedestrians moving at different speeds, but the trends revealed by this table persisted across all experiments. Through all clutter levels, our method maintains precision above 0.98 while significantly improving recall relative to Dynablox and LV-DOT , particularly at higher association thresholds ( distT hresh = 0.25 m). Our position error is always within 5 cm of the lowest error in its respective run. The recall improvement is most pronounced in high-object-density scenes, where partial occlusions and proximity-induced clustering failures are frequent. In an experiment with 31 static obstacles and two pedestrians, our approach achieved 10 .18% higher recall and 6 .60% higher F1 score than our implementation without GridNet at the 0 .25 m
+
+distance threshold. Relative to Dynablox , it achieved a 28 .67% and 18 .50% improvement on recall and F1 score respectively. For reference, in the 4 obstacle case, STORM ’s F1 score is only 2 .35% higher than Dynablox ’s. The fact that in some tests, STORM NG achieved higher recall than Dynablox , may be attributed to the EKF module, which propagates position estimates between timesteps in the absence of measurements, as well as more discriminative filtering between partial occlusions and noise. Overall we found that the performance of STORM NG and Dynablox 
+
+is comparable across all metrics. Out of all methods, the most impacted by clutter was LV-DOT . At a distance threshold of 0 .25 m, LV-DOT ’s precision and recall sit 425 .71% and 297 .21% below STORM ’s, respectively. This is expected as 
+
+LV-DOT clusters objects before performing MOS, merging dynamic and static obstacles and obscuring detections.               
+
+> TABLE III: Mean processing time (ms) of parallel pipelines
+> Pre-process MOS Clustering Fusion Total OGM 1.65 23.56 0.10 0.15 25.46 GridNet -69.31 -0.15 69.46
+
+D. Detector Performance on Other Obstacles 
+
+For this set of experiments, a quadcopter was flown in between static obstacles as a second quadcopter equipped with a LiDAR sensor was placed at the center of the room. Both quadcopters had motion capture spheres used to compute their ground truth. Table II reports the results from experiments containing 0, 11, and 26 static obstacles. In the most cluttered environment, STORM achieved 21 .88% higher on recall and 16 .42% higher on F1 score than Dynablox . Without GridNet, performance dropped by 11 .61% and 7 .90% on recall and F1 score respectively. Surprisingly, for these tests the gap in performance was larger when no static obstacles were present. As illustrated in Figure 4, STORM achieved 61 .10% and 39 .87% higher F1 7score than Dynablox and STORM NG , respectively, in this experiment. While visualizing obstacle detections and ground truth positions, STORM NG and Dynablox were observed to miss detections when the obstacle accelerated. This is likely a combination of fast flight speeds, that are easily achieved in uncluttered spaces, and the quadcopter’s low point density. These make OGM-based detectors struggle, as they rely on hand-tuned parameters for filtering out artifacts and sparse fast moving vehicles can be hard to distinguish from noise. Our model instead learns these parameters and performs well on low-density fast-moving obstacles as their displacement is more pronounced in the T = 3 sized window. Either due to aggressive point-count, cluster-size, or cluster-density filtering catered to obstacles of human pro-portions, LV-DOT ’s 3D pipeline failed to detect the dynamic quadcopter. As the quadcopter does not fit into any of YOLO’s categories, it also was not detected by the vision module, leading to an overall zero precision and recall for all quadcopter tests. 
+
+E. Runtime Analysis 
+
+Our parallel OGM-based and learning-based pipelines had a mean total runtime of 25 .46 ms and 69 .46 ms , respectively. This corresponds to an operating frequency of 39 .28 Hz for the OGM approach and 14 .40 Hz for the model which is sufficient for real-time operation. Since GridNet supplements OGM detections, the model’s runtime does not bottleneck the system, but in cluttered scenes, increased reliance on GridNet can make detections appear slightly delayed relative to the ground truth (see Figure 1), reflecting GridNet’s higher inference time. This additional latency is bounded and preferable to the missed detections observed when relying on OGMs alone. While we process the point cloud histories with the PointPillars encoder sequentially, this procedure can be fully parallelized. To preserve information, we also process all 20 , 000 LiDAR points per scan. We expect that parallelizing the point cloud histories, downsampling the point cloud, and exporting the Pytorch model to TensorRT should provide a performance boost sufficient to enable the deployment of our system in resource constrained embedded devices as well, such as a Jetson Orin AGX. V. C ONCLUSION AND DISCUSSION 
+
+This paper presented STORM , a LiDAR-based class-agnostic multi-object detection framework robust to partial occlusions and proximity-induced failures in cluttered indoor environments. By combining temporal occupancy grid mo-tion segmentation with a learned 2D dynamic grid represen-tation, the proposed approach addresses key failure modes of clustering-based systems, particularly missed detections near static obstacles. Experimental results demonstrate consistent improvements in recall and F1 score across increasingly cluttered environments, as well as comparable precision and position error against state-of-the-art clustering-based detec-tors. Finally, STORM demonstrated robustness to fast moving objects relative to the state-of-the-art, as it achieved the highest recall out of all methods in experiments containing obstacles moving at speeds of up to 5 m/s.While the OGM-GridNet fusion addresses many of the challenges faced by Dynablox and LV-DOT , we still inherit some of the limitations of OGM-based detectors. Thin surfaces generate spurious artifacts that lead to false positives, lowering overall F1 score. Moreover, since GridNet relies on a temporal window of three LiDAR scans, the model performs better on faster objects, as their displacement within the 0 .3 s window is more pronounced. Implementing the GridNet improvements discussed in Section IV-E, as well as targeted optimizations to the OGM segmentation pipeline, is a promising direction for future work as this would reduce end-to-end latency and enable efficient deployment on resource constrained embedded platforms. REFERENCES [1] Z. Xu, H. Shen, X. Han, H. Jin, K. Ye, and K. Shimada, “LV-DOT: Lidar-visual dynamic obstacle detection and tracking for autonomous robot navigation,” arXiv preprint arXiv:2502.20607 , 2025. [2] L. Schmid, O. Andersson, A. Sulser, P. Pfreundschuh, and R. Siegwart, “Dynablox: Real-time detection of diverse dynamic objects in complex environments,” IEEE Robotics and Automation Letters , vol. 8, no. 10, pp. 6259–6266, 2023. [3] R. E. Kalman, “A new approach to linear filtering and prediction problems,” 1960. [4] A. H. Lang, S. Vora, H. Caesar, L. Zhou, J. Yang, and O. Beijbom, “Pointpillars: Fast encoders for object detection from point clouds,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 12 697–12 705. [5] Y. Min, D.-U. Kim, and H.-L. Choi, “Kernel-based 3-d dynamic oc-cupancy mapping with particle tracking,” in 2021 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2021, pp. 5268–5274. [6] M. Schreiber, V. Belagiannis, C. Gl¨ aser, and K. Dietmayer, “Dynamic occupancy grid mapping with recurrent neural networks,” in 2021 IEEE International Conference on Robotics and Automation (ICRA) .IEEE, 2021, pp. 6717–6724. [7] M. Lu, X. Fan, H. Chen, and P. Lu, “Fapp: Fast and adaptive perception and planning for uavs in dynamic cluttered environments,” IEEE Transactions on Robotics , 2024. [8] S. Shi, C. Guo, L. Jiang, Z. Wang, J. Shi, X. Wang, and H. Li, “Pv-rcnn: Point-voxel feature set abstraction for 3d object detection,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 10 529–10 538. [9] H. Wu, Y. Li, W. Xu, F. Kong, and F. Zhang, “Moving event detection from lidar point streams,” nature communications , vol. 15, no. 1, p. 345, 2024. [10] T. Yin, X. Zhou, and P. Krahenbuhl, “Center-based 3d object detec-tion and tracking,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2021, pp. 11 784–11 793. [11] A. Elfes, “Using occupancy grids for mobile robot perception and navigation,” Computer , vol. 22, no. 6, pp. 46–57, 2002. [12] J. Redmon, S. Divvala, R. Girshick, and A. Farhadi, “You only look once: Unified, real-time object detection,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 779– 788. [13] S. Hoermann, M. Bach, and K. Dietmayer, “Dynamic occupancy grid prediction for urban autonomous driving: A deep learning approach with fully automatic labeling,” in 2018 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2018, pp. 2056–2063. [14] X. Chen, S. Li, B. Mersch, L. Wiesmann, J. Gall, J. Behley, and C. Stachniss, “Moving object segmentation in 3d lidar data: Alearning-based approach exploiting sequential data,” IEEE Robotics and Automation Letters , vol. 6, no. 4, pp. 6529–6536, 2021. [15] B. Mersch, X. Chen, I. Vizzo, L. Nunes, J. Behley, and C. Stachniss, “Receding moving object segmentation in 3d lidar data using sparse 4d convolutions,” IEEE Robotics and Automation Letters , vol. 7, no. 3, pp. 7503–7510, 2022. 
+
+8[16] B. Mersch, T. Guadagnino, X. Chen, I. Vizzo, J. Behley, and C. Stachniss, “Building volumetric beliefs for dynamic environments exploiting map-based moving object segmentation,” IEEE Robotics and Automation Letters , vol. 8, no. 8, pp. 5180–5187, 2023. [17] B. Zhou, J. Xie, Y. Pan, J. Wu, and C. Lu, “MotionBEV: Attention-aware online lidar moving object segmentation with bird’s eye view based appearance and motion features,” IEEE Robotics and Automa-tion Letters , vol. 8, no. 12, pp. 8074–8081, 2023. [18] X. Chen, B. Mersch, L. Nunes, R. Marcuzzi, I. Vizzo, J. Behley, and C. Stachniss, “Automatic labeling to generate training data for online lidar-based moving object segmentation,” IEEE Robotics and Automation Letters , vol. 7, no. 3, pp. 6107–6114, 2022. [19] C. R. Qi, W. Liu, C. Wu, H. Su, and L. J. Guibas, “Frustum pointnets for 3d object detection from rgb-d data,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 918– 927. 
+
+9
