@@ -1,0 +1,160 @@
+Title: Transformer-Based Predictive Maintenance for Risk-Aware Instrument Calibration
+
+URL Source: https://arxiv.org/pdf/2603.20297v1
+
+Published Time: Tue, 24 Mar 2026 00:04:19 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# Transformer-Based Predictive Maintenance for Risk-Aware Instrument Calibration 
+
+Adithya Parthasarathy 
+
+California, USA 
+
+0009-0001-6839-9527 
+
+Aswathnarayan Muthukrishnan Kirubakaran 
+
+California, USA 
+
+0009-0006-6652-2663 
+
+Akshay Deshpande 
+
+California, USA 
+
+0009-0002-3007-3393 
+
+Ram Sekhar Bodala 
+
+Delaware, USA 
+
+0009-0005-4646-6679 
+
+Suhas Malempati 
+
+South Carolina, USA 
+
+0009-0009-3855-0423 
+
+Nachiappan Chockalingam 
+
+Massachusetts, USA 
+
+0009-0007-4275-3771 
+
+Vinoth Punniyamoorthy 
+
+Texas, USA 
+
+0009-0009-3719-4949 
+
+Seema Gangaiah Aarella 
+
+Texas, USA 
+
+0009-0006-8807-3352 
+
+Abstract —Accurate calibration is essential for instruments whose measurements must remain traceable, reliable, and com-pliant over long operating periods. Fixed-interval programs are easy to administer, but they ignore that instruments drift at different rates under different conditions. This paper studies calibration scheduling as a predictive maintenance problem: given recent sensor histories, estimate time-to-drift (TTD) and in-tervene before a violation occurs. We adapt the NASA C-MAPSS benchmark into a calibration setting by selecting drift-sensitive sensors, defining virtual calibration thresholds, and inserting synthetic reset events that emulate repeated recalibration. We then compare classical regressors, recurrent and convolutional sequence models, and a compact Transformer for TTD predic-tion. The Transformer provides the strongest point forecasts on the primary FD001 split and remains competitive on the harder FD002–FD004 splits, while a quantile-based uncertainty model supports conservative scheduling when drift behavior is noisier. Under a violation-aware cost model, predictive scheduling lowers cost relative to reactive and fixed policies, and uncertainty-aware triggers sharply reduce violations when point forecasts are less reliable. The results show that condition-based calibration can be framed as a joint forecasting and decision problem, and that combining sequence models with risk-aware policies is a practical route toward smarter calibration planning. 
+
+Index Terms —Transformer models, Predictive Maintenance, Instrument Calibration, Deep Learning, Industrial Monitoring 
+
+I. I NTRODUCTION 
+
+Precision instruments in laboratories, observatories, and healthcare systems do not lose calibration at a uniform rate. Environmental conditions, usage intensity, and component aging all affect how quickly measurements drift. Even so, many organizations still rely on fixed calibration intervals because they are easy to document and audit. The drawback is that a static interval treats every instrument as if it aged in the same way. In practice, that creates two avoidable outcomes: some instruments are recalibrated earlier than necessary, while others remain in service after drift has become operationally relevant [1]–[3]. For high-value or regulated assets, calibration is not only a quality activity but also a scheduling problem. Taking an instrument offline consumes technician time, interrupts experiments or production, and may idle dependent workflows. Missing a needed calibration has the opposite cost profile: the instrument stays available, but the organization absorbs measurement risk, compliance exposure, and potential rework. A useful data-driven policy therefore has to do more than fit a degradation curve; it has to convert that forecast into decisions that trade calibration effort against violation risk. This paper addresses that problem in two stages. First, we estimate TTD from multivariate sensor windows. Second, we use those forecasts inside a scheduling rule that decides when to calibrate. Because public calibration datasets with repeated drift and reset cycles are scarce, we adapt the C-MAPSS turbofan benchmark into a calibration surrogate with virtual thresholds and synthetic recalibration events. We then compare linear models, tree ensembles, CNN/LSTM/TCN baselines, and a compact Transformer. The Transformer is used as the primary point forecaster, while a quantile LSTM provides the conservative uncertainty estimates consumed by the risk-aware scheduling rule. The paper makes four contributions. First, it defines a full calibration-oriented adaptation of C-MAPSS, including drift-sensor selection, virtual calibration thresholds, synthetic reset events, and TTD labels. Second, it shows that a lightweight Transformer can outperform both classical baselines and other sequence models on the main calibration split. Third, it eval-uates scheduling with violation-aware costs instead of relying on regression metrics alone. Finally, it demonstrates that lower-quantile triggers provide a practical safety mechanism when point forecasts degrade on harder operating-condition splits. II. B ACKGROUND AND RELATED WORK 
+
+Calibration management sits between metrology and main-tenance. In a failure-prediction setting, the main question is how long an asset can continue operating before it breaks down. In calibration, the question is slightly different and often more demanding: how long an instrument can remain in ser-vice before its readings are no longer trustworthy for the task at hand. The relevant threshold is therefore not catastrophic failure but loss of acceptable measurement performance. This distinction matters because a calibration action is a restorative reset applied before failure, and because the downstream cost 
+
+> arXiv:2603.20297v1 [cs.LG] 19 Mar 2026
+
+is often tied to data validity, traceability, or compliance rather than to mechanical replacement alone. Most calibration-interval research focuses on selecting or adjusting a single service interval from historical records, uncertainty budgets, or conformity requirements. That work provides the institutional logic behind interval setting: orga-nizations need defensible policies that can be documented, repeated, and audited. What it usually does not provide is a rolling decision mechanism that updates priority instrument by instrument as fresh condition data arrive. In other words, interval-planning methods are useful for setting policy, but they do not by themselves solve the online scheduling problem addressed here. The predictive-maintenance literature offers a closer op-erational analogy. There, the aim is to convert condition-monitoring signals into estimates of remaining useful life, fault probability, or intervention urgency. The connection to calibra-tion is direct: both settings require models that map evolving multivariate measurements to a forward-looking maintenance decision. The difference is that calibration is driven by a performance threshold that may precede failure by a wide margin, and successful intervention resets the process rather than terminating it. That reset-and-repeat structure is common in practice but rare in public benchmark datasets, which is why a surrogate formulation is necessary. Among available benchmarks, C-MAPSS remains one of the most widely used testbeds for temporal degradation mod-eling [4], [5]. Its appeal is not that it perfectly matches the calibration domain, but that it provides long multivariate trajectories under several operating-condition regimes. Those trajectories make it possible to study sensor monotonicity, degradation forecasting, and generalization across easier and harder condition mixes. By inserting virtual calibration thresh-olds and synthetic resets, the benchmark can be reinterpreted as a repeated drift-and-restoration problem rather than a single run-to-failure task. That adaptation preserves the temporal structure that makes the benchmark useful while aligning the labels with a calibration decision process. The model families used in this paper serve different purposes. Linear regression provides a minimum-complexity reference point and clarifies how much signal is available without nonlinear modeling. Tree ensembles such as random forest, XGBoost, and LightGBM are strong baselines because they can capture nonlinear interactions among sensors without requiring heavy feature engineering. When the sensor window is flattened into a tabular representation, those models often provide a difficult baseline to beat. Their limitation is that temporal order is represented only implicitly through feature position, which means they do not model sequence structure as naturally as dedicated temporal architectures. Recurrent and convolutional sequence models address that limitation in complementary ways. LSTMs [6] are designed to accumulate temporal evidence through gated recurrence, which makes them natural candidates when current drift depends on a long sensor history. One-dimensional CNNs extract local temporal motifs efficiently, while TCNs extend that idea with dilation and causal structure so that the receptive field grows without losing training stability [7]. These models are useful not only because they are common baselines, but because they embody different hypotheses about the signal: re-current memory emphasizes sequential accumulation, whereas temporal convolutions emphasize repeated local patterns. Transformers offer a third view of the same problem. Instead of propagating state step by step or relying on fixed convo-lutional kernels, self-attention allows the model to compare measurements across the whole window and decide which po-sitions are most informative for the forecast [8]. In degradation modeling, that can be valuable when the most predictive part of the signal is not the most recent measurement alone, but a broader temporal pattern or interaction among sensors. Prior work on RUL estimation and time-series forecasting suggests that Transformer-style models can be especially effective when long-range context matters and when the temporal dependen-cies are not well summarized by local convolutions or a single recurrent state [9], [10]. For calibration scheduling, however, the model architecture is only half of the problem. A scheduler must convert a forecast into an action under asymmetric costs. A prediction that is unbiased on average may still be operationally poor if it is overconfident near the threshold-crossing region, where underestimation of risk is most expensive. This is why the paper separates point forecasting from conservative decision support. Quantile regression provides a natural bridge between prediction and action because it estimates different parts of the TTD distribution rather than only its center [11]. Recent neural approaches extend that idea to complex spatiotempo-ral settings and show that calibrated quantiles can serve as practical uncertainty summaries [12], [13]. In our setting, the lower quantile is especially relevant because it answers the operational question, “how soon could this instrument become unsafe if the forecast is optimistic?” This perspective also explains the choice to evaluate poli-cies, not just regressors. Cost-aware predictive maintenance emphasizes that model selection should reflect the decision objective rather than only aggregate prediction error [14]. The same principle applies more strongly to calibration, where the imbalance between avoidable downtime and out-of-calibration operation is central to the problem definition. The literature therefore motivates the structure adopted here: a time-series forecasting task grounded in predictive-maintenance methods, combined with a scheduling layer that treats uncertainty and intervention cost as first-class concerns. Another domain challenge is that drift is rarely observed in isolation. Instruments operate under changing loads, ambient conditions, and usage patterns, so the same sensor trend may imply different calibration urgency under different regimes. This is one reason multi-condition benchmarks such as FD002 and FD004 are important in the present study. They force the model to separate true drift progression from operating-context variation. A calibration scheduler that performs well only under a single stable regime would have limited practical value, because real fleets almost always contain instruments that age differently across sites, operators, and duty cycles. This motivates comparing multiple model classes instead of treating one architecture as self-evidently best. In some deployments, interpretability, tuning simplicity, and latency may favor tree ensembles; in others, richer temporal models may justify their complexity by reducing missed drift events. The relevant question is therefore not only which model predicts TTD most accurately in aggregate, but which model preserves the decision-relevant structure of the signal near the calibration threshold. That framing helps connect the background literature to the empirical results that follow: the comparison is not merely algorithmic, but operational. III. P ROBLEM FORMULATION 
+
+Consider an instrument i emitting a multivariate sensor vector xi,t ∈ Rd at cycle t. Let Si denote the subset of sensors selected as drift indicators for that instrument class or operating-condition split. For each selected sensor s ∈ S i,a virtual threshold τi,s marks the onset of unacceptable drift. Because some sensors drift upward and others downward, threshold crossing is defined relative to the estimated direction of degradation. A calibration action restores the process near baseline, after which a new drift cycle begins. The forecasting task is defined on sliding windows. Given the recent history 
+
+Xi,t −w+1: t = [ xi,t −w+1 , . . . , xi,t ] ∈ Rw×d, (1) the model predicts the time-to-drift (TTD) at cycle t, i.e., the number of cycles until the next threshold crossing. In the adapted dataset, a time index is considered out of calibration if any selected drift sensor has crossed its threshold. The ground-truth target is therefore 
+
+yi,t = min {∆ ≥ 0 : ∃s ∈ S i such that xi,t +∆ ,s crosses τi,s },
+
+(2) with yi,t = 0 at or beyond a crossing and, when no later crossing exists in the current synthetic run, the label set to the remaining distance to the end of that run. The learning problem is to estimate a function fθ such that ˆyi,t = fθ (Xi,t −w+1: t).The forecast is only useful if it can drive a maintenance decision. We therefore evaluate policies under the cost cost = ccal · Ncal + cvio · Nvio , (3) where Ncal is the number of preventive calibrations and Nvio 
+
+is the number of threshold violations. At deployment, a policy maps the forecast to a binary decision 
+
+ai,t =
+
+(
+
+1, if si,t ≤ m, 
+
+0, otherwise, (4) where ai,t = 1 denotes scheduling a calibration, m is a safety margin, and si,t is either the point forecast ˆyi,t or a conserva-tive score such as the lower predicted quantile. If a planning window has finite service capacity K, instruments can be ranked by si,t so that the smallest predicted TTD values are serviced first. This formulation distinguishes prediction quality from operational quality: a model with low average regression error can still be a poor scheduler if it systematically misses the threshold-crossing regime or becomes overconfident near the intervention boundary. 
+
+A. Methodological Overview 
+
+The proposed methodology follows the same sequence as the operational problem. We first adapt raw multivariate tra-jectories into a calibration dataset by identifying drift-sensitive sensors, defining sensor-specific thresholds, and inserting syn-thetic resets that mimic recalibration. We then construct fixed-length windows and train models to predict the TTD attached to the last cycle in each window. Finally, those forecasts are converted into decisions through point-based or quantile-based rules and evaluated with a violation-aware cost model. This decomposition is intentional. It separates three sources of performance: whether the adaptation produces labels that resemble calibration behavior, whether the forecasting model captures the temporal structure of drift, and whether the decision rule converts forecasts into useful interventions. The sections that follow therefore describe the methodology in that same order: data adaptation, model estimation, and scheduling policy design. IV. D ATA AND ADAPTATION 
+
+A. Calibration-Oriented Adaptation of C-MAPSS 
+
+C-MAPSS provides multivariate run-to-failure engine tra-jectories, but it does not contain calibration events. We rein-terpret each engine run as an instrument drift trajectory and adapt each FD00 x subset independently. Within each split, drift-sensitive sensors are selected by Spearman correlation with operating cycle. On FD001, sensors 11, 4, and 12 are the most monotonic, with absolute correlations 0.615, 0.605, and 0.593, respectively. The same ranking procedure is repeated for FD002–FD004 so that each subset uses the sensors whose drift pattern is clearest under its own operating conditions. Virtual calibration thresholds are then placed before end-of-life rather than at failure. For each selected sensor, the thresh-old is sampled uniformly from 55%–80% of the baseline-to-tail span. When a trajectory reaches the threshold, we synthesize a calibration event by resetting the selected drift sensors to baseline plus noise and allowing them to drift again. Some resets are generated by stitching in a perturbed early-life segment from another engine, which helps emulate imperfect recalibration and variable post-maintenance behavior. Up to three resets are inserted per run, producing repeated drift-reset cycles and multiple calibration opportunities from a single engine trace. Figure 1 summarizes this transformation. 
+
+B. Window Construction and Labels 
+
+After adaptation, each trajectory is converted into overlap-ping 40-cycle windows with stride 1. Splits are performed at the engine level so that windows from the same engine do not leak across train and validation sets; 75% of engines are used for training and 25% for validation. Features are standardized with training statistics only. The regression target is TTD, defined as the number of cycles remaining until Fig. 1. Calibration-oriented adaptation of C-MAPSS: sensor selection, virtual thresholds, synthetic resets, and TTD labeling. 
+
+the next threshold crossing after the end of the window. For scheduling, negative predictions are clipped to zero so that overdue instruments are treated as immediate priorities rather than assigned artificial negative lead times. V. M ODELS 
+
+We compare four standard regressors linear regression, ran-dom forest, XGBoost, and LightGBM against four sequence models: LSTM, 1D CNN, TCN, and Transformer. The tree models provide strong tabular baselines after flattening each sensor window, while the neural models preserve temporal structure directly. The LSTM also serves as the uncertainty model. It pre-dicts the 0.1, 0.5, and 0.9 TTD quantiles with the pinball loss, producing the lower-quantile forecast used by the risk-aware scheduler. The CNN and TCN provide local-temporal baselines, with the TCN using two dilated causal convolution blocks. Our primary point predictor is a compact Transformer with sinusoidal positional encodings, two encoder layers, four attention heads, and model dimension dmodel = 64 . It is trained with SmoothL1 loss and AdamW using 100 warmup steps fol-lowed by cosine decay. Xavier initialization is applied to linear layers and LSTM input weights, orthogonal initialization to recurrent weights, and Kaiming initialization to convolutional layers. The intent is to test whether a small attention model can extract enough temporal structure to improve calibration decisions without resorting to a large architecture. VI. S CHEDULING AND COST MODELING 
+
+We evaluate four operational policies. The reactive policy calibrates only after a true violation. The fixed policy calibrates periodically. The predictive policy calibrates when the point forecast satisfies ˆyt ≤ m, where m is a lead-time margin. The uncertainty-aware policy replaces the point forecast with the           
+
+> Sensor window
+> Xt−w+1: t
+> Forecast model (point or quantile)
+> Decision score
+> ˆytor q0.1
+> Trigger if score ≤m
+> Schedule calibration
+> Continue monitoring
+> Capacity limit: at most Kinstruments can be calibrated in a planning window.
+> w×dsensors
+> yes
+> no
+> Fig. 2. Decision flow for the predictive calibration policy.
+
+lower quantile q0.1, yielding a more conservative trigger on noisy splits. Figure 2 illustrates the decision flow. Violations are counted only from ground-truth TTD values, not from forecast proxies. All experiments use ccal = 1 and 
+
+cvio = 5 , reflecting the common deployment asymmetry in which an unnecessary calibration is inconvenient but operating out of calibration is worse [14]. This setup lets the evaluation focus on the practical trade-off between downtime and risk rather than on regression accuracy alone. VII. T RAINING SETUP 
+
+All experiments were run on a Tesla T4 GPU with 14.7 GB of memory. The window length is 40 and the stride is 1 for all neural models. The Transformer is trained for up to 40 epochs with learning rate 3 × 10 −4 and patience 6. LSTM, CNN, and TCN models are trained for up to 30 epochs with learning rate 10 −3. Tree ensembles use moderate estimator counts to keep the comparison practical rather than aggressively tuned. Unless noted otherwise, the same adaptation and scheduling pipeline is reused across FD001–FD004 so that differences in outcome mainly reflect data difficulty rather than per-split reconfiguration. TABLE I VALIDATION METRICS ON C-MAPSS-A DAPTED FD001                             
+
+> Model MAE RMSE R2
+> Linear 18.21 23.73 0.51 Random Forest 17.28 23.15 0.53 XGBoost 16.07 21.80 0.59 LightGBM 15.08 20.44 0.64 LSTM 15.78 21.39 0.60 CNN 19.57 25.66 0.43 TCN 19.75 25.97 0.41 Transformer 13.84 19.76 0.66
+> Fig. 3. Predicted versus true TTD on FD001 for the Transformer.
+
+VIII. R ESULTS 
+
+A. Prediction Accuracy on FD001 
+
+FD001 is the clearest calibration surrogate because it retains strong monotonic drift after adaptation. Table I shows that the Transformer achieves the best validation accuracy, with MAE 13.84, RMSE 19.76, and R2 = 0 .66 . LightGBM is the closest classical baseline at R2 = 0 .64 , and the LSTM remains competitive at R2 = 0 .60 . The CNN and TCN trail the other models on this split. Figure 3 provides a qualitative view of the Transformer predictions and shows that the forecast remains concentrated around the identity line. 
+
+B. Cross-Dataset Generalization 
+
+The same architecture remains competitive on the other C-MAPSS subsets, although the ranking is split-dependent. On FD003 the Transformer again leads, reaching MAE 14.65 and R2 = 0 .776 . On FD002 it matches the strongest tree baseline at roughly R2 = 0 .29 , indicating that the benefit of attention narrows when drift monotonicity is weak. On FD004, LightGBM is the best model with R2 = 0 .603 , while the                                                                 
+
+> TABLE II POLICY COST COMPARISON ON FD001
+> Policy Cal Viol Cost
+> Reactive 289 289 1734 Fixed 417 289 1862 Predictive 743 90 1193 Quantile@10 2386 26 2516 TABLE III CROSS -S PLIT POLICY OUTCOMES ON C-MAPSS D ATASETS
+> Data Policy Cal Viol Cost
+> FD002 Reactive 3902 3902 23412 Fixed 1043 3902 20553 Predictive 6063 2047 16298 Quantile10 28341 152 29101 FD003 Reactive 4805 4805 28830 Fixed 503 4805 24528 Predictive 9075 13 9140 Quantile10 9284 11 9339 FD004 Reactive 3451 3451 20706 Fixed 1317 3451 18572 Predictive 3965 2296 15445 Quantile10 18021 823 22136
+
+Transformer reaches R2 = 0 .486 . The broader pattern is still consistent: when drift retains a clear temporal structure, the Transformer is strongest; when operating conditions are more heterogeneous, tree models remain a credible alternative. 
+
+C. Scheduling Outcomes 
+
+The forecasting model is most useful when evaluated as a scheduler rather than as a regressor alone. On FD001, the point-based predictive policy reduces cost from 1734 under the reactive policy to 1193 while also lowering violations from 289 to 90. The quantile trigger is even safer, reducing viola-tions to 26, but its conservative behavior raises the number of calibrations from 743 to 2386 and therefore increases total cost. This is the intended trade-off: lower quantiles protect against missed drift events at the expense of extra downtime. Table III shows the same trade-off across FD002–FD004. FD003 benefits the most: both predictive policies nearly eliminate violations and dramatically improve cost relative to reactive or fixed scheduling. FD002 and FD004 are less stable, yet the uncertainty-aware rule still cuts violations sharply compared with the point policy. In other words, uncertainty becomes most valuable precisely on the splits where point accuracy is least reliable. IX. D ISCUSSION AND FUTURE WORK 
+
+Two conclusions follow from the experiments. First, calibra-tion scheduling should be treated as a joint forecasting-and-decision problem. The best regressor is not automatically the best operational policy unless its output is translated through a margin and a cost model. Second, a compact Transformer is a strong default when drift has clear temporal structure, but LightGBM remains a pragmatic alternative on heterogeneous splits. The results therefore support a practical model-selection view: choose the forecaster that best serves the scheduling objective, not just the lowest average regression error. The most direct extension is to move the quantile head into the Transformer so that point and uncertainty estimates come from the same model. Additional gains are likely to come from per-condition normalization on FD002 and FD004, calibration of safety margins to site-specific cost ratios, and multi-seed evaluation to quantify variance. These are natural next steps within the present pipeline and would make the scheduler easier to tune for deployment. X. C ONCLUSION 
+
+This paper presented a calibration-oriented predictive main-tenance framework that unifies time-to-drift (TTD) forecasting with risk-aware scheduling decisions, enabling a transition from static calibration intervals to dynamic, condition-based strategies. By adapting C-MAPSS into repeated drift-reset cycles, the study provides a realistic and reproducible bench-mark for jointly evaluating prediction models and operational policies. Empirical results demonstrate that the compact Transformer achieves the best predictive performance on FD001, attaining MAE of 13.84, RMSE of 19.76, and R2 = 0 .66 , outperform-ing both classical models such as LightGBM ( R2 = 0 .64 )and sequence baselines. Its advantage persists on structured datasets such as FD003 (R2 = 0.776 ), while remaining competitive on more heterogeneous splits (FD002 and FD004), where tree-based models provide strong alternatives. These findings confirm that attention-based models are particularly effective when drift exhibits clear temporal structure, while model selection remains data-dependent. More importantly, evaluating models through a scheduling lens reveals substantial operational gains. On FD001, the pre-dictive policy reduces total cost from 1734 (reactive) to 1193, while simultaneously lowering violations from 289 to 90, demonstrating the practical value of forecast-driven interven-tions. The uncertainty-aware (quantile) policy further reduces violations to 26, though at the expense of increased calibration frequency and higher cost, highlighting the trade-off between risk mitigation and operational efficiency. Across FD002– FD004, similar trends are observed: predictive scheduling con-sistently improves cost relative to fixed and reactive baselines, while quantile-based policies are most beneficial under high uncertainty and non-stationary conditions. These results reinforce two key insights. First, calibration scheduling must be treated as a joint forecasting-and-decision problem, where success is defined by cost and risk outcomes rather than prediction error alone. Second, uncertainty mod-eling plays a critical role in safeguarding against missed drift events, particularly when model reliability varies across operating regimes. In summary, the proposed framework demonstrates that Transformer-based forecasting combined with cost-aware and uncertainty-aware policies can significantly reduce unneces-sary downtime while improving compliance assurance. ARTIFACTS AND REPRODUCIBILITY 
+
+Code, plots, tables, and summary artifacts are available in the public project repository [15]. REFERENCES [1] L. R. Pendrill, ”Using measurement uncertainty in decision-making and conformity assessment,” Metrologia , vol. 51, no. 4, p. S206, 2014, doi: 10.1088/0026-1394/51/4/S206. [2] V. Kopke, S. C. Mourao, and M. Brito, ”Determination of the Calibration Interval of Measuring Instruments: Which Method Should I Use?,” IEEE Instrumentation & Measurement Magazine , vol. 27, no. 2, pp. 59–62, 2024, doi: 10.1109/MIM.2024.10472985. [3] P. Carbone, ”Performance of simple response method for the establish-ment and adjustment of calibration intervals,” IEEE Transactions on Instrumentation and Measurement , vol. 53, no. 3, pp. 730–735, 2004, doi: 10.1109/TIM.2004.827298. [4] A. Saxena and K. Goebel, ”Turbofan Engine Degradation Simulation Data Set,” NASA Ames Prognostics Data Repository, NASA Ames Research Center, Moffett Field, CA, 2008. [5] C. Ferreira and G. Goncalves, ”Remaining Useful Life prediction and challenges: A literature review on the use of Machine Learning Methods,” Journal of Manufacturing Systems , vol. 63, pp. 550–562, 2022, doi: 10.1016/j.jmsy.2022.05.010. [6] S. Hochreiter and J. Schmidhuber, ”Long Short-Term Memory,”

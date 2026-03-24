@@ -1,0 +1,759 @@
+Title: Scalable and Robust Spatial Prediction via Multi-Resolution Ensembles of Predictive Processes
+
+URL Source: https://arxiv.org/pdf/2603.19977v1
+
+Published Time: Mon, 23 Mar 2026 00:57:42 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Scalable and Robust Spatial Prediction via Multi-Resolution Ensembles of Predictive Processes 
+
+Nicolas Bianco * 1 and Nadja Klein †1 1Scientific Computing Center, Karlsruhe Institute of Technology, Germany March 23, 2026 
+
+Abstract 
+
+Gaussian processes provide a flexible framework for spatial prediction, but their computational cost limits applicability to large-scale data with large sample size n. Predictive processes (PPs), a popular low-rank approximation, mitigate this burden by projecting the original process onto a reduced set of m ≪ n inducing points. However, existing theory requires m to grow with n,creating a trade-off between accuracy and computational efficiency. We address this challenge by introducing an ensemble of PPs based on spatial partitioning, and propose a novel partitioning and patching scheme with desirable properties. By generalizing the convergence results of PPs, it be-comes possible to explicitly balance scalability and accuracy: increasing the number of ensemble components slows down the convergence but substantially improves computational efficiency. We further show theoretically that, despite the limited approximation accuracy of PPs with fixed m,they are asymptotically robust to data contamination. Motivated by this insight, we finally intro-duce a multi-resolution ensemble that combines PPs with fixed m with multiple ensembles defined over possibly overlapping coarse to fine partitions. Simulations and large-scale geostatistical ap-plications demonstrate that our approach delivers accurate, robust predictions with computational gains, providing a practical and broadly applicable solution for spatial prediction. 
+
+Keywords: Divide-and-conquer; Gaussian process; influence function; low-rank approximation; spatial partitioning. 
+
+> *Mail: nicolas.bianco@kit.edu
+> †This research was partially funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Founda-tion) through the Emmy Noether grant KL3037/1-1 and the TRR391 within the project A07, grant number 520388526.
+> arXiv:2603.19977v1 [stat.ME] 20 Mar 2026
+
+# 1 Introduction 
+
+Gaussian Processes (GPs; Rasmussen and Williams, 2006) are widely used in statistics and ma-chine learning for tasks such as regression, classification, Bayesian optimization, time series anal-ysis, and spatial analysis. In this paper, we focus on spatial prediction based on a GP regression which assumes that the observations y = ( y(s1), . . . , y (sn)) ⊤ at locations si ∈ S ⊂ Rd arise from 
+
+y(s) = w(s) + ε(s), s ∈ S , (1) where we assume d = 2 throughout, w(s) is a zero-mean GP with covariance Cnn (θ) = {c(si, s j ; θ)}ni,j =1 ,parameterized by θ = ( η2, ϕ, ν )⊤, namely the marginal variance η2, the range ϕ, and Mat´ ern smoothness parameter ν. The term ε(s) ∼ N (0 , τ 2) represents independent Gaussian noise (nugget effect). Despite their popularity, GPs scale poorly with n because inference requires inversion of Cnn (θ)+ 
+
+τ 2In, incurring O(n3) complexity. This bottleneck severely limits their use in large-scale applica-tions. To overcome this challenge, numerous scalable GP methods have been proposed, broadly categorized into global and local approximations (Liu et al., 2020; Vakayil and Joseph, 2024). Global methods, such as predictive processes (PPs; Banerjee et al., 2008) and sparse GPs (Tit-sias, 2009), reduce complexity via single low-rank surrogates that summarize the entire dataset through a smaller set of representative points, while structured approaches exploit block-diagonal or low-rank covariance matrices Bui and Titsias (2025). Relatedly, sparse structures for the covari-ance matrix can be introduced using spatial partitioning (Sang et al., 2011) or covariance taper-ing (Furrer et al., 2006), while methods such as Vecchia approximations (Katzfuss and Guinness, 2021), nearest-neighbor GPs (Datta et al., 2016), and meshed processes (Peruzzi and Dunson, 2024) enforce a sparse precision matrix. Global methods capture broad trends but often over-smooth local features. Local methods partition the domain and fit separate GPs within each region, providing adapt-ability and enabling parallelization, at the cost of potential discontinuities and aggregation artifacts (Szab´ o et al., 2025). Recent developments in local approximation approaches encompass mixture-of-experts models (Etienam et al., 2024) and distributed Gaussian process frameworks, notably the Bayesian Committee Machine (Tresp, 2000). The local approximate Gaussian process (LAGP) of Gramacy and Apley (2015) circumvents domain partitioning and focuses on prediction by con-structing, for each new location, a surrogate GP based on a local subset of the data. More recent developments combine local expert models with deep neural gating networks, enhancing flexibil-ity and scalability (Etienam et al., 2024). While local approximations are well-suited for spatially heterogeneous processes due to their region-specific adaptability, their dependence on localized data can make them prone to undersmoothing and overfitting. In summary, local approaches tend to be highly accurate when there are no outliers and the model is well specified, owing to their local (e.g., region-specific) adaptability. However, theo-retical guarantees for their predictive accuracy remain limited (Szab´ o et al., 2025). In contrast, global methods are effective at capturing broad trends, and naturally mitigate the influence of local noise or outliers, making them attractive for improving predictive robustness. Theoretically, global 1methods have been studied for example by Szab´ o and Zhu (2026) for Vecchia approximations, or by Burt et al. (2020) for inducing variables, and by Szab´ o and van Zanten (2019) who show that a global distributed GP approximation can perform poorly. Yet, to the best of our knowledge, their robustness properties have not been formally established in prior work. In practice, it is rarely known a priori whether predictive accuracy or robustness is more critical for a given dataset. Balancing these objectives, together with scalability, remains challenging and motivates the development of hybrid methodologies that can automatically adapt by combining the strengths of global and local approaches. This paper addresses exactly this challenge by making three key contributions: 1. We propose an Ensemble of Predictive Processes (EPP), a hybrid strategy that combines global low-rank approximations with local adaptivity via spatial partitioning. We introduce a coherent partitioning scheme designed to ensure space-filling and balanced point density across subregions, a fundamental property underlying our theoretical results. To maintain continuity at partition boundaries, which represents an important empirical feature, we de-velop a patching strategy that smoothly aggregates local predictions. Building on this EPP framework, we establish convergence rates for the ensemble predictive mean, quantifying the trade-off between statistical efficiency and computational cost. This contributes to the growing literature on theoretical guarantees for local approximations, which remains limited. 2. We define and study the predictive robustness of PPs using influence functions. We show that PPs and EPPs with a fixed number of inducing points m provide more robust predictions when outliers or contaminated data are present in the training set. However, m needs to grow with the sample size n to theoretically guarantee convergence rates for the predictive mean (e.g., Burt et al., 2020; Nieman et al., 2022). 3. To balance both robustness and predictive accuracy, we introduce a Multi-Resolution En-semble of Predictive Processes (MREPP), which constructs ensembles over possibly over-lapping coarse-to-fine partitions, which we call resolutions. Predictions are not only aggre-gated within partitions (EPP) but also across partitions through resolutions. In both cases, data-driven weights regulate their contributions to balance robustness and predictive accu-racy. Robustness arises when greater weight is assigned to coarser (i.e., early) resolutions, since these imply a smaller number of ensembles of PPs with fixed m that are well-suited to estimate global trends and to reduce the influence of local outliers. In contrast, predic-tive accuracy is preserved at finer (i.e., later) resolutions, where larger numbers of ensemble members and inducing points allow the model to capture local behavior. Unlike previous multi-resolution GP approximations (Nychka et al., 2015; Katzfuss, 2017), MREPP targets predictive robustness rather than covariance approximation and does not require nested par-titions. Figure 1 illustrates the general idea of the PP with fixed m (blue box), the EPP (orange boxes for two distinct spatial partitions), and the MREPP (ensemble over EPPs of coarse-to-fine partitions in green box) along with their properties investigated in this paper. The remainder of the paper is organized as follows: Section 2 introduces notation and reviews properties and limitations of PPs. Section 3 proposes the EPP and theoretically analyzes its pre-dictive performance. Section 4 presents the robustness properties of PPs with a fixed number of inducing points and presents a novel multi-resolution ensemble methodology. Section 5 evaluates 2…                                          
+
+> 𝐾 1=1,𝑚 1
+> 𝑝 𝑦 ∗𝑦 =෍𝑙 =1
+> 𝐿
+> 𝑝 𝑙 𝑝 𝑙 𝑦 ∗𝑦
+> 𝑝 1𝑦 ∗𝑦 =𝑝 𝑦 ∗𝑦
+> 𝑝 𝐿 𝑦 ∗𝑦 =෍𝑘 =1
+> 𝐾 𝐿
+> π𝑘 𝑠 ∗|𝑆 𝑘 𝑝 𝑘 𝑦 ∗𝑦 ,𝑆 𝑘
+> 𝑝 𝑙 𝑦 ∗𝑦 =෍𝑘 =1
+> 𝐾 𝑙
+> π𝑘 𝑠 ∗|𝑆 𝑘 𝑝 𝑘 𝑦 ∗𝑦 ,𝑆 𝑘
+> 𝐾 2>1,𝑚 2
+> 𝐾 𝐿 >𝐾 𝐿 −1,𝑚 𝐿
+> 𝑦 (𝑠 )
+> PP with fixed m
+> Accurate
+> Scalable
+> Robust
+> EPP( 𝑲 𝑳 ,𝒎 𝑳 )
+> Accurate
+> Scalable
+> Robust
+> MREPP
+
+(𝑳 , {𝑲 𝒍 }𝒍 =𝟏    
+
+> 𝑳 ,{𝒎 𝒍 }𝒍 =𝟏
+> 𝑳
+
+) 
+
+> Accurate
+> Scalable
+> Robust
+> EPP( 𝑲 𝟐 ,𝒎 𝟐 )
+> Accurate
+> Scalable
+> Robust
+
+Figure 1: Graphical illustration for PP with fixed m (blue box), the EPP (orange boxes for two distinct spatial parti-tions), and the MREPP (ensemble over EPPs of coarse-to-fine partitions in green box) and their properties investigated in this paper. The PP consists of a single resolution ( L = 1 ), and a single ensemble member ( K1 = 1 ). The spatial domain is approximated based on a fixed number m1 = m of inducing points. While the PP is scalable and more robust it has limited prediction accuracy. The EPP in contrast partitions the space into K subregions based on m
+
+inducing points each, where each of them forms an ensemble member. This improves prediction accuracy compared to the PP at the price of a lack of robustness. As a solution, we propose MREPP, that leverages both, the PP and EPP by combining inference over L > 1 resolutions, with a coarse-to-fine structure of spatial domain partitions, where 
+
+KL > K L−1 > . . . > K 1. At each resolution l for l = 1 , . . . , L a corresponding EPP on Kl subregions is fitted. Computations can be parallelized, yielding an approach that is accurate, scalable and robust simultaneously. 
+
+performance on simulated and real datasets. Section 6 concludes and discusses future directions. 
+
+# 2 Spatial predictive processes 
+
+A predictive process (PP) provides a global low-rank approximation to the GP by projecting the original process onto a smaller set {˜si}mi=1 of m inducing points, with m ≪ n. Specifically, the GP 
+
+w(s) in (1) is replaced by 
+
+˜w(s) = cm(s, θ )C−1
+
+> mm
+
+(θ)wm, (2) where wm ∼ Nm(0 , C mm (θ)) is the GP evaluated at the inducing points, cm(s, θ ) is the 1 × m
+
+covariance vector between s and the inducing points, and Cmm (θ) is the m × m covariance matrix among inducing points. This construction yields a rank-m approximation to the full covariance, reducing computational complexity from O(n3) to O(nm 2) via the Woodbury identity. Predictions at new locations follow from the joint Gaussian distribution obtained by integrating out wm. Closed-form expressions for the predictive mean and covariance only involve m × m
+
+matrix inversions, and matrix-vector products with n × m cross-covariance terms, making PP a 3practical choice for large n. To keep exposition concise, we defer explicit formulas and algebraic details to Supplementary Material A. 
+
+2.1 Choosing the inducing points in predictive processes 
+
+A key component in PPs is the selection of inducing points, which governs both approximation accuracy and theoretical guarantees. Support Points (SPs) have emerged as a principled choice, offering space-filling coverage and ensuring convergence properties critical for PP approximations (Song et al., 2025). SPs currently represent the state-of-the-art approach for inducing point selec-tion. To analyze convergence, we next summarize mild regularity conditions, which are taken from Song et al. (2025), and which will be assumed in Sections 3–4. 
+
+Assumption 1 (Regularity conditions (Song et al., 2025)) . The observed locations {si}ni=1 are realizations of a random variable s ∼ F (s), where F (s) is a finite Borel measure on S. The Mat´ ern covariance function admits the Mercer expansion c(si, s j ; θ) = P∞ 
+
+> k=0
+
+λkϕk(si)ϕk(sj ) where λk are positive eigenvalues such that λ1 ≥ λ2 ≥ . . . and ϕk are the corresponding eigenfunctions. Assume the following hold: (A) S is a compact set with a Lipschitz boundary and satisfies an interior cone condition. (B) The eigenvalues decay polynomially: λi ≤ βi −γ for constants β > 0 and γ > 1.(C) For any i, j , R 
+
+> S
+
+ϕi(s)2ϕj (s)2 dF (s) is bounded. Moreover, the 3/2-order derivatives of ϕiϕj
+
+are square-integrable on S.
+
+These assumptions are common in the literature and Song et al. (2025) provide a more detailed discussion on their practical implications. Under Assumption 1, the authors study the convergence rate of the predictive means of the full GP, μ, and of the PP, μm, to the true mean function μ0. The latter is considered a random function with the same GP as w. The convergence rates are quantified via the squared L2(F ) norm ∥μm − μ0∥2  
+
+> L2(F)
+
+= R
+
+> S
+
+ μm(s) − μ0(s)2 dF (s) and given by 
+
+∥μ − μ0∥2  
+
+> L2(F)
+
+= Op
+
+ n−(1 −1/γ ), n → ∞ , γ > 1
+
+for the full GP. This coincides with the minimax rate for estimating a 2-dimensional random func-tion μ0 with smoothness γ in nonparametric models (van der Vaart and van Zanten, 2008; Rosa et al., 2023). For the PP, the rate depends on the choice of inducing locations through F . Let ˆFm
+
+be the empirical measure of the m inducing points and let E(F, ˆFm)1 denote their energy distance, which measures the discrepancy between the two distributions. If 
+
+n2/γ E(F, ˆFm) → 0 as n, m → ∞ , and γ > 2,
+
+then the PP predictive mean achieves the same minimax rate as the full GP: 
+
+∥μm − μ0∥2  
+
+> L2(F)
+
+= Op
+
+ n−(1 −1/γ ). (3) In particular, SPs are optimal in the sense that they provide the best rate at which E(F, ˆFm) ap-proaches zero, namely E(F, ˆFm) = O(1 /m ), implying the requirement m ≳ O n2/γ  of SPs to achieve the minimax rate (3).                     
+
+> 1See Sz´ ekely and Rizzo (2013); E(F, ˆFm) = 2
+> m
+> Pmi=1 E∥s−˜si∥ − E∥s−s′∥ − 1
+> m2
+> Pmi=1
+> Pmj=1 ∥˜si−˜sj∥where
+> s, s ′∼Fand {˜si}mi=1 inducing points.
+
+42.2 Limitations of PPs with SPs 
+
+Despite their optimality, SP-based guarantees rely on smoothness and sampling conditions that can be too restrictive in practice: 1. Smoothness threshold. The optimal rate in (3) holds only when γ > 2. this means, suf-ficiently smooth processes are assumed but “rougher” processes (e.g., exponential kernels with ν = 0 .5 and γ < 2) are excluded. Even for γ = 2 + δ with small δ > 0, the re-quirement m = O n2/(2+ δ) implies a rapidly growing number of SPs, which can become computationally prohibitive for large n.2. Design dependence and enlarging domains. While the approximation γ ≈ 2( ν + d/ 2) /d 
+
+is appropriate under infill asymptotics, enlarging-domain designs lead to a separation radius 
+
+rS = 12 min i̸=j ∥si − sj ∥2 that may converge to a strictly positive constant (Wang and Jing, 2022). This induces a reduction in the effective value of γ, thereby restricting the validity of SP-based theoretical guarantees. In fact, γ may fall below 2 even for moderate smoothness levels ν as rS grows; see Figure 2 for an illustration. 246          
+
+> 1234
+> ν
+> γ
+> rS
+> 0.0007
+> 0.0028
+> 0.0042
+> 0.0056
+> 0.0070
+> Figure 2: Sensitivity of the smoothness parameter γ. Estimates of the smoothness parameter γare shown for different values of the Mat´ ern parameter νand increasing separation radius rS.
+
+To overcome these limitations and enable scalable, accurate inference for complex spatial de-signs, we propose a strategy that balances statistical accuracy, computational efficiency, and robust-ness without requiring an unreasonable growth of m. To this end, we first introduce an Ensemble of Predictive Processes (EPP) in Section 3, which leverages spatial partitioning to reduce compu-tational burden while preserving accuracy, as we show in Theorem 1. 
+
+# 3 Ensemble of predictive processes 
+
+The EPP, formally introduced in Definition 1 below, aims to overcome the limitations of PPs with SPs discussed in Section 2.2 by combining low-rank approximations of GPs with a divide-and-conquer strategy through spatial partitioning. 
+
+Definition 1 (Ensemble of Predictive Processes) . Let P = {S k}Kk=1 be a partition of the spatial domain S into K, possibly overlapping, subregions. For each Sk, let {˜sk,i }mi=1 denote a set of m
+
+5SPs. The EPP( K, m) at a predictive location s⋆ is defined as a locally weighted mixture of PPs with density 
+
+p(y(s⋆) | y) = 
+
+> K
+
+X
+
+> k=1
+
+πk(s⋆ | S k) p(y(s⋆) | y, Sk),
+
+where p(y(s⋆) | y, Sk) is the predictive distribution of a PP on Sk, and πk(s⋆ | S k) is a local weight such that PKk=1 πk(s⋆ | S k) = 1 . The corresponding predictive mean and variance are: 
+
+μK,m (s⋆) = 
+
+> K
+
+X
+
+> k=1
+
+πk(s⋆ | S k) μm(s⋆ | S k),σ2
+
+> K,m
+
+(s⋆) = 
+
+> K
+
+X
+
+> k=1
+
+πk(s⋆ | S k)
+
+"
+
+σ2
+
+> m
+
+(s⋆ | S k) + μ2
+
+> m
+
+(s⋆ | S k)
+
+#
+
+−
+
+" KX
+
+> k=1
+
+πk(s⋆ | S k)μm(s⋆ | S k)
+
+#2
+
+.
+
+Section 3.1 discusses the partition of the spatial domain and guides the choice of the weights. In Section 3.2, we show that the EPP is computationally scalable while retaining theoretical con-vergence guarantees for the predictive mean. 
+
+3.1 Spatial partitioning, local weights, and continuity 
+
+The choice of partition P strongly affects both computational efficiency and predictive accuracy. Simple schemes, such as regular grids, generally lead to imbalanced or empty regions. We instead adopt a principled approach based on Support Points-based Voronoi Tessellation (SPVT), which combines SP optimality with Voronoi partitioning (Du et al., 1999). SPVT proceeds as follows (see also Algorithm D.1 in the Supplementary Material for details): 1. Site selection . Choose K sites {uk}Kk=1 as SPs over S.2. Voronoi regions . Each site uk induces a Voronoi region (or cell) Vk, for k = 1 , . . . , K :
+
+Vk = {s ∈ S | ∥ s − uk∥2 < ∥s − uj ∥2, ∀j̸ = k}.
+
+3. Introduce overlap . For δ > 0, define overlapping regions 
+
+Sk = {s ∈ S \ V k | min 
+
+> x∈V k
+
+∥s − x∥2 ≤ δ} ∪ V k.
+
+4. Local SP selection . Within each Sk, select m SPs to construct the local PP. SPVT yields balanced, density-aware partitions (cf, Secord, 2002; Balzer and Heck, 2008) and satisfies Assumption 2(B) required for our theoretical results (Section 3.2). In particular, SPVT ensures |S K | ≈ [K f (uk)] −1, so that PF (s ∈ S k) ≈ 1/K . Figure C.1 in the Supplementary Material provides an illustration of SPVT for several spatial designs F .In Definition 1, a natural choice for disjoint partitions is πk(s⋆ | S k) = I(s⋆ ∈ S k), which has fa-vorable asymptotic properties (Szab´ o et al., 2025) but induces discontinuities at region boundaries in finite samples. Allowing overlaps helps achieve continuity, and we adopt soft weights based on truncated localization kernels (Hore and Barber, 2025), 
+
+πk(s⋆ | S k) ∝ K(s⋆, u k) I(s⋆ ∈ S k),
+
+6where uk is the centroid of Sk and K is a distance-decaying kernel. Let ∆( Sk) denote the boundary of region k. To ensure continuity, K must satisfy, for any s0 ∈ ∆( Sk),
+
+lim s⋆→s0
+
+> s⋆∈S k
+
+K(s⋆, u k) = 0 .
+
+A Gaussian kernel with mean uk and variance tied to the distance to the boundary, 
+
+K(s⋆, u k) = exp 
+
+
+
+− ∥s⋆ − uk∥22
+
+dist( s⋆, ∆( Sk)) 
+
+
+
+, dist( s⋆, ∆( Sk)) = min   
+
+> s0∈∆( Sk)
+
+∥s⋆ − s0∥22,
+
+satisfies this condition. Figures C.3–C.4 in the Supplementary Material illustrate the effect of different kernels on the ensemble mean and local weights. 
+
+3.2 Theoretical properties 
+
+Theorem 1 extends the convergence rate of μm of a PP to the predictive mean μK,m of an EPP (K, m ).Let α ∈ [0 , 1) determine the number of partitions K = O(nα) and the number of SPs per region 
+
+m = O(n(1 −α)2 /γ ). We assume Assumption 1 and the additional conditions below. 
+
+Assumption 2. Let the following hold: (A) The spatial domain satisfies S = SKk=1 Sk, where overlaps are allowed. (B) The probability PF (s ∈ S k) = O(1 /K ).
+
+Theorem 1. Under Assumptions 1–2, if γ > 2, the predictive mean μK,m of the EPP satisfies: 
+
+∥μK,m − μ0∥2  
+
+> L2(F)
+
+= Op
+
+
+
+n−(1 −α)(1− 1 
+
+> γ
+
+)
+
+.
+
+The proof of Theorem 1 is provided in Supplementary Material B.1. Compared to the PP rate in (3), the EPP introduces α as a tunable parameter that explicitly controls the trade-off between scalability ( α → 1) and accuracy ( α → 0). Increasing α yields more partitions and smaller regions, enabling parallelization but slowing convergence. For α = 0 ,EPP reduces to a single PP. 
+
+Theoretical and practical implications. EPP aims to mitigate the limitations discussed in Section 2.2 for PPs. Computing an EPP requires evaluating K = O(nα) local PPs, each based on m =
+
+O(n(1 −α)2 /γ ) SPs. This alleviates the issue that, for PPs, achieving convergence when γ = 2+ δ and 
+
+δ > 0 small requires the number of SPs to grow almost linearly with n. By contrast, EPP remains computationally feasible while still ensuring convergence through an appropriate choice of α, and thus avoids the near-linear growth in m required by global PPs. In addition, computations are embarrassingly parallel, enabling substantial speed-ups in practice. This computational advantage becomes particularly evident in high-dimensional settings, as demonstrated in Section 5. Finally, when γ ≤ 2, asymptotic convergence cannot be guaranteed, but the following error bound in the following Corollary helps explain the empirical improvements observed in our experiments in Section 5. 7GP PPs with SPS (Song et al., 2025) EPP (Theorem 1) EPP (Corollary 1) Smoothness γ > 1 γ > 2 γ > 2 γ > 1                                     
+
+> Partitions ——K=O(nα),α∈[0 ,1) K=n/m
+> Support points —m=O(n2/γ )m=O(n(1 −α)2 /γ ),α∈[0 ,1) mfixed Convergence rate Op(n−(1 −1/γ ))Op(n−(1 −1/γ ))Op(n−(1 −α)(1 −1/γ ))Op(1) ∗
+> Computations O(n3)O(n1+4 /γ )O(n1+(1 −α)4 /γ )O(nm 2)
+
+Table 1: Summary of theoretical results and conditions. ∗Error upper bound ∥μK,m − μ0∥2  
+
+> L2(F)
+
+≤ m−(1 −1/γ ).
+
+Corollary 1. Under Assumptions 1–2, if K = n/m and {˜sk,i }mi=1 = {si ∈ S : si ∈ S k}, then 
+
+∥μK,m − μ0∥2  
+
+> L2(F)
+
+= O(1) and it is upper-bounded by 
+
+∥μK,m − μ0∥2  
+
+> L2(F)
+
+≤ c1m−(1 −1/γ ),
+
+for some constant c1 > 0 and γ > 1.
+
+The proof of Corollary 1 is provided in Supplementary Material B.2. In contrast to PPs, whose theory requires γ > 2 (see Section 2.2), the predictive error of EPP can still be characterized when 
+
+γ ≤ 2 by considering the extreme case α = 1 , thereby expanding the theoretical understanding in regimes not addressed by global PPs. A summary of our theoretical properties contrasting full GP, PP and EPP is given in Table 1. 
+
+# 4 Multi-resolution ensemble of predictive processes 
+
+The theoretical results in Section 3.2 and Song et al. (2025) show that accurate approximation of the full GP requires the number of inducing points m to grow with n. Consequently, projecting onto a fixed low-rank subspace limits the ability to capture fine-scale dependence and typically results in oversmoothing, particularly at locations far from inducing points. We turn this limitation into an advantage. We show that PPs with fixed m exhibit asymptotic predictive robustness to data contamination in the training data and use this property to propose a multi-resolution ensemble of PPs that balances predictive accuracy and robustness. 
+
+4.1 Robustness of PPs with fixed m
+
+We evaluate predictive robustness by analyzing how perturbations in the training data affect the predictions. In this framework, robustness refers to the ability of a predictive algorithm to resist overfitting and maintain generalization properties. Here, we study the influence function of the predictive mean, and define predictive robustness next. 
+
+Definition 2 (Predictive robustness) . A predictive algorithm is asymptotically robust if for any test location s⋆:
+
+lim  
+
+> n→∞
+
+max  
+
+> i∈{ 1,...,n }
+
+|I i(s⋆)| = 0 , Ii(s⋆) = ∂μ (s⋆)
+
+∂y (si) ,
+
+8where the influence function Ii(s⋆) measures the influence of a training point si on the prediction at an unobserved location s⋆.For the full GP the influence of a training observation y(si) on the predictive mean at s⋆ is unbounded as n → ∞ . In contrast, for a PP with fixed m, the influence decays at rate O(n−1),yielding asymptotic predictive robustness under data contamination. Formal statements are given in Propositions 1–2 and proofs are available in the Supplementary Material B.3–B.4. 
+
+Proposition 1 (GP influence) . Let cn⋆ (θ) = {c(si, s ⋆; θ)}ni=1 ∈ Rn×1 and c1 > 0. Then, un-der Assumption 1, the vector of influence functions for the full GP is given by I(s⋆) = ( Cnn +
+
+τ 2In)−1cn⋆ (θ) and satisfies 
+
+∥I (s⋆)∥∞ ≤√nτ 2 c(sN (s⋆), s ⋆; θ),
+
+where sN (s⋆) = arg min s∈{ s1,...,s n} ∥s − s⋆∥ is the nearest neighbor of s⋆.
+
+Proposition 2 (PP influence) . Let c⋆m (θ) = {c(s⋆, ˜sj ; θ)}mj=1 ∈ R1×m and c2 > 0. Then, under Assumption 1, the vector of influence functions for the PP with m inducing points is Im(s⋆) = 
+
+Cnm (θ)( τ 2Cmm (θ) + Cnm (θ)⊤Cnm (θ)) −1c⋆m (θ)⊤. If the eigenvalues of n−1Cnm (θ)⊤Cnm (θ) lie in 
+
+(emin , e max ), with 0 < e min < e max < ∞, then 
+
+∥I m(s⋆)∥∞ ≤ m√mη 2
+
+ne min 
+
+c(˜ sN (s⋆), s ⋆; θ),
+
+where ˜sN (s⋆) = arg min ˜s∈{ ˜s1,..., ˜sm} ∥˜s − s⋆∥.
+
+Remark 1. For a fixed sample size n, the influence functions of both GP and PP are bounded by a constant that does not depend on the value of y(s). This implies that for perturbations in the training data of magnitude going to infinity, neither GP nor PP is robust. However, even in the fixed sample size scenario, PP exhibits greater robustness than GP, as indicated by a substantially smaller upper bound when m ≪ n. We confirm this property empirically in our simulation study. 
+
+4.2 Multi-resolution ensemble of PPs 
+
+To combine the global robustness of coarse, low-rank approximations with the local adaptivity of finer resolutions, we introduce the Multi-Resolution Ensemble of Predictive Processes (MREPP). MREPP constructs ensembles across multiple spatial resolutions, ranging from possibly overlap-ping coarse to fine partitions, and aggregates predictions across resolutions. We provide a formal definition next. 
+
+Definition 3 (Multi-Resolution Ensemble of Predictive Processes) . Let Pl = {S l,k }Kl 
+
+> k=1
+
+be a par-tition, of the space S at resolution level l = 1 , . . . , L , possibly with overlaps, such that K1 <
+
+· · · < K L. For each Sl,k , let {˜sl,k,i }ml 
+
+> i=1
+
+be a set of ml SPs such that m1 ≥ . . . ≥ mL. Then, the MREPP( L,{Kl}Ll=1 ,{ml}Ll=1 ) of depth L is defined as 
+
+p(y(s⋆) | y) = 
+
+> L
+
+X
+
+> l=1
+> Kl
+
+X
+
+> k=1
+
+πl,k (s⋆ | S l,k ) p(y(s⋆) | y, Sl,k ),
+
+9where π(s⋆ | S l,k ) are resolution-specific local weights satisfying PLl=1 
+
+PKl 
+
+> k=1
+
+πl,k (s⋆ | S l,k ) = 1 .The predictive mean and variance are 
+
+μL,K,m (s⋆) = 
+
+> L
+
+X
+
+> l=1
+> Kl
+
+X
+
+> k=1
+
+πl,k (s⋆ | S l,k ) μm(s⋆ | S l,k ),σ2
+
+> L,K,m
+
+(s⋆) = 
+
+> L
+
+X
+
+> l=1
+> Kl
+
+X
+
+> k=1
+
+πl,k (s⋆ | S l,k )
+
+"
+
+σ2
+
+> m
+
+(s⋆ | S l,k ) + μ2
+
+> m
+
+(s⋆ | S l,k )
+
+#
+
+−
+
+" LX
+
+> l=1
+> Kl
+
+X
+
+> k=1
+
+πl,k (s⋆ | S l,k )μm(s⋆ | S l,k )
+
+#2
+
+.
+
+The spatial weights πl,k (s⋆ | S l,k ) are defined as the normalized products of horizontal and ver-tical weights πl,k (s⋆ | S l,k ) ∝ p(l)πk(s⋆ | S l,k ). Horizontal weights πk(s⋆ | S l,k ) use truncated localization kernels from Section 3.1. Vertical weights p(l) govern the contribution of each res-olution: The sequence of coarse to fine partitions progressively transitions from PPs that capture global spatial trends to those that capture increasingly local features, thereby moving from more robust but potentially oversmoothed predictions, to more accurate but potentially overfitted ones. The idea is that if outliers are present in the training set, coarser resolutions should be upweighted to avoid overfitting in those regions. The weights p(l) adaptively balance this trade-off and are learned by minimizing an out-of-sample prediction loss on a calibration set: 
+
+ˆp(l) = arg min 
+
+> p(l)
+
+1
+
+n2
+
+> n2
+
+X
+
+> i=1
+
+g μL,K,m (s2,i |y1), y 2(s2,i ),
+
+where g is the mean squared error, and y1 = {y(s1,i )}n1 
+
+> i=1
+
+and y2 = {y(s2,i )}n2
+
+> i=1
+
+, with n1 + n2 = n,denote a disjoint division of the observed data into training and calibration subsets, respectively. Algorithm D.2 in the Supplementary Material summarizes spatial prediction with MREPP. Overall, MREPP recovers PP when L = 1 , K 1 = 1 and EPP when L = 1 , K 1 > 1. Although slower than EPP due to multiple resolutions, MREPP remains computationally efficient because computations are parallelizable across resolutions and subregions. Its multi-resolution design en-ables predictive robustness under contamination through coarse partitions with small ml, while preserving local accuracy through finer partitions with large Kl. In practice we impose an upper bound on the number of SPs to avoid excessive local resolution ml ≤ mmax ≪ n.
+
+4.3 Tuning MREPP 
+
+Although theoretical results can guide the optimal choice of the number of SPs in each subregion, there is not a unique optimal choice of the number of resolutions L, ensembles per resolution Kl,
+
+l = 1 , . . . , L , and upper bound on the number of SPs mmax . However, it is possible to empirically investigate the sensitivity of MREPP to these choices. To this end, the number of resolution members is studied in the simulations Section 5. Regard-ing L and mmax specific to MREPP, we conduct additional experiments documented in Supplemen-tary Material E, with results summarized in Figure E.4. We find that, first, increasing L consistently 10 reduces RMSE and LPS, with L = 6 providing the lowest and most stable values across sample sizes and contamination levels. Second, smaller mmax performs better for small sample sizes n,while larger mmax offers improvements for larger datasets. The benefits of larger L become even more evident in the real data applications in Section 5.2, in particular for large datasets (see Table 4). These results make clear that restricting attention to only the coarsest resolution (i.e., the PP) and the finest one is suboptimal in practice, especially for density prediction. In line with these findings, theoretical results (see Proposition 2) suggest that mmax should be much smaller than n to enhance robustness. This can be a reason why we find empirically that 
+
+mmax = 50 outperforms mmax = 200 for n = 1000 .Finally, it is worth noting that computation time increases with number of resolutions L and decreases with mmax . Taking all aspects into account, as a practical recommendation, we suggest using large L for stability, and choosing mmax small relative to n to preserve predictive robustness, while considering computational limits. 
+
+# 5 Empirical evaluation 
+
+In this section, we conduct experiments to evaluate the proposed MREPP and EPP in terms of predictive accuracy, uncertainty quantification, robustness to data contamination, and computa-tional efficiency on synthetic data in Section 5.1 and on real data in Section 5.2. The computations were implemented in R 4.4.0 and executed on a compute node equipped with dual Intel ® Xeon ®
+
+Platinum and 512 GB RAM. 
+
+5.1 Simulation study 
+
+Data generation. Data are generated from (1) with locations drawn uniformly over S in three scenarios. Scenario 1 and 2 assume fixed space S = [ −3, 3] 2 and enlarging space with n such that the separation radius rS = 0 .001 is constant, respectively. Scenario 3 considers fixed space 
+
+S = [ −3, 3] 2 and in order to mimic data contamination, we sequentially set 1% of the observations to 5, 10 , 15 , which correspond to {10 , 20 , 30 } times the true standard deviation √0.25 .In each scenario, the true GP assumes a Mat´ ern kernel with parameters (ϕ, ν ) = (0 .21 , 1.5) ,marginal variance η2 = 1 .5, and Gaussian nugget ε(s) ∼ N (0 , 0.25) . In Scenarios 1 and 2 we additionally consider (ϕ, ν ) = (0 .33 , 0.5) to contrast performance with a less smooth process. The range parameter ϕ is chosen such that the effective range of the GP is equal to 1. For all scenarios, we consider n = {1000 , 2500 , 5000 , 7500 , 10000 } locations for training and an additional test set of N = 1000 observations for prediction. We generate R = 100 data replications, where for each the sequences {(si, w (si), ε (si)) }ni=1 and {(s⋆,i , w (s⋆,i ), ε (s⋆,i )) }Ni=1 for the training and test sets, respectively, are resampled. 
+
+Benchmark methods. As competitors, we include the full GP, the PP of Song et al. (2025), and the local approximate GP (LAGP) of Gramacy and Apley (2015). All methods assume a Mat´ ern kernel with parameters fixed at their true values to isolate methodological differences. We come back to this point in the discussion Section 6. 11 Hyperparameter settings. For the EPP, we consider three values of α ∈ { 0.2, 0.4, 0.5}, set 
+
+K = nα, and determine the number of SPs using the theoretical recommendation when γ > 2 (i.e., 
+
+ν = 1 .5), while for γ ≤ 2 (i.e., ν = 0 .5) we instead use a fraction of the expected number of ob-servations in the corresponding region. Specifically, we choose m = min {(n/K )2/γ , 0.5 ( n/K )}.For the MREPP, we investigate three settings with different L and varying α = ( α1, . . . , α L)
+
+(and therefore Kl = nα), where αl is the value used for the l-th EPP in the MREPP construction. Specifically, we consider L = 2 and {αl}2 
+
+> l=1
+
+∈ { 0, 0.5}, L = 4 and {αl}4 
+
+> l=1
+
+∈ { 0, 0.2, 0.4, 0.5},and L = 6 and {αl}6 
+
+> l=1
+
+∈ { 0, 0.2, 0.3, 0.4, 0.45 , 0.5}. We discuss the tuning of MREPP in Sec-tion 4.3. The number of SPs for each l = 1 , . . . , L in the MREPP follows the same principle used for the EPP, but we impose an upper bound on the number of SPs, as discussed in Section 4.3, ml = min {mmax , (n/K l)2/γ , 0.5 ( n/K l)}. Here we choose mmax = 200 . To obtain data-driven estimates of the resolution weights p(l), we employ a calibration set of size 0.2n. This yields weight estimates that reflect local predictive performance while maintaining computational efficiency. Both EPP and MREPP allow for a small overlap between adjacent regions to ensure continuity at the boundaries. Horizontal weights are defined using the distance-dependent truncated Gaussian localization kernel introduced in Section 3.1. Throughout, we refer to EPP as EPP (α) and to MREPP as MREPP (L), respectively. The PP is estimated using m = min {n2/γ , 0.5n}. The corresponding values of γ and m are provided in Table E.1 of the Supplementary Material. We implement LAGP using the active learning Cohn (ALC) strategy (Cohn, 1996) to construct the local design for prediction. For each predictive location, ALC identifies a local subset of points that minimizes the predictive variance. Following Gramacy and Apley (2015), we initialize the search with the five nearest neighbors and set kmax = 50 .From a computational standpoint, when n > 5000 we evaluate the full GP only on the first 10 replicates and use these results exclusively to study computational cost. For such cases, we do not report other performance metrics, because 10 replicates are insufficient to obtain reliable estimates. Although the MREPP, EPP, and LAGP procedures are in principle parallelizable, we execute all methods in serial to facilitate a fair comparison with the full GP and PP. 
+
+Evaluation metrics. To assess the performance of each method, we consider the following met-rics. As a measure of point prediction accuracy, we compute the predictive Root Mean Squared Error (RMSE) on the test set. We complement it with the Log Predictive Score (LPS) to quantify probabilistic prediction accuracy. Then, we investigate empirical coverage and average width of 90% highest posterior density (HPD) intervals in the training data, as well as the predictive interval score (Gneiting and Raftery, 2007) on the test set to balance coverage and sharpness. Finally, we report the total runtime in seconds as a measure for computational efficiency. 
+
+Results. We focus on results for n = 1000 , 5000 , 10000 in the following and present further results for all n in Supplementary Material E. 
+
+Prediction accuracy and robustness . Figure 3 shows that the proposed MREPP yields compara-ble performance compared to full GP (when available) and LAGP for both point prediction and probabilistic prediction, for the three choices of L = 2 , 4, 6 in Scenarios 1 and 2. For EPP, the 12 0.50 0.55 0.60 0.65 0.70 0.75                                 
+
+> 0.50 0.55 0.60 0.65
+> ν = 0.5 (Exponential )ν = 1.5 (Matern )
+> Fixed Space  [−3,3]^2  Fixed Radius  (0.001)
+> 1000 5000 10000 1000 5000 10000
+> 0.7 0.8 0.9
+> 0.6 0.7 0.8 0.9
+> RMSE
+> 0.90 0.95 1.00 1.05
+> 0.85 0.90 0.95 1.00
+> ν = 0.5 (Exponential )ν = 1.5 (Matern )
+> Fixed Space  [−3,3]^2  Fixed Radius  (0.001)
+> 1000 5000 10000 1000 5000 10000
+> 1.00 1.05 1.10 1.15
+> 0.95 1.00 1.05 1.10 1.15
+> Sample size (n)
+> LPS
+> Model
+> GP
+> PP
+> LAGP
+> EPP (α = 0.2 )
+> EPP (α = 0.4 )
+> EPP (α = 0.5 )
+> MREPP (L=2)
+> MREPP (L=4)
+> MREPP (L=6)
+
+Figure 3: Scenarios 1 and 2: Point and probabilistic predictions. The RMSE (top panels) and the LPS (bottom panels) are shown for fixed space (Scenario 1) and enlarging domain with fixed separation radius (Scenario 2) and increasing sample sizes n = 1000 , 5000 , 10000 . For both metrics, a smaller value indicates better performance. 
+
+performance for α = 0 .5 and γ > 2 is satisfactory across all scenarios as somewhat expected. However, for γ < 2 the performance drops rapidly the smaller α gets. A similar behavior is observed for PP. Figure 4 shows that MREPP adapts better than full GP, LAGP, and EPP both in point and proba-bilistic prediction in the presence of data contamination (Scenario 3). The PP and EPP with smaller 
+
+α also show satisfactory performance. However, MREPP comes with the advantage of choosing more than one resolution, and this can be effective to achieve predictive robustness, as indicated by our empirical results, showing that larger L provide better RMSE, particularly for larger n. The adaptability of MREPP arises from its multi-resolution construction. At coarser resolutions, the number of neighbors m remains fixed and very small relative to n, allowing the estimator to exploit the robustness properties of PP established in Proposition 2. This behavior is illustrated in Figure 5, which reports how the resolution weights change as the level of contamination increases for L = 6 
+
+(the corresponding plots for L = 2 , 4 are provided in Figure E.3 of the Supplementary Material). When no contamination is present, MREPP allocates most weight to the finer resolutions, enabling it to capture local structure effectively. As contamination increases, however, the weights shift to-ward coarser resolutions, thereby reducing the influence of local outliers and improving recovery of global trends. 
+
+Uncertainty quantification . In Scenarios 1 and 2, the coverage of the predictive 90% HPD inter-13 n = 1000 n = 5000 n = 10000                            
+
+> 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15
+> 0.50 0.75 1.00 1.25
+> RMSE
+> n = 1000 n = 5000 n = 10000
+> 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15
+> 0.0 0.5 1.0 1.5 2.0 2.5
+> log LPS
+> Model
+> GP
+> PP
+> LAGP
+> EPP (α = 0.2 )
+> EPP (α = 0.4 )
+> EPP (α = 0.5 )
+> MREPP (L=2)
+> MREPP (L=4)
+> MREPP (L=6)
+
+Figure 4: Scenario 3: Point and probabilistic predictions. The RMSE (top panels) and logarithm of the LPS (bottom panels) are shown for increasing level of contamination ( x-axis) and sample sizes n ∈ { 5000 , 7500 , 10000 }.
+
+vals is reported in Table E.2 and is, on average, satisfactory for all methods. This indicates that, in general, the procedures are able to produce predictive intervals with appropriate frequentist cali-bration. Figure E.1 presents a graphical summary of the interval scores, simultaneously assessing calibration and sharpness, and indicates that the methods perform comparably well. However, Table 2 (and Figure E.2 in the Supplementary Material) highlight the superior per-formance of MREPP relative to the competing approaches in terms of predictive uncertainty in Scenario 3. In particular, as the level of contamination increases, the coverage of the predictive 
+
+90% HPD intervals deteriorates more slowly for MREPP than for all benchmark methods. This behavior suggests superior robustness of MREPP to contamination effects. Notably, this advantage persists across all values of L.
+
+Computational efficiency . Table 3 reports the average computing time (in seconds). As expected, the running time of MREPP increases with L, whereas that of EPP decreases as α becomes smaller. Since the most computationally expensive component in both EPP and MREPP is the SPVT step, MREPP is consistently slower than EPP because it performs the SPVT L times and additionally requires estimation of the resolution weights. Depending on the choice of L and α, MREPP (EPP) is up to 4 (up to 36) times faster than the full GP when n = 5000 , and up to 4 (up to 47) times faster than LAGP when n = 10000 , while retaining comparable predictive accuracy. Notably, EPP is the overall fastest prediction method 2. PP is also competitive in terms of computing time, although its performance is more sensitive to the choice of the smoothness parameter γ.
+
+> 2
+
+Note that MREPP can be parallelized across resolutions to achieve improved runtime. 
+
+14 n = 1000 n = 2500 n = 5000 n = 7500 n = 10000                    
+
+> 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15
+> 0.00 0.25 0.50 0.75 1.00
+> p(l)
+
+Figure 5: Scenario 3: Estimated resolution weights for MREPP( L = 6 ). The estimated distribution of weights p(l)
+
+in MREPP is shown for increasing level of contamination and sample sizes. Each boxplot is the distribution of p(l)
+
+over the replicates for l = 1 , . . . , L and for a given level of contamination they are sorted from left l = 1 (coarsest resolution) to right l = L (finest resolution). 
+
+GP PP LAGP Contamination 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 
+
+n = 1000 0.90 0.88 0.87 0.85 0.91 0.89 0.87 0.85 0.90 0.88 0.87 0.86 
+
+n = 2500 0.90 0.88 0.86 0.84 0.91 0.89 0.86 0.84 0.90 0.88 0.86 0.84 
+
+n = 5000 0.90 0.88 0.86 0.84 0.91 0.89 0.87 0.83 0.90 0.88 0.86 0.84 
+
+n = 7500 0.91 0.90 0.87 0.84 0.90 0.89 0.86 0.84 
+
+n = 10000 0.91 0.90 0.87 0.83 0.90 0.88 0.86 0.83 EPP( α = 0 .2) EPP( α = 0 .4) EPP( α = 0 .5)Contamination 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 
+
+n = 1000 0.91 0.89 0.87 0.85 0.90 0.88 0.87 0.86 0.90 0.89 0.87 0.86 
+
+n = 2500 0.90 0.89 0.86 0.84 0.90 0.88 0.86 0.85 0.90 0.88 0.86 0.85 
+
+n = 5000 0.91 0.89 0.86 0.83 0.90 0.88 0.86 0.84 0.90 0.89 0.86 0.85 
+
+n = 7500 0.91 0.89 0.86 0.83 0.90 0.89 0.86 0.84 0.90 0.89 0.86 0.84 
+
+n = 10000 0.90 0.89 0.86 0.83 0.90 0.89 0.86 0.83 0.90 0.89 0.86 0.84 MREPP( L = 2 ) MREPP( L = 4 ) MREPP( L = 6 )Contamination 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 0% 1% to 5 1% to 10 1% to 15 
+
+n = 1000 0.92 0.91 0.90 0.88 0.91 0.91 0.89 0.88 0.91 0.90 0.89 0.88 
+
+n = 2500 0.91 0.92 0.91 0.90 0.91 0.91 0.91 0.90 0.91 0.91 0.91 0.90 
+
+n = 5000 0.91 0.92 0.92 0.92 0.91 0.91 0.92 0.91 0.91 0.91 0.92 0.91 
+
+n = 7500 0.91 0.92 0.93 0.92 0.91 0.91 0.92 0.92 0.91 0.91 0.92 0.92 
+
+n = 10000 0.90 0.91 0.92 0.92 0.91 0.91 0.92 0.92 0.91 0.91 0.92 0.92 
+
+Table 2: Scenario 3: Prediction HPD 90% coverage under increasing contamination. The empirical coverage is shown for increasing contamination level and sample sizes. 
+
+Overall summary. In settings without contamination, EPP and MREPP achieve prediction ac-curacy comparable to the full GP and LAGP while being substantially faster. Furthermore, both approaches outperform the PP, particularly when the smoothness parameter γ < 2. Its multi-resolution structure allows MREPP to adapt effectively to data contamination by shifting weight from fine to coarser resolutions, yielding superior point and probabilistic predictions with more accurate uncertainty quantification. As a result, MREPP provides robustness to contamination without sacrificing accuracy in standard settings and remains computationally scalable to high-dimensional data, offering clear practical advantages over existing alternatives. 15 ν = 0 .5 (Exponential) ν = 1 .5 (Mat´ ern)                                                                                                                                                                                                             
+
+> n1000 2500 5000 7500 10000 1000 2500 5000 7500 10000
+> Fixed Space [−3,3] 3
+> GP 0.7 9.3 70.5 229.1 ∗539.5 ∗0.6 7.6 65.1 231.1 ∗523.0 ∗
+> PP 1.8 10.2 44.8 113.0 223.8 1.8 5.3 9.7 15.6 22.6 LAGP 13.4 20.1 38.7 108.5 165.3 13.8 20.7 40.5 110.6 159.3 EPP( α= 0 .2)1.5 3.6 9.5 16.7 28.7 1.5 3.1 4.6 6.3 8.4 EPP( α= 0 .4)0.6 0.8 1.3 5.6 14.2 0.6 0.8 1.3 4.9 11.1 EPP( α= 0 .5)0.7 0.9 1.6 2.4 3.5 0.7 0.9 1.6 2.4 3.4 MREPP( L= 2 )3.7 5.6 8.8 11.8 15.2 3.7 5.7 8.8 12.0 15.1 MREPP( L= 4 )6.2 11.0 16.8 27.0 40.7 6.3 10.5 16.3 25.8 37.2 MREPP( L= 6 )8.3 16.8 27.9 43.6 61.8 8.3 16.0 25.4 38.0 52.6 Fixed Radius (0.001) GP 0.6 7.1 61.5 225.1 ∗527.7 ∗0.6 7.1 61.3 227.1 ∗510.7 ∗
+> PP 1.8 10.2 44.6 112.0 223.2 0.6 2.5 11.8 44.3 122.8 LAGP 13.4 20.0 38.6 109.5 166.1 13.8 20.7 40.3 110.4 158.1 EPP( α= 0 .2)1.5 3.6 9.5 16.8 28.8 1.3 2.5 5.1 11.6 23.9 EPP( α= 0 .4)0.6 0.8 1.3 5.6 14.3 0.6 0.8 1.3 5.4 13.8 EPP( α= 0 .5)0.7 0.9 1.6 2.4 3.5 0.7 0.9 1.6 2.4 3.4 MREPP( L= 2 )3.7 5.6 8.8 11.8 15.2 3.4 5.7 8.8 12.0 14.9 MREPP( L= 4 )6.2 11.0 16.8 26.9 40.6 5.7 9.8 16.7 26.8 39.9 MREPP( L= 6 )8.3 16.7 27.9 43.7 61.8 7.8 15.0 26.1 42.0 60.2
+
+Table 3: Scenarios 1 and 2: Average computing time across replications in seconds. ∗The GP performance for 
+
+n > 5000 is based on 10 replicates for computational reasons. 
+
+5.2 Real data illustrations 
+
+To illustrate the efficacy of MREPP compared to the benchmark methods considered in Section 5.1 on four real datasets of varying sample size and spatial distributions, see the Supplementary Material F for their visualizations. 
+
+Datasets. We consider the following four real datasets that differ in size and characteristics: 1. Brain dataset from the R-package gamair . It contains lattice data of one slice of func-tional magnetic resonance imaging measurements for a human brain. The total number of observations is 1567 which we divide into n = 1000 and N = 567 for training and testing, respectively. Since this dataset contains outliers, we use it to evaluate the predictive ro-bustness by allocating the values greater than the 99% quantile to the training set with high probability. 2. Anomalies dataset used in Song et al. (2025). It consists of spatially non-uniformly dis-tributed annual total precipitation anomalies observed in the United States in 1962 at 7352 
+
+weather stations. We randomly divide the data into n = 7000 training and N = 352 test locations. 3. Ozone dataset used in Song et al. (2025). It provides the level-2 total column ozone for October 1, 1988 at 173 , 405 locations over a regularly shaped region, and we randomly divide the data into n = 150 , 000 training observations and N = 23 , 405 test locations. 4. Canopy dataset used in Cook et al. (2013) and Mao et al. (2024). It collects 1, 723 , 137 
+
+measurements of canopy height in the Connecticut River Valley. We randomly divide the total observations into n = 1 , 378 , 510 (80% of the total data points) and N = 344 , 627 for training and testing, respectively. 
+
+Hyperparameter settings. For the first three datasets Brain , Anomalies and Ozone , we consider the hyperparameter settings and the spatial partitioning scheme used in Section 5.1 for EPP and 16 MREPP. Since the Canopy dataset is high-dimensional, we consider α ∈ { 0.4, 0.5, 0.6} (i.e., we replace α = 0 .2 with α = 0 .6 for computational limits) for EPP, and αL = 0 .6 for the last resolution of MREPP. Following Section 4.3, we use mmax = 20 for Brain , mmax = 100 for 
+
+Anomalies , and mmax = 200 for Ozone and Canopy , respectively. LAGP is implemented using the ALC algorithm to construct the local process, following the approach in Section 5.1, for the first three datasets. For Canopy , however, we instead use only the five nearest neighbors, due to computational constraints. The PP is estimated using m = 500 for Brain , and, following Song et al. (2025), m = 1000 and 
+
+m = 1755 for Anomalies and Ozone , respectively. Finally, we use m = 5000 for Canopy because of computational constraints. For computational reasons, we do not consider the full GP for the 
+
+Ozone and Canopy datasets. For convenience, in a first step, we center the observations around their empirical mean for each dataset. Then, we estimate a zero-mean GP using the function fit model in the GpGp package. This function employs a Vecchia approximation. We then fix the Mat´ ern kernel and nugget effect for each benchmark method equal to the ones estimated with fit model to ensure comparability. Details on these estimates are given in Table F.1 in the Supplementary Material. 
+
+Results. Table 4 summarizes point and probabilistic prediction accuracy (MSE and LPS), uncer-tainty quantification through predictive 90% HPD interval coverage, and runtime (in minutes), for the Anomalies , Ozone , and Canopy datasets. Table 5 shows the performance of methods with respect to predictive robustness assessed in the Brain datasets. 
+
+Point and probabilistic prediction . Across the three datasets Anomalies , Ozone , and Canopy , the proposed EPP and MREPP achieve MSE that are competitive with the benchmark methods, with MREPP attaining the best performance for the Canopy dataset. While the performance of LAGP on Canopy could potentially be improved by increasing the number of nearest neighbors or by optimizing the local design using ALC, such improvements would come at substantially higher computational cost. In terms of probabilistic prediction, MREPP consistently delivers the best LPS across all three datasets, with a performance increase for a higher number of resolutions. 
+
+Uncertainty quantification . For the Anomalies dataset, all methods achieve coverage close to the 
+
+90% level, indicating that predictive uncertainty is well calibrated. In contrast, for both the Ozone 
+
+and Canopy datasets, all methods exhibit similar behavior in overestimating coverage. 
+
+Computational efficiency . We find strong favorable results for EPP and MREPP in terms of com-putational cost relative to GP, PP, and LAGP. In the Anomalies dataset, runtime decreases from 4.53 minutes for GP to well below one minute for both EPP and MREPP. As the size of the dataset increases, advantages of EPP and MREPP become more evident. For Ozone , EPP and MREPP are approximately nine times faster than LAGP, depending on α and L. PP is competitive in this dataset, but it provides much worse predictive performance. The most pronounced improvements appear in the Canopy dataset, where PP requires nearly 47 minutes and LAGP about 18 minutes, while EPP( α3 = 0 .6) and MREPP( L = 6 ) are about 19 and 2.3 times faster than LAGP, respec-tively. 
+
+Robustness . The results in Table 5 highlight the predictive robustness of MREPP to outliers in the training set. The slightly overall better performance of MREPP can be better explained when the 17 Anomalies Ozone Canopy                                                                                                                   
+
+> MSE LPS Coverage Runtime MSE LPS Coverage Runtime MSE LPS Coverage Runtime GP 0,22 0,66 0,90 4,53 PP 0,25 0,74 0,92 0,32 37,59 3,86 0,94 2,56 7,69 2,68 0,96 46,92 LAGP 0,22 0,65 0,90 2,92 28,37 4,22 0,94 9,26 1,71 3,00 0,94 17,73 EPP( α1)0,24 0,73 0,90 0,30 27,71 4,12 0,94 1,12 1,83 2,99 0,94 21,42 EPP( α2)0,23 0,68 0,91 0,15 27,48 4,12 0,94 0,81 1,96 2,68 0,95 3,60 EPP( α3)0,22 0,66 0,90 0,12 27,48 4,10 0,94 0,56 1,66 2,86 0,94 0,93 MREPP( L= 2 )0,22 0,65 0,91 0,18 27,58 3,98 0,94 0,64 1,66 2,85 0,94 1,73 MREPP( L= 4 )0,22 0,65 0,91 0,41 27,58 3,94 0,94 0,98 1,66 2,73 0,95 4,15 MREPP( L= 6 )0,22 0,65 0,91 0,66 27,58 3,90 0,94 1,45 1,66 2,56 0,95 7,70
+
+Table 4: Real data: Point and probabilistic predictions, uncertainty quantification, and runtime. The MSE, LPS, the predictive 90% HPD coverage, and the runtime in minutes are shown for Anomalies , Ozone , and Canopy data. For EPP, (α1, α 2, α 3) = (0 .2, 0.4, 0.5) for Anomalies and Ozone , and (α1, α 2, α 3) = (0 .4, 0.5, 0.6) for Canopy . For the high dimensional datasets Ozone and Canopy computations are parallelized across 20 CPU cores. 
+
+metrics are evaluated separately on the five nearest neighbors of each outlier and on the remain-ing locations. In regions far from outliers, all methods perform similarly across MSE, LPS, and coverage. However, greater differences arise in neighborhoods close to anomalous observations. The GP, PP, LAGP, and EPP exhibit a degradation of the predictive performance near outliers and undercovered predictive intervals. The poor performance of PP can be explained by the choice of large m = 500 compared to n. In fact, using a much smaller value could improve its behav-ior, albeit at the expense of global accuracy. In contrast, MREPP delivers improvements in both point and density prediction near outliers, while maintaining coverage close to 90% . This behavior can be attributed to the resolution-weighting mechanism, which assigns importance also to coarser resolutions where the number of SPs remains limited, thereby preserving robustness. Overall Near outliers Far from outliers MSE LPS Coverage MSE LPS Coverage MSE LPS Coverage GP 0,97 1,62 0,95 4,76 6,54 0,70 0,78 1,37 0,96 PP 1,04 1,65 0,95 5,09 6,20 0,72 0,83 1,42 0,96 LAGP 0,97 1,62 0,95 4,75 6,45 0,70 0,78 1,37 0,96 EPP( α = 0 .2) 1,00 1,61 0,95 4,80 5,69 0,72 0,81 1,41 0,96 EPP( α = 0 .4) 0,96 1,62 0,95 4,65 6,37 0,72 0,78 1,38 0,96 EPP( α = 0 .5) 0,97 1,61 0,95 4,63 5,99 0,73 0,78 1,38 0,96 MREPP( L = 2 ) 0,87 1,50 0,97 2,47 1,89 0,94 0,79 1,48 0,98 MREPP( L = 4 ) 0,91 1,50 0,97 3,31 2,02 0,91 0,79 1,47 0,98 MREPP( L = 6 ) 0,93 1,51 0,97 3,58 2,17 0,90 0,79 1,47 0,98 
+
+Table 5: Brain data: Point and probabilistic predictions, and uncertainty quantification in presence of outliers. The MSE, LPS, and the predictive 90% HPD coverage are shown for the Brain dataset and computed on different test sets: “Overall” considers all test locations; “Near outliers” considers the set of five nearest neighbor locations to each outlier; “Far from outliers” is obtained as “Overall” minus “Near outliers”. 
+
+Overall summary. The empirical findings indicate that MREPP achieves point prediction accu-racy comparable to or better than the benchmark methods and consistently outperforms the latter in terms of probabilistic prediction, while preserving low computational cost also in very high dimensional datasets. Furthermore, MREPP maintains reliable coverage also in the presence of data contamination in the training set. These results make MREPP an effective method to balance statistical and computational efficiency in possibly large-scale spatial prediction problems. 18 6 Discussion 
+
+This paper addresses a central challenge in spatial statistics: achieving accurate and more robust predictions while being scalable to high-dimensional data. Our contributions are threefold. First, we introduce the Ensemble of Predictive Processes (EPP) together with a spatial partitioning algorithm and patching scheme, and we establish convergence rates for the EPP, thereby quantifying the trade-off between statistical accuracy and computational scalability. Second, we demonstrate that PPs with fixed inducing points are more robustness to con-tamination in the training data than full GPs and many local approximations. Third, we introduce MREPP, a method that integrates recent advances in PPs with divide-and-conquer strategies across multiple spatial resolutions. By leveraging coarse-to-fine spatial partitions, MREPP is computa-tionally efficient, balances global robustness with local adaptivity, and delivers accurate predictions even in the presence of data contamination. Although our notion of predictive robustness focuses on how training data contamination affects the predictive mean, our results can be extended to cover robustness of the entire predictive distribution, analogous to the posterior influence function introduced in Altamirano et al. (2024). Empirical results on synthetic and real-world datasets confirm that MREPP achieves predic-tive accuracy and uncertainty quantification comparable to those of full GPs, while being or-ders of magnitude faster. Moreover, MREPP adapts to contamination by shifting weights toward coarser resolutions, and consequently outperforms state-of-the-art global and local approximations in terms of predictive robustness. While this paper focuses on prediction, parameter estimation is beyond its scope. Neverthe-less, the process parameters and nugget variance could, in principle, be estimated by maximizing the likelihood of MREPP. As an advantage, MREPP naturally enables local, resolution-specific parameter estimation by restricting inference to observations within each spatial partition. Un-like standard PPs with globally shared parameters, this capability may make MREPP beneficial to flexibly accommodate nonstationary spatial structures. This work also opens further future directions. First, extending the methodology to allow resolu-tion probabilities to vary with location p(l|s⋆) could improve flexibility in heterogeneous domains and clustered anomalies (Wang et al., 2024). Second, tailoring MREPP to spatio-temporal pre-diction constitutes a natural next step. Many applications involve evolving spatial processes with misaligned time-varying locations (Berrocal et al., 2010). Extending MREPP to spatio-temporal settings requires dynamic partitions and time-adaptive inducing sets. Third, studying the proposed ensemble-based GP approximation from the field of probabilistic numerics (Stankewitz and Szab´ o, 2024) could broaden the theoretical understanding of this approximation and potentially deepen in-sights into the accuracy–scalability trade-off. Overall, MREPP provides a practical and theoretically grounded solution for modern large-scale spatial modeling in the context of scalable and more robust GP prediction. 
+
+Acknowledgements. The authors would like to thank Botond Szab´ o for constructive feedback on the theoretical aspects of this paper and Dongjae Son for careful proofreading. 19 References 
+
+Altamirano, M., Briol, F.-X. and Knoblauch, J. (2024), Robust and conjugate Gaussian process re-gression, in ‘Proceedings of the 41st International Conference on Machine Learning’, ICML’24, JMLR.org. Balzer, M. and Heck, D. (2008), Capacity-constrained Voronoi diagrams in finite spaces, in ‘Pro-ceedings of the 5 th Annual International Symposium on Voronoi Diagrams in Science and Engineering, 22 - 28 September, 2008, Kiev, Ukraine’. Banerjee, S., Gelfand, A. E., Finley, A. O. and Sang, H. (2008), ‘Gaussian predictive process models for large spatial data sets’, Journal of the Royal Statistical Society Series B: Statistical Methodology 70 (4), 825–848. Berrocal, V. J., Gelfand, A. E. and Holland, D. M. (2010), ‘A bivariate space–time downscaler under space and time misalignment’, The Annals of Applied Statistics 4(4), 1942 – 1975. Bui, T. D. and Titsias, M. K. (2025), ‘Sparse Gaussian processes: Structured approximations and power-EP revisited’, arXiv preprint arXiv:2507.02377 .Burt, D. R., Rasmussen, C. E. and Van Der Wilk, M. (2020), ‘Convergence of sparse variational inference in gaussian processes regression’, Journal of Machine Learning Research 21 (1). Cohn, D. A. (1996), ‘Neural network exploration using optimal experiment design’, Neural Net-works 9(6), 1071–1083. Cook, B. D., Corp, L. A., Nelson, R. F., Middleton, E. M., Morton, D. C., McCorkel, J. T., Masek, J. G., Ranson, K. J., Ly, V. and Montesano, P. M. (2013), ‘NASA Goddard’s LiDAR, hyperspec-tral and thermal (G-LiHT) airborne imager’, Remote Sensing 5(8), 4045–4066. Datta, A., Banerjee, S., Finley, A. O. and Gelfand, A. E. (2016), ‘Hierarchical nearest-neighbor Gaussian process models for large geostatistical datasets’, Journal of the American Statistical Association 111 (514), 800–812. Du, Q., Faber, V. and Gunzburger, M. (1999), ‘Centroidal Voronoi tessellations: Applications and algorithms’, SIAM Review 41 (4), 637–676. Etienam, C., Law, K. J. H., Wade, S. and Zankin, V. (2024), ‘Fast deep mixtures of Gaussian process experts’, Machine Learning 113 (1), 1–35. Furrer, R., Genton, M. G. and Nychka, D. (2006), ‘Covariance tapering for interpolation of large spatial datasets’, Journal of Computational and Graphical Statistics 15 (3), 502–523. Gneiting, T. and Raftery, A. E. (2007), ‘Strictly proper scoring rules, prediction, and estimation’, 
+
+Journal of the American Statistical Association 102 (477), 359–378. Gramacy, R. B. and Apley, D. W. (2015), ‘Local Gaussian process approximation for large com-puter experiments’, Journal of Computational and Graphical Statistics 24 (2), 561–578. 20 Hore, R. and Barber, R. F. (2025), ‘Conformal prediction with local weights: randomization en-ables robust guarantees’, Journal of the Royal Statistical Society Series B: Statistical Methodol-ogy 87 (2), 549–578. Katzfuss, M. (2017), ‘A multi-resolution approximation for massive spatial datasets’, Journal of the American Statistical Association 112 (517), 201–214. Katzfuss, M. and Guinness, J. (2021), ‘A general framework for Vecchia approximations of Gaus-sian processes’, Statistical Science 36 (1), 124–141. Liu, H., Ong, Y.-S., Shen, X. and Cai, J. (2020), ‘When Gaussian process meets big data: A review of scalable GPs’, IEEE Transactions on Neural Networks and Learning Systems 31 (11), 4405– 4423. Mao, H., Martin, R. and Reich, B. J. (2024), ‘Valid model-free spatial prediction’, Journal of the American Statistical Association 119 (546), 904–914. Nieman, D., Szab´ o, B. and van Zanten, H. (2022), ‘Contraction rates for sparse variational approx-imations in gaussian process regression’, Journal of Machine Learning Research 23 (205), 1–26. Nychka, D., Bandyopadhyay, S., Hammerling, D., Lindgren, F. and Sain, S. (2015), ‘A multiresolu-tion Gaussian process model for the analysis of large spatial datasets’, Journal of Computational and Graphical Statistics 24 (2), 579–599. Peruzzi, M. and Dunson, D. B. (2024), ‘Spatial meshing for general Bayesian multivariate models’, 
+
+Journal of Machine Learning Research 25 (87), 1–49. Rasmussen, C. E. and Williams, C. K. I. (2006), Gaussian Processes for Machine Learning , MIT Press. Rosa, P., Borovitskiy, S., Terenin, A. and Rousseau, J. (2023), ‘Posterior contraction rates for mat´ ern gaussian processes on riemannian manifolds’, Advances in Neural Information Process-ing Systems 36 , 34087–34121. Sang, H., Jun, M. and Huang, J. Z. (2011), ‘Covariance approximation for large multivariate spatial data sets with an application to multiple climate model errors’, The Annals of Applied Statistics 
+
+5(4), 2519 – 2548. Secord, A. (2002), Weighted Voronoi stippling, in ‘Proceedings of the 2nd International Sympo-sium on Non-Photorealistic Animation and Rendering’, pp. 37–43. Song, Y., Dai, W. and Genton, M. G. (2025), ‘Large-scale low-rank Gaussian process prediction with support points’, Journal of the American Statistical Association 120 (550), 1189–1200. Stankewitz, B. and Szab´ o, B. (2024), ‘Contraction rates for conjugate gradient and Lanczos ap-proximate posteriors in Gaussian process regression’, arXiv preprint arXiv:2406.12678 .Szab´ o, B., Hadji, A. and van der Vaart, A. (2025), ‘Adaptation using spatially distributed Gaussian processes’, Journal of the American Statistical Association 0(0), 1–12. 21 Szab´ o, B. and van Zanten, H. (2019), ‘An asymptotic analysis of distributed nonparametric meth-ods’, Journal of Machine Learning Research 20 (87), 1–30. Szab´ o, B. and Zhu, Y. (2026), ‘Vecchia Gaussian processes: Probabilistic properties, minimax rates and methodological developments’, To appear in Annals of Statistics, preprint available at arXiv:2410.10649 .Sz´ ekely, G. J. and Rizzo, M. L. (2013), ‘Energy statistics: A class of statistics based on distances’, 
+
+Journal of Statistical Planning and Inference 143 (8), 1249–1272. Titsias, M. K. (2009), Variational learning of inducing variables in sparse Gaussian processes, 
+
+in ‘Proceedings of the Twelth International Conference on Artificial Intelligence and Statistics (AISTATS)’, pp. 567–574. Tresp, V. (2000), ‘A Bayesian committee machine’, Neural Computation 12 (11), 2719–2741. Vakayil, A. and Joseph, V. R. (2024), ‘A global-local approximation framework for large-scale Gaussian process modeling’, Technometrics 66 (2), 295–305. van der Vaart, A. W. and van Zanten, J. H. (2008), ‘Rates of contraction of posterior distributions based on Gaussian process priors’, The Annals of Statistics 36 (3), 1435 – 1463. Wang, H., Song, C., Wang, J. and Gao, P. (2024), ‘A raster-based spatial clustering method with robustness to spatial outliers’, Scientific Reports 14 (1), 4103. Wang, W. and Jing, B.-Y. (2022), ‘Gaussian process regression: Optimality, robustness, and rela-tionship with kernel ridge regression’, Journal of Machine Learning Research 23 (193), 1–67. 22
