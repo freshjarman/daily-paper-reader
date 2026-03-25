@@ -6,58 +6,47 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-24
-- 运行时间：2026-03-24 20:02:51 UTC
+- 最新运行日期：2026-03-25
+- 运行时间：2026-03-25 20:07:55 UTC
 - 运行状态：成功
-- 本次总论文数：12
-- 精读区：1
-- 速读区：11
+- 本次总论文数：8
+- 精读区：0
+- 速读区：8
 
 ### 今日简报（AI）
-今日聚焦物理驱动的图神经跳跃ODE，深度解析电网级联故障预测等12项前沿成果。
-核心突破在于将物理规律融入动态图建模，显著提升了能源网络与城市系统的风险预警精度。
-推荐关注AI与物理模型的深度融合，这是提升复杂基础设施安全性的关键路径。
-- 详情：[/202603/24/README](/202603/24/README)
+今日追踪 8 篇前沿成果，深度覆盖极端事件预测、视频轨迹生成及动态叙事监测。
+重点关注 TrajLoom 如何从视频中织就密集未来轨迹，以及针对风电爬坡预测中类别不平衡问题的直接分类新方案。
+建议对时序预测和计算机视觉感兴趣的读者优先研读这两项技术突破。
+- 详情：[/202603/25/README](/202603/25/README)
 
 ### 精读区论文标签
-1. [Physics-Informed Graph Neural Jump ODEs for Cascading Failure Prediction in Power Grids](/202603/24/2603.20838v1-physics-informed-graph-neural-jump-odes-for-cascading-failure-prediction-in-power-grids)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：用于连续和离散事件预测的神经常微分方程跳跃模型
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Discovering Governing Spatial Interaction Mechanisms in Dynamic Urban Systems](/202603/24/2603.19537v1-discovering-governing-spatial-interaction-mechanisms-in-dynamic-urban-systems)  
+1. [A Direct Classification Approach for Reliable Wind Ramp Event Forecasting under Severe Class Imbalance](/202603/25/2603.22326v1-a-direct-classification-approach-for-reliable-wind-ramp-event-forecasting-under-severe-class-imbalance)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：城市系统中观察到的时空动力学序列数据
-2. [Transformer-Based Predictive Maintenance for Risk-Aware Instrument Calibration](/202603/24/2603.20297v1-transformer-based-predictive-maintenance-for-risk-aware-instrument-calibration)  
+   evidence：实时预测风电爬坡事件
+2. [TrajLoom: Dense Future Trajectory Generation from Video](/202603/25/2603.22606v1-trajloom-dense-future-trajectory-generation-from-video)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：估计漂移时间及事件序列建模
-3. [Revisiting the expressiveness of metric temporal logic : A tale of "Je t'aime, moi non plus."](/202603/24/2603.15379v3-revisiting-the-expressiveness-of-metric-temporal-logic--a-tale-of-je-taime-moi-non-plus)  
+   evidence：稠密轨迹的时空潜空间建模
+3. [Temporal Narrative Monitoring in Dynamic Information Environments](/202603/25/2603.17617v1-temporal-narrative-monitoring-in-dynamic-information-environments)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：定时事件的点式与区间式语义分析
-4. [Estimating Staged Event Tree Models via Hierarchical Clustering on the Simplex](/202603/24/2603.15568v1-estimating-staged-event-tree-models-via-hierarchical-clustering-on-the-simplex)  
+   evidence：将新兴叙事建模为随时间演变的语义结构
+4. [Motion-o: Trajectory-Grounded Video Reasoning](/202603/25/2603.18856v1-motion-o-trajectory-grounded-video-reasoning)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：用于上下文特定依赖的分阶段事件树模型
-5. [Learning Lineage-guided Geodesics with Finsler Geometry](/202603/24/2603.16708v1-learning-lineage-guided-geodesics-with-finsler-geometry)  
+   evidence：视频中的时空轨迹推理
+5. [Watch an AI Weather Model Learn (and Unlearn) Tropical Cyclones](/202603/25/2603.20541v1-watch-an-ai-weather-model-learn-and-unlearn-tropical-cyclones)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：观测时间点之间的轨迹推断
-6. [The Phasor Transformer: Resolving Attention Bottlenecks on the Unit Circle](/202603/24/2603.17433v1-the-phasor-transformer-resolving-attention-bottlenecks-on-the-unit-circle)  
+   evidence：高影响天气事件的预测
+6. [Sonny: Breaking the Compute Wall in Medium-Range Weather Forecasting](/202603/25/2603.21284v1-sonny-breaking-the-compute-wall-in-medium-range-weather-forecasting)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：合成基准上的自回归时间序列预测
-7. [PCSTracker: Long-Term Scene Flow Estimation for Point Cloud Sequences](/202603/24/2603.19762v1-pcstracker-long-term-scene-flow-estimation-for-point-cloud-sequences)  
+   evidence：预测高影响大气事件
+7. [WaveSFNet: A Wavelet-Based Codec and Spatial--Frequency Dual-Domain Gating Network for Spatiotemporal Prediction](/202603/25/2603.23284v1-wavesfnet-a-wavelet-based-codec-and-spatial--frequency-dual-domain-gating-network-for-spatiotemporal-prediction)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：点云序列的时空点轨迹更新模块
-8. [Scalable and Robust Spatial Prediction via Multi-Resolution Ensembles of Predictive Processes](/202603/24/2603.19977v1-scalable-and-robust-spatial-prediction-via-multi-resolution-ensembles-of-predictive-processes)  
+   evidence：时空预测学习以预测未来帧
+8. [WISTERIA: Weak Implicit Signal-based Temporal Relation Extraction with Attention](/202603/25/2603.23319v1-wisteria-weak-implicit-signal-based-temporal-relation-extraction-with-attention)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：通过预测过程进行空间预测
-9. [High-Quality and Efficient Turbulence Mitigation with Events](/202603/24/2603.20708v1-high-quality-and-efficient-turbulence-mitigation-with-events)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：利用事件建模连续序列中的运动
-10. [Long-Term Outlier Prediction Through Outlier Score Modeling](/202603/24/2603.20993v1-long-term-outlier-prediction-through-outlier-score-modeling)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：基于时间结构预测未来的异常事件
-11. [Time-adaptive functional Gaussian Process regression](/202603/24/2603.21144v1-time-adaptive-functional-gaussian-process-regression)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：时空随机场背景下的随时间变化的回归分析
+   evidence：识别事件在时间上的关联及时间顺序
 
 
 <div class="dpr-home-promo-card">
