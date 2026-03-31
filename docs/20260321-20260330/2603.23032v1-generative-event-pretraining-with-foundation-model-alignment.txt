@@ -1,0 +1,683 @@
+Title: Generative Event Pretraining with Foundation Model Alignment
+
+URL Source: https://arxiv.org/pdf/2603.23032v1
+
+Published Time: Wed, 25 Mar 2026 01:10:55 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+## This paper has been accepted for publication at the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) Findings, Denver, 2026 ©IEEE 
+
+# Generative Event Pretraining with Foundation Model Alignment 
+
+## Jianwen Cao Jiaxu Xing Nico Messikommer Davide Scaramuzza Robotics and Perception Group, University of Zurich 
+
+## Abstract 
+
+Event cameras provide robust visual signals under fast mo-tion and challenging illumination thanks to their microsec-ond latency and high dynamic range. However, their unique sensing characteristics and limited labeled data make it challenging to train event-based visual foundation mod-els (VFMs), which are crucial for learning visual fea-tures transferable across tasks. To tackle this problem, we propose GEP (Generative Event Pretraining), a two-stage framework that transfers semantic knowledge learned from internet-scale image datasets to event data while learn-ing event-specific temporal dynamics. First, an event en-coder is aligned to a frozen VFM through a joint regression-contrastive objective, grounding event features in image se-mantics. Second, a transformer backbone is autoregres-sively pretrained on mixed event–image sequences to cap-ture the temporal structure unique to events. Our ap-proach outperforms state-of-the-art event pretraining meth-ods on a diverse range of downstream tasks, including ob-ject recognition, segmentation, and depth estimation. To-gether, VFM-guided alignment and generative sequence modeling yield a semantically rich, temporally aware event model that generalizes robustly across domains. Code: uzh-rpg/generative event pretraining 
+
+## 1. Introduction 
+
+Event cameras [29] measure per-pixel brightness changes asynchronously with microsecond latency and high dy-namic range. Unlike conventional RGB frames, event streams are sparse and provide high temporal resolution, al-lowing robust perception in challenging lighting and fast-motion scenarios [15, 35]. However, these advantages also introduce challenges: events contain limited texture, differ fundamentally from images, and lack access to large-scale training datasets [15, 47]. These challenges make it diffi-cult to transfer semantic knowledge from images to events, and hinder the robustness of models that rely on large-scale, texture-rich supervision. Consequently, many existing approaches rely on lim-98.57  
+
+> 98.12
+> 91.94
+> 94.08
+> 91.94
+> 91.94
+> 91.94
+> 91.94
+> 87.36 93.05
+> 65.11
+> 60.28
+> 72.14
+> 65.22 74.66
+> 3.85
+> 6.60
+
+Semantic 
+
+Segmentation 
+
+Object 
+
+Recognition 
+
+Depth 
+
+Estimation       
+
+> MVSEC
+> Abs [m]
+> MVSEC
+> RMS [m]
+> ECDP ECDDP DinoV2 Ours
+> DSEC
+> mAcc [%]
+> DSEC
+> mIoU [%]
+> DDD17
+> mAcc [%]
+> N-ImageNet
+> N-Caltech101 N-ImageNet
+> N-Caltech101
+> acc5 [%]
+> acc5 [%] acc1 [%]
+> acc1 [%]
+> DDD17
+> mIoU [%]
+> 55.73
+> 54.66
+> 66.08
+> 64.77
+> 3.99
+> 6.96
+> 4.45
+> 7.65
+> 4.49
+> 7.68
+> 66.00
+> 98.12
+> 86.30 91.94
+> 64.83
+> 83.97
+> 87.66
+> 52.52 60.55
+> 52.17 64.50 59.80
+> 56.38
+> 53.85
+> 60.80
+
+Figure 1. Overall comparison across ten metrics on various datasets. With the same backbone model, our method demon-strates superior and consistent performance across all tasks. 
+
+ited event-only pretraining, small task-specific datasets, or transfer directly from image-pretrained models that are not optimized for the sparse and asynchronous nature of event data [26, 33, 52, 58, 59]. These strategies either miss long-range temporal dynamics or fail to import rich semantic pri-ors from RGB due to suboptimal cross-modality adaptation. While recent advances in vision foundation models (VFMs) [11, 13, 39, 45] demonstrate that large-scale pre-training on diverse image corpora produces semantically rich and task-transferable representations, these benefits have not yet been fully exploited in the event domain. We address this gap with a unified pretraining paradigm that transfers VFM-level semantics to event data while explicitly modeling temporal dynamics in event streams. By align-ing event features with foundation-level image representa-tions, the event encoder inherits broad semantic priors and 1
+
+> arXiv:2603.23032v1 [cs.CV] 24 Mar 2026
+
+narrows the discrepancy between event and image modal-ities. The subsequent generative pretraining stage further equips the model with long-horizon predictive capabilities, enabling scalable, task-agnostic learning on large datasets featuring events and images. To this end, we introduce Generative Event Pretraining (GEP) , a two-stage training framework. In the first stage, an event encoder is aligned to a frozen image encoder (DI-NOv2 [39]) using a combination of MSE and InfoNCE [38] objectives, transferring semantic structure from the image to the event domain. Such cross-modal alignment can also be viewed as a teacher-student training paradigm [34], where a pretrained teacher provides rich supervision for a student operating under different observation modalities. In the second stage, we perform autoregressive pretraining on aligned event and image sequences using a causal trans-former. Unlike masked autoencoding [22], our model pre-dicts future token sequences over randomly masked tem-poral gaps, encouraging long-horizon temporal reasoning and providing dense generative supervision. We pretrain on the large-scale Event-1.8M corpus with 1.8M event-image pairs, including EventScape [17], N-ImageNet [25], and DSEC [18], covering diverse spatial and temporal patterns. To evaluate generalization, we conduct experiments on object recognition (N-ImageNet [25], N-Caltech101 [40]), semantic segmentation (DDD17 [3], DSEC [18]), and depth estimation (MVSEC [63]). Among them, N-Caltech101, DDD17, and MVSEC are not included during pretraining and thus serve as out-of-distribution benchmarks. As summarized in Fig. 1, our method consistently achieves superior performance across all 10 metrics, sur-passing both event-specific and image-pretrained baselines while requiring only 24 pretraining epochs. These results demonstrate that aligning event and image features, coupled with autoregressive generative pretraining, enables effective cross-modal transfer and robust task generalization The main contributions of our work are as follows: 1. VFM-guided semantic alignment. We align an event en-coder with a pretrained VFM encoder to transfer seman-tic knowledge learned from large-scale image datasets, effectively grounding event features in rich visual priors. 2. Autoregressive event pretraining. We propose an au-toregressive pretraining strategy on unlabeled event se-quences paired with aligned images, which enables long-horizon temporal reasoning and captures the distinct temporal dynamics of event streams. 3. Cross-domain generalization. With about only 15% training epochs compared to previous methods, our model outperforms state-of-the-art methods on recognition (N-ImageNet, N-Caltech101), segmenta-tion (DDD17, DSEC), and depth estimation (MVSEC) benchmarks. Our pretrained backbone demonstrates ro-bust generalization across diverse domains, providing a strong foundation for future event-based vision research. 
+
+## 2. Related Work 
+
+2.1. Transfer Learning Across Modalities 
+
+In contrast to the conventional pretrain–finetune paradigm in the event domain, transferring knowledge across modali-ties involves aligning representations between images and events. Prior work in this direction can be broadly di-vided into two groups: Unsupervised domain adaptation and feature-level distillation. 
+
+Unsupervised domain adaptation. UDA bridges the gap between labeled images and unlabeled events by enforcing consistency in features or predictions [33, 52, 57]. ESS [52] aligns embeddings through reconstruction and prediction losses to transfer labels from Cityscapes to unpaired event data. CMESS [57] adds attention-guided soft alignment and joint decoder constraints for dense prediction. 
+
+Feature level distillation. Another line distills intermedi-ate features from image models into event encoders using aligned image-event pairs. Hu et al. [24] use grafting by replacing early image layers with an event front end and re-gressing internal features for label free adaptation. Depth AnyEvent [2] distills multi scale representations into event-based depth estimators and shows that semantic priors help reconstruction and estimation. Across UDA and distillation, existing methods are de-signed for a single task and trained on limited data. In con-trast, we align events to foundation-level image features in a task-agnostic way and couple the alignment with generative autoregressive pretraining, which captures temporal struc-ture and enables transfer to both recognition and dense pre-diction tasks. 
+
+2.2. Pretraining for Event Vision 
+
+Event pretraining targets the learning of general feature rep-resentations that are subsequently finetuned for downstream tasks using task labels. 
+
+Masked and self reconstruction pretraining. Masked Event Modeling adapts masked autoencoding and frame re-construction to event streams. MEM [26] follows MAE [22] by masking patches and reconstructing from context. These methods capture local statistics but remain reconstruction-oriented and lack explicit temporal reasoning. 
+
+Contrastive and multimodal alignment. Recent methods align events with images or with joint vi-sion–language embedding spaces using contrastive objec-tives. ECDP [58] aligns event and RGB patch embeddings through momentum-based contrastive learning, leveraging an image encoder pretrained with MoCov3 [7] for super-vision but without fully exploiting its rich semantic priors. ECDDP [59] extends this concept to spatial feature maps for pixel level tasks. EventCLIP [55] projects event features 2into CLIP space for zero-shot and few-shot recognition. EventBind [62] applies multi-stage contrastive finetuning for stronger event image text alignment. In contrast, our framework adds feature regression toward foundation-level image representations and couples alignment with autore-gressive pretraining, which yields semantically grounded and temporally aware event features. 
+
+Autoregressive and predictive pretraining. Temporal modeling learns motion dynamics directly from events. Event Transformer [50] introduces a sparse-aware trans-former with patch-based representations and latent memory tokens for online recognition. Recent models replace re-current blocks with structured state space modules S4 and S5 [19, 64], which provide learnable time scales and adapt linear attention language modeling, such as RWKV [41], for asynchronous encoding with multi-step or next representa-tion prediction [21]. These approaches confirm the strong temporal structure of events but are usually single modality, task-specific, and are often trained from scratch on limited data. We pretrain in a task-agnostic way under guidance from vision foundation models to unify semantic alignment with autoregressive temporal reasoning. 
+
+2.3. Event VLMs with LLM backbones 
+
+A recent popular direction toward generalizable event un-derstanding is to extend large multimodal language mod-els to event data for open-ended reasoning and description. EventGPT [30] aggregates spatiotemporal tokens before feeding a language model to support captioning and ques-tion answering. Event-VL [27] builds a generative event-based multimodal model with dynamic semantic alignment. EP VLM [43] uses event prior guided sparsification to prune redundant tokens and can adapt large backbones such as Qwen2-VL [54]. Many event language and video language systems compress visual tokens by about an order of mag-nitude for efficiency, for example, EventGPT, Event-VL, VideoLLaMA3 [61], and ARVideo [48]. We observe that compression improves reasoning efficiency but harms dense prediction that requires fine spatial detail, see Sec. 4.6. Sim-ilar findings have been reported for segmentation and other dense tasks [31, 53]. Large LLM backbones of billions of parameters also hinder real-time inference at high event rates. Our approach avoids heavy language backbones, pre-serves spatial detail, and transfers to recognition and dense prediction. 
+
+## 3. Method 
+
+3.1. Overview 
+
+Our method consists of two main stages: alignment and pre-training . An overview of the entire framework is illustrated in Fig. 2. Following the event accumulation as detailed in Sec 3.2, each temporal window yields a normalized event frame Xe paired with a synchronized image Xi, as illus-trated in Fig. 2 (a). Given a paired event–image sample 
+
+(Xe, X i), the event encoder Ee and the image encoder Ei
+
+extract modality-specific embeddings (Ze, Z i) used for the modality alignment. For the pretraining, we alternately ac-cumulate events and sample images over time, feeding them into the corresponding encoders to obtain a multimodal fea-ture sequence. All encoded embeddings are concatenated into a long sequence S, corresponding to the token sequence fed to the causal transformer in Fig. 2 (b). For each slice 
+
+Ss,s +w, a causal transformer T autoregressively predicts the next slice Ss+1 ,s +1+ w:
+
+ˆSs+1 ,s +1+ w = T  Ss,s +w
+
+, (1) where s is a randomly sampled starting index and w is a fixed window length. 
+
+3.2. Event Accumulation 
+
+Event streams are composed of asynchronous brightness changes represented as tuples (x, y, t, p ), where (x, y ) de-notes pixel coordinates, t the timestamp, and p ∈ { +1 , −1}
+
+the polarity indicating whether the brightness increased or decreased. To construct a dense tensor representation suit-able for transformer-based modeling, we accumulate events within a fixed temporal window ∆t into a pseudo-frame 
+
+Xe ∈ RH×W ×3.For each event, we locate its corresponding pixel cell 
+
+(x, y ) and increment the first channel count Mr (x, y ) if the polarity is positive ( p = +1 ), or the third channel count 
+
+Mb(x, y ) if it is negative ( p = −1). For the second chan-nel, we assign full intensity whenever any event occurs at 
+
+(x, y ) within the temporal window, serving as an activity mask that marks all active pixels regardless of polarity. Af-ter processing all events in the window, the accumulated counts are normalized to suppress local activity spikes and maintain a balanced dynamic range. Let Mc(x, y ) denote the raw accumulated count in chan-nel c ∈ { r, b }. We compute a normalization scale αn as the 
+
+n-th percentile of all pixel values across both channels (by default n = 99 ). Each channel is then clipped and normal-ized as 
+
+Xe(x, y, c ) = min( Mc(x, y ), α n)
+
+αn
+
+, c ∈ { r, b }. (2) This percentile-based clipping and normalization ensure ro-bust scaling and prevent a few high-activity pixels from dominating the distribution, resulting in a stable and bal-anced input representation for subsequent encoding. At the end of this stage, each event window produces a normalized event frame Xe that can be paired with a syn-chronized image frame Xi. These paired samples (Xe, X i)
+
+serve as inputs to the following alignment and pretraining stages. 3Event   
+
+> Encoder
+> 2
+> Image
+> Encoder
+> Image
+> Encoder
+> Event
+> Encoder
+> Event
+> Encoder
+> Event
+> Encoder
+> Image
+> Encoder
+> 134
+
+Causal Transformer Transformer Block Norm Feature Norm Feature Video Event Video Image 
+
+> Transformer Block
+> Alignment Gradient
+
+(a) (b)                                                                                  
+
+> 1
+> Video Event Video Image Video Event Video Image Video Event
+> 657810 911 12 14 13 15 16 18 17 19 20 22 21 23 24 26 25 27 28
+> 2345678910 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 2345678910 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 Image Encoder
+> Event Encoder
+
+Figure 2. The overall two-stage framework. (a) Alignment stage: Event frames and synchronized images are encoded by an event encoder and a frozen VFM encoder. The event encoder is optimized with regression, contrastive, and preservation terms to match the semantic structure of image features. (b) Autoregressive pretraining stage: Aligned event and image embeddings are interleaved into a single sequence and processed by a causal transformer, which predicts future slices from partial windows, learning long-range temporal structure and cross-modal consistency. Arrows indicate causal dependencies; only a subset is shown for visual clarity. 
+
+3.3. Alignment 
+
+The weights of both encoders are initialized from DINOv2 [39]. We freeze the image branch Ei (parame-ters θi) and update only the event branch Ee (parameters 
+
+θe). Since vision foundation models already capture strong and well-structured semantics from large-scale RGB cor-pora, their features provide a reliable reference. Freezing 
+
+Ei therefore treats the image encoder as a fixed seman-tic teacher, allowing the event encoder to learn meaningful alignment instead of co-adapting to unstable event features. The alignment objective combines a cosine similarity and an InfoNCE term, while a preservation loss constrains the behavior of Ee on image inputs. Unless otherwise noted, we use DINOv2 [39] as the image foundation model. 
+
+Event–image alignment. Given a paired input (Xe, X i),we extract features 
+
+Ze = Ee(Xe), Zi = sg  Ei(Xi),
+
+where sg stops gradients through the frozen image branch. We use the following alignment loss 
+
+La = λcos 
+
+ 1 − cos( Ze, Z i) + λnce Lnce (Ze, Z i) , (3) where cos( ·, ·) denotes cosine similarity. Following stan-dard in-batch contrastive learning, the InfoNCE loss is de-fined as 
+
+Lnce = − 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+log exp  cos(˜ z ne , ˜z ni )/τ PNm=1 exp  cos(˜ z ne , ˜z mi )/τ  , (4) where ˜z = z/ ∥z∥2 denotes ℓ2-normalized features, τ is the temperature, and N is the batch size. Each positive pair 
+
+(˜ z ne , ˜z ni ) is contrasted against all other image embeddings in the batch, which act as negative anchors. The cosine term enforces directional consistency be-tween event and image embeddings, ensuring that both modalities lie in a shared feature subspace regardless of scale, while the InfoNCE term encourages global separa-tion from unrelated image embeddings, leading to semanti-cally consistent yet discriminative representations. In prac-tice, we apply a lightweight projection head g(·) before (4) following SimCLR [6]. This allows the contrastive branch to adapt its embedding distribution without disturbing the main cosine alignment space, stabilizing optimization and improving cross-modal transfer. 
+
+Capability preservation on images. To avoid drift when 
+
+Ee processes RGB inputs, we pass Xi through Ee and match the frozen image features 
+
+Z(I) 
+
+> e
+
+= Ee(Xi), Zi = sg  Ei(Xi),
+
+with the preservation loss 
+
+Lp = μ  1 − cos( Z(I) 
+
+> e
+
+, Z i). (5) Equation (5) regularizes Ee by preventing its feature space from collapsing or drifting away from the semantic man-ifold learned by Ei. By enforcing consistent orientation when both branches process image inputs, this term discour-ages degenerate alignment and maintains semantic ground-ing. 
+
+Total objective. The alignment stage optimizes 
+
+L = La + Lp, λcos > 0, λ nce > 0, μ > 0. (6) 4To balance the loss terms, we use separate weights for cosine alignment ( λcos ), contrastive separation ( λnce ), and preservation ( μ). Batch composition and temperature τ fol-low standard practice for in-batch contrastive learning. 
+
+3.4. Pre-training 
+
+After alignment, both encoders produce semantically aligned feature embeddings. We concatenate them into a multimodal sequence S = [ S1, S 2, . . . , S K ] that mixes samples from image datasets and paired event-video datasets, as depicted in Fig. 2 (b). Each token is projected into a shared embedding space and augmented with posi-tional and modality encodings before entering the causal transformer. 
+
+Token representation. Given an encoded token Sk, its in-put representation is 
+
+Xk = Sk + Pk + Mk, (7) where Pk is the positional embedding and Mk is the modal-ity encoding, indicating whether the token originates from an event frame, image frame, or video sequence. The modality encoding allows the transformer to distinguish heterogeneous sources within the same batch, while posi-tional encoding preserves temporal order. 
+
+Dense autoregressive training. We slice a long multi-modal sequence into overlapping windows of length w with a stride 1 to form a dense training target. In other words, within one training sample, the model performs 
+
+S1 → S2, (S1, S 2) → S3, . . . , S1: w−1 → Sw,
+
+yielding a dense sequence of autoregressive targets: 
+
+Lpre = 1
+
+w
+
+> w
+
+X
+
+> j=1
+
+ˆSs+j − Ss+1+ j
+
+> 22
+
+, (8) encouraging temporally coherent and modality-consistent predictions. 
+
+## 4. Experiments 
+
+4.1. Datasets and Baselines 
+
+We evaluate on established event-vision benchmarks that cover both recognition, segmentation, and depth estima-tion tasks. For object recognition, we use N-ImageNet [25] and N-Caltech101 [40], the neuromorphic counterparts of ImageNet [10] and Caltech101 [14]. N-ImageNet con-tains large-scale event recordings of 1K ImageNet cate-gories captured with a moving DAVIS sensor [4], while N-Caltech101 provides 101 object classes with simpler back-grounds and fewer samples per class. For semantic seg-mentation, we use DDD17 [3] and DSEC [18, 52], two large-scale driving datasets with synchronized events and 
+
+Table 1. Object recognition on N-ImageNet and N-Caltech101. We report top-1 (acc1) and top-5 (acc5) accuracies. The two best-performing methods for each evaluation metric are highlighted in green and orange .                                                                      
+
+> Method Backbone Dataset Ep. N-ImageNet N-Caltech101 acc1 ↑acc5 ↑acc1 ↑acc5 ↑
+> Training from scratch
+> ViT[11] ViT-S/16 N-ImageNet 300 46.70 69.89 55.63 –
+> Specific trained
+> EST[16] –––48.93 –––
+> Self-supervised pretraining
+> BeiT[1] ViT-B/16 ImageNet-1K 800 47.15 69.27 53.10 –MAE[22] ViT-B/16 ImageNet-1K 800 51.25 72.64 67.68 –MoCo-v3[7] ViT-S/16 ImageNet-1K 300 45.77 68.89 76.59 –DINOv2[39] ViT-S/16 LVD-142M –60.80 83.97 91.94 98.12
+> Event-specific pretraining
+> MEM[26] ViT-S/16 N-ImageNet 75 57.89 –––ECDP[58] ViT-S/16 N-ImageNet 300 64.83 86.30 87.66 –EventBind[59] ViT-B/16 N-ImageNet –51.40 –94.08 –STP [28] Swin-T N-ImageNet –68.87 89.65 ––Ours ViT-S/16 Event-1.8M 24 65.11 87.36 93.05 98.57 Ours (Sup. Align) ViT-S/16 N-ImageNet 669.41 90.20 ––Ours ViT-B/16 Event-1.8M 24 75.20 92.90 96.47 99.56
+
+grayscale frames. DDD17 offers 12 hours of urban driv-ing sequences with 6 semantic classes derived from inten-sity frames, while DSEC provides 8,082 higher-resolution stereo event-image-annotation pairs for training. For depth estimation, we use the MVSEC dataset [63], which pro-vides synchronized stereo DAVIS346 event cameras with grayscale frames and accurate depth maps. MVSEC con-tains indoor and outdoor sequences captured from hand-held, hexacopter, car, and motorcycle platforms, enabling depth evaluation under diverse motions and illumination conditions. For pretraining, we adopt Event-1.8M, a large-scale event corpus that integrates EventScape [17], N-ImageNet, and DSEC. This mixture covers diverse spatial patterns and motion statistics, serving as a task-agnostic dataset for rep-resentation learning. DDD17, MVSEC, and N-Caltech101 are excluded from pretraining and used only for out-of-distribution evaluation. More training details are included in the supplementary material. We compare our model against four groups of baselines to ensure a fair and comprehensive evaluation. The first group trains a ViT [11] from scratch on event data without any pretraining. The second group is specifically designed for each task. The third group includes self-supervised pre-training on images, represented by MAE [22], BeiT [1], and DINOv2 [39]. The last group consists of event-specific pretraining methods, including MEM [26], ECDP [58], ECDDP [59], and EventBind [62]. 5Table 2. Semantic segmentation on DDD17 and DSEC. We re-port mean IoU (mIoU) and mean ACC (mAcc). The two best-performing methods for each evaluation metric are highlighted in green and orange.                                                                                         
+
+> Method Backbone Dataset Ep. DDD17 DSEC mIoU ↑mAcc ↑mIoU ↑mAcc ↑
+> Training from scratch
+> ViT[11] ViT-S/16 ––36.65 46.21 32.66 40.84
+> Specific trained
+> ESS[52] –Cityscape 50 61.37 70.87 53.30 62.94
+> Self-supervised pretraining
+> BeiT[1] ViT-B/16 ImageNet1K 800 52.39 61.95 51.90 59.66 MAE[22] ViT-B/16 ImageNet1K 800 53.76 64.78 51.96 59.84 DINOv2[39] ViT-S/14 LVD-142M –53.85 64.50 52.17 59.80
+> Event-specific pretraining
+> MEM[26] ViT-S/16 N-ImageNet 75 ––44.62 51.39 ECDP[58] ViT-S/16 N-ImageNet 300 54.66 66.08 52.52 60.55 ECDDP[59] ViT-S/16 E-TartanAir 300 55.73 64.77 56.38 66.00 TESPEC [37] Swin-T 1Mpx [42] –––62.77 70.61 Ours ViT-S/14 N-ImageNet 24 58.42 69.59 60.43 68.76 Ours ViT-S/14 Event-1.8M 24 60.28 72.14 65.22 74.66 Ours ViT-B/14 Event-1.8M 24 61.90 72.39 67.37 76.27
+
+4.2. Object Recognition 
+
+As can be observed by the top-1 and top-5 accuracy reported in Table 1, our model consistently surpasses event-specific pretraining baselines. Compared with ECDP, we improve top-1 from 64.83% to 65.11% on N-ImageNet and from 87.66% to 93.05% on N-Caltech101. Although the event encoder is aligned to DINOv2, our model achieves higher accuracy on event streams than its VFM teacher, trained on 142M RGB images and applied to events. This shows the benefit of the alignment followed by autoregressive mod-eling to transfer semantics while adapting the features to the sparsity and asynchronicity of events. With only 24 epochs of training (including alignment), our approach out-performs DINOv2 on the tested event benchmarks, demon-strating strong data efficiency and generalization. Remark-ably, our method outperforms STP [28] under fair settings, while using only 25% of the pre-training schedule (Ours Sup. Align). As shown in Table 1, STP’s parameter effi-ciency relies on privileged supervised pre-training with ex-plicit labels. 
+
+4.3. Semantic Segmentation 
+
+For DDD17, we use sequence1 for training and the remain-ing sequences for evaluation, as done in ESS [52]. Follow-ing DINOv2, a simple linear segmentation head is attached on top of the encoder. Thus, the performance mainly reflect the quality of the backbone representations. We use cross-entropy and Dice losses [36] on labeled events. Note that both ECDP and ECDDP adopt a stronger UperNet [56] decoder. ECDP further incorporates a 3D expanded patch embedding [60], while ECDDP addition-ally applies test-time augmentation with horizontal flipping 
+
+Table 3. Depth estimation on MVSEC. We report absolute er-ror (Abs ↓) and root mean squared error (RMS ↓). The two best-performing methods for each evaluation metric are highlighted in green and orange. 
+
+Method Backbone Dataset Ep. Abs ↓ RMS ↓
+
+Specific trained 
+
+HMNet[20] – – – 4.61 8.60 
+
+Self-supervised pretraining 
+
+BeiT[1] ViT-B/16 ImageNet-1K 800 4.40 7.56 MAE[22] ViT-B/16 ImageNet-1K 800 4.45 7.60 DINOv2[39] ViT-S/16 LVD-142M – 4.45 7.65 
+
+Event-specific pretraining 
+
+ECDP[58] ViT-S/16 N-ImageNet 300 4.49 7.68 ECDDP[59] ViT-S/16 N-ImageNet 300 3.99 6.96 Ours ViT-S/16 Event-1.8M 24 3.85 6.60 
+
+and multi-scale features. Despite our lighter linear head and the absence of test time augmentation, our method achieves higher segmentation accuracy, indicating that the gains come from the learned representations rather than from a heavy decoder or inference heuristics. Table 2 summarizes the semantic segmentation perfor-mance reported in mIoU and mAcc. Our model attains the best performance on both datasets, outperforming ECDDP by +4.0 mIoU and +5.0 mAcc on DSEC, indicating that purely static pretraining struggles to capture event dynam-ics, while our alignment plus autoregressive pretraining bridges this gap. 
+
+4.4. Depth estimation 
+
+We follow the protocol of ECDDP [59] on MVSEC. Train-ing is conducted on the ’outdoor day2’ split, and validation is performed on ’outdoor day1’, ’outdoor night1’, ’out-door night2’, and ’outdoor night3’. Following ECDDP, the Context Window 16x256 tokens Generated Image 32x256 tokens 
+
+Figure 3. Visualization of a 16-frame context (blue) and a 32-frame autoregressively generated future (red) on validation inter-leaved event and image streams. Green boxes highlight consistent motion. Insets enlarge the first context and last generated frames for clarity. 
+
+6(a) Input (b) MEM (c) Ours (d) Label (e) RGB (f) Input (g) ECDDP (h) Ours (i) Label (j) RGB (a) Input (b) MEM (c) Ours (d) Label (e) RGB (f) Input (b) ECDDP (c) Ours (d) Label (e) RGB Figure 4. Qualitative results on the DSEC validation set. The RGB images are shown only for visual reference and are not used by the model. 
+
+network is trained to predict normalized log depth. The loss combines a scale-invariant term and a multi-scale gra-dient matching term. At test time, predictions are con-verted back to metric depth, and we report Absolute error and Root Mean Squared error in meters without limiting the maximum depth during evaluation, consistent with prior work [17]. Table 3 summarizes the results. Our method achieves lower Abs and RMS errors than ECDDP and other baselines, demonstrating that the proposed pretraining re-mains highly effective for depth estimation tasks that re-quire strong 3D spatial understanding. 
+
+4.5. Qualitative results 
+
+Autoregressive long-horizon generation. We visualize se-quence rollouts using a frozen, lightweight decoder attached to the encoder, which is used only for qualitative inspec-tion of latent predictions. Each rollout is conditioned on a multimodal context of 256 ×8×2 = 4096 tokens and gen-erates 256 ×16 ×2 = 8192 future tokens. Here, 256 denotes spatial tokens per frame, 8 and 16 are the context and pre-dicted steps, and 2 corresponds to interleaved event and im-age modalities. A sliding causal window is applied when the target horizon exceeds the pretraining window length. Figure 3 indicates that the model extrapolates ego motion, facade parallax, lane-marking drift, and object displacement even when such cues are weak in the last context frame. Despite moderate sensor noise and the minimal decoder, rollouts remain stable and geometrically consistent, which suggests the transformer internalizes long-range temporal structure. (a) Input image (b) Dinov2 response (c) Our response                       
+
+> Figure 5. Attention map response on event camera data. Table 4. Clustering metrics on encoder features (20 classes, 50 samples/class). Higher is better for Silhouette and Calinski– Harabasz; lower is better for Davies–Bouldin.
+> ViT-Small ViT-Base Metric Dinov2 Aligned Dinov2 Aligned Silhouette[49] ↑-0.03 0.19 0.03 0.27
+> Davies–Bouldin[9] ↓5.24 2.21 3.75 2.04
+> Calinski–Harabasz[5] ↑9.39 33.21 14.97 48.56
+
+Segmentation results. Figure 4 compares our model with MEM [26] and ECDDP[59]. Our predictions exhibit cleaner boundaries and more coherent region semantics, es-pecially in low-texture or overexposed scenes where event measurements are sparse. In the last row, the roadside pedestrian is barely discernible in the event input due to missing texture, which makes fine structures difficult to de-tect. With VFM-guided alignment and generative pretrain-ing, the network recovers semantically consistent contours and preserves layout in spite of weak appearance cues. We refer to the supplementary material for more qualita-tive task results 
+
+Attention responses. Figure 5 analyzes attention on event inputs. The red box marks a distant car that is hard to per-ceive in the raw events. DINOv2 with registers [8] usually produces meaningful attention on RGB data, yet on events, its response is weak and spatially inconsistent with spuri-ous activations on the road surface. Our aligned and genera-tively pretrained encoder yields concentrated and structured attention that focuses on the car and other salient elements, indicating effective cross-modal alignment and stronger se-mantic grounding. 
+
+Alignment Clustering. Figure 6 shows a t-SNE plot for event features before and after alignment. Although the alignment pretraining is class-agnostic, it still exhibits pro-nounced class-wise separation, consistent with near-linear separability in the learned feature space. Table 4 quanti-fies the effect, which indicates reduced intra-class variance and stronger inter-class separation, supporting the view that 7Table 5. Feature alignment results on N-ImageNet using 30,000 training steps. Each cell shows Original →Aligned with relative change (%).                 
+
+> Metric Distance Reduction ImageNet Acc. (%)
+> MSE 2.22 →0.78 (-64.7%) 31.18 →61.45 InfoNCE 2.28 →0.57 (-75.0%) 31.18 →60.99 Cosine 0.70 →0.27 (-61.8%) 31.18 →61.80 KL Diver. 0.48 →0.15 (-67.5%) 31.18 →59.20 Attention 38.76 →19.42 (-49.9%) 31.18 →56.72 Cosine + InfoNCE 1.40 →0.36 (-74.3%) 31.18 →62.73
+> All 0.96 →0.37 (-61.1%) 31.18 →61.40
+
+alignment organizes event features into semantically mean-ingful manifolds that aid downstream tasks. 
+
+4.6. Ablations 
+
+We report linear probing with a frozen backbone to iso-late representation quality in order to ablate alignment, the second-stage autoregressive modeling, masked reconstruc-tion, and token aggregation. 
+
+Feature alignment analysis. Table 5 systematically evalu-ates different alignment objectives on N-ImageNet. Among the individual objectives, Cosine + InfoNCE achieves the best trade-off between compactness and transferability, yielding a +31 .6% N-ImageNet accuracy improvement. For the attention-map alignment loss, we match the final-layer attention distributions of the two encoders using an MSE objective. Combining all objectives slightly reduces transfer, suggesting that overly mixed signals may hinder convergence. Overall, these results confirm that our multi-objective alignment design effectively improves semantic consistency between event and image modalities. 
+
+Training paradigm analysis. Removing image-to-event (a) 
+
+> tow truck
+> sturgeon
+> sax
+> wool
+> basketball
+> whiptail
+> toy poodle
+> acorn
+> crutch
+> church
+> backpack
+> spaghetti squash
+> snowmobile
+> teapot
+> ant
+> coral fungus
+> chain
+> gorilla
+> holster
+> wreck
+> (b)
+
+Figure 6. t-SNE visualization of ViT-Base encoder features (20 classes, 50 samples/class from N-ImageNet validation set). Left (a): Before Align ; right (b): After Align . Each color denotes a semantic class. Table 6. Ablation on alignment and training paradigm (frozen backbone).                           
+
+> Variant Align Parad. DSEC (mIoU / mAcc)
+> Ours (2 stages) !AR 63.27 / 73.13
+> Event-only AR (Stage 2) !AR 63.51 / 72.11 Ours - pretrain !None 61.97 / 71.83 Ours - alignment %AR 52.38 / 60.97 Ours - alignment + finetune %AR 58.24 / 66.82 Ours + aggregator [30] !AR 61.24 / 71.53 Masked Modeling + alignment !MAE 62.33 / 71.65
+
+alignment means pretraining on the original DINOv2 fea-ture sequence, which leads to a performance drop on DSEC from 63.27 to 52.38 mIoU, highlighting the importance of alignment. Moreover, the two-stage design outperforms the single-stage variant by +1.30 mIoU, showing that autore-gressive pretraining introduces temporal consistency be-yond static alignment. In the same setting of our frame-work, autoregressive (AR) pretraining surpasses masked modeling (MAE) by +0.94 mIoU and +1.48 mAcc, indicat-ing stronger sequence-level reasoning. Even without align-ment ( Ours - alignment + finetune ), our autoregressive vari-ant still outperforms state-of-the-art approaches, yielding +5.72 mIoU over ECDP and +1.86 mIoU over ECDDP. Furthermore, we ablate the downsampling of recent au-toregressive video learners and multimodal LLMs, which often cluster spatio-temporal tokens for efficiency [48, 61]. Our controlled pretraining study ( Ours + aggregator ) fol-lows EventGPT [30], which employs a spatio-temporal ag-gregator that performs independent pooling along the tem-poral and spatial dimensions and concatenates the results into a compact token sequence. The lower performance achieved by this aggregation demonstrates that aggressive token compression degrades dense prediction, which relies on high spatial fidelity. 
+
+## 5. Conclusion 
+
+We presented GEP (Generative Event Pretraining), a unified framework that bridges large-scale VFMs and event-based representation learning. By aligning event features with pretrained VFM representations and performing autore-gressive sequence modeling on mixed event–image data, our method effectively transfers semantic knowledge from internet-scale image corpora to the event domain while pre-serving temporal sensitivity. 
+
+## Acknowledgment 
+
+This work was supported by the European Union’s Horizon Europe Research and Innovation Programme under grant agreement No. 101120732 (AUTOASSESS) and the Eu-ropean Research Council (ERC) under grant agreement No. 864042 (AGILEFLIGHT). 8Supplementary Material for 
+
+# Generative Event Pretraining with Foundation Model Alignment 
+
+## 6. Overview 
+
+This supplementary document provides additional imple-mentation details and qualitative results that complement the main paper “Generative Event Pretraining with Foun-dation Model Alignment”. Specifically, Sec. 7 presents ex-tended method details, including training hyperparameters and task-specific settings for semantic segmentation and depth estimation, while Sec. 9 reports additional qualitative results for depth prediction and attention visualization. 
+
+## 7. Extended Method Details 
+
+7.1. Alignment hyperparameters 
+
+During the alignment stage, we fine-tune the pretrained backbone with a lightweight optimization setup. We use the AdamW [32] optimizer with a batch size of 32 and an input resolution of 224 × 224 . The base learning rate is set to 3 × 10 −5 without weight decay, and we employ a linear warmup for the first 100 steps followed by a cosine decay schedule down to a minimum learning rate of 0. Training is performed for 2.5 × 10 5 steps. To improve robustness, we apply moderate data augmen-tation, including polarity swap and horizontal flipping, each with probability 0.5. In addition, we use random resized cropping with scale range [0 .25 , 1.0] and a random upscale operation (scale factor 2) with probability 0.1. All align-ment hyperparameters are summarized in Table 7. 
+
+7.2. Pretraining hyperparameters 
+
+For the pretraining stage, we adopt a similar optimization strategy but with settings tailored to longer context and larger-scale training. We use AdamW with a batch size of 8
+
+and a context window size of 4096 (Following GPT2 [44]). The base learning rate is 5 × 10 −4 with weight decay of 
+
+1 × 10 −5. We apply linear warmup for the first 100 steps and then use a cosine decay schedule towards an asymptote at 0, training for 2.5 × 10 5 steps in total. The full set of pretraining hyperparameters is listed in Table 8. 
+
+7.3. Semantic Segmentation Settings 
+
+For semantic segmentation, we adopt a lightweight decod-ing head that converts the sequence of visual tokens pro-duced by the backbone into a full-resolution prediction map. The design consists of two main components: a linear 
+
+Table 7. Hyperparameters for the alignment stage. 
+
+Setting Value optimizer AdamW Batch size 32 Learning rate 3 × 10 −5
+
+Weight decay 0Minimum learning rate 0Warmup steps 100 Training steps 2.5 × 10 5
+
+Input resolution 224 × 224 
+
+Learning rate schedule linear warmup cosine decay 
+
+Data augmentation 
+
+Polarity swap [58] prob = 0.5 Horizontal flip prob = 0.5 Random resized crop scale = [0.25, 1.00] Random upscale prob = 0.1, scale = 2 
+
+Table 8. Hyperparameters for the pretraining stage. 
+
+Setting Value optimizer AdamW Batch size 8Window size 4096 Learning rate 5 × 10 −4
+
+Weight decay 1 × 10 −5
+
+Minimum learning rate 0Warmup steps 100 Training steps 2.5 × 10 5
+
+Learning rate schedule linear warmup cosine decay 
+
+patch-wise decoding stage and a shallow convolutional re-finement stage. We use cross-entropy loss and dice loss [51] with equal weights. 
+
+Linear Patch-wise Decoding. Vision Transformers (ViTs) operate on a grid of non-overlapping image patches. Given an input image with spatial resolution H × W and a 9patch size P , the encoder produces a sequence of 
+
+L = HP × WP (9) tokens, each with feature dimension D. In contrast, dense prediction tasks provide supervision at the pixel level, i.e., one label per location in the original H × W grid. To fully exploit this pixel-wise supervision, we adopt a simple linear patch-wise decoder . For each token, we apply a shared linear projection that maps the D-dimensional fea-ture into CP 2 channels, where C is the number of classes. By reshaping and rearranging the outputs of all L tokens, we recover a dense prediction map of shape C × H × W .Formally, let F ∈ RL×D denote the token features from the ViT encoder. Our decoder learns a weight matrix 
+
+Wdec ∈ RD×(CP 2), (10) and computes 
+
+ˆY = reshape  F W dec 
+
+ ∈ RC×H×W , (11) where the reshape operation rearranges the per-token CP 2
+
+outputs into their corresponding P × P spatial locations in the original image grid. This linear patch-wise decod-ing is computationally lightweight and allows us to lever-age all pixel-level supervision without resorting to a heavy decoder. 
+
+Convolutional Refinement. To enhance spatial coher-ence and refine local details, the reconstructed feature map is further processed by a lightweight convolutional refine-ment module. This stage applies several 3×3 convolutions with nonlinear activations while preserving the original spa-tial resolution. The module introduces only 0.2% (ViT-Small) and 0.07% (ViT-Base) additional parameters, result-ing in negligible impact on overall performance and compu-tational cost, and is mainly employed to improve the visual quality of the predictions. 
+
+7.4. Depth Estimation Settings 
+
+Following prior work on monocular depth estimation [46, 59], we supervise training with the scale-invariant loss of [12] and the multi-scale scale-invariant gradient match-ing loss of [23], using fixed loss weights of 1 and 0.25, re-spectively. The network is optimized to predict normalized log-depth values during training, and these predictions are converted back to metric depth at inference time. 
+
+Decoder backbone. Given a batch of encoder tokens T ∈
+
+RB×L×C , we treat B as the batch size, L as the number of tokens per image, and C as the channel dimension of each token. These tokens lie on a patch grid of size Hp × Wp,obtained from an input image of spatial resolution H × W
+
+using a patch size p, so that Hp = H/p and Wp = W/p .We first apply a linear projection to each token and re-shape the result into a low-resolution feature map F0 ∈
+
+RB×C0×Hp×Wp , where C0 is the number of feature chan-nels used in the decoder. On top of F0, we build a convo-lutional decoder with S stages, indexed by s = 1 , . . . , S .Each stage is implemented as a residual-like block, denoted 
+
+DecBlock s, that consists of two 3×3 convolutions with GELU activations and an identity skip connection. The in-put to stage s is Fs−1 and the output is Fs.Each decoder stage has a target spatial resolution 
+
+(Hs, W s). These resolutions gradually increase from the patch resolution (Hp, W p) at the first stage up to the full image resolution (H, W ) at the last stage. If the output Fs
+
+of stage s does not match (Hs, W s), we use a bilinear inter-polation operator, denoted Interp( ·; Hs, W s), to upsample it to the target size and obtain a feature map ˜Fs at resolution 
+
+(Hs, W s).To aggregate information across scales, all stage out-puts are first brought to full resolution (H, W ) using the same interpolation operator and then concatenated along the channel dimension. This yields a fused feature map 
+
+Ffuse ∈ RB×Cfuse ×H×W , where Cfuse is the total number of channels after concatenation. Finally, a small convolutional prediction head is applied to Ffuse . This head consists of two 3×3 convolutions with GELU activations, followed by a 1×1 convolution and a sigmoid function. The output is a normalized log-depth map 
+
+Ynorm ∈ [0 , 1] B×1×H×W , where the single channel corre-sponds to normalized log-depth for each pixel. 
+
+Log-depth parameterization. We convert the normal-ized log-depth Ynorm into metric depth using a fixed min-imum and maximum depth range. Let dmin > 0 and 
+
+dmax > d min denote, respectively, the minimum and max-imum metric depth considered during training. We define their logarithms ℓmin = log dmin and ℓmax = log dmax , and the log-range ∆ℓ = ℓmax − ℓmin . For each pixel, the nor-malized log-depth prediction Ynorm is first mapped to the corresponding log-depth value ℓ = Ynorm ∆ℓ + ℓmin , and the final metric depth prediction is obtained as 
+
+D = exp( ℓ) ∈ RB×1×H×W (12) Thus, D contains the predicted depth (in meters) at each pixel. This log-depth parameterization improves numeri-cal stability over large depth ranges and makes the predic-tions more robust to global scale shifts, since uniform shifts in log-depth correspond to multiplicative changes in metric depth. 
+
+Multi-scale log-depth gradient loss. To further reg-ularize the spatial structure of the prediction, we match log-depth gradients at multiple resolutions. We consider a 10 Tench      
+
+> (a) Input (b) DinoV2 (d) RGB (c) Ours (e) Input (f) DinoV2 (h) RGB (g) Ours
+> Goldfinch
+> Bald
+> Eagle
+> Water
+> Snake
+> Crutch
+> Mail Box
+
+Figure 7. Visual comparison of attention maps on N-ImageNet [25] validation event inputs. We compare the attention responses of DINOv2 [39] (b, f) and our method (c, g) given input events (a, e), alongside reference RGB images (d, h). Our approach demonstrates more precise localization of semantic structures compared to the diffuse activations of DINOv2. 
+
+set of scales S (e.g., different downsampling factors). For each scale s ∈ S , we downsample the predicted depth, the ground-truth depth, and the validity mask with a fixed oper-ator Down s(·):
+
+D(s) = Down s(D), (13) 
+
+(D⋆)(s) = Down s(D⋆), (14) 
+
+M (s) = 1{Down s(M ) > 0.5}. (15) 
+
+Training loss. Supervision is provided by LiDAR depth measurements D⋆ ∈ RB×1×H×W and a binary validity mask M ∈ { 0, 1}B×1×H×W , where Mi = 1 indicates that a valid ground-truth depth value is available at pixel i and 
+
+Mi = 0 otherwise. All losses are computed only on pixels with Mi = 1 .To concisely express masked averages, we define a masked mean operator. Given any quantity X defined per pixel (and per batch element), and a corresponding binary mask M , we write 
+
+⟨X⟩M =
+
+P 
+
+> i
+
+MiXi
+
+P 
+
+> i
+
+Mi + ε , (16) where i indexes all spatial positions and batch elements, and 
+
+ε is a small constant used to avoid division by zero when no valid pixels are present. 
+
+Scale-invariant log RMSE. Following Eigen et al [12]., we measure the discrepancy between predicted and ground-truth depths in log space. For each valid pixel i, we define the log-depth residual 
+
+yi = log Di − log D⋆i ,
+
+where Di and D⋆i denote the predicted and ground-truth depth, respectively. Using the masked mean operator in Eq. 16, the scale-invariant log-depth loss is 
+
+Lsilog =
+
+q
+
+y2  
+
+> iM
+
+− λ yi 
+
+> 2
+> M
+
+. (17) Here, λ ∈ [0 , 1] is a scalar hyperparameter that controls the degree of scale invariance; in our experiments we use 
+
+λ = 0 .85 . The first term encourages small squared log-errors, while the second term subtracts a global bias term, making the loss invariant (up to λ) to additive shifts in log-depth, i.e., multiplicative changes in depth scale. At scale s, we compute horizontal and vertical log-depth gradient residuals using finite differences: 
+
+G(s) 
+
+> x
+
+= ∇x log D(s) − ∇ x log( D⋆)(s), (18) 
+
+G(s) 
+
+> y
+
+= ∇y log D(s) − ∇ y log( D⋆)(s). (19) The corresponding masked mean absolute errors are 
+
+E(s) 
+
+> x
+
+= |G(s) 
+
+> x
+
+| M (s) , (20) 
+
+E(s) 
+
+> y
+
+= |G(s) 
+
+> y
+
+| M (s) , (21) where ⟨·⟩ M (s) denotes the masked mean defined analo-gously to Eq. (16), but using the mask M (s).The gradient loss at scale s and the final multi-scale gra-dient loss are 
+
+L(s)grad = E(s) 
+
+> x
+
++ E(s) 
+
+> y
+
+, (22) 
+
+Lms grad = 1
+
+|S| 
+
+X
+
+> s∈S
+
+L(s)grad , (23) where |S| is the number of scales in S.11 Final objective. The total depth training objective is a weighted sum of the scale-invariant log RMSE and the multi-scale gradient loss: 
+
+Ltotal = wsilog Lsilog + wms grad Lms grad , (24) where wsilog and wms grad are non-negative scalar hyperpa-rameters that balance the two terms. Gradients are back-propagated only through pixels with Mi = 1 (and their downsampled counterparts), so invalid or missing depth val-ues do not influence learning. 
+
+## 8. Computational Efficiency and Temporal Analysis 
+
+8.1. Computational Efficiency 
+
+As quantified in Tabs. 9 and 10, GEP achieves 10 × and 
+
+∼65 × efficiency gains in pretraining and finetuning respec-tively with superior performance. The GPU hours are com-puted with a single RTX8000. 
+
+Table 9. Pre-training Efficiency & Data. Comparison of back-bone architectures, pre-training paradigm, resolution, compute cost, data scale, and peak memory usage.                              
+
+> Method Back-Pretrain Pretrain Pretrain Pretrain Peak bone Mode Res. EFLOPs (h) Data Size GPU Mem.
+> TESPEC [37] Swin-T Unsup. 360 ×640 31.7 (540h) ∼3.5 TB -STP [28] Swin-T Sup. 224 ×224 -0.57 TB -
+> GEP (Ours) ViT-S Unsup. 224 ×224 3.2 (54h) 0.94 TB 17G
+
+Table 10. Segmentation Performance & Cost.                     
+
+> Method Head Trainable Param. Finetune (h) DSEC Seg. mIoU mAcc
+> TESPEC [37] UperNet 45M 2.7 (46h) 62.77 70.61 STP [28] UperNet 42M -62.05 -
+> GEP (ours) Linear 22M 0.04 (0.7h) 65.22 74.66
+
+8.2. Temporal Resolution Analysis 
+
+Our approach unlocks VFM semantics without compromis-ing temporal fidelity. As empirically proven in Tab. 11, our model supports flexible time sampling : it generalizes ro-bustly to unseen high-temporal resolutions ( N = 10 bins), demonstrating the capability to flexibly adapt the integra-tion window ∆t to extreme motion speeds on the fly. Fur-thermore, it is essentially representation-agnostic and can seamlessly adopt inputs like Voxel Grids. 
+
+## 9. More Qualitative Results 
+
+9.1. Depth Estimation 
+
+Figure 8 presents qualitative depth estimation results on several outdoor driving scenes. Compared to the ECDDP baseline, our method recovers a smoother road surfaces and 
+
+Table 11. Temporal Resolution Ablation. All experiments are transferred based on 10% schedule pretrained pilot runs.                               
+
+> Pre-training Strategy Eval. Resolution DSEC Seg.
+> (Bins per RGB interval) (Bins per RGB interval) mIoU mAcc
+> Fixed ( N= 1 ) (Ours) N= 1 (Ours) 42.98 53.09 Dynamic ( N∈ { 1,3,5})
+> N= 1 (Ours) 42.67 52.02
+> N= 10 (Unseen) 42.25 51.39
+> N= 10 (Random) 21.31 28.58 （a) Input （b) ECDDP （c) Ours （d) Label （e) RGB
+
+Figure 8. Qualitative comparison of depth estimation on MVSEC [63]. From left to right: (a) event-based input, (b) ECDDP baseline, (c) our method, (d) ground-truth depth, and (e) corresponding reference RGB images (not used). Our model pro-duces depth maps that more closely match the ground truth, with sharper object boundaries and fewer artifacts on thin structures such as trees and poles. 
+
+sharper discontinuities at object boundaries, while preserv-ing thin structures such as trees and poles. The predicted depth maps align better with the LiDAR ground truth, il-lustrating the benefit of our representation for event-based depth estimation. 
+
+9.2. Attention Map 
+
+In addition to depth estimation, we further analyze the dis-criminative power of our learned features by visualizing at-tention maps in Figure 7. For each sample, we show the input event frame, the attention responses produced by DI-NOv2 [39] (our teacher VFM during alignment) and our method, and the corresponding RGB image. As observed in the figure, our approach focuses more accurately on se-mantically meaningful structures such as object contours, fine edges, and distinctive regions. In contrast, DINOv2 ex-hibits more diffuse or noisy activations and often fails to localize these structures precisely. These qualitative results indicate that our representation extracts more discriminative features from event data and aligns better with the underly-ing scene semantics. 12 References 
+
+[1] Hangbo Bao, Li Dong, Songhao Piao, and Furu Wei. Beit: Bert pre-training of image transformers. arXiv preprint arXiv:2106.08254 , 2021. 5, 6 [2] Luca Bartolomei, Enrico Mannocci, Fabio Tosi, Matteo Poggi, and Stefano Mattoccia. Depth anyevent: A cross-modal distillation paradigm for event-based monocular depth estimation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 19669–19678, 2025. 2[3] Jonathan Binas, Daniel Neil, Shih-Chii Liu, and Tobi Del-bruck. Ddd17: End-to-end davis driving dataset. arXiv preprint arXiv:1711.01458 , 2017. 2, 5 [4] Christian Brandli, Raphael Berner, Minhao Yang, Shih-Chii Liu, and Tobi Delbruck. A 240 × 180 130 db 3 μs latency global shutter spatiotemporal vision sensor. IEEE Journal of Solid-State Circuits , 49(10):2333–2341, 2014. 5 [5] Tadeusz Cali´ nski and Jerzy Harabasz. A dendrite method for cluster analysis. Communications in Statistics-theory and Methods , 3(1):1–27, 1974. 7 [6] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Ge-offrey Hinton. A simple framework for contrastive learning of visual representations. In International conference on ma-chine learning , pages 1597–1607. PmLR, 2020. 4 [7] Xinlei Chen, Saining Xie, and Kaiming He. An empirical study of training self-supervised vision transformers. In Pro-ceedings of the IEEE/CVF international conference on com-puter vision , pages 9640–9649, 2021. 2, 5 [8] Timoth´ ee Darcet, Maxime Oquab, Julien Mairal, and Pi-otr Bojanowski. Vision transformers need registers. arXiv preprint arXiv:2309.16588 , 2023. 7 [9] David L Davies and Donald W Bouldin. A cluster separation measure. IEEE transactions on pattern analysis and machine intelligence , pages 224–227, 2009. 7 [10] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition , pages 248–255. Ieee, 2009. 5 [11] Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. 1, 5, 6 [12] David Eigen, Christian Puhrsch, and Rob Fergus. Depth map prediction from a single image using a multi-scale deep net-work. Advances in neural information processing systems ,27, 2014. 10, 11 [13] Yuxin Fang, Wen Wang, Binhui Xie, Quan Sun, Ledell Wu, Xinggang Wang, Tiejun Huang, Xinlong Wang, and Yue Cao. Eva: Exploring the limits of masked visual representa-tion learning at scale. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pages 19358–19369, 2023. 1 [14] Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning gener-ative visual models from few training examples: An incre-mental bayesian approach tested on 101 object categories. In 
+
+2004 conference on computer vision and pattern recognition workshop , pages 178–178. IEEE, 2004. 5 [15] Guillermo Gallego, Tobi Delbr¨ uck, Garrick Orchard, Chiara Bartolozzi, Brian Taba, Andrea Censi, Stefan Leutenegger, Andrew J Davison, J¨ org Conradt, Kostas Daniilidis, et al. Event-based vision: A survey. IEEE transactions on pattern analysis and machine intelligence , 44(1):154–180, 2020. 1 [16] Daniel Gehrig, Antonio Loquercio, Konstantinos G Derpa-nis, and Davide Scaramuzza. End-to-end learning of repre-sentations for asynchronous event-based data. In Proceed-ings of the IEEE/CVF international conference on computer vision , pages 5633–5643, 2019. 5 [17] Daniel Gehrig, Michelle R¨ uegg, Mathias Gehrig, Javier Hidalgo-Carri´ o, and Davide Scaramuzza. Combining events and frames using recurrent asynchronous multimodal net-works for monocular depth prediction. IEEE Robotics and Automation Letters , 6(2):2822–2829, 2021. 2, 5, 7 [18] Mathias Gehrig, Willem Aarents, Daniel Gehrig, and Davide Scaramuzza. Dsec: A stereo event camera dataset for driv-ing scenarios. IEEE Robotics and Automation Letters , 6(3): 4947–4954, 2021. 2, 5 [19] Albert Gu, Karan Goel, and Christopher R´ e. Efficiently modeling long sequences with structured state spaces. arXiv preprint arXiv:2111.00396 , 2021. 3 [20] Ryuhei Hamaguchi, Yasutaka Furukawa, Masaki Onishi, and Ken Sakurada. Hierarchical neural memory network for low latency event processing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 22867–22876, 2023. 6 [21] Haiqing Hao, Nikola Zubi´ c, Weihua He, Zhipeng Sui, Da-vide Scaramuzza, and Wenhui Wang. Maximizing asyn-chronicity in event-based neural networks. arXiv preprint arXiv:2505.11165 , 2025. 3 [22] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ ar, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16000– 16009, 2022. 2, 5, 6 [23] Javier Hidalgo-Carri´ o, Daniel Gehrig, and Davide Scara-muzza. Learning monocular dense depth from events. In 
+
+2020 International Conference on 3D Vision (3DV) , pages 534–542. IEEE, 2020. 10 [24] Yuhuang Hu, Tobi Delbruck, and Shih-Chii Liu. Learning to exploit multiple vision modalities by using grafted networks. In European Conference on Computer Vision , pages 85–101. Springer, 2020. 2 [25] Junho Kim, Jaehyeok Bae, Gangin Park, Dongsu Zhang, and Young Min Kim. N-imagenet: Towards robust, fine-grained object recognition with event cameras. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 2146–2156, 2021. 2, 5, 11 [26] Simon Klenk, David Bonello, Lukas Koestler, Nikita Araslanov, and Daniel Cremers. Masked event modeling: Self-supervised pretraining for event cameras. In Proceed-ings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 2378–2388, 2024. 1, 2, 5, 6, 7 [27] Pengteng Li, Yunfan Lu, Pinghao Song, Wuyang Li, Huizai Yao, and Hui Xiong. Eventvl: Understand event streams via multimodal large language model. arXiv preprint arXiv:2501.13707 , 2025. 3 
+
+13 [28] Quanmin Liang, Qiang Li, Shuai Liu, Xinzi Cao, Jinyi Lu, Feidiao Yang, Wei Zhang, Kai Huang, and Yonghong Tian. Efficient event camera data pretraining with adaptive prompt fusion. In Proceedings of the IEEE/CVF International Con-ference on Computer Vision , pages 8656–8667, 2025. 5, 6, 12 [29] Patrick Lichtsteiner, Christoph Posch, and Tobi Delbruck. A 128×128 120 db 15 us latency asynchronous temporal con-trast vision sensor. IEEE Journal of Solid-State Circuits , 43 (2):566–576, 2008. 1 [30] Shaoyu Liu, Jianing Li, Guanghui Zhao, Yunjian Zhang, Xin Meng, Fei Richard Yu, Xiangyang Ji, and Ming Li. Eventgpt: Event stream understanding with multimodal large language models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 29139–29149, 2025. 3, 8 [31] Yifei Liu, Mathias Gehrig, Nico Messikommer, Marco Can-nici, and Davide Scaramuzza. Revisiting token pruning for object detection and instance segmentation. In Proceed-ings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 2658–2668, 2024. 3 [32] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. 9 [33] Nico Messikommer, Daniel Gehrig, Mathias Gehrig, and Davide Scaramuzza. Bridging the gap between events and frames through unsupervised domain adaptation. IEEE Robotics and Automation Letters , 7(2):3515–3522, 2022. 1, 2[34] Nico Messikommer, Jiaxu Xing, Elie Aljalbout, and Davide Scaramuzza. Student-informed teacher training. Interna-tional Conference on Learning Representations , 2025. 2 [35] Nico Messikommer, Jiaxu Xing, Leonard Bauersfeld, Marco Cannici, Elie Aljalbout, and Davide Scaramuzza. Approx-imate imitation learning for event-based quadrotor flight in cluttered environments. arXiv preprint arXiv:2603.07578 ,2026. 1 [36] Fausto Milletari, Nassir Navab, and Seyed-Ahmad Ahmadi. V-net: Fully convolutional neural networks for volumetric medical image segmentation. In 2016 fourth international conference on 3D vision (3DV) . Ieee, 2016. 6 [37] Mohammad Mohammadi, Ziyi Wu, and Igor Gilitschen-ski. Tespec: Temporally-enhanced self-supervised pretrain-ing for event cameras. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 7782– 7793, 2025. 6, 12 [38] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Repre-sentation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 , 2018. 2 [39] Maxime Oquab, Timoth´ ee Darcet, Th´ eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning robust visual features without supervision. 
+
+arXiv preprint arXiv:2304.07193 , 2023. 1, 2, 4, 5, 6, 11, 12 [40] Garrick Orchard, Ajinkya Jayawant, Gregory K Cohen, and Nitish Thakor. Converting static image datasets to spiking neuromorphic datasets using saccades. Frontiers in neuro-science , 9:437, 2015. 2, 5 [41] Bo Peng, Daniel Goldstein, Quentin Anthony, Alon Albalak, Eric Alcaide, Stella Biderman, Eugene Cheah, Xingjian Du, Teddy Ferdinan, Haowen Hou, et al. Eagle and finch: Rwkv with matrix-valued states and dynamic recurrence. arXiv preprint arXiv:2404.05892 , 2024. 3 [42] Etienne Perot, Pierre De Tournemire, Davide Nitti, Jonathan Masci, and Amos Sironi. Learning to detect objects with a 1 megapixel event camera. Advances in Neural Information Processing Systems , 33:16639–16652, 2020. 6 [43] Haotong Qin, Cheng Hu, and Michele Magno. Event-priori-based vision-language model for efficient visual understand-ing. In International Joint Conference on Artificial Intelli-gence , pages 16–30. Springer, 2025. 3 [44] Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language models are unsu-pervised multitask learners. OpenAI blog , 1(8):9, 2019. 9 [45] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 1 [46] Ren´ e Ranftl, Alexey Bochkovskiy, and Vladlen Koltun. Vi-sion transformers for dense prediction. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 12179–12188, 2021. 10 [47] Henri Rebecq, Ren´ e Ranftl, Vladlen Koltun, and Davide Scaramuzza. High speed and high dynamic range video with an event camera. IEEE transactions on pattern analysis and machine intelligence , 43(6):1964–1980, 2019. 1 [48] Sucheng Ren, Hongru Zhu, Chen Wei, Yijiang Li, Alan Yuille, and Cihang Xie. Arvideo: Autoregressive pretrain-ing for self-supervised video representation learning. arXiv preprint arXiv:2405.15160 , 2024. 3, 8 [49] Peter J Rousseeuw. Silhouettes: a graphical aid to the inter-pretation and validation of cluster analysis. Journal of com-putational and applied mathematics , 20:53–65, 1987. 7 [50] Alberto Sabater, Luis Montesano, and Ana C Murillo. Event transformer. a sparse-aware solution for efficient event data processing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2677– 2686, 2022. 3 [51] Carole H Sudre, Wenqi Li, Tom Vercauteren, Sebastien Ourselin, and M Jorge Cardoso. Generalised dice overlap as a deep learning loss function for highly unbalanced seg-mentations. In International Workshop on Deep Learning in Medical Image Analysis , pages 240–248. Springer, 2017. 9 [52] Zhaoning Sun, Nico Messikommer, Daniel Gehrig, and Da-vide Scaramuzza. Ess: Learning event-based semantic seg-mentation from still images. In European Conference on Computer Vision , pages 341–357. Springer, 2022. 1, 2, 5, 6[53] Quan Tang, Bowen Zhang, Jiajun Liu, Fagui Liu, and Yifan Liu. Dynamic token pruning in plain vision transformers for semantic segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 777– 786, 2023. 3 [54] Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin 
+
+14 Ge, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. 3 [55] Ziyi Wu, Xudong Liu, and Igor Gilitschenski. Eventclip: Adapting clip for event-based object recognition. arXiv preprint arXiv:2306.06354 , 2023. 2 [56] Tete Xiao, Yingcheng Liu, Bolei Zhou, Yuning Jiang, and Jian Sun. Unified perceptual parsing for scene understand-ing. In Proceedings of the European conference on computer vision (ECCV) , pages 418–434, 2018. 6 [57] Chuyun Xie, Wei Gao, and Ren Guo. Cross-modal learn-ing for event-based semantic segmentation via attention soft alignment. IEEE Robotics and Automation Letters , 9(3): 2359–2366, 2024. 2 [58] Yan Yang, Liyuan Pan, and Liu Liu. Event camera data pre-training. In Proceedings of the IEEE/CVF international con-ference on computer vision , 2023. 1, 2, 5, 6, 9 [59] Yan Yang, Liyuan Pan, and Liu Liu. Event camera data dense pre-training. In European Conference on Computer Vision ,pages 292–310. Springer, 2024. 1, 2, 5, 6, 7, 10 [60] Xiaoyu Yue, Shuyang Sun, Zhanghui Kuang, Meng Wei, Philip HS Torr, Wayne Zhang, and Dahua Lin. Vision trans-former with progressive sampling. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 387–396, 2021. 6 [61] Boqiang Zhang, Kehan Li, Zesen Cheng, Zhiqiang Hu, Yuqian Yuan, Guanzheng Chen, Sicong Leng, Yuming Jiang, Hang Zhang, Xin Li, et al. Videollama 3: Frontier multi-modal foundation models for image and video understand-ing. arXiv preprint arXiv:2501.13106 , 2025. 3, 8 [62] Jiazhou Zhou, Xu Zheng, Yuanhuiyi Lyu, and Lin Wang. Eventbind: Learning a unified representation to bind them all for event-based open-world understanding. In European Conference on Computer Vision , pages 477–494. Springer, 2024. 3, 5 [63] Alex Zihao Zhu, Dinesh Thakur, Tolga ¨Ozaslan, Bernd Pfrommer, Vijay Kumar, and Kostas Daniilidis. The multi-vehicle stereo event camera dataset: An event camera dataset for 3d perception. IEEE Robotics and Automation Letters , 3 (3):2032–2039, 2018. 2, 5, 12 [64] Nikola Zubic, Mathias Gehrig, and Davide Scaramuzza. State space models for event cameras. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5819–5828, 2024. 3 
+
+15
