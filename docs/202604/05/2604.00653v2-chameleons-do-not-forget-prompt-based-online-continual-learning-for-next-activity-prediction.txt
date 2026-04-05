@@ -1,0 +1,731 @@
+Title: Chameleons do not Forget: Prompt-Based Online Continual Learning for Next Activity Prediction
+
+URL Source: https://arxiv.org/pdf/2604.00653v2
+
+Published Time: Fri, 03 Apr 2026 00:33:18 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# Chameleons do not Forget: Prompt-Based Online Continual Learning for Next Activity Prediction 
+
+Marwan Hassani 1 , Tamara Verbeek 1, and Sjoerd van Straten 1
+
+Department of Mathematics and Computer Science, Eindhoven University of Technology, The Netherlands 
+
+{m.hassani, h.a.j.v.straten}@tue.nl 
+
+Abstract. Predictive process monitoring (PPM) focuses on predicting future process trajectories, including next activity predictions. This is crucial in dynamic environments where processes change or face un-certainty. However, current frameworks often assume a static environ-ment, overlooking dynamic characteristics and concept drifts. This re-sults in catastrophic forgetting, where training while focusing merely on new data distribution negatively impacts the performance on previously learned data distributions. Continual learning addresses, among others, the challenges related to mitigating catastrophic forgetting. This paper proposes a novel approach called Continual Next Activity Prediction with Prompts (CNAPwP), which adapts the DualPrompt algorithm for next activity prediction to improve accuracy and adaptability while mitigat-ing catastrophic forgetting. We introduce new datasets with recurring concept drifts, alongside a task-specific forgetting metric that measures the prediction accuracy gap between initial occurrence and subsequent task occurrences. Extensive testing on three synthetic and two real-world datasets representing several setups of recurrent drifts shows that CNAPwP achieves SOTA or competitive results compared to five base-lines, demonstrating its potential applicability in real-world scenarios. An open-source implementation of our method, together with the datasets and results, is available at: https://github.com/SvStraten/CNAPwP .
+
+Keywords: Process Mining, Next Activity Prediction, Concept Drift, Catastrophic Forgetting, Continual Learning 
+
+1 Introduction 
+
+Recent emphasis on predictive process monitoring (PPM) highlights its criti-cal importance by enabling organizations to predict the future trajectories of individual process instances dynamically [5], [4]. PPM offers decision support that empowers organizations to make adjustments to their processes. Next ac-tivity prediction holds significant relevance due to its ability to anticipate and plan for future actions within business processes. This predictive capability en-ables proactive management of resources, ensuring they are deployed effectively to meet upcoming demands. For example, accurate next activity prediction in  
+
+> arXiv:2604.00653v2 [cs.LG] 2 Apr 2026 2M. Hassani et al.
+
+customer service enables organizations to plan ahead, optimize resources, and re-duce response times, leading to more efficient operations and improved customer satisfaction [28]. Offline PPM involves two main phases: training and testing. Performing next activity prediction in an online setting offers distinct advantages over offline methods. In an online environment, predictive models continuously learn and adapt in real time as new data streams in, more accurately reflecting the cur-rent state of operations. This dynamic approach allows organizations to respond swiftly to changing conditions and optimize processes continuously, whereas of-fline methods typically rely on static datasets that might be limited in capturing evolving patterns and trends effectively [28], [11], [8]. A significant challenge in online next activity prediction arises from adapting to new concepts following shifts in data distribution. While real-time model up-dates enable responsiveness to evolving trends and operational changes, they also introduce the risk of catastrophic forgetting [10]. This phenomenon occurs when the prediction model overwrites previously learned information with a new data distribution, potentially leading to a loss of accuracy or reliability in predicting next activities when refacing previously learned data distributions. Balancing dynamic model updates with the retention of critical historical knowledge is crucial, especially given constraints such as storage limitations and privacy con-cerns that prevent organizations from retaining all historical data indefinitely. Developing robust online prediction models requires efficient use of historical data while integrating new information. In process mining, recurring drifts from factors such as seasonal changes or shifts in customer behavior make it essential to prevent catastrophic forgetting. Neglecting recurring tasks would compromise the model’s long-term performance. Only recently algorithms have been developed for online PPM [9] and specif-ically for online next activity prediction [28], [11]. In contrast, numerous al-gorithms already exist for online image classification that avoid catastrophic forgetting, including [26], [27], [19], [10]. By leveraging the techniques utilized in such algorithms, there is potential to create high-performance online next activity prediction models for this purpose. Unlike independent data points in classification, next activity prediction requires capturing temporal dependencies, which presents unique challenges. Continual learning, also known as lifelong learning, plays a crucial role in enhancing the effectiveness of online prediction models. This concept facili-tates the retention of previously learned information while integrating new in-sights, thereby maintaining a comprehensive understanding of the data distribu-tion landscape. By leveraging task-specific and task-invariant features, continual learning helps to mitigate catastrophic forgetting. Fig. 1 illustrates a stream of animal image classification tasks. Initially, the model classifies elephant pho-tographs, followed by a task classifying bird drawings. Typically, an online model forgets how to classify elephants when switching to birds. In the performance depicted for the occurrences of Task 1 , we observe a decline after learning Task 2 
+
+when the model is compelled to deal again with the first task. However, by iden-Prompt-Based Online Continual Learning for Next Activity Prediction 3    
+
+> Fig. 1. Catastrophic forgetting in sequential image classification. The model trains on realistic elephant photos (Task 1) and subsequently on bird drawings (Task 2), which typically causes it to forget the initial task. When Task 1 recurs as elephant drawings ,performance drops, illustrating the need to leverage task-invariant features to preserve knowledge during shifts.
+
+tifying task-invariant features, such as distinguishing between photographs and drawings, we have the potential to preserve valuable information for the subse-quent reappearance of the initial task, for instance when involving elephants de-picted in drawings. By understanding the distinctions between photographs and drawings and incorporating task-specific insights about elephants, we improve the model’s ability to classify representations of elephants in drawings accurately. These features can be incorporated as prompts. A prompt is an additional piece of information provided to the model to guide its learning or inference process. By using prompts that highlight task-specific and task-invariant features, we can maintain the contextual knowledge necessary for effectively addressing evolving tasks, ensuring continued success in classification, particularly when faced with shifts in a task. In this paper, we propose a framework called Continual Next Activity Predic-tion with Prompts (CNAPwP) with components for handling temporal depen-dencies, capturing long-term patterns, and incorporating memory and context into the learning process. The key contributions of this work include: 
+
+– Introducing an innovative framework that combines general and expert prompts for dynamic adaptation and learning from streaming data. 
+
+– Developing the “task-specific forgetting" evaluation metric to assess the re-tention and the degradation of task-specific knowledge. 
+
+– Creating new datasets that are specifically tailored for evaluating online predictive process monitoring. 
+
+– Conducting a comprehensive experimental evaluation that demonstrates that CNAPwP significantly outperforms existing methods in dynamic environ-ments. 4 M. Hassani et al. 
+
+This paper extends, but fundamentally differs from our paper in [24]. Among others, this paper extends [24] by: (i) updating the related work, (ii) enriching the experimental evaluation with an extended ablation study, (iii) introducing a new real-world dataset ( BPIC2017 ) and (iv) extensively evaluating the introduced “task-specific forgetting" metric. The remainder of this paper is structured as follows: Section 2 provides an overview of the state-of-the-art in continual learning and PPM. Section 3 intro-duces the foundational concepts, including concept drift and catastrophic for-getting, and formally defines the problem of task incremental learning for next activity prediction. Section 4 details the proposed CNAPwP framework, explain-ing the architecture and its components for prompt-based adaptation. Section 5 outlines the experimental setup, encompassing datasets, baselines, and specific evaluation metrics used. Section 6 presents a comprehensive analysis of the com-parative results and the ablation study. Finally, Section 7 concludes the paper with a summary of the contributions and an outlook on future research. 
+
+2 Related Work 
+
+At its core, continual learning seeks to equip machine learning models with the ability to continuously learn and adapt over time, similar to how humans acquire and refine knowledge throughout their lives. Within this framework, re-searchers have explored various methodologies, each offering unique perspectives and strategies. These approaches include memory-based, architecture-based, reg-ularization based, and prompt-based methods. 
+
+Memory-based approaches , inspired by human cognition and memory systems, focus on storing and retrieving past experiences or knowledge. These methods can be broadly classified into two categories. The first involves retaining actual past experiences, as demonstrated by techniques such as Experience Re-play [19], iCaRL [18], DynaTrainCDD [11], Maximally Interfered Retrieval [17], and Gradient Episodic Memory [14]. The second category, on the other hand, involves generating past experiences during training, with Generative Replay [12] serving as a key example. 
+
+Regularization-based approaches aim to prevent catastrophic forget-ting by constraining weight updates during training. This constraint is typically achieved by evaluating the importance of each parameter for previously learned tasks. For example, Elastic Weight Consolidation [10] determines parameter sig-nificance, while Synaptic Intelligence [29] imposes penalties during the training of new tasks to preserve essential knowledge. Alternatively, the importance of parameters can be assessed based on their impact on output sensitivity, with selective penalties applied to critical parameters to mitigate forgetting, as seen in Learning without Forgetting [13]. 
+
+Architecture-based approaches prioritize adjusting the neural network’s structure to integrate new data while preserving existing knowledge. One ap-proach involves dynamic architectures, which expand the network by adding more neurons or layers for each task. This allows the model to continuously Prompt-Based Online Continual Learning for Next Activity Prediction 5
+
+grow and adapt without forgetting previous knowledge, as exemplified by meth-ods such as Progressive Neural Networks [20] and Dynamic Neural Networks [7]. 
+
+Prompt-based approaches , a more recent addition to the continuum, in-troduce a novel perspective on continual learning challenges. These methods entail attaching static or adaptable “instructions”, also referred to as prompts, to direct the model’s behavior. These prompts can take various forms, such as specific input patterns, embeddings, or task-specific tokens, and they help the model recall and apply knowledge from earlier tasks. Examples of prompt-based approaches include Learning to Prompt [27] and DualPrompt [26]. We will delve deeper into DualPrompt [26], since our approach adopts a modified version of it. DualPrompt is a continual image classification method, inspired by prompting techniques commonly used in natural language processing to guide models toward desired results [26]. This approach is particularly useful for sequence-like data, as it helps the model understand the underlying structure and the relationships within the sequences. It comprises two key components: G-Prompt and E-Prompt, which learn task-invariant and task-specific knowledge, respectively. The architecture of DualPrompt involves multiple multi-head self-attention (MHSA) layers, with G-Prompt and E-Prompt integrated into these layers. The G-Prompt is a shared parameter for all tasks, applied during both training and testing to capture general knowledge. The E-Prompt on the other hand contains a set of task-specific parameters, each linked to a learnable key representing the task’s unique features. These prompts are strategically attached to different layers of the model, with G-Prompt typically at shallower layers and E-Prompt at deeper layers. This setup leverages the varying levels of feature abstraction in the layers. Two prompting functions can be used to combine the prompts with embedding features. In prompt tuning, prompts are attached to the input tokens of each layer, increasing the output length. In prefix tuning, the prompt is split and attached to specific tokens, maintaining the same output length as the input. During inference, an input is transformed to identify the closest task key and the associated E-Prompt using cosine similarity. The shared G-Prompt and matched E-Prompt are then attached to multiple MHSA layers to produce the model’s output. During training, the E-Prompt and G-Prompt are jointly trained with the classifier based on the task identity. TFCLPM [25] is the first continual learning method specifically designed for PPM. It utilizes a memory-based approach to store hard samples and a dynamic loss to predict next activities while mitigating catastrophic forgetting. Outside continual learning, innovative methodologies have emerged in offline next-event prediction. The state of the art in offline next activity prediction is evolving through advancements in deep learning architectures, attention mech-anisms, hybrid modeling approaches, and the integration of Generative Adver-sarial Networks (GANs), enhancing sequence generation and capturing complex temporal dependencies [23]. Studies explore incremental techniques to update predictive models with new process execution data. Pauwels and Calders [16] compare various update strategies, including re-training with and without hy-6 M. Hassani et al. 
+
+peroptimization and incremental updates, demonstrating the effectiveness of in-cremental updates in maintaining model quality while offering real-time adapt-ability. To efficiently store traces, prefix trees [8] offer a robust solution. These trees, represented as simple graphs, organize event sequences efficiently, with each node representing an event and edges connecting sequential events. As events occur, nodes are either created or their frequencies updated, capturing unique event sequences for individual cases. Table 1 summarizes the related work discussed in this paper from the pre-diction setup perspective as well as from the model architecture perspective. Prompt-Based Online Continual Learning for Next Activity Prediction 7
+
+> Table 1.  A summary table is provided, detailing all methods discussed in the preceding sections. Each method is classified according to its method type, which may include an image classification method, a general method focusing solely on the model updating, or a next activity prediction method (NA Pred). For each method several characteristics are highlighted, including whether the task-ID is unknown during testing, whether the task-ID is unknown during training, whether the method is a continual learning algorithm (CL), and the type of technique utilized (Memory-based, Regul.=Regularization-based, Arch.=Architecture-based, or Prompt-based). Methods  Settings  Techniques Task-Free (Inference) Task-Free (Training) Continual Learning Memory-Based Regularization Architecture Prompt-Based Raw  Pseudo
+
+Image Classification Generative Replay [21]  ✓ ✓ ✓ ✓
+
+> Maximally Interfered Retrieval [17]  ✓ ✓ ✓ ✓
+> Experience Replay [19]  ✓ ✓ ✓ ✓
+> iCaRL [18]  ✓ ✓ ✓ ✓
+> Progressive Neural Networks [20]  ✓ ✓ ✓ ✓
+> Dynamic Neural Networks [20], [7]  ✓ ✓ ✓ ✓
+> Learning without Forgetting [13]  ✓ ✓ ✓ ✓
+> Elastic Weight Consolidation [10]  ✓ ✓ ✓ ✓
+> Gradient Episodic Memory [14]  ✓ ✓ ✓ ✓
+> Synaptic Intelligence [29]  ✓ ✓ ✓ ✓
+> Learning to Prompt [27]  ✓ ✓ ✓ ✓
+> DualPrompt [26]  ✓ ✓ ✓ ✓
+
+Updating Strategies Incremental Update [16]  ✓ ✓ ✓ ✓
+
+> Full Re-train [16]  ✓ ✓ ✓ ✓
+> Re-train with No Hyperoptimization  [16]  ✓ ✓ ✓ ✓
+> Do Nothing [16]  ✓ ✓ ×
+> ADWIN [2]  ✓ ✓ ✓ ✓
+
+Next Activity DynaTrainCDD [11]  ✓ ✓ ✓ ✓ 
+
+> TFCLPM [25]  ✓ ✓ ✓ ✓ ✓
+> GAN  [23]  ✓ × × ✓8M. Hassani et al.
+
+3 Preliminaries and Problem Formulation 
+
+In this section we delve into formulating the problem of utilizing continual learn-ing in process prediction. We aim to develop an algorithm that continuously pro-cesses an event stream S = {e1, e 2, ... } as events are generated, where an event 
+
+e = ( c, a, t, v 1, ..., v A) is a tuple of case identifier c, activity label a, timestamp 
+
+t, and the values of other event attributes v1, ..., v A. A case refers to a single instance of the process being analyzed or executed, encompassing all events, their attributes, and contextual information associated with that instance. A trace σ(i) = ⟨e1i, ..., e ni ⟩ denotes a finite sequence of events that all belong to the same case i (i.e. they share the same case identifier c), ordered by their timestamps. In our notation, a single subscript (e.g. et in stream S) denotes the event’s sequential position in the global stream. A double subscript (e.g. eji in trace σ(i)) denotes the j-th event occurring within the specific case i. Without loss of generality and since we are dealing merely with event logs, the terms trace and case are used interchangeably in the remainder of the paper and refer to the sequence of activities within the instance. A stream S contains multiple traces. Given σ(i), a prefix represents the sequence of activities executed up to a certain point in a trace’s lifecycle. The prefix of length k is defined by σ(i) 
+
+> ≤k
+
+=
+
+⟨e1i, ..., e ki ⟩. For each event e that occurs in stream S, we want to predict the next activity name of event e(k+1) i.
+
+Definition 1 (Next Activity Prediction). Let there be a sample of prefixes of sequences P = {σ(i)
+
+> ≤k
+
+}i=mi=1 where 2 ≤ k < |σ(i)| is the prefix length and m
+
+is the sample size. Given a prefix of an events sequence σ(i)
+
+> ≤k
+
+, the next activity prediction is ˆa(k+1) i of activity a(k+1) i.
+
+To continuously predict the next activity in a stream, we must engage in online next activity prediction. 
+
+Definition 2 (Online Next Activity Prediction). Assume we aim to per-form ongoing predictions of the next activity on a stream of events. Upon the arrival of each new event eki , we continuously utilize the prefix σ(i) 
+
+> ≤k
+
+to predict the subsequent activity a(k+1) i.
+
+A stream S encompasses multiple learning tasks, each having several traces. 
+
+Definition 3 (Learning Task). A model will learn a learning task Tn with a corresponding dataset Dn for n ∈ [1 , ..., N ] where N is the number of learning tasks. Let Tp and Tr represent two distinct learning tasks, where p̸ = r. This indicates that Tp and Tr belong to different processes or data , implying there is no relationship between these learning tasks. 
+
+In the context of a stream of events involving multiple learning tasks, the distribution evolves over time, necessitating continuous updates to the prediction model. This demands a special form of incremental learning, known as task incremental learning. Prompt-Based Online Continual Learning for Next Activity Prediction 9
+
+Definition 4 (Task Incremental Learning). In task incremental learning, two tasks Tn, Tm where n, m ∈ [1 , ..., N ] have no correspondence to each other if 
+
+n̸ = m. Each task has unique objectives and is associated with a separate process, necessitating the model to acquire new patterns, features, or behaviors. 
+
+The emergence of new tasks results from concept drifts. 
+
+Definition 5 (Concept Drift [6]). A concept drift between timestamps t0 and 
+
+t1 is defined as ∃X : pt0 (X, y )̸ = pt1 (X, y ) where pt0 denotes the joint distribution at time t0 between the set of input variables X and the target variable y.
+
+A task repeating multiple times is called a recurrent concept drift. 
+
+Definition 6 (Recurrent Concept Drifts). A recurrent concept drift implies repeated changes in tasks, with the possibility of cycles that bring the system back to the original task. 
+
+When updating the model after a concept drift, the goal is to utilize as much data as possible. If a task reappears, it is advantageous to have stored data about this task, ensuring that it is not forgotten. However, this poses challenges such as storage limitations or privacy concerns. This often prevents keeping all past data, but relying only on recent data introduces bias and causes catastrophic forgetting [3]. 
+
+Definition 7 (Catastrophic Forgetting [10]). Let there be a model at any point in time that has learned a sequence of T learning tasks. When faced with the (T + 1) th task, the model tends to forget how to predict the next activities of the T previously learned tasks. 
+
+This phenomenon poses a significant challenge in dynamic environments. To address the issue of catastrophic forgetting, continual learning enables models to retain and incorporate knowledge from previous tasks while learning new ones. 
+
+Definition 8 (Continual Learning [11]). Let there be a model at any point in time that has learned a sequence of T learning tasks. When faced with the 
+
+(T + 1) th task, the model can leverage the past knowledge in the knowledge base to help learn this task. The objective is to optimize the performance of the new task while minimizing the decrease in performance on the previous tasks. 
+
+By compiling the definitions, we arrive at the following definition for a continual learning algorithm used to predict the next activity. 
+
+Definition 9 (Continual Learning for Next Activity Prediction). Con-sider a model that has learned to predict the next activities for an event stream 
+
+S. Throughout S, concept drifts may occur which refer to the alteration in the learning task. The event stream contains a sequence of T learning tasks. A learn-ing task for next activity prediction is defined by a sample of prefixes of sequences 
+
+P. Given a prefix of an events sequence σ(i)
+
+> ≤k
+
+, the model has to predict the activity 
+
+ˆa(k+1) i. When presented with the (T +1) th task, the model must accurately predict the activities for this new task without suffering from catastrophic forgetting. 10 M. Hassani et al. 
+
+The solution to the challenges of continual learning in process prediction models must meet several key requirements. Firstly, it should efficiently utilize an input event stream S consisting of multiple learning tasks T , as defined in Def-inition 3, and predict next activities accurately in near-real-time, as described in Definition 2. Secondly, the solution should accommodate task incremental learn-ing, mentioned in Definition 4, allowing for seamless integration in the emergence of new tasks. Additionally, the solution must exhibit the capability to perform next activity predictions while remaining robust to concept drifts, mentioned in Definition 5. Moreover, the solution should aim to reduce catastrophic forget-ting, as defined in Definition 7, particularly when tasks recur in the stream, as defined in Definition 6. In essence, the algorithm should incorporate continual learning for predicting next activities, as defined in Definition 9. 
+
+4 Method 
+
+In this section, we provide an overview of the CNAPwP architecture by detail-ing its components. The implementation is available on GitHub 1. Fig. 2 shows the framework architecture for training and testing the prediction model. First, raw event streams undergo preprocessing (Section 4.1) to generate and encode prefixes. These processed events are managed by the window handling com-ponent (Section 4.2), which maintains a dynamic sliding window of the most recent data. This window feeds into the window updating and prompt detection (Section 4.3) mechanism, which continuously updates the model parameters and selects the appropriate general prompt (G-Prompt) for shared knowledge and expert prompt (E-Prompt) for task-specific knowledge. Simultaneously, the con-cept drift detection (Section 4.4) component monitors the stream for distribu-tional shifts, triggering the storage of new task definitions and the initialization of new prompts when a new task is identified. Finally, the prediction model (Sec-tion 4.5) integrates the input prefix with the selected prompts via a multi-head self-attention (MHSA) architecture to output the probability distribution for the next activity. 
+
+4.1 Preprocessing 
+
+Preprocessing involves initial data reduction, where unnecessary columns are re-moved from the event log to reduce noise, focusing on essential attributes such as case, event, resource, and completion time. If events are missing key attributes, the corresponding cases are excluded from the dataset. Attributes representing the resource should be retained if present. Next, data is ordered chronologically to represent a real-time data stream, and afterward, the completion time at-tribute is deleted. Next, for each new event, a prefix is generated. The approach checks whether the case has appeared within the window of events. If the case is found and there are sufficient events to match the prefix size, the prefix is  
+
+> 1https://github.com/SvStraten/CNAPwP
+
+Prompt-Based Online Continual Learning for Next Activity Prediction 11 Input  Prefix                  
+
+> Encoding
+> hq
+> hk
+> hv
+> pk
+> pv
+> G-Prompt
+> hq
+> hk
+> hv
+> pk
+> pv
+> Total E -Prompt
+> Prediction
+> Create tree of
+> new task
+> Initialize new
+> E-Prompts
+> EN+ 1 EN+ 1.1 EN+ 1.2 EN+ 1.3 EN+ 1.4
+> Concatenate
+> E1E1.4
+> E1.2
+> Concatenate
+> EN
+> EN.1 EN.2 EN.3 EN.4
+> Split window on θ
+> E1.3 E1.1
+> Split window on θ
+> 4 ≤ θ≤ 6 7 ≤ θ≤ ∞ θ= 0
+> Concatenate
+> E2
+> E2.1 E2.2 E2.3 E2.4
+> Split window on θ
+
+…    
+
+> Linear
+> Layer
+> MHSA
+> Layer
+> Linear
+> Layer
+> MHSA
+> Layer
+> Linear
+> Layer Prompt attachment Prompt attachment
+> Concept
+> Drift? No
+> Yes Full Window
+> Yes
+> Add events
+> to 𝞺
+
+…   
+
+> Task N Task 2
+> Task 1 Task N+1
+> 1 ≤ θ≤ 3
+> New Task
+> Difference < E
+> Yes
+> No
+
+Prediction (4.5) 
+
+Prompt Detection (4.3) 
+
+Task Initialization (4.4) 
+
+Storage (4.4) 
+
+Comparison (4.4) 
+
+Fig. 2. Framework for Continual Next Activity Prediction with Prompts (CNAPwP). When concept drift is externally detected, a new task-specific E-Prompt is initialized. When no drifts are detected, a prompt detection mechanism dynamically selects and attaches the appropriate general G-Prompt and E-Prompt to the MHSA layers for accurate prediction. 
+
+formed. To accommodate the variable nature of trace lengths, the framework supports different prefix sizes k. While all prefixes are padded to a fixed max-imum sequence length to facilitate tensor operations and batching within the neural network, the effective length k of each prefix is preserved. This effec-tive length is subsequently used to assign a specific “bucket" (as detailed in Section 4.3), ensuring that the model applies the appropriate length-dependent prompts during training and inference. If the case is new and not previously encountered, a prefix composed entirely of “None” values is created. Once the prefix is defined, the next activity is assigned as the new event. Events outside the defined window are disregarded in this process. After generating the prefixes, the next step involves encoding both the prefix and the next activity. The prefix is one-hot encoded, generating sparse input vectors that are effective for han-dling high-dimensional categorical data, whereas the next activity is ordinally encoded, offering a compact and efficient representation. 12 M. Hassani et al. 
+
+4.2 Window Handling 
+
+The process starts by importing an event log and extracting key attributes nec-essary for predicting the next activity. These attributes are converted into a con-tinuous event flow, transmitting events until the entire log is analyzed. Events are sequenced by activity completion order, allowing new cases to begin while others are still ongoing. As each event arrives, it is added to a dynamic window that accumulates events until it reaches its window size, defined by γ. The op-timal value of this parameter is established based on the experiment outlined in Section 5.5. Once full, the window operates on a “first-in, first-out" basis, maintaining a consistent size to manage the sequence of events effectively. 
+
+4.3 Window Updating and Prompt Detection 
+
+When γ events accumulate, an update is initiated, as depicted in the green seg-ment of Fig. 2. This ensures the model remains current with the evolving event stream, maintaining a dynamic framework ready to process new events seam-lessly. After accumulating γ events, the data is partitioned into buckets based on prefix lengths θ. Each bucket represents a specific range of prefix lengths, ensuring a uniform distribution. Fig. 2 illustrates that there are four buckets, with the first containing solely empty prefixes and the second containing pre-fixes ranging in length from 1 to 3, for example. During initialization, bucket ranges are selected based on optimal values. Data of a specific prefix length is added to buckets until a significant discrepancy occurs, ensuring each bucket has a comparable number of values. With the window data segmented into buckets, the next phase updates all method parameters, including the G-Prompt, the bucket-specific E-Prompts, the task-specific E-Prompt, and the model weights. Data is batched by bucket, with each batch containing data from a single bucket. Data from each bucket is used solely for updating the parameters within its cor-responding bucket-specific E-Prompt. The task-specific E-Prompt, G-Prompt, and weights receive updates across all batches. The cross-entropy loss is used for updating the weights and parameters of the G-Prompt and E-Prompt: CrossEntropyLoss = −
+
+> N
+
+X
+
+> i=1
+
+yi log(ˆ yi) (1) where N is the number of classes, yi and ˆyi are the true and predicted prob-abilities for class i, respectively. Both the G-Prompt and E-Prompt are concate-nated with the model to facilitate these targeted updates. An ablation study experiment, detailed in Section 6.2, is conducted to validate the use of both the G-Prompt and E-Prompt. 
+
+4.4 Concept Drift Detection 
+
+Routine weight and parameter updates continue until a concept drift is detected. CNAPwP assumes these shifts are anticipated, triggering a task recognition Prompt-Based Online Continual Learning for Next Activity Prediction 13 
+
+mechanism upon encountering a drift index. After a concept drift, a specified number of events, denoted as the buffer size ρ, is stored in a prefix tree as depicted in the grey segment of Fig. 2. The optimal value of ρ is established through an experiment outlined in Section 5.5. The prefix tree of the new task is compared with the prefix trees of stored tasks, as shown in the blue section of Fig. 2. The comparison focuses on identifying overlaps and unique sequences between them. A high degree of overlap and fewer unique sequences in the new task’s prefix tree indicate greater similarity between the trees. A dissimilarity ratio is then calculated to measure how distinct the tasks are, with the lowest ratio indicating the stored task most similar to the new task. For each dataset, a threshold E is established according to the dissimilarity between its constituent tasks, . If the similarity between the new task and any of the stored tasks is less than E, the model will utilize the E-Prompts associated with that task. The optimal value for E for each dataset is determined in an experiment outlined in Section 5.5. If none of the stored tasks are similar to the new task, our model does not overfit to only previously seen tasks and, as such, initializes parameters for the new task, as depicted in the pink segment of Figure 2. This involves setting up the E-Prompt parameters for the new task and each bucket, which are initialized randomly. A new prefix tree is also created to characterize the task and is stored together with the tasks already in storage. As events stream in, they are added to the prefix tree until it reaches 500 events, enough to capture the task’s essence for future comparisons. 
+
+4.5 Prediction Model 
+
+A multi-head self-attention (MHSA) mechanism is utilized for next activity pre-dictions. The MHSA mechanism enhances next activity prediction by capturing complex dependencies and relationships between events, allowing the model to weigh the significance of past activities effectively. This approach enables the model to handle variable-length sequences efficiently while extracting diverse features, leading to more accurate predictions based on historical patterns. The prediction model of the approach is depicted in the orange segment of Figure 2. The prefix of each input event from the event stream is used as the model input. During preprocessing, each event’s prefix is converted into a one-hot en-coded array with dimensions [k, num _events ], where k is the prefix length and 
+
+num _events is the number of distinct events. Therefore, the encoded prefix of the event is initially determined. Subsequently, this encoded prefix under-goes a series of layers, ultimately resulting in a prediction of the next activity. The model consists of duplicated linear layers and MHSA layers. Linear layers take inputs of size input _size and produce outputs of 3 × input _size , allowing prompt attachment via prefix tuning. For further details on prefix tuning, please refer to [26]. These outputs are then processed by a MHSA layer with softmax activation and dropout regularization. Outputs from the MHSA layers feed into a dense layer with matching input and output sizes, equivalent to the number of events times the prefix length. Finally, the output passes through a softmax 14 M. Hassani et al. 
+
+layer, converting it into a probability distribution over possible activities. The activity with the highest probability is predicted as the next activity. During inference, the G-Prompt and E-Prompt are appended to the input of the MHSA layers. The G-Prompt remains consistent across all inputs, while the E-Prompt is determined by the task recognition mechanism. The task linked with the input event is identifiable due to the mechanism activated after a con-cept drift, as explained in Section 4.4. The bucket-specific E-Prompt is chosen based on the prefix size k of the input event. This bucket-specific E-Prompt is combined with the task-specific E-Prompt and applied to the input using a des-ignated prompting function, such as prefix tuning. The justification of selecting the prompting function is based on the related experiment described in Section 6.2. 
+
+5 Experimental Setup 
+
+5.1 Evaluation Metrics 
+
+Typically, studies rely on metrics such as accuracy and running time to assess performance. However, these metrics often fall short of capturing the longitudinal performance of our model, which can vary significantly over time. We will explore alternative evaluation metrics that offer a more nuanced understanding of our model’s performance dynamics over extended periods. 
+
+Accuracy at a given event index is a performance metric used to assess the effectiveness of a predictive model at a specific position within the sequence of events. In mathematical terms, if we denote w as the size of the average accuracy window, and ˆyj as the predicted activity label of an event at index j
+
+based on preceding events, with yj representing the actual activity at index j,the accuracy at index i can be expressed as: 
+
+accuracy i = 1
+
+w
+
+> i
+
+X
+
+> j=i−w
+
+1{ˆyj = yj }
+
+The formula computes the ratio of correct predictions from j up to event index 
+
+i, averaging the predictions in the window. 
+
+Average accuracy is calculated by averaging across all events to determine if each activity is predicted correctly. To calculate the average accuracy, we have the following formula: 
+
+accuracy = 1
+
+N
+
+> N
+
+X
+
+> j=0
+
+1{ˆyj = yj }
+
+Where N is the total number of events in the stream. In both cases, 1 {·} denotes the indicator function, yielding 1 if its argument holds and 0 otherwise. 
+
+Task-specific forgetting is the difference in the accuracy of predictions when the task is encountered for the first time compared to the accuracy during Prompt-Based Online Continual Learning for Next Activity Prediction 15 
+
+subsequent encounters. For each task and each appearance of a task, we compute the following: 
+
+task _accuracy (n, a ) = Rtn,t n1 − R tn,t na 
+
+Where n is the task, Rtn,t ni is the accuracy of task tn after encountering it for the ith time, and a > 1 is the appearance of the subsequent task, except for the first task. The running time is computed by taking the difference between the end time and the start time of the full evaluation stream, incorporating both training and inference. 
+
+5.2 Datasets 
+
+We provide an overview of the datasets utilized in our study, comprising a diverse selection of both real-world and synthetic datasets. To generate sudden concept drift datasets, the following scheme was em-ployed: for each concept, N examples are sampled. The samples of each concept are concatenated to form a new event log, alternating between the concepts. Consequently, a sudden concept drift is introduced at every N events. To replicate the occurrence of a drift in a log, the authors of [15] created a reference set of 72 event logs by modifying various parameters. They systemat-ically modified a base model by applying one of twelve simple change patterns. Using the Business Process Drift data, three datasets were generated, each with different lengths and characteristics. The first dataset, RandomTasks , consists of seven distinct tasks arranged in batches without any specific order. Each batch contains all tasks, and the entire dataset is made up of four batches, totaling 
+
+80 , 406 events. The second dataset, ImbalancedTasks , includes four tasks that occur with varying frequencies, with each task appearing between one and four times, totaling 30 , 754 events. The third dataset, RecurrentTasks , features four distinct tasks that recur within the same loop multiple times, totaling 100 , 739 
+
+events. In terms of real-world datasets, we utilize a dataset named Recurrent BPIC2015 ,which is a recurrent dataset generated from actual data collected across five different municipalities. Each task within BPIC2015 corresponds to data from a specific municipality. This Recurrent BPIC2015 dataset comprises 32 , 016 
+
+events. Additionally, we include the BPIC2017 dataset. This dataset originates from loan application processes within a Dutch financial institution. It contains events representing the full lifecycle of loan applications, including application submission, document verification, and final approval or rejection. The dataset exhibits high variability in case lengths and contains multiple parallel and con-ditional paths, making it suitable for evaluating complex, real-world dynamics. 
+
+5.3 Baselines 
+
+The model’s performance is compared against five competitors, including two baseline methods: Landmark and Incremental Update (w = Last Drift). In the 16 M. Hassani et al. 
+
+Landmark approach [16], the model retrains from scratch with each new data window. In the Incremental Updating (w = Last Drift) approach [16], the model updates based on historical data up to the last observed concept drift. In addition to these baselines, three state-of-the-art next activity prediction methods are used as competitors. DynaTrainCDD [11] which distinguishes it-self through its advanced concept drift detection algorithm called PrefixTreeCDD [8]. It continually monitors process data for deviations and utilizes prefix trees to represent and analyze process sequences efficiently. These detected drifts dy-namically dictate the frequency of updates and the selection of datasets for retraining. TFCLPM [25] dynamically updates its model based on a retraining dataset that combines recent events with hard samples. It is processed through a Single Dense Layer (SDL) [16] neural network using a dynamic loss function that incorporates Memory Aware Synapses (MAS) [1] to mitigate significant parameter changes. Finally, an approach that uses GANs [23] is constructed upon the principle of establishing a competitive game between two entities, each represented by a Recurrent Neural Network (RNN). Throughout the training process, one player gradually learns to generate event sequences that closely re-semble those observed in the training data, while the other player evaluates the realism of this prediction. To ensure a fair comparison of the continual learning strategies only and not the utilized prediction models, both Landmark and IncrementalUpdate (w = LastDrift) are implemented using the same multi-head self-attention backbone architecture employed by CNAPwP. This isolates the impact of the update strat-egy from the model architecture. DynaTrainCDD [11] and TFCLPM [25] both use the SDL neural network, as proposed in their paper. The GAN-based ap-proach [23] relies on its specific adversarial architecture. Unlike other methods that utilize standard supervised loss functions (cross-entropy loss), the GAN-based approach relies on adversarial loss which is notoriously unstable during the initial training phases. Taymouri et al. [22] explicitly requires 500 training iterations to ensure the generator and discriminator reach a stable equilibrium. To adapt this offline requirement to our online setup and prevent immediate model collapse, the GAN model is initially trained on a warm-up set of 500 events before switching to the online setup. 
+
+5.4 Implementation Details 
+
+We implemented the framework using Python and the PyTorch library for neural network components. Data preprocessing was handled using Pandas and Numpy, while Seaborn and Matplotlib were used for visualizations. We conducted the experiments on an HP Envy x360 laptop equipped with an AMD Ryzen 5 2500U processor (2.00 GHz), 8.00 GB of RAM, and running Windows 11. The imple-mentation is open source and available on GitHub 2.To ensure a robust evaluation, we employ a temporal split of the event stream. The first 15% of the data constitutes the validation set used for hyperparameter                         
+
+> 2https://github.com/SvStraten/CNAPwP Prompt-Based Online Continual Learning for Next Activity Prediction 17
+> Table 2. The final parameter settings for all datasets. Dataset window_size γbuffer_size ρthreshold E
+> RandomTasks 250 100 0.5
+> ImbalancedTasks 500 100 0.6
+> RecurrentTasks 250 150 0.6
+> Recurrent BPIC2015 250 100 0.8
+> BPIC2017 500 100 0.5
+
+selection (as detailed in Section 5.5), while the remaining 85% is used for the evaluation. On this evaluation stream, we adopt a test-then-train protocol. This implies that each incoming event is first used to evaluate the model’s prediction performance before it is used to train the model, ensuring that the model is always tested on unseen data. For the online training updates, we utilize a batch size of 25, a learning rate of 0.01 and perform 10 retraining epochs per update window. 
+
+5.5 Parameter Selection 
+
+Three key hyperparameters are fine-tuned for CNAPwP, corresponding directly to the variables in Section 4. The window size ( γ) specifies the capacity of the sliding window used for event accumulation. The buffer size ( ρ) represents the number of events stored in the prefix tree immediately following a concept drift detection. Finally, the threshold ( E) defines the dissimilarity limit used to deter-mine whether new data corresponds to an existing task or requires the initial-ization of a new task. All parameter configurations were rigorously assessed by performing grid search on the validation set, using average accuracy and running time as our metrics. For grid search, we used γ ∈ { 250 , 500 , 1000 }, ρ ∈ { 50 , 100 , 150 } and E ∈ {0.2, 0.4, 0.5, 0.6, 0.8}. For RandomTasks , RecurrentTasks , BPIC2017 and Recurrent BPIC2015 , a γ of 250 was selected as it provided the shortest running time while maintaining high accuracy. However, for the ImbalancedTasks dataset, a larger window size of 500 was necessary to maintain performance, ensuring sufficient data collection for infrequent tasks. ρ and E control the sensitivity of task recog-nition. We observed that increasing ρ often led to a drop in accuracy due to the extended period of uncertainty while filling the buffer. Therefore, we prioritized smaller buffer sizes (e.g. 100 or 150) to ensure rapid task identification. 
+
+6 Evaluation Results 
+
+6.1 Results Average accuracy Table 3 provides an overview of the average accuracy across all evaluation datasets and methods. The results indicate that different meth-ods excel depending on dataset characteristics. TFCLPM [25] outperforms all 18 M. Hassani et al. 
+
+other methods on the ImbalancedTasks and BPIC2017 datasets, demonstrating its effectiveness in scenarios with fewer tasks or less frequent drifts. However, CNAPwP (ours) achieves the highest average accuracy on the RandomTasks and 
+
+RecurrentTasks datasets, outperforming all other baseline methods. This sug-gests that our prompt-based approach is particularly effective in scenarios with structured recurrence or randomized batches of tasks. 
+
+Table 3. Average accuracy and standard deviation (after 5 runs over each evaluation set). Bold indicates the highest accuracy, while italic and underlined second- and third-highest values, respectively. Method Dataset 
+
+RandTasks ImbalTasks Recur BPIC15 RecurTasks BPIC17 
+
+CNAPwP (ours) .813 ±.004 .797 ±.007 .662 ±.003 .789 ±.002 .818 ±.002 
+
+DynaTrainCDD [11] .747 ±.005 .758 ±.006 .543 ±.007 .731 ±.004 .820 ±.004 
+
+TFCLPM [25] .795 ±.001 .817 ±.004 .655 ±.002 .781 ±.001 .839 ±.000 
+
+GAN [23] .739 ±.001 .704 ±.004 .604 ±.005 .694 ±.001 .693 ±.000 
+
+Landmark [16] .800 ±.007 .796 ±.007 .670 ±.006 .780 ±.002 .798 ±.004 
+
+w = LastDrift [16] .760 ±.001 .745 ±.008 .570 ±.004 .727 ±.002 .798 ±.005 
+
+ImbalancedTasks dataset This dataset aims to investigate whether the fre-quency of task occurrences affects performance. Although TFCLPM achieves the highest average accuracy (cf. Table 3), the stream analysis reveals some in-stability. Fig. 3 shows the accuracy per event index, where TFCLPM initially performs well but degrades in later stages. This is further clarified by the task-specific forgetting heatmap in Fig. 4. In these heatmaps, warm colors indicate positive knowledge retention (improvements), white indicates stability and cold colors indicate forgetting. TFCLPM shows strong retention for the first three tasks, while DynaTrainCDD [11] displays severe forgetting for Task 2, indicated by deep blue cells. CNAPwP demonstrates robust adaptation, maintaining pos-itive deltas (red, light red) across task recurrences, which is an indication of effective knowledge retainment even when task frequencies vary. Prompt-Based Online Continual Learning for Next Activity Prediction 19 0 5 10 15 20 25 
+
+> Event Index ( ×10 3)
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+
+ImbalancedTasks dataset (Evaluation Phase)      
+
+> DynaTrainCDD Landmark w = Last Drift GAN TFCLPM CNAPwP
+
+Fig. 3. The accuracy per event for all methods on the ImbalancedTasks dataset. The plot reveals that while baselines like TFCLPM initially perform well, they suffer from degradation in later stages of the stream. In contrast, CNAPwP (dark blue line) demon-strates robust adaptation, maintaining higher stability and positive performance deltas even as task frequencies vary significantly throughout the stream. T1 T2 T3 T4                                              
+
+> 1st 2nd 3rd
+> Recurrence
+> +0.00 +3.79 +1.98 +0.00
+> +2.57 +3.52 +0.69 +0.00
+> -6.25 +5.56 +4.23 +0.00
+> CNAPwP
+> T1 T2 T3 T4
+> +0.00 -0.49 +12.28 +0.00
+> +3.40 -11.99 -10.35 +0.00
+> +3.66 -9.70 -19.97 +0.00
+> TFCLPM
+> T1 T2 T3 T4
+> +0.00 +0.00 +0.00 +0.00
+> -1.58 -9.05 -7.03 +0.00
+> -8.98 -19.81 +4.37 +0.00
+> Landmark
+> T1 T2 T3 T4
+> +0.00 -0.58 -14.80 -8.95
+> -6.25 -22.63 +0.00 -8.77
+> +0.00 +0.00 +0.00 +0.00
+> DynaTrainCDD
+> -20
+> -10
+> +0
+> +10
+> +20
+
+Fig. 4. Heatmaps showing the accuracy drop per task (task-specific forgetting) for the 
+
+ImbalancedTasks dataset for the four best-performing methods. Warm colors indicate positive knowledge retentions (improvements), white indicates stability and cold colors indicate forgetting. 
+
+RecurrentTasks dataset CNAPwP achieves the highest average accuracy of .789 on this dataset. Fig. 5 illustrates the accuracy per event, showing that CNAPwP recovers swiftly after task transitions compared to DynaTrainCDD, which generally takes longer to regain accuracy. The figure also highlights that while the IncrementalUpdate (w = LastDrift) [16] method maintains reasonable accuracy in stable periods, it suffers from deep, catastrophic spikes during spe-cific task transitions, indicating a lack of training data. The robustness of our approach is further analyzed in the task-specific forgetting heatmaps (cf. Fig. 6). While methods like TFCLPM and DynaTrainCDD exhibit high retention on specific tasks, CNAPwP demonstrates balanced and stable retention across all tasks. This consistent performance, avoiding the forgetting trends observed in methods like Landmark [16] for Task 1, ultimately contributes to CNAPwP’s superior average accuracy. 20 M. Hassani et al. 0 10 20 30 40 50 60 70 80 
+
+Event Index ( ×10 3)
+
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+
+RecurrentTasks dataset (Evaluation Phase) 
+
+DynaTrainCDD Landmark w = Last Drift GAN TFCLPM CNAPwP 
+
+Fig. 5. The accuracy per event for all methods on the RecurrentTasks dataset. It highlights CNAPwP’s ability to recover accuracy swiftly following task transitions, whereas DynaTrainCDD takes noticeably longer to regain performance. The graph also exposes the instability of the IncrementalUpdate baseline (w = LastDrift), which suffers from deep, catastrophic spikes during specific task transitions due to insufficient training data. T1 T2 T3                   
+
+> 1st 2nd 3rd 4th 5th 6th 7th 8th 9th
+> Recurrence
+> +0.00 +3.79 +1.98
+> +0.00 +3.71 +3.13
+> +0.00 +3.70 +3.45
+> +0.00 +3.48 +2.47
+> +0.00 +3.26 +2.30
+> +0.00 +3.12 +1.20
+> +0.68 +3.97 +1.57
+> -2.15 +3.29 +2.04
+> +0.29 +3.34 +3.21
+
+CNAPwP 
+
+T1 T2 T3                   
+
+> +0.00 -0.49 +12.28
+> +0.00 +0.25 +11.52
+> +0.00 +1.26 +11.29
+> +0.00 +4.19 +13.66
+> +0.00 +2.53 +16.69
+> +0.39 +0.75 +11.29
+> +0.78 +0.58 +11.46
+> +0.07 +1.34 +10.99
+> +0.91 +1.05 +8.50
+
+TFCLPM 
+
+T1 T2 T3                   
+
+> +0.00 +1.28 +0.30
+> +0.00 +3.00 +0.57
+> +0.00 +3.20 +0.91
+> +0.00 +3.64 +2.06
+> -2.03 +3.29 +3.29
+> -1.90 +1.05 +1.05
+> -0.34 +3.44 +0.84
+> -4.73 +2.68 +0.01
+> -0.98 +2.27 +1.21
+
+Landmark 
+
+T1 T2 T3                   
+
+> +0.00 +3.24 +12.98
+> +0.00 +3.06 +18.92
+> +0.00 +2.57 +17.05
+> +0.00 +6.37 +18.25
+> +0.00 +3.48 +12.74
+> +0.00 +2.88 +9.04
+> +1.81 +2.43 +17.77
+> +3.43 +3.15 +12.59
+> +3.49 +3.12 +13.09
+
+DynaTrainCDD 
+
+-10 
+
+-5 
+
++0 
+
++5 
+
++10 
+
++15 
+
++20 
+
+Fig. 6. Heatmaps showing the accuracy drop per task (task-specific forgetting) for the RecurrentTasks dataset for the four best-performing methods. While methods like TFCLPM and DynaTrainCDD exhibit high retention on specific tasks, CNAPwP demonstrates balanced and stable retention across all tasks, leading to the overall highest accuracy. 
+
+RandomTasks dataset In the RandomTasks dataset, where tasks appear in randomized batches, CNAPwP again secures the highest average accuracy. The stream accuracy in Fig. 7 shows that while most methods dip during task transi-Prompt-Based Online Continual Learning for Next Activity Prediction 21 
+
+tions, CNAPwP maintains higher baseline performance. The heatmap in Fig. 8 highlights specific weaknesses of competing methods. For instance, Incremen-talUpdate (w = LastDrift) suffers from severe forgetting on Task 1 in the third occurrence (-23.72). TFCLPM shows retention in Task 3 (+21.05), but the over-all higher accuracy during the full stream still contributes to CNAPwP’s superior accuracy. 0 10 20 30 40 50 60      
+
+> Event Index ( ×10 3)
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> RandomTasks dataset (Evaluation Phase)
+> DynaTrainCDD Landmark w = Last Drift GAN TFCLPM CNAPwP
+
+Fig. 7. The accuracy per event for all methods on the RandomTasks dataset. In this scenario of randomized task batches, CNAPwP consistently secures a higher baseline performance compared to competitors. While most methods experience significant dips during task transitions, the prompt-based approach effectively mitigates these drops in most cases, maintaining superior average accuracy across the evaluation phase. 22 M. Hassani et al. 1st 2nd 3rd                   
+
+> Recurrence
+> +0.00 +4.08 +2.36 +2.10 -2.30 -0.94 +2.77
+> +2.57 +3.52 +0.69 -1.93 -0.56 -4.96 -3.35
+> -6.25 +5.56 +4.23 +2.55 -7.74 +7.03 -2.35
+
+CNAPwP                   
+
+> +0.00 -0.28 +5.07 +7.67 +1.59 +0.92 +2.33
+> -0.50 -2.16 +10.24 +4.11 +5.85 +3.67 +1.71
+> -9.37 +1.27 +21.05 +8.86 -7.03 +5.15 +0.02
+
+TFCLPM                         
+
+> T1 T2 T3 T4 T5 T6 T7
+> 1st 2nd 3rd
+> Recurrence
+> +0.00 +1.78 -0.70 +4.81 -0.12 -1.05 +1.87
+> +1.87 +0.54 +3.67 +4.94 +0.30 +0.25 +0.18
+> -9.04 +3.98 +4.95 +7.94 -5.03 +7.48 -1.68
+
+Landmark                         
+
+> T1 T2 T3 T4 T5 T6 T7
+> +0.00 +1.36 +4.34 +5.53 +0.15 -3.24 +4.90
+> +1.87 +4.52 +6.08 +5.87 +2.23 -0.54 +1.80
+> -23.72 +6.03 +0.58 +9.44 -12.68 +4.09 +0.06
+
+w = Last Drift 
+
+> -20
+> -10
+> +0
+> +10
+> +20
+
+Fig. 8. Heatmaps showing the accuracy drop per task (task-specific forgetting) for the RandomTasks dataset for the four best-performing methods.The heatmaps isolate specific weaknesses in competing methods, such as the severe forgetting observed in the Incremental Update baseline on Task 1’s third occurrence (-23.72% accuracy drop). CNAPwP avoids such drastic failures, showing broader stability that outweighs the localized gains seen in methods like TFCLPM. 
+
+Recurrent BPIC2015 dataset This dataset presents synthetic recurrent drifts based on several different municipalities. Table 3 shows that the Landmark method achieves the highest accuracy (.670), closely followed by CNAPwP (.662) and TFCLPM (.655). The accuracy plot in Fig. 9 reveals high volatility for all methods due to both the complexity of the underlying process and the high num-ber of classes. The task-specific forgetting heatmap (cf. Fig. 10) provides further insight. CNAPwP demonstrates exceptional retention capabilities on Tasks 2, 3 and 4, displaying deep red cells with high positive deltas, where other base-lines often show weaker retention. However, CNAPwP suffers from significant forgetting on Task 1 in later occurrences, whereas the Landmark method re-mains relatively stable on this specific task. This localized degradation on Task 1 counteracts the strong gains made on other tasks, allowing Landmark to secure a slightly higher overall average accuracy. Prompt-Based Online Continual Learning for Next Activity Prediction 23 0 5 10 15 20 25      
+
+> Event Index ( ×10 3)
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Accuracy
+> Recurrent BPIC15 dataset (Evaluation Phase)
+> DynaTrainCDD Landmark w = Last Drift GAN TFCLPM CNAPwP
+
+Fig. 9. The accuracy per event for all methods on the Recurrent BPIC2015 dataset. The plot shows high volatility for all methods due to the complexity of the underlying process and the high number of classes. While the Landmark method achieves slightly higher overall accuracy, CNAPwP remains highly competitive and follows similar con-vergence patterns despite the difficult environment. T1 T2 T3 T4                                              
+
+> 1st 2nd 3rd
+> Recurrence
+> -11.76 +14.36 +12.79 +10.15
+> -6.86 +11.73 +12.30 +13.79
+> +0.00 +15.98 +8.42 +15.66
+> CNAPwP
+> T1 T2 T3 T4
+> -0.86 +6.34 +6.93 -2.97
+> +1.32 +7.37 +4.77 -10.02
+> +0.00 +8.34 +12.87 -5.14
+> GAN
+> T1 T2 T3 T4
+> -2.44 +14.41 +12.15 +7.35
+> -0.52 +14.43 +10.79 +10.01
+> +0.00 +16.69 -0.49 +2.30
+> Landmark
+> T1 T2 T3 T4
+> -5.50 +7.68 +5.72 +7.81
+> -8.32 +8.01 +8.89 +5.18
+> +0.00 +9.85 -7.48 -10.37
+> w = Last Drift
+> -20
+> -10
+> +0
+> +10
+> +20
+
+Fig. 10. Heatmaps showing the accuracy drop per task (task-specific forgetting) for the 
+
+Recurrent BPIC2015 dataset for the four best-performing methods. CNAPwP exhibits exceptional retention capabilities on Tasks 2, 3, and 4, indicated by deep red cells with high positive deltas where other baselines such as GAN and IncrementalUpdate (w = LastDrift). However, it does experience some localized forgetting on Task 1 in later occurrences, which slightly offsets its overall gains compared to the stable Landmark method. 
+
+BPIC 2017 dataset Fig. 11 displays the accuracy per event for the BPIC2017 
+
+dataset, which (arguably) contains no drifts. Unlike the synthetic datasets with clear abrupt drifts, this real-world dataset exhibits more stable convergence pat-terns. TFCLPM achieves the highest average accuracy (.893) , followed by Dy-naTrainCDD (.820) and CNAPwP (0.818). The accuracy plot illustrates that while all methods require a brief adaptation period before converging to similar high accuracy levels, the GAN-based method [23] performs significantly worse (0.693). 24 M. Hassani et al. 0 20 40 60 80 100 120 140 160      
+
+> Event Index ( ×10 3)
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> BPIC2017 dataset (Evaluation Phase)
+> DynaTrainCDD Landmark w = Last Drift GAN TFCLPM CNAPwP
+
+Fig. 11. The accuracy per event for all methods on the BPIC 2017 dataset. This dataset (arguably) represents a stable environment with no abrupt drifts, allowing most meth-ods to converge to high accuracy levels after a brief adaptation period. TFCLPM and CNAPwP perform similarly well, whereas the GAN-based approach struggles signifi-cantly, failing to reach the high accuracy standards set by the other methods. 
+
+Running Time To assess the feasibility of our approach for real-time imple-mentation, we calculate the processing time per event, as detailed in Table 4. DynaTrainCDD consistently demonstrates the lowest running time per event across almost all datasets (ranging from 1.90 ms to 9.13 ms), benefiting from its lightweight drift-detection mechanism. In contrast, CNAPwP generally incurs a higher computational cost due to the overhead of the prefix-tuning mechanism. This difference is most pronounced in the complex Recurrent BPIC2015 dataset, where CNAPwP requires 25.04 ms per event compared to DynaTrainCDD’s 9.13 ms, which highlights how the complexity of the event log can impact our ap-proach’s processing speed. 
+
+Table 4. Processing time per event and standard deviation after 5 runs of each method over each dataset (in milliseconds). Method Dataset 
+
+RandTasks ImbalTasks Recur BPIC15 RecurTasks BPIC17 
+
+CNAPwP (ours) 3.29 ±2.13 2.98 ±1.42 25.04 ±1.76 3.16 ±2.34 10.12 ±1.98 
+
+DynaTrainCDD [11] 2.06 ±1.24 1.90 ±1.37 9.13 ±1.84 2.45 ±0.87 8.41 ±1.12 
+
+TFCLPM [25] 2.23 ±2.31 4.62 ±2.65 12.14 ±3.12 2.81 ±1.72 11.02 ±1.33 
+
+GAN [23] 5.08 ±2.15 5.22 ±2.79 22.50 ±1.38 5.23 ±1.95 4.56 ±2.78 
+
+Landmark [16] 63.85 ±6.47 18.45 ±8.32 229.25 ±7.68 33.98 ±9.13 13.59 ±7.98 
+
+w = LastDrift [16] 3.03 ±1.96 2.41 ±1.52 21.26 ±1.43 2.62 ±0.93 13.78 ±2.29 
+
+However, CNAPwP remains highly competitive on BPIC2017 (10.12 ms) , where it performs faster than both TFCLPM (11.02 ms) and IncrementalUpdate Prompt-Based Online Continual Learning for Next Activity Prediction 25 
+
+(w= LastDrift) (13.78 ms). Although CNAPwP is not consistently the fasted method, the processing time per event remains in the millisecond range (roughly 3 ms to 25 ms). Given that business process activities typically unfold over minutes or hours, this latency remains acceptable. This confirms that CNAPwP maintains near real-time performance suitable for practical deployment despite its architectural complexity. 
+
+6.2 Ablation Study 
+
+To confirm the effectiveness of using both the E- and G-prompts, an ablation study compares the average accuracy on the RecurrentTasks dataset under four conditions: using only the E-prompt, using only the G-prompt, using nei-ther prompt, and using both prompts (CNAPwP). For the baseline without prompts, a model is trained on the initial 500 events, after which its layer weights are frozen, leaving only the classification head trainable. This setup is chosen to establish a static baseline that isolates the contribution of the prompting mecha-nism. The value of 500 has been chosen because it represents an average window size and the GAN method also uses this value for initial training. By prevent-ing the backbone from updating, we simulate a scenario where the model lacks the specific plasticity provided by the prompts. It allows us to quantify exactly how much knowledge retention and adaptation the G- and E- prompt contribute compared to a fixed feature extractor.         
+
+> Table 5. Average accuracy value for each condition on the RecurrentTasks dataset. Condition CNAPwP E-Prompt G-Prompt No Prompt Average Accuracy .789 .773 .770 .709
+
+Table 5 reports accuracy across the four conditions. The combination of both E- and G-prompts yields the highest performance on the RecurrentTasks 
+
+dataset, confirming their complementary benefit. Fig. 12 illustrates accuracy trends by event index, revealing key differences. The G-Prompt alone reduces sharp drops after task transitions, while the E-Prompt aids recovery. Without prompts, accuracy remains consistently lower and fails to match the combined setup. These results emphasize the importance of using both prompts to enhance stability and performance. 26 M. Hassani et al. 0 10 20 30 40 50 60 70 80    
+
+> Event Index ( ×10 3)
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> RecurrentTasks dataset (Ablation Study)
+> CNAPwP E-Prompt G-Prompt No Prompt
+
+Fig. 12. The accuracy for each event index for the four conditions in the ablation study. It confirms that combining both E-Prompts and G-Prompts (the CNAPwP line) yields the highest performance. The distinct roles are visible: the G-Prompt helps in reducing sharp performance drops immediately after task transitions, while the E-Prompt is crucial for aiding the model’s rapid recovery. 
+
+Prompting Function The original DualPrompt study compared two prompting functions: prefix tuning and prompt tuning [26]. We conducted a comparative analysis between both to determine the most effective prompting strategy for CNAPwP. As shown in Table 6, both approaches yield similar average accuracies across all datasets, with prefix tuning showing a slight advantage in accuracy and a significantly reduced runtime. Given the trade-off between accuracy and efficiency, prefix tuning was selected as the prompting function in CNAPwP. 
+
+Table 6. Total accuracy with a prompting function, where bold text shows the highest accuracy or lowest running time for each prompting function and dataset. 
+
+Prefix tuning (Pre-T) Prompt tuning (Pro-T) 
+
+Accuracy Duration (s) Accuracy Duration (s) 
+
+RandomTasks .813 264.26 .800 325.47 
+
+RecurrentTasks .789 318.20 .780 401.55 
+
+ImbalancedTasks .797 103.82 .798 104.08 
+
+Recurrent BPIC2015 .662 801.80 .657 1073.63 
+
+BPIC2017 .818 2114.40 .812 2509.76 
+
+7 Conclusion and Future Work 
+
+In this work, we propose CNAPwP, a novel approach for continual next activity prediction aimed at mitigating catastrophic forgetting. We evaluated its per-formance using various metrics, including a novel measure called task-specific Prompt-Based Online Continual Learning for Next Activity Prediction 27 
+
+forgetting, which quantifies the method’s memory retention. Experiments con-ducted on several datasets indicate that CNAPwP achieves the highest average accuracy on two of the four datasets. In one dataset, it ranks second, with Land-mark performing the best but being highly inefficient. Therefore, CNAPwP is still regarded as the superior option. Furthermore, analyses of accuracy per event index and task-specific forgetting indicate that our approach exhibits minimal forgetting compared to alternative methods. Detecting concept drifts was outside the scope of the paper. In the future, it is crucial to explore areas such as integrating a robust concept drift detection mechanism, possibly for both sudden and gradual drifts. Additionally, exploring alternative methods for task comparison might offer sharper, faster, and more efficient ways of performing task similarity detection. Finally, our experimental results highlighted that the complexity of the event log directly impacts the processing time of the prompting mechanism (cf. Ta-ble 4). While CNAPwP maintains robust accuracy in these complex scenarios, the computation cost increases relative to methods such as DynaTrainCDD. We hypothesize that this latency is partly attributed to the current bucketing strategy. Complex logs typically exhibit high variance in trace lengths, which may lead to fragmented batches across numerous buckets, thereby reducing par-allelization efficiency. Future research should therefore investigate the specific relationship between log complexity and prompt overhead, with the aim of de-veloping lightweight prompting strategies that optimize this trade-off for highly complex, real-time environments. 28 M. Hassani et al. 
+
+References 
+
+1. Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., Tuytelaars, T.: Memory aware synapses: Learning what (not) to forget. In: ECCV. pp. 139–154 (2018) 2. Bifet, A., Gavalda, R.: Learning from time-changing data with adaptive windowing. In: SDM. pp. 443–448 (2007) 3. Chrysakis, A., Moens, M.F.: Online continual learning from imbalanced data. In: ICML. pp. 1952–1961 (2020) 4. Feldman, Z., Fournier, F., Franklin, R., Metzger, A.: Proactive event processing in action: a case study on the proactive management of transport processes. In: DEBS. pp. 97–106 (2013) 5. Ferilli, S., Angelastro, S.: Activity prediction in process mining using the WoMan framework. Journal of Intelligent Information Systems 53 , 93–112 (2019) 6. Gama, J., Žliobait˙ e, I., Bifet, A., Pechenizkiy, M., Bouchachia, A.: A survey on concept drift adaptation. CSUR 46 (4), 1–37 (2014) 7. Hou, S., Pan, X., Loy, C.C., Wang, Z., Lin, D.: Lifelong learning via progressive distillation and retrospection. In: ECCV. pp. 437–452 (2018) 8. Huete, J., Qahtan, A.A., Hassani, M.: PrefixCDD: Effective online concept drift detection over event streams using prefix trees. In: COMPSAC. pp. 328–333 (2023) 9. Hurtado, J., Salvati, D., Semola, R., Bosio, M., Lomonaco, V.: Continual learning for predictive maintenance: Overview and challenges. ISWA 19 , 200251 (2023) 10. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al.: Overcoming catastrophic forgetting in neural networks. PNAS 114 (13), 3521–3526 (2017) 11. Kosciuszek, T., Hassani, M.: Online next activity prediction under concept drifts. In: CAiSE Workshops. pp. 335–346 (2024) 12. Lesort, T., Caselles-Dupré, H., Garcia-Ortiz, M., Stoian, A., Filliat, D.: Generative models from the perspective of continual learning. In: IJCNN. pp. 1–8 (2019) 13. Li, Z., Hoiem, D.: Learning without forgetting. TPAMI 40 (12), 2935–2947 (2017) 14. Lopez-Paz, D., Ranzato, M.: Gradient episodic memory for continual learning. NeurIPS 30 , 6470–6479 (2017) 15. Maaradji, A., Dumas, M., La Rosa, M., Ostovar, A.: Fast and accurate business process drift detection. In: BPM. pp. 406–422 (2015) 16. Pauwels, S., Calders, T.: Incremental predictive process monitoring: The next ac-tivity case. In: BPM. pp. 123–140 (2021) 17. Rahaf, A., Lucas, C.: Online continual learning with maximally interfered retrieval. In: NeurIPS. pp. 1–10 (2019) 18. Rebuffi, S.A., Kolesnikov, A., Sperl, G., Lampert, C.H.: icarl: Incremental classifier and representation learning. In: CVPR. pp. 2001–2010 (2017) 19. Rolnick, D., Ahuja, A., Schwarz, J., Lillicrap, T., Wayne, G.: Experience replay for continual learning. NeurIPS 32 (2019) 20. Rusu, A.A., Rabinowitz, N.C., Desjardins, G., Soyer, H., Kirkpatrick, J., Kavukcuoglu, K., Pascanu, R., Hadsell, R.: Progressive neural networks. arXiv:1606.04671 (2016) 21. Shin, H., Lee, J.K., Kim, J., Kim, J.: Continual learning with deep generative replay. NeurIPS 30 (2017) 22. Taymouri, F., La Rosa, M., Erfani, S.M.: A deep adversarial model for suffix and remaining time prediction of event sequences. In: SDM. pp. 522–530 (2021) 23. Taymouri, F., Rosa, M.L., Erfani, S., Bozorgi, Z.D., Verenich, I.: Predictive busi-ness process monitoring via generative adversarial nets: the case of next event prediction. In: BPM. pp. 237–256 (2020) Prompt-Based Online Continual Learning for Next Activity Prediction 29 24. Verbeek, T., Hassani, M.: Handling catastrophic forgetting: online continual learn-ing for next activity prediction. In: CoopIS. pp. 225–242 (2024) 25. Verbeek, T., Yao, R., Hassani, M.: Task-free continual learning with dynamic loss for online next activity prediction. In: ICPM Workshops. pp. 693–705 (2024) 26. Wang, Z., Zhang, Z., Ebrahimi, S., Sun, R., Zhang, H., Lee, C.Y., Ren, X., Su, G., Perot, V., Dy, J., et al.: Dualprompt: Complementary prompting for rehearsal-free continual learning. In: ECCV. pp. 631–648 (2022) 27. Wang, Z., Zhang, Z., Lee, C., Zhang, H., Sun, R., Ren, X., Su, G., Perot, V., Dy, J.G., Pfister, T.: Learning to prompt for continual learning. CoRR (2022) 28. Wolters, L., Hassani, M.: Predicting activities of interest in the remainder of cus-tomer journeys under online settings. In: ICPM Workshops. pp. 145–157 (2022) 29. Zenke, F., Poole, B., Ganguli, S.: Continual learning through synaptic intelligence. In: PMLR. pp. 3987–3995 (2017)
