@@ -1,0 +1,1878 @@
+Title: Flexible and Scalable Bayesian Modelling of Spatio-Temporal Hawkes Processes
+
+URL Source: https://arxiv.org/pdf/2603.28556v1
+
+Published Time: Tue, 31 Mar 2026 02:35:34 GMT
+
+Number of Pages: 43
+
+Markdown Content:
+# Flexible and Scalable Bayesian Modelling Of Spatio-Temporal Hawkes Processes 
+
+Wenqing Liu ∗1, Xenia Miscouridou †2, and Déborah Sulem ∗11Faculty of Informatics, Università della Svizzera italiana, Lugano, Switzerland 
+
+> 2
+
+Department of Mathematics and Statistics, University of Cyprus, Nicosia, Cyprus 
+
+Abstract 
+
+Existing spatio-temporal Hawkes process models typically rely on either parametric or semiparametric assumptions, limiting the model’s ability to capture complex endogenous and exogenous event dynamics. We propose a fully Bayesian nonparametric framework for spatio-temporal Hawkes processes using additive Gaussian processes for the prior distributions on the background rate and the triggering kernel. This additive structure enhances interpretability by decoupling temporal and spatial effects while maintaining high modelling flexibility across the entire spatio-temporal domain. To address scalability, we develop a sparse variational inference scheme based on the Gaussian variational family. Synthetic experiments demonstrate that the proposed method accurately recovers background and triggering structures, achieving superior performance compared to existing alternatives. When applied to real-world datasets, it achieves higher held-out log-likelihoods and reveals interpretable spatio-temporal structures of the self-excitation mechanism. Overall, the framework provides a flexible, scalable, interpretable, and uncertainty-aware approach for modelling complex excitation patterns in spatio-temporal event data. 
+
+Keywords: Bayesian nonparametrics; Gaussian process; Hawkes process; spatio-temporal modelling; variational inference. 
+
+# 1 Introduction 
+
+Many real-world phenomena exhibit contagious behaviour, where events cluster in both time and space. In seismology, major earthquakes are typically followed by aftershock sequences concentrated near the epicenter and shortly after the main shock [Ogata, 1988, 1998]. In criminology, burglary incidents often exhibit “near-repeat" victimisation, where one crime triggers additional offenses in nearby areas within a short period [Mohler et al., 2011]. Similar spatio-temporal clustering has been observed in terrorism and armed conflict data, where initial attacks may precipitate cycles of follow-up violence [Wang et al., 2023]. These examples all share the feature that the occurrence of one event increases the likelihood of subsequent events nearby in space and time. This characteristic, often referred to as self-excitation, means that past events increase the probability of future events. Hawkes processes [Hawkes, 1971] provide a general framework for modelling such history-dependent dynamics of events occurrences. They represent the conditional intensity as the sum of a background rate, capturing exogenous influences, and a triggering kernel that describes how past events increase the likelihood of a future event. By extending this formulation to incorporate spatial dependence, spatio-temporal Hawkes processes model how both the timing and the locations of past events    
+
+> ∗Emails: wenqing.liu@usi.ch ,deborah.sulem@usi.ch
+> †Email: miscouridou.xenia@ucy.ac.cy
+
+1
+
+> arXiv:2603.28556v1 [stat.ME] 30 Mar 2026
+
+jointly shape the risk of future events, and have become a standard tool for studying event data that exhibit clustering and contagion effects. While the Hawkes model is conceptually flexible, practical implementations typically impose strong assumptions on the forms of its main components, the background rate and the triggering kernel. As a result, most spatio-temporal Hawkes processes rely on specified parametric forms for these components. Temporal triggering kernels are typically assumed to be exponential or power-law [Bernabeu et al., 2025] whereas spatial kernels are often taken to be Gaussian [Miscouridou et al., 2023]. Furthermore, most Hawkes processes in literature assume a constant background rate [Bernabeu et al., 2025, Hawkes, 1971], thereby ignoring the temporal or spatial variation coming from exogenous factors. All the aforementioned assumptions facilitate inference but restrict the flexibility of the model, and may prevent it from capturing complex temporal trends, spatial heterogeneity, and interactions between temporal and spatial coordinates that are often present in real-world event data. To overcome the limitations of parametric spatio-temporal Hawkes processes, the background rate and the triggering kernel should ideally be modelled with flexible, data-driven functional forms rather than restricted to fixed parametric shapes. A Bayesian nonparametric formulation naturally provides this flexibility through priors that allow the functions to vary freely while quantifying uncertainty in the estimated spatio-temporal structure. At the same time, fully nonparametric Bayesian models require posterior inference over a vast latent space that scales with both data size and dimensionality, rendering them computationally prohibitive in large-scale spatio-temporal settings, which makes scalability an essential practical consideration. Furthermore, our framework is computationally scalable to large spatio-temporal point patterns thanks to a variational approximation. Therefore, we propose a novel fully Bayesian nonparametric spatio-temporal Hawkes process that satisfies both flexibility and scalability requirements with the following contributions: (1) We model both the background rate and the triggering kernel in a fully Bayesian nonparametric way using Gaussian process (GP) priors. Existing spatio-temporal Hawkes processes typically impose parametric forms on at least one of these components; this entirely nonparametric Bayesian framework allows the data to determine temporal and spatial structure while providing uncertainty quantification. (2) We employ an additive GP representation for both components of the Hawkes process. This additive structure increases interpretability by modelling temporal, spatial, and cross-dimensional interaction effects separately rather than forcing them into a single joint kernel. Beyond interpretability, we empirically observe that the additive formulation typically enhances numerical stability and performs at least as well as its non-additive alternative. (3) We perform posterior inference using a variational Gaussian approximation (VGA) built on a sparse GP representation of the latent components of the Hawkes process. VGA along with the sparse GP enables efficient optimisation and computational scalability. (4) We evaluate our framework using various link functions and GP kernels across both synthetic and real-world datasets, whereas existing Bayesian nonparametric temporal Hawkes methods are typically restricted to specific link functions for conjugacy. This demonstrates the versatility of our framework in supporting diverse model specifications. The remainder of this paper is organised as follows. Section 2 reviews related work, Section 3 presents the proposed methodology, Section 4 validates the performance on both synthetic and real-world data, and Section 5 offers a discussion and conclusion. 
+
+# 2 Related methods 
+
+In purely temporal settings, Hawkes processes have been used to model complex point patterns [Hawkes, 1971, Sulem et al., 2022, 2024]. Their extension to the spatio-temporal domain has received increasing attention in recent years due to their ability to capture self-exciting phenomena across both dimensions. This 2modelling framework has been applied in various fields, including finance [Bacry et al., 2015, Chen et al., 2022], neuroscience [Johnson, 1996], criminology [Mohler et al., 2011], epidemiology [Chiang et al., 2022], and seismology [Ogata, 1998, Kwon et al., 2023]. Several recent surveys provide broader overviews of these developments. In particular, Bernabeu Atanasio et al. [2024] focuses on recent methodological advances, while Reinhart [2018] covers foundational aspects along with applications across multiple domains. Most classical spatio-temporal Hawkes processes adopt a fully parametric specification, in which both the background rate and the triggering kernel are described by fixed functional forms. The background rate is often modeled as constant [Schoenberg, 2023, Bernabeu et al., 2025], while the triggering kernel is typically taken to be separable, with exponential decay over time and Gaussian spread over space, such as in [Miscouridou et al., 2023, Bernabeu Atanasio et al., 2024, Mohler, 2014]. Such parametric formulations offer interpretability and computational tractability, but their form can be inadequate for capturing complex or irregular spatio-temporal patterns often observed in real-world data. Relaxing these assumptions, a line of work has explored nonparametric modelling of the intensity within a Bayesian framework, most notably via log-Gaussian Cox processes. In these models, a GP prior is placed on a latent log-intensity, which is then mapped to the positive domain through an exponential or sigmoid link function to ensure non-negativity [Møller et al., 1998, Samo and Roberts, 2015]. In the context of Hawkes processes, Miscouridou et al. [2023] proposed the Cox–Hawkes model, which uses a log-Gaussian Cox process prior for the background rate while retaining parametric exponential and Gaussian kernels for the triggering kernel. This hybrid design introduces nonparametric flexibility for the baseline but still relies on strong structural assumptions for the excitation mechanism. Posterior inference is performed using MCMC, aided by pre-trained GP generators to accelerate sampling. Alaimo Di Loro et al. [2025] proposed a semi-parametric Hawkes process model, which treats the background component nonparametrically by estimating its spatio-temporal varying intensity directly on the road network, while preserving a structured form for the excitation mechanism. This framework utilises a stochastic-reconstruction algorithm that iteratively updates the background risk through empirical smoothing of events, rather than assuming a fixed parametric baseline. By combining this flexible background with a parametric triggering component, the model effectively balances local data adaptability with the interpretability of self-excitation patterns. A different approach is taken by Zhou et al. [2020], who proposed a fully nonparametric temporal Hawkes model by placing GP priors on both the background rate and the triggering kernel. A sigmoid link function is used not only to enforce positivity but also, when combined with suitable latent variables, to achieve conjugacy that enables a range of inference schemes, including EM algorithms, Gibbs sampling, and variational inference (VI). While this framework avoids parametric assumptions on the triggering kernel and captures rich temporal dynamics, it is limited to purely temporal data and is tightly coupled to the sigmoid link function. Extending it to a general spatio-temporal setting would require latent-variable updates over a high-dimensional space, causing the computational cost to grow prohibitively. Overall, the method is difficult to extend directly to the spatio-temporal domain or to accommodate alternative link functions. While the method of Zhou et al. [2020] represents a Bayesian nonparametric direction, a substantial literature on frequentist nonparametric estimation for Hawkes processes has also emerged. Maximum-likelihood-based methods have been developed to estimate triggering kernels and, in some cases, background rates in a flexible manner [Marsan and Lengline, 2008, Lewis and Mohler, 2011, Zhou et al., 2013]. These approaches are attractive due to their efficiency and asymptotic properties, but they yield point estimates rather than full distributions, and therefore do not provide uncertainty quantification for the inferred intensity components. From a Bayesian perspective, posterior inference is often carried out using Markov Chain Monte Carlo (MCMC) algorithms [Adams et al., 2009, Donnet et al., 2020, Miscouridou et al., 2023], which offer principled uncertainty quantification but can be computationally demanding, particularly for large spatio-temporal 3datasets. VI has emerged as a scalable alternative, providing approximate posterior distributions at a fraction of the computational cost [Malem-Shinitski et al., 2021, Sulem et al., 2022, Zhou et al., 2020]. Theoretical guarantees for such Bayesian nonparametric formulations in the spatio-temporal domain have also been established, including results on posterior contraction rates [Miscouridou and Sulem, 2026]. However, many existing VI approaches rely on independence assumptions that factorise the posterior over latent variables, potentially limiting the ability to capture complex posterior dependencies. This motivates the use of more expressive approximations, such as the Gaussian variational family, which we adopt in this work. Overall, these factors indicate the need to further relax parametric assumptions while maintaining scalability in Hawkes process modelling. However, existing methods either (i) maintain parametric structure in at least one component, (ii) remain confined to purely temporal settings, or (iii) lack a fully Bayesian treatment that is both nonparametric and scalable in space and time. Our work fills these gaps by proposing a novel fully Bayesian nonparametric spatio-temporal Hawkes model in which both the background rate and the triggering kernel are modelled with GP priors, and a scalable VI algorithm is used to approximate the posterior. 
+
+# 3 Methodology 
+
+3.1 Problem Setup 
+
+We assume that we observe a spatio-temporal point process 𝑁 on a bounded domain W = T × S , where 
+
+T = [0, 𝑇 ] is the temporal window, 𝑇 > 0 is the time horizon, and S ⊂ R𝑑 is the spatial domain. Typical choices include 𝑑 = 1 for a single spatial coordinate, 𝑑 = 2 for planar settings, and 𝑑 = 3 for applications such as latitude-longitude-depth. The data consists of one or multiple realisations of this point process 𝑁 . For clarity, we first consider that we only observe one sequence of points {( 𝑡 𝑖 , 𝑠 𝑖 )} 𝑛 𝑖 =1 with 𝑡 𝑖 ∈ T and 𝑠 𝑖 ∈ S . Let 
+
+H𝑡 = {( 𝑡 𝑖 , 𝑠 𝑖 ) : 𝑡 𝑖 < 𝑡 } denote the history up to time 𝑡 .The law of this process is specified by its conditional intensity. For each (𝑡, 𝑠 ) ∈ W , the conditional intensity, given the history H𝑡 , of a Hawkes process is 
+
+𝜆 (𝑡, 𝑠 | H 𝑡 ) = 𝜇 (𝑡, 𝑠 ) + ∑︁  
+
+> 𝑡 𝑖 <𝑡
+
+𝜙  𝑡 − 𝑡 𝑖 , 𝑠 − 𝑠 𝑖 
+
+, (1) where 𝜇 (𝑡, 𝑠 ) ≥ 0 is the background rate representing exogenous arrivals, and 𝜙 (Δ𝑡, Δ𝑠 ) ≥ 0 is the triggering kernel characterizing the endogenous self-exciting effect, where Δ𝑡 = 𝑡 − 𝑡 𝑖 and Δ𝑠 = 𝑠 − 𝑠 𝑖 denote the relative time and spatial lags from a past event, respectively. The cumulative impact of these two components can be characterised by their respective 𝐿 1-norms. Specifically, the total expected number of background events within the observation domain W is given by: 
+
+∥𝜇 ∥1 =
+
+∫
+
+> S
+
+∫
+
+> T
+
+𝜇 (𝑡, 𝑠 ) d𝑡 d𝑠, (2) Meanwhile, the overall strength of the self-excitation is summarised by the branching ratio, defined as the 
+
+𝐿 1-norm of 𝜙 over its support: 
+
+∥𝜙 ∥1 =
+
+∫
+
+> S
+
+∫ ∞
+
+> 0
+
+𝜙 (Δ𝑡, Δ𝑠 ) dΔ𝑡 dΔ𝑠. (3) The branching ratio ∥𝜙 ∥1 represents the expected number of offspring events generated by a single event. To ensure the process is stable, i.e., does not explode, we assume the stationarity condition ∥𝜙 ∥1 <
+
+1 [Bernabeu Atanasio et al., 2024, Siviero et al., 2024, Reinhart, 2018, Miscouridou et al., 2023]. Under this condition, the total expected number of events in the bounded domain W can be approximated as 
+
+E[𝑁 (W)] ≈ ∥ 𝜇 ∥1/( 1 − ∥ 𝜙 ∥1) [Miscouridou et al., 2023] with 𝑁 (W the number of events in W. A detailed derivation of this approximation is provided in Appendix A. 43.2 Gaussian Process Prior 
+
+To flexibly model both the background rate 𝜇 and the triggering kernel 𝜙 , we introduce latent functions 𝑓 𝜇 
+
+and 𝑓 𝜙 and apply link functions to ensure non-negativity. Specifically, the conditional intensity of a Hawkes process in (1) is reformulated as 
+
+𝜆 (𝑡, 𝑠 | H 𝑡 ) = ℎ𝜇 
+
+  𝑓 𝜇 (𝑡, 𝑠 ) +∑︁  
+
+> 𝑡 𝑖 <𝑡
+
+ℎ𝜙 
+
+  𝑓 𝜙 (𝑡 − 𝑡 𝑖 , 𝑠 − 𝑠 𝑖 ) (4) where ℎ𝜇 , ℎ 𝜙 : R → R≥0 are fixed, non-negative, bijective and non-decreasing link functions, such as the softplus [Mei and Eisner, 2017, Sulem et al., 2022], sigmoid [Zhou et al., 2020, Malem-Shinitski et al., 2021], or exponential functions [Møller et al., 1998, Diggle et al., 2013, Miscouridou et al., 2023]. The latent functions 𝑓 𝜇 and 𝑓 𝜙 are given independent Gaussian process priors, 
+
+𝑓 𝜇 (𝑡, 𝑠 ) ∼ GP ( 𝜂 𝜇 , 𝐾 𝜇 ), 𝑓 𝜙 (Δ𝑡, Δ𝑠 ) ∼ GP ( 𝜂 𝜙 , 𝐾 𝜙 )
+
+where 𝑓 𝜇 is defined on absolute coordinates (𝑡, 𝑠 ), while 𝑓 𝜙 is defined on temporal and spatial lags 
+
+(Δ𝑡, Δ𝑠 ) = (𝑡 − 𝑡 𝑖 , 𝑠 − 𝑠 𝑖 ) with Δ𝑡 ≥ 0. Above, 𝜂 𝜇 and 𝜂 𝜙 denote the GP mean functions, which are assumed to be zero without loss of generality [Zhou, 2019]. The covariance kernels 𝐾 𝜇 and 𝐾 𝜙 encode prior beliefs about the smoothness and correlation structures of the latent functions. We primarily employ stationary families such as the squared-exponential (RBF) or Matérn [Williams and Rasmussen, 2006], parameterised by a signal variance 𝜎 2 (controlling amplitude) and lengthscales ℓ (controlling correlation ranges). For the spatio-temporal domain, we consider both traditional separable kernels which factorise into independent spatial and temporal components 
+
+𝐾 separable 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) = 𝜎 2 𝑘 𝑡 (𝑡, 𝑡 ′ | 1, ℓ 𝑡 ) 𝑘 𝑠 (𝑠, 𝑠 ′ | 1, ℓ 𝑠 ), (5) and a more interpretable additive framework [Plate, 1999, Duvenaud et al., 2011], where marginal and interaction effects are explicitly modelled to capture cross-dimensional dependencies 
+
+𝐾 additive 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) = 𝑘 𝑡 (𝑡, 𝑡 ′ | 𝜎 2 
+
+> 𝑡
+
+, ℓ 𝑡 ) + 𝑘 𝑠 (𝑠, 𝑠 ′ | 𝜎 2 
+
+> 𝑠
+
+, ℓ 𝑠 ) + 𝑘 𝑡 ,𝑠 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) | 𝜎 2
+
+> 𝑡 ,𝑠
+
+, ℓ 𝑡 ,𝑠 
+
+. (6) Mathematical definitions for all kernels are provided in Appendix B. 
+
+3.3 Model Likelihood 
+
+We now specialise to the two-dimensional spatial case ( 𝑑 = 2). For simplicity, let W = [0, 𝑇 ] × [ 0, 𝑋 ] × [ 0, 𝑌 ]
+
+with 𝑋, 𝑌 > 0 and D = {( 𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 )} 𝑛 𝑖 =1 denote the observed sequence of events on W. Following Daley and Vere-Jones [2008], the likelihood of a spatio-temporal Hawkes process is: 
+
+𝑝 (D | 𝜇, 𝜙 ) =
+
+> 𝑛
+
+Ö
+
+> 𝑖 =1
+
+𝜆 (𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 | H 𝑡 𝑖 )
+
+!
+
+exp 
+
+
+
+−
+
+∭
+
+> W
+
+𝜆 (𝑡, 𝑥, 𝑦 | H 𝑡 ) dt dx dy 
+
+
+
+. (7) For 𝑀 independent sequences {D (𝑚 ) = {( 𝑡 (𝑚 ) 
+
+> 𝑖
+
+, 𝑥 (𝑚 ) 
+
+> 𝑖
+
+, 𝑦 (𝑚 ) 
+
+> 𝑖
+
+)} 𝑛 𝑚 
+
+> 𝑖 =1
+
+}𝑀 𝑚 =1, the joint likelihood is the product of the likelihoods of each sequence: 
+
+𝑝 ({D (𝑚 ) }𝑀 𝑚 =1 | 𝜇, 𝜙 ) =
+
+> 𝑀
+
+Ö
+
+> 𝑚 =1
+
+" 𝑛 𝑚 Ö
+
+> 𝑖 =1
+
+𝜆  𝑡 (𝑚 ) 
+
+> 𝑖
+
+, 𝑥 (𝑚 ) 
+
+> 𝑖
+
+, 𝑦 (𝑚 ) 
+
+> 𝑖
+
+| H (𝑚 )
+
+> 𝑡 𝑖
+
+!
+
+exp 
+
+
+
+−
+
+∭
+
+> W
+
+𝜆 (𝑡, 𝑥, 𝑦 | H (𝑚 ) 
+
+> 𝑡
+
+) dt dx dy 
+
+#
+
+.
+
+Evaluating the likelihood in (7) is computationally demanding for nonparametric models. Unlike parametric triggering kernels, which often admit closed-form integrals, a nonparametric triggering kernel 5modelled by a GP requires explicit computation over history. Without structural restrictions, each event depends on all previous events, resulting in quadratic complexity in the number of observations. To reduce this burden, we follow [Sulem et al., 2024, Zhou et al., 2020] and assume the triggering kernel 
+
+𝜙 has finite support Ω𝜙 = [0, 𝑇 𝜙 ] × [− 𝑋 𝜙 , 𝑋 𝜙 ] × [− 𝑌 𝜙 , 𝑌 𝜙 ], with 𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 > 0, vanishing elsewhere. Under this assumption, only recent events within the support contribute to the intensity and the integral, reducing both computations to linear complexity. This assumption is empirically justified, as influence is typically localised in domains like neuroscience [Staerman et al., 2023, Eichler et al., 2017], finance [Bacry et al., 2015, Carreira, 2021], and criminology [Zhou et al., 2020]. Under this assumption, the likelihood (7) simplifies to the form derived in Appendix C: 
+
+𝑝 (D | 𝜇, 𝜙 ) = exp 
+
+
+
+−
+
+∫ 𝑇 
+
+> 0
+
+∫ 𝑋 
+
+> 0
+
+∫ 𝑌 
+
+> 0
+
+𝜇 (𝑡, 𝑥, 𝑦 ) dt dx dy 
+
+
+
+× exp −
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+∫ min (𝑇 𝜙 , 𝑇 −𝑡 𝑖 )
+
+> 0
+
+∫ min (𝑋 𝜙 , 𝑋 −𝑥 𝑖 )   
+
+> max (− 𝑋 𝜙 ,−𝑥 𝑖 )
+
+∫ min (𝑌 𝜙 , 𝑌 −𝑦 𝑖 )   
+
+> max (− 𝑌 𝜙 ,−𝑦 𝑖 )
+
+𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) dΔt d Δx d Δy
+
+!
+
+×
+
+> 𝑛
+
+Ö
+
+> 𝑖 =1
+
+©«
+
+𝜇 (𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 ) + ∑︁   
+
+> 𝑗 :𝑡 𝑗 <𝑡 𝑖
+
+𝜙 (Δ𝑡 𝑖 𝑗 , Δ𝑥 𝑖 𝑗 , Δ𝑦 𝑖 𝑗 )ª®¬
+
+.
+
+(8) where Δ𝑡 𝑖 𝑗 = 𝑡 𝑖 − 𝑡 𝑗 , Δ𝑥 𝑖 𝑗 = 𝑥 𝑖 − 𝑥 𝑗 , and Δ𝑦 𝑖 𝑗 = 𝑦 𝑖 − 𝑦 𝑗 .
+
+3.4 Inference 
+
+Having established the expression of the likelihood, our goal is to perform Bayesian inference for the background rate 𝜇 and the triggering kernel 𝜙 from the observed events D. Following the nonparametric framework established in Section 3.2, we do not place priors directly on 𝜇 and 𝜙 . Instead, these components are modelled as transformations of latent Gaussian processes, i.e., 𝜇 = ℎ𝜇 ( 𝑓 𝜇 ) and 𝜙 = ℎ𝜙 ( 𝑓 𝜙 ). Consequently, the inference problem translates to estimating these latent functions 𝑓 = { 𝑓 𝜇 , 𝑓 𝜙 } and hyperparameters 
+
+𝜃 = {𝜃 𝜇 , 𝜃 𝜙 } of the GP kernels. The specific joint posterior distribution over these latent functions is: 
+
+𝑝 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 | D) ∝ 𝑝 (D | 𝑓 𝜇 , 𝑓 𝜙 ) 𝑝 ( 𝑓 𝜇 | 𝜃 𝜇 ) 𝑝 ( 𝑓 𝜙 | 𝜃 𝜙 ) 𝑝 (𝜃 𝜇 ) 𝑝 (𝜃 𝜙 ). (9) where 𝑝 ( 𝑓 | 𝜃 ) denotes the GP prior and 𝑝 (𝜃 ) the hyperprior (for background or triggering kernel components). For practical computation, the latent functions 𝑓 𝜇 and 𝑓 𝜙 are evaluated on a finite discretisation grid. Specifically, for 𝑓 𝜇 , the grid has 𝑛 𝜇,𝑡 points in time and 𝑛 𝜇,𝑥 , 𝑛 𝜇,𝑦 points in space, giving a total number of points of 𝑁 𝜇 = 𝑛 𝜇,𝑡 × 𝑛 𝜇,𝑥 × 𝑛 𝜇,𝑦 . The grid for 𝑓 𝜙 has 𝑛 𝜙,𝑡 , 𝑛 𝜙,𝑥 , 𝑛 𝜙,𝑦 points in each dimension, resulting in 
+
+𝑁 𝜙 = 𝑛 𝜙,𝑡 × 𝑛 𝜙,𝑥 × 𝑛 𝜙,𝑦 grid points. Direct inference on this specific posterior (9) is intractable due to the non-conjugate relationship between the Hawkes likelihood and the Gaussian process priors. While Markov Chain Monte Carlo (MCMC) methods can theoretically yield exact samples from the posterior, they are computationally prohibitive due to the dimensionality of the discretised latent functions. Consequently, we adopt variational inference [Jordan et al., 1999, Blei et al., 2017] to achieve scalability and efficiency. The goal of variational inference is to approximate the intractable posterior 𝑝 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 | D) in (9) .A variational family Q is introduced to provide a tractable set of candidate densities over the latent variables, defined on the same domain as the posterior distribution. The variational distribution 𝑞 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 ) ∈ Q is chosen to minimise the Kullback–Leibler (KL) divergence to the true posterior. Finding this optimal 𝑞 is equivalent to maximising the Evidence Lower Bound (ELBO): 
+
+L( 𝑞 ) = E𝑞 
+
+h
+
+log 𝑝 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 , D) 
+
+i
+
+− E𝑞 
+
+h
+
+log 𝑞 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 )
+
+i
+
+. (10) 6A detailed derivation demonstrating this equivalence is provided in Appendix D. The choice of the variational family Q is critical for the quality of posterior approximation. In the present setting, the latent functions 𝑓 𝜇 and 𝑓 𝜙 are modelled as GPs, and it is therefore essential that the variational family preserves the correlation structure within each latent process while remaining computationally tractable. We adopt a Variational Gaussian Approximation (VGA) [Opper and Archambeau, 2009, Zhou, 2019] with the block-wise factorisation: 
+
+𝑞 ( 𝑓 𝜇 , 𝑓 𝜙 , 𝜃 𝜇 , 𝜃 𝜙 ) = 𝑞 ( 𝑓 𝜇 , 𝜃 𝜇 ) 𝑞 ( 𝑓 𝜙 , 𝜃 𝜙 ) (11) which assumes independence between the background and triggering components. Within each block, an additional factorisation is used: 
+
+𝑞 ( 𝑓 𝜇 , 𝜃 𝜇 ) = 𝑞 ( 𝑓 𝜇 ) 𝑞 (𝜃 𝜇 ), 𝑞 ( 𝑓 𝜙 , 𝜃 𝜙 ) = 𝑞 ( 𝑓 𝜙 ) 𝑞 (𝜃 𝜙 ). (12) This independence between the latent function and its hyperparameters is introduced for efficiency. The variational distributions over the latent functions are chosen as multivariate Gaussians: 
+
+𝑞 ( 𝑓 𝜇 ) = N ( 𝑚 𝜇 , Σ𝜇 ), 𝑞 ( 𝑓 𝜙 ) = N ( 𝑚 𝜙 , Σ𝜙 ). (13) The full covariance matrices Σ𝜇 and Σ𝜙 preserve the dependence between function values, allowing the variational distributions to reflect the smoothness structure induced by the GP priors. It is important to retain dependencies within the hyperparameters of each latent process. Since the hyperparameters 𝜃 of the GP kernels are positive, we define the variational approximation in the log-domain. Specifically, we assign multivariate Gaussian distributions to the log-transformed hyperparameters 𝛼 𝜇 = log 𝜃 𝜇 and 𝛼 𝜙 = log 𝜃 𝜙 :
+
+𝑞 (𝛼 𝜇 ) = N ( 𝑚 𝜃 𝜇 , Σ𝜃 𝜇 ), 𝑞 (𝛼 𝜙 ) = N ( 𝑚 𝜃 𝜙 , Σ𝜃 𝜙 ) (14) implying that 𝑞 (𝜃 𝜇 ) and 𝑞 (𝜃 𝜙 ) follow multivariate Log-normal distributions: 
+
+𝑞 (𝜃 𝜇 ) = LN ( 𝑚 𝜃 𝜇 , Σ𝜃 𝜇 ), 𝑞 (𝜃 𝜙 ) = LN ( 𝑚 𝜃 𝜙 , Σ𝜃 𝜙 ) (15) The use of full covariance matrices Σ𝜃 𝜇 and Σ𝜃 𝜙 allows the variational distribution to capture potential correlations between hyperparameters [Flaxman et al., 2015], enabling the model to represent dependencies that may arise in the posterior. 
+
+3.5 Sparse GP Approximation 
+
+Under the VGA structure defined in Equations (11) –(12) , calculating the KL divergence between the variational distributions 𝑞 ( 𝑓 𝜇 ), 𝑞 ( 𝑓 𝜙 ) and the priors 𝑝 ( 𝑓 𝜇 ), 𝑝 ( 𝑓 𝜙 ) requires the inversion of the kernel matrices 𝐾 𝜇 and 
+
+𝐾 𝜙 . In our spatio-temporal setting, the sizes of these matrices are respectively 𝑁 𝜇 × 𝑁 𝜇 and 𝑁 𝜙 × 𝑁 𝜙 and are typically so large that these matrix operations, which scale as O( 𝑁 3 
+
+> 𝜇
+
++ 𝑁 3
+
+> 𝜙
+
+), become computationally infeasible. To ensure scalability, a sparse GP approximation is adopted following Titsias [2009], replacing each full GP with a lower-rank inducing-point representation and substantially reducing the cost of ELBO optimisation. For the background component, let 𝑍 𝜇 = {𝑧 𝑚 }𝑀 𝜇  
+
+> 𝑚 =1
+
+⊂ [ 0, 𝑇 ] × [ 0, 𝑋 ] × [ 0, 𝑌 ] be a set of inducing locations, and define the inducing variables u𝜇 := 𝑓 𝜇 (𝑍 𝜇 ) ∈ R𝑀 𝜇 . Under the GP prior 
+
+𝑝 (u𝜇 ) = N ( 0, 𝐾 𝑍 𝜇 𝑍 𝜇 ),
+
+where 𝐾 𝑍 𝜇 𝑍 𝜇 ∈ R𝑀 𝜇 ×𝑀 𝜇 is the kernel matrix evaluated at the inducing locations. The triggering component is handled analogously using inducing locations 𝑍 𝜙 = {z𝑛 }𝑀 𝜙  
+
+> 𝑛 =1
+
+⊂ [ 0, 𝑇 𝜙 ] × [− 𝑋 𝜙 , 𝑋 𝜙 ] × [− 𝑌 𝜙 , 𝑌 𝜙 ] and the corresponding inducing variables u𝜙 = 𝑓 𝜙 (𝑍 𝜙 ).7To select the inducing variables, we adopt the approach of [Zhou et al., 2020], where the inducing locations 
+
+𝑍 𝜇 and 𝑍 𝜙 are placed on equidistant grids over their respective domains. Given the inducing variables, the latent functions at the grid locations are recovered via Gaussian conditioning [Titsias, 2009, Zhou, 2019]. For the background latent function 𝑓 𝜇 ,
+
+𝑝 ( 𝑓 𝜇 | u𝜇 ) = N ( 𝑚 𝑓 |𝑢 𝜇 , Σ 𝑓 |𝑢 𝜇 ),
+
+with 
+
+𝑚 𝑓 |𝑢 𝜇 = 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+u𝜇 , (16) 
+
+Σ 𝑓 |𝑢 𝜇 = 𝐾 𝑍 𝑍 − 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑘 𝑍 𝜇 𝑍 . (17) Under our variational Gaussian approximation, the variational posterior on the inducing variables is 
+
+𝑞 (u𝜇 ) = N ( 𝜇 𝜇 , 𝑆 𝜇 ), 𝑞 (u𝜙 ) = N ( 𝜇 𝜙 , 𝑆 𝜙 ).
+
+The variational posteriors over the latent functions are obtained by marginalizing out the inducing variables: 
+
+𝑞 ( 𝑓 𝜇 ) =
+
+∫
+
+𝑝 ( 𝑓 𝜇 | u𝜇 ) 𝑞 (u𝜇 ) 𝑑 u𝜇 , 𝑞 ( 𝑓 𝜙 ) =
+
+∫
+
+𝑝 ( 𝑓 𝜙 | u𝜙 ) 𝑞 (u𝜙 ) 𝑑 u𝜙 .
+
+Since both terms are Gaussian and conjugate, the marginals remain Gaussian with closed-form expressions. For 𝑓 𝜇 ,
+
+𝑞 ( 𝑓 𝜇 ) = N   ˜𝑚 𝜇 , ˜Σ𝜇 
+
+,
+
+where ˜𝑚 𝜇 and ˜Σ𝜇 are given by [Lloyd et al., 2015], with the derivation provided in Appendix E, 
+
+˜𝑚 𝜇 = 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝜇 𝜇 , (18) 
+
+˜Σ𝜇 = 𝐾 𝑍 𝑍 − 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 + 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑆 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 . (19) We can interpret the form of ˜Σ𝜇 as follows: the first term 𝐾 𝑍 𝑍 represents the original GP prior uncertainty, while the second term, 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 , corresponds to the part of this uncertainty that can be explained by the inducing variables, so their difference captures the remaining uncertainty that the inducing variables cannot represent [Quinonero-Candela and Rasmussen, 2005]. The final term, 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑆 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 ,adds back the uncertainty arising from the fact that the inducing variables themselves are not known exactly but have an approximate posterior with covariance 𝑆 𝜇 . The expressions for 𝑞 ( 𝑓 𝜙 ) are analogous. Although the sparse construction provides closed-form variational posteriors 𝑞 ( 𝑓 𝜇 ) and 𝑞 ( 𝑓 𝜙 ), these distributions are still defined over all latent function evaluations, and their covariance matrices remain dense with sizes 𝑁 𝜇 × 𝑁 𝜇 and 𝑁 𝜙 × 𝑁 𝜙 . Consequently, computing ELBO terms that require sampling from 𝑞 ( 𝑓 𝜇 ) or 
+
+𝑞 ( 𝑓 𝜙 ) involves operations on these dense covariance matrices, necessitating a Cholesky decomposition with 
+
+O( 𝑁 3
+
+> 𝜇
+
+) or O( 𝑁 3
+
+> 𝜙
+
+) complexity. This computational burden motivates the additional approximations introduced below. We adopt the Deterministic Training Conditional (DTC) approximation [Quinonero-Candela and Ras-mussen, 2005, Hensman et al., 2018], in which the latent function 𝑓 ∗ 
+
+> 𝜇
+
+is based on the projection: 
+
+𝑓 ∗ 
+
+> 𝜇
+
+= 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+u𝜇 , u𝜇 ∼ 𝑞 (u𝜇 ) = N ( 𝜇 𝜇 , 𝑆 𝜇 ).
+
+The posterior mean follows directly from the linear mapping: 
+
+𝑚 ∗ 
+
+> 𝜇
+
+= E[ 𝑓 ∗ 
+
+> 𝜇
+
+] = 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝜇 𝜇 .
+
+8The covariance is 
+
+Σ∗ 
+
+> 𝜇
+
+= Cov 
+
+
+
+𝑓 ∗
+
+> 𝜇
+
+
+
+= 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑆 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 .
+
+In DTC, the prior residual term 𝐾 𝑍 𝑍 − 𝑘 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 present in the full sparse posterior is omitted. As this residual term vanishes when the inducing set becomes the original grid, the DTC approximation improves with larger numbers of inducing variables, consistent with the classical Nyström approximation [Williams and Seeger, 2000]. The same approximation is applied to the posterior on the triggering kernel’s latent function. In this sparse approximation setting, the posterior distribution in (9) can be written as 
+
+𝑝 ( 𝑓 ∗ 
+
+> 𝜇
+
+, 𝑓 ∗ 
+
+> 𝜙
+
+, u𝜇 , u𝜙 , 𝜃 𝜇 , 𝜃 𝜙 | D) ∝ 𝑝 
+
+
+
+D | 𝜇 = ℎ𝜇 ( 𝑓 ∗ 
+
+> 𝜇
+
+), 𝜙 = ℎ𝜙 ( 𝑓 ∗ 
+
+> 𝜙
+
+)
+
+
+
+𝑝 ( 𝑓 ∗ 
+
+> 𝜇
+
+| u𝜇 , 𝜃 𝜇 ) 𝑝 ( 𝑓 ∗ 
+
+> 𝜙
+
+| u𝜙 , 𝜃 𝜙 )× 𝑝 (u𝜇 ) 𝑝 (u𝜙 ) 𝑝 (𝜃 𝜇 ) 𝑝 (𝜃 𝜙 ).
+
+(20) Since 𝑓 ∗ 
+
+> 𝜇
+
+and 𝑓 ∗ 
+
+> 𝜙
+
+are conditionally recovered from the inducing variables, the variational distribution only needs to be defined over the inducing values and the hyperparameters, 𝑞 (u𝜇 , u𝜙 , 𝜃 𝜇 , 𝜃 𝜙 ). The corresponding ELBO in (10) is 
+
+L( 𝑞 ) = E𝑞 
+
+h
+
+log 𝑝 ( 𝑓 ∗ 
+
+> 𝜇
+
+, 𝑓 ∗ 
+
+> 𝜙
+
+, u𝜇 , u𝜙 , 𝜃 𝜇 , 𝜃 𝜙 , D) 
+
+i
+
+− E𝑞 
+
+log 𝑞 (u𝜇 , u𝜙 , 𝜃 𝜇 , 𝜃 𝜙 ) . (21) In summary, the sparse GP approximation introduces inducing variables to obtain a low-rank representation of each GP prior, while the DTC approximation further simplifies the variational posterior by projecting all latent function evaluations onto these inducing variables. This combination yields a scalable variational inference scheme for spatio-temporal Hawkes processes. 
+
+# 4 Experiments 1
+
+Detailed hyperparameter settings, grid resolutions, and computational configurations used in our experiments are provided in Appendix F. 
+
+4.1 Baselines and Metrics 
+
+We compare our model against several spatio-temporal Hawkes process baselines, which are estimated using variational inference for consistency with our approach. 
+
+Parametric Hawkes Process [Bernabeu et al., 2025]: The background rate 𝜇 is assumed constant and the triggering kernel takes the parametric form: 
+
+𝛼𝛽 
+
+2𝜋𝜎 𝑥 𝜎 𝑦 
+
+exp  −𝛽 (𝑡 − 𝑡 𝑖 ) exp − (𝑥 − 𝑥 𝑖 )2
+
+2𝜎 2
+
+> 𝑥
+
+− (𝑦 − 𝑦 𝑖 )2
+
+2𝜎 2
+
+> 𝑦
+
+!
+
+(22) with hyperparameters 𝛼, 𝛽, 𝜎 𝑥 , 𝜎 𝑦 > 0.       
+
+> 1The model implementation can be found at https://github.com/Wenqing-Liu-1010/ Flexible-and-Scalable-Bayesian-Modeling-Of-Spatio-Temporal-Hawkes-Processes .
+
+9Cox–Hawkes Process [Miscouridou et al., 2023]: The background rate 𝜇 (𝑡, 𝑥, 𝑦 ) is modelled using a log-Gaussian Cox process, while the triggering kernel retains the same parametric form as (22) . Although their GP prior consists of an additive RBF kernel with separate temporal and spatial components, here for consistency we adopt the interaction-aware additive structure described in Section 3.2. A key limitation of both baselines is their reliance on triggering kernels with exponential decay and Gaussian forms, which are inherently unsuitable for capturing non-monotonic triggering patterns. To evaluate model performance, we employ the following metrics, with detailed mathematical formulations provided in Appendix F.1: 
+
+Posterior Mean Error ( 𝑃𝑀 mse ): The mean squared error between the posterior mean estimates ˆ𝜇 , ˆ𝜙 and the ground truth. 
+
+Posterior Expected Error ( 𝑃𝐸 mse ): The expected mean squared error calculated under the variational posterior distribution of 𝜇 and 𝜙 .
+
+Expected Log-Likelihood ( 𝐸 𝐿𝐿 ): The expected log-likelihood of the observed data under the variational posterior. This metric serves as a measure of model fit for real-world datasets. 
+
+4.2 Synthetic Data Experiments 
+
+For synthetic data experiments, events are generated using a cluster-based simulation [Miscouridou et al., 2023, Bernabeu et al., 2025] in a spatio-temporal domain (𝑇, 𝑋, 𝑌 ) = (10 , 10 , 10 ). For the triggering kernel, we set (𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 ) = (0.5, 0.3, 0.3). We consider the following three synthetic scenarios, with increasing complexity: 
+
+Scenario 1. 𝜇 (𝑡, 𝑥, 𝑦 ) = 4.5,𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) = 5 exp  −( Δ𝑥 2 + Δ𝑦 2)/ 0.02  exp (− Δ𝑡 ).
+
+Scenario 2. 𝜇 (𝑡, 𝑥, 𝑦 ) = (1.5 + sin (2𝜋𝑡 /𝑇 )) + ( 1.5 + sin (2𝜋𝑥 /𝑋 )) + ( 1.5 + sin (2𝜋𝑦 /𝑌 )) ,𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) = 5 exp  −( Δ𝑥 2 + Δ𝑦 2)/ 0.02  exp (− Δ𝑡 ).
+
+Scenario 3. 𝜇 (𝑡, 𝑥, 𝑦 ) = (1.5 + sin (2𝜋𝑡 /𝑇 )) + ( 1.5 + sin (2𝜋𝑥 /𝑋 )) + ( 1.5 + sin (2𝜋𝑦 /𝑌 )) + sin (2𝜋𝑡 /𝑇 ) sin (2𝜋𝑥 /𝑋 ) sin (2𝜋𝑦 /𝑌 ),𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) = (1 + 10 (Δ𝑡 /𝑇 𝜙 )( 1 − Δ𝑡 /𝑇 𝜙 )) exp (−( Δ𝑥 2/𝑋 2 
+
+> 𝜙
+
++ Δ𝑦 2/𝑌 2 
+
+> 𝜙
+
+)) .
+
+The first scenario corresponds to a parametric Hawkes process with constant background rate. The second introduces an additive nonstationary background rate that varies independently in time and space. The third has a background rate which is nonstationary, with additive and interaction terms and a triggering kernel which is non-monotonic. These scenarios allow us to evaluate our model under classical settings, time-varying background rate, and the most flexible scenarios involving both nonstationary 𝜇 (𝑡, 𝑥, 𝑦 ) and non-monotonic 𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ).To assess the impact of prior specifications on the inference, we evaluate our model across various configurations, including separable and additive RBF and Matérn kernels (with smoothness level 𝜈 = 2.5), as well as different link functions (softplus, exponential, and sigmoid 2). We present the results for these combinations for Scenarios 1 to 3 in Tables 1, 2, and 3, which report 𝑃𝑀 mse (𝜇 ), 𝑃𝑀 mse (𝜙 ), 𝑃𝐸 mse (𝜇 ),     
+
+> 2The sigmoid link function is implemented as 𝜎 (𝑥 )=𝛼 /( 1+exp (− 𝑥 )) , where 𝛼 is set to a relatively large constant to accommodate the scale of the target latent intensity.
+
+10 and 𝑃𝐸 mse (𝜙 ) computed against the ground-truth background rate and triggering kernel. Detailed results regarding different smoothness levels for the Matérn kernels ( 𝜈 = 0.5, 1.5) across all scenarios are provided in Tables 7, 8, and G.3 of Appendix G. The variational posterior mean on the background rate ˆ𝜇 (𝑡, 𝑥, 𝑦 ) and triggering kernel ˆ𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ),along with their ground-truth counterparts, are visualised in Figures 1, 4, and 7 at selected timestamps. Furthermore, Figures 2, 5, and 8 provide a 3D visualisation of the full posterior distributions for these components, showcasing the posterior mean, the ground truth, and the 95% credible intervals (CIs) to illustrate the uncertainty of our inference. All results are obtained under the additive kernel configuration. To quantify the temporal evolution of these components, we compute the spatial average for both the background rate and the triggering kernel. Specifically, for each variational posterior sample, we calculate the following spatial averages over their respective domains: 
+
+¯𝜇 (𝑡 ) = 1
+
+|S 𝜇 |
+
+∬
+
+> S𝜇
+
+𝜇 (𝑡, 𝑥, 𝑦 ) 𝑑𝑥𝑑𝑦, ¯𝜙 (Δ𝑡 ) = 1
+
+|S 𝜙 |
+
+∬
+
+> S𝜙
+
+𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) 𝑑 Δ𝑥𝑑 Δ𝑦, (23) where S𝜇 = [0, 𝑋 ] × [ 0, 𝑌 ] and S𝜙 = [− 𝑋 𝜙 , 𝑋 𝜙 ] × [− 𝑌 𝜙 , 𝑌 𝜙 ] denote the spatial support for the background rate and triggering kernel, respectively, with |S 𝜇 | and |S 𝜙 | representing their corresponding areas. Figures 3, 6, and 9 present the resulting posterior mean of these spatial averages, the 95% CIs derived from the posterior samples, and the corresponding ground-truth curves. The results in Tables 1, 2, and 3 summarise the performance of our framework. In Scenario 1, the Parametric Hawkes and Cox-Hawkes models achieve the best performance with lower 𝑃𝑀 mse and 𝑃𝐸 mse than our model, as their specifications match the data-generating processes more closely. However, our proposed model yields estimates close to the ground truth. As illustrated in Figures 1, 2, and 3, our posterior mean estimates recover the steady, invariant background rate and point-source diffusion patterns (Fig. 1), while 3D visualisations confirm that the true intensity surfaces remain within the 95% CIs (Fig. 2). Notably, the model recovers the constant background rate and the temporal decay of the triggering kernel (Fig. 3). For Scenario 2, the results are presented in Table 2 and Figures 4, 5, and 6. In this complex setting, Parametric Hawkes model yields the poorest performance due to the limitations of its predefined functional forms. Although the Cox-Hawkes model is the most closely aligned with the true data-generating process, our proposed nonparametric framework demonstrates comparable or even slightly superior performance in certain metrics. As illustrated in Fig. 4, the posterior mean estimates accurately capture the oscillating spatial intensity across different time slices. This precision is further confirmed by the 3D surface plots in Fig. 5, where the estimated surfaces (blue) closely overlap with the ground truth (green), with the true intensity remaining well within the 95% CIs (grey shaded area). Fig. 6 characterises the temporal evolution of the spatial averages; the results clearly demonstrate that our model captures the significant fluctuations in the background rate 𝜇 , with the posterior mean tightly tracking the trajectory of the ground truth while simultaneously recovering the decay structure of the triggering kernel 𝜙 .The results for Scenario 3 are presented in Table 3 and Figures 7, 8, and 9. In this scenario, our model outperforms all baselines, achieving the lowest errors across all metrics. This performance gap highlights the inherent limitations of parametric or semi-parametric baselines when confronted with complex dynamics. A key challenge in Scenario 3 is that the triggering kernel 𝜙 is non-monotonic over time, as clearly shown in the right panel of Fig. 9. Such a complex temporal structure is extremely difficult to capture using standard parametric functional forms, which typically assume monotonic decay. In contrast, our fully nonparametric approach offers superior flexibility, allowing the posterior mean to accurately track this non-monotonic rise and fall. Furthermore, Fig. 7 and Fig. 8 demonstrate that our model maintains high precision in estimating the spatio-temporal background rate 𝜇 . The 3D surface plots confirm that even under these highly dynamic 11 Figure 1: Estimated Hawkes process components for Scenario 1. The figure is divided into two main panels: the background rate 𝜇 (𝑡, 𝑥, 𝑦 ) (left) and the triggering kernel 𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) (right), each shown at two different time snapshots. For each component, the ground truth is on the left and the posterior mean estimate is on the right. conditions, the true intensity surfaces remain consistently within the 95% CIs, showcasing the robustness of our framework in recovering complex Hawkes process components. In addition, the results across all scenarios in Tables 1, 2, and 3 demonstrate that our additive kernels generally outperform their separable counterparts, or at the very least exhibit comparable performance. This advantage is particularly evident in the background rate estimation ( 𝑃𝑀 mse (𝜇 ) and 𝑃𝐸 mse (𝜇 )), while the performance on the triggering kernel 𝜙 remains comparable to that of the separable kernels. We attribute this gain to the enhanced numerical stability of the additive formulation. In sparse GP inference, the stability of inverting the inducing point covariance matrices 𝐾 𝑍 𝜇 𝑍 𝜇 and 𝐾 𝑍 𝜙 𝑍 𝜙 depends on their condition number 
+
+𝜅 (𝐾 ) = 𝜆 max (𝐾 )/ 𝜆 min (𝐾 ). Here 𝜆 max and 𝜆 min denote the maximum and minimum eigenvalues, respectively. As summarised in Table 4, which reports the condition numbers of 𝐾 𝑍 𝜇 𝑍 𝜇 and 𝐾 𝑍 𝜙 𝑍 𝜙 for the separable and additive RBF kernels under the softplus link function, separable kernels generally exhibit higher condition numbers, leading to ill-conditioned matrices. In contrast, the additive structure brings lower condition numbers (or at least comparable ones), thereby ensuring more robust estimation. 12 Figure 2: Three-dimensional visualisation of the estimated Hawkes process components for Scenario 1, including posterior uncertainty. Left: background rate 𝜇 (𝑡, 𝑥, 𝑦 ) at 𝑡 = 5. Right: triggering kernel 
+
+𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) at Δ𝑡 = 0.25 . The plots show the variational posterior mean (blue), ground truth (green), and the 95% CIs (grey shaded area). 
+
+Figure 3: Spatial averages of the Hawkes process components for Scenario 1. Left: spatial average of the background rate over its domain. Right: spatial average of the triggering kernel over its domain. The plots show the variational posterior mean (blue), ground truth (green), and 95% CIs. 13 Figure 4: Estimated Hawkes process components for Scenario 2. The background rate 𝜇 (left) and triggering kernel 𝜙 (right) are shown at different time snapshots. For each component, the ground truth is on the left and the variational posterior mean estimate is on the right. 
+
+Figure 5: Three-dimensional visualisation of the estimated Hawkes process components for Scenario 2, demonstrating captured posterior uncertainty. Left: background rate 𝜇 (𝑡, 𝑥, 𝑦 ) at 𝑡 = 5. Right: triggering kernel 𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) at Δ𝑡 = 0.25 . The plots display the variational posterior mean (blue), ground truth (green), and the 95% CIs (grey shaded area). 14 Figure 6: Spatial averages of the Hawkes process components for Scenario 2. Left: spatial average of the background rate over its domain. Right: spatial average of the triggering kernel over its domain. The plots show the variational posterior mean (blue), ground truth (green), and 95% CIs. 
+
+Figure 7: Estimated Hawkes process components for Scenario 3. The background rate 𝜇 (left) and triggering kernel 𝜙 (right) are shown at different snapshots. For each component, the ground truth is on the left and the posterior mean estimate is on the right. 15 Figure 8: Three-dimensional visualisation of the estimated Hawkes process components for Scenario 3, showing the posterior mean and associated uncertainty. Left: background rate 𝜇 (𝑡, 𝑥, 𝑦 ) at 𝑡 = 5. Right: triggering kernel 𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) at Δ𝑡 = 0.25 . The results illustrate the variational posterior mean (blue), ground truth (green), and the 95% CIs (grey shaded area). 
+
+Figure 9: Spatial averages of the Hawkes process components for Scenario 3. Left: spatial average of the background rate over its domain. Right: spatial average of the triggering kernel over its domain. The plots show the variational posterior mean (blue), ground truth (green), and 95% CIs. 16 Table 1: Comparison of different methods for Scenario 1 using 𝑃𝑀 mse (𝜇 ), 𝑃𝑀 mse (𝜙 ), 𝑃𝐸 mse (𝜇 ), 𝑃𝐸 mse (𝜙 ).
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 1.21 ± 1.90 4.49 ± 2.26 1.90 ± 1.87 3.33 ± 0.47 
+
+Cox-Hawkes exp 4.63 ± 2.76 2.92 ± 1.66 13 .84 ± 4.90 4.42 ± 1.66 
+
+Ours (separable RBF) softplus-softplus 8.13 ± 2.50 9.82 ± 2.31 14 .95 ± 2.73 14 .64 ± 2.42 
+
+Ours (separable RBF) sigmoid-sigmoid 8.03 ± 2.86 8.16 ± 2.26 15 .96 ± 3.51 15 .23 ± 2.12 
+
+Ours (separable RBF) exp-exp 8.48 ± 2.50 8.57 ± 1.97 16 .29 ± 2.85 14 .39 ± 2.12 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 6.58 ± 2.08 7.36 ± 2.69 13 .27 ± 2.24 12 .03 ± 2.64 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 7.34 ± 2.61 7.04 ± 2.32 15 .13 ± 3.16 13 .35 ± 2.28 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 8.11 ± 2.69 8.12 ± 2.09 16 .18 ± 3.19 14 .01 ± 1.99 
+
+Ours (additive RBF) softplus-softplus 2.88 ± 0.88 5.01 ± 1.36 7.63 ± 0.82 10 .16 ± 1.47 
+
+Ours (additive RBF) sigmoid-sigmoid 3.43 ± 1.20 7.91 ± 2.93 9.75 ± 1.50 15 .43 ± 3.28 
+
+Ours (additive RBF) exp-exp 4.78 ± 2.22 7.26 ± 3.46 13 .69 ± 4.23 14 .08 ± 3.78 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 3.14 ± 1.10 5.28 ± 1.77 8.44 ± 1.45 10 .83 ± 1.93 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 3.76 ± 1.51 7.55 ± 2.93 10 .45 ± 2.06 14 .62 ± 3.41 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 5.11 ± 2.50 7.36 ± 2.31 13 .82 ± 4.84 13 .97 ± 2.31 
+
+The first and second terms in the Link column refer to the link functions for the background rate 𝜇 and the triggering kernel 𝜙 , respectively. Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+Table 2: Comparison of different methods for Scenario 2 based on 𝑃𝑀 mse (𝜇 ), 𝑃𝑀 mse (𝜙 ), 𝑃𝐸 mse (𝜇 ), 𝑃𝐸 mse (𝜙 ).
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 152 .64 ± 3.24 16 .78 ± 7.56 153 .37 ± 3.26 11 .58 ± 6.34 
+
+Cox-Hawkes exp 16 .08 ± 4.72 4.21 ± 2.33 30 .57 ± 6.09 5.68 ± 2.27 
+
+Ours (separable RBF) softplus-softplus 22 .09 ± 7.26 13 .24 ± 1.68 37 .01 ± 6.70 18 .04 ± 1.94 
+
+Ours (separable RBF) sigmoid-sigmoid 19 .56 ± 5.97 11 .76 ± 2.07 36 .59 ± 5.88 19 .24 ± 2.48 
+
+Ours (separable RBF) exp-exp 22 .34 ± 6.55 11 .58 ± 1.74 38 .29 ± 6.21 17 .71 ± 2.21 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 18 .16 ± 6.48 9.16 ± 1.43 31 .73 ± 5.80 14 .58 ± 1.89 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 17 .28 ± 5.91 10 .14 ± 1.66 32 .90 ± 5.69 16 .91 ± 2.08 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 18 .62 ± 6.08 10 .87 ± 1.36 33 .69 ± 5.60 17 .27 ± 1.80 
+
+Ours (additive RBF) softplus-softplus 11 .14 ± 6.21 7.67 ± 1.37 20 .22 ± 6.14 13 .44 ± 2.74 
+
+Ours (additive RBF) sigmoid-sigmoid 11 .95 ± 6.18 11 .96 ± 2.58 22 .88 ± 6.12 20 .20 ± 3.56 
+
+Ours (additive RBF) exp-exp 14 .12 ± 5.72 9.87 ± 1.91 25 .52 ± 5.75 17 .37 ± 3.16 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 11 .81 ± 6.14 8.08 ± 1.26 21 .00 ± 5.86 14 .48 ± 1.71 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 12 .38 ± 5.80 10 .02 ± 1.85 23 .27 ± 5.79 16 .98 ± 2.55 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 14 .43 ± 6.22 10 .50 ± 1.97 25 .50 ± 6.44 18 .26 ± 2.01 
+
+Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+17 Table 3: Comparison of different methods for Scenario 3 based on 𝑃𝑀 mse (𝜇 ), 𝑃𝑀 mse (𝜙 ), 𝑃𝐸 mse (𝜇 ), 𝑃𝐸 mse (𝜙 ).
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 169 .55 ± 5.35 32 .50 ± 4.42 170 .35 ± 5.31 31 .11 ± 3.81 
+
+Cox-Hawkes exp 24 .39 ± 5.60 24 .97 ± 1.46 47 .32 ± 5.61 26 .02 ± 1.44 
+
+Ours (separable RBF) softplus-softplus 22 .92 ± 3.97 10 .72 ± 5.46 41 .49 ± 3.82 18 .92 ± 4.71 
+
+Ours (separable RBF) sigmoid-sigmoid 25 .24 ± 5.24 11 .61 ± 5.07 47 .67 ± 4.93 20 .31 ± 4.94 
+
+Ours (separable RBF) exp-exp 28 .08 ± 5.25 12 .41 ± 5.29 48 .23 ± 5.34 20 .75 ± 4.68 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 20 .75 ± 3.86 10 .23 ± 4.39 38 .07 ± 3.80 18 .74 ± 3.77 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 23 .00 ± 5.34 10 .57 ± 5.20 43 .84 ± 5.06 18 .39 ± 4.84 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 24 .79 ± 5.32 11 .75 ± 4.36 44 .17 ± 5.43 20 .18 ± 3.93 
+
+Ours (additive RBF) softplus-softplus 19 .17 ± 5.28 10 .14 ± 4.27 37 .11 ± 4.42 18 .54 ± 4.23 
+
+Ours (additive RBF) sigmoid-sigmoid 25 .50 ± 4.14 9.31 ± 4.61 40 .57 ± 8.14 17 .49 ± 4.42 
+
+Ours (additive RBF) exp-exp 24 .88 ± 6.60 9.26 ± 4.24 43 .98 ± 6.32 17 .84 ± 3.96 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 18 .27 ± 3.56 10 .91 ± 5.89 37 .76 ± 3.77 18 .75 ± 5.45 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 26 .22 ± 4.27 9.70 ± 4.78 41 .47 ± 8.80 17 .94 ± 4.50 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 25 .32 ± 6.85 10 .50 ± 4.39 45 .91 ± 7.83 19 .47 ± 4.47 
+
+Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+Table 4: Comparison of condition numbers across different synthetic scenarios. 𝜅 (𝐾 𝑍 𝜇 𝑍 𝜇 ) and 𝜅 (𝐾 𝑍 𝜙 𝑍 𝜙 )
+
+denote the condition numbers for the background and triggering components, respectively. Lower condition numbers usually indicate better numerical stability. 
+
+Scenario Method Link 𝜅 (𝐾 𝑍 𝜇 𝑍 𝜇 ) 𝜅 (𝐾 𝑍 𝜙 𝑍 𝜙 )
+
+Scenario 1 Ours (separable RBF) softplus-softplus 1.84 × 10 4 ± 1.02 × 10 4 1.79 × 10 2 ± 1.02 × 10 2
+
+Ours (additive RBF) softplus-softplus 5.67 × 10 1 ± 5.09 × 10 0 4.84 × 10 1 ± 6.75 × 10 0
+
+Scenario 2 Ours (separable RBF) softplus-softplus 4.92 × 10 4 ± 1.32 × 10 4 2.50 × 10 2 ± 6.67 × 10 1
+
+Ours (additive RBF) softplus-softplus 1.37 × 10 2 ± 1.50 × 10 1 4.49 × 10 1 ± 7.74 × 10 0
+
+Scenario 3 Ours (separable RBF) softplus-softplus 1.77 × 10 4 ± 1.05 × 10 4 1.96 × 10 2 ± 3.17 × 10 2
+
+Ours (additive RBF) softplus-softplus 4.37 × 10 2 ± 3.48 × 10 2 3.51 × 10 2 ± 5.14 × 10 2
+
+Mean and standard deviation ( ±) of the condition numbers for the induction points. Values are multiplied by 10 2.
+
+18 4.3 Real-world Data Experiments 
+
+We evaluate our nonparametric framework on two real-world spatio-temporal datasets: Chicago Shoot-ings [Manring et al., 2025] and Vancouver Break-ins [Zhou et al., 2020]. Figure 10 illustrates the spatial distribution of events for both datasets. The Chicago Shootings dataset contains reported shooting incidents with continuous timestamps and geographic coordinates. We use the data from 2022 (2,124 events) as the training sequence and the data from 2023 (1,809 events) for testing. The Vancouver Break-ins dataset records break-and-enter incidents in Vancouver. We use the 2013 data (3,013 events) for training and the 2014 data (3,033 events) for testing. For both datasets, we rescale the temporal dimension 𝑇 to [0, 10 ] and the spatial coordinates (𝑋, 𝑌 ) to 
+
+[0, 10 ]2. For the Chicago Shootings dataset, the triggering kernel window is set to 𝑇 𝜙 = 0.4 (approximately half a month), with spatial windows 𝑋 𝜙 = 𝑌 𝜙 = 0.4 (representing physical distances of approximately 1,278 m East-West and 1,716.4 m North-South). For the Vancouver Break-ins dataset, we use 𝑇 𝜙 = 0.6 (approximately three weeks), with spatial windows 𝑋 𝜙 = 𝑌 𝜙 = 0.2 (representing physical distances of approximately 321.2 m East-West and 233.6 m North-South). The selection of these finite window sizes is supported by a sensitivity analysis detailed in Appendix H. 
+
+Figure 10: Spatial distribution of events in the real-world datasets. Left: Chicago shooting incidents (2022 for training and 2023 for testing). Right: Vancouver break-ins (2013 for training and 2014 for testing). The model fit, evaluated using the Expected Log-Likelihood ( 𝐸 𝐿𝐿 ) on the test sets, is presented in Table 6, with more comprehensive results for all tested kernel and link function combinations provided in Appendix G.4. Alongside standard baselines, we specifically include a Log-Gaussian Cox Process [Møller et al., 1998] to isolate the impact of self-excitation. Because the Log-Gaussian Cox Process models only the background rate without any triggering mechanism, the fact that our proposed model yields a significantly higher 𝐸 𝐿𝐿 across both datasets provides strong evidence for the presence of underlying contagion effects. Furthermore, among our proposed model variants, the additive kernel configurations yield the best overall fit. This suggests that decomposing the spatial and temporal components provides a better empirical fit for these real-world events. To evaluate goodness-of-fit, we apply the super-thinning algorithm [Reinhart, 2018] (details in Ap-pendix I.1) to the estimated intensity obtained via the variational posterior mean on the background rate 19 and triggering kernel from our additive kernel configurations. After super-thinning, a perfectly specified model yields a thinned process which has the distribution of a homogeneous Poisson process. We assess the distribution of this thinned process using standard temporal and spatial diagnostics (see Appendix I.2). Our temporal diagnostics yield solid results. Kolmogorov-Smirnov (KS) tests confirm that the time between events follows the expected pattern. For the Vancouver dataset, 16 out of 20 random seeds passed the test ( 𝑝 > 0.05 ). For the Chicago dataset, the results were even more consistent, with 19 out of 20 seeds passing the test ( 𝑝 > 0.05 ). This high success rate across multiple independent runs suggests that our temporal modeling is stable and performs reliably. Spatially, however, visual inspection of the super-thinned events (Figure 11) and subsequent quadrat count tests ( 𝑝 < 0.05 ) indicate the presence of residual localised clustering. This suggests that while our model effectively captures the temporal contagion and the primary spatial patterns, certain localised spatial heterogeneities remain unmodeled. This potential remaining clustering is likely driven by external spatial covariates that are not included in our model. 
+
+Figure 11: Spatial distribution of the super-thinned events. Left: Chicago shooting incidents. Right: Vancouver break-ins. Despite the minor spatial heterogeneities identified in the diagnostics, our Bayesian framework provides the following interpretable insights into the overall generating mechanisms of these events. Note that in what follows, all expected event counts and their CIs are rounded to the nearest integer. For the Chicago Shootings dataset, the variational posterior mean of the expected number of background events is ∥𝜇 ∥1 = 1398 (95% CI: [1300 , 1500 ]), and the branching ratio is ∥𝜙 ∥1 = 0.324 (95% CI: [0.278 , 0.382 ]). Using the branching process identity E[𝑁 (W)] ≈ ∥ 𝜇 ∥1/( 1 − ∥ 𝜙 ∥1) (see Appendix A for the derivation), the implied expected number of total events is 2073 (95% CI: [1876 , 2314 ]). This aligns well with both the numerical compensator estimate of 2131 (95% CI: [1992 , 2292 ]) and the actual observed number of training events (2,124). With an estimated branching ratio of 0.324, we find that nearly a third of these shootings are directly triggered by previous incidents within this window, highlighting a strong short-term contagion in urban gun violence. Similarly, for the Vancouver Break-ins dataset, the variational posterior mean of the expected number of background events is ∥𝜇 ∥1 = 2213 (95% CI: [2090 , 2346 ]), with a branching ratio of ∥𝜙 ∥1 = 0.210 (95% CI: 
+
+[0.176 , 0.248 ]). The branching process identity yields an implied expected number of events of 2804 (95% CI: [2610 , 3019 ]), while the compensator yields 2904 (95% CI: [2741 , 3078 ]). Again, the true observed number of training events (3,013) falls well within these CIs. Practically, a 21% branching ratio indicates that 20 within the chosen spatial-temporal window, localised near-repeat dynamics are responsible for roughly one in five break-ins. To further understand the behaviour of the additive kernel of the GP, we examine the variational posterior means and 95% CIs of the hyperparameters for the additive kernel, which decomposes the underlying Gaussian processes into purely temporal, purely spatial, and joint spatio-temporal components. Table 5: Variational posterior means and 95% CIs (in brackets) for the additive kernel hyperparameters. ℓ
+
+denotes the length scale and 𝜎 2 denotes the signal variance for the temporal ( 𝑡 ), spatial ( 𝑠 ), and spatio-temporal (𝑡, 𝑠 ) components.                                         
+
+> Length Scales (ℓ)Signal Variance (𝜎 2)
+> Dataset Component 𝑡 𝑠 (𝑡 , 𝑠 )𝑡 𝑠 (𝑡 , 𝑠 )
+> Chicago Background 𝜇 2.73 [1.46, 4.63] 2.07 [1.91, 2.23] 0.28 [0.12, 0.53] 0.82 [0.15, 2.41] 6.10 [3.84, 9.20] 0.47 [0.31, 0.67] Trigger 𝜙 0.62 [0.11, 1.87] 0.04 [0.03, 0.05] 0.20 [0.16, 0.24] 0.26 [0.03, 0.89] 0.74 [0.43, 1.19] 0.93 [0.61, 1.37] Vancouver Background 𝜇 4.90 [2.24, 10.07] 1.23 [1.15, 1.31] 1.44 [1.15, 1.75] 2.78 [1.05, 6.04] 7.10 [4.57, 10.95] 1.44 [0.95, 2.13] Trigger 𝜙 0.50 [0.06, 2.02] 0.02 [0.01, 0.02] 0.13 [0.10, 0.16] 0.39 [0.11, 1.08] 4.24 [3.12, 5.68] 2.36 [1.59, 3.32]
+
+While additive kernels offer interpretable decompositions [Duvenaud et al., 2011] by measuring the signal variance ( 𝜎 2) of each term, they can suffer from identifiability issues [Lu et al., 2022]. To address this, Orthogonal Additive Kernels (OAK) were proposed [Lu et al., 2022]. However, we do not employ OAK in this work, as the need to specify marginal data densities for each dimension significantly complicates the modeling and increases the computational burden. Instead, we verify the interpretability of our model through empirical testing. Across 20 random seeds, the learned hyperparameters for the Chicago dataset were very similar. For the Vancouver dataset, all hyperparameters remained stable except for one temporal scale ( ℓ𝑡 for 
+
+𝜇 , which showed two modes). This suggests that our model converges to reliable optima rather than random local optima. Therefore, given the stability of our results, our model’s decomposition remains identifiable and interpretable. 
+
+Background Rate. When looking at the estimated background rate surfaces ( 𝜇 ) (Figure 12 and Figure 13), we observe distinct spatial hotspots that correspond to areas with persistently high crime baseline rates. For Chicago, these hotspots are concentrated in certain neighbourhoods on the South and West sides, while Vancouver shows elevated background rates in specific downtown area. As shown in Table 5, In Chicago, the spatial factor is statistically robust; its 95% CI lower bound ( 3.84 ) comfortably exceeds the upper bounds of both the temporal ( 2.41 ) and spatio-temporal ( 0.67 ) components. This confirms that Chicago’s baseline crime risks are largely persistent and tied to long-term locational factors rather than temporal fluctuations. For Vancouver, while the spatial variance remains the largest ( 𝜎 2 
+
+> 𝑠
+
+= 7.10 ), its 95% CI overlaps with the temporal component ( 𝜎 2 
+
+> 𝑡
+
+, upper bound 6.04 ). This suggests that while location is the strongest driver, the baseline risk in Vancouver is also influenced by broader temporal trends. Overall, these results indicate that while spatial persistence is a common feature, the temporal stability of the background rate is more noticeable in the Chicago shootings dataset than in Vancouver break-ins. 
+
+Triggering Kernel. The posterior means of the self-excitation triggering kernels ( 𝜙 ) for the two datasets are shown in Figure 14 and Figure 15 in Appendix G.5. We observe that the triggering effects are strongly centered in space and time in both cases. Table 5 further highlights clear differences between shootings and break-ins. In Chicago, the triggering effect is mostly driven by the joint space-time component ( 𝜎 2 
+
+> 𝑠𝑡
+
+= 0.93 ,95% CI: [0.61 , 1.37 ]). This means that retaliatory violence happens within a very specific window of both time and space. On the other hand, the spread of Vancouver break-ins is mostly driven by the pure spatial component ( 𝜎 2 
+
+> 𝑠
+
+= 4.24 , 95% CI: [3.12 , 5.68 ]). Notably, despite Vancouver having a smaller physical triggering window than Chicago, it exhibits a significantly smaller spatial length scale ( ℓ𝑠 = 0.02 , 95% CI: 
+
+[0.01 , 0.02 ] vs. Chicago’s 0.04 , 95% CI: [0.03 , 0.05 ]), indicating an even more localised concentration of 21 risk. This reflects the “near-repeat” pattern inherent in burglaries: once a property is targeted, the immediate neighbors face a higher risk that is tied more to precise proximity than to a restrictive time window. These findings empirically confirm that crime in the aforementioned datasets propagates similarly to epidemic processes, meaning crime triggers more crime. The highly localised spatial length scales for both datasets underscore that crime contagion operates within a very restricted microscopic radius. This suggests that future work focusing on interventions should treat crime spikes not merely as static non-contagious clusters, but as dynamic contagions, aiming to decrease the spread in space and time through rapid, geographically targeted policing. Table 6: Performance comparison (Expected Log-Likelihood) on real-world datasets. 
+
+Chicago Shootings Vancouver Break-ins 
+
+Method Link 𝐸 𝐿𝐿 Link 𝐸 𝐿𝐿 
+
+Parametric Hawkes Process – 1471 .17 – 2203 .65 
+
+Log Gaussian Cox Process exp 1535 .49 exp 2000 .43 
+
+Cox-Hawkes Process exp 1647 .26 exp 2157 .32 
+
+Ours (separable RBF) softplus-softplus 1615 .71 softplus-softplus 2209 .45 
+
+Ours (separable RBF) sigmoid-softplus 1642 .24 sigmoid-softplus 2198 .64 
+
+Ours (separable RBF) exp-softplus 1643 .36 exp-softplus 2188 .72 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 1622 .09 softplus-softplus 2220 .85 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-softplus 1645 .43 sigmoid-softplus 2205 .70 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-softplus 1651 .15 exp-softplus 2193 .20 
+
+Ours (additive RBF) softplus-softplus 1616 .90 softplus-softplus 2249 .02 
+
+Ours (additive RBF) sigmoid-softplus 1656 .78 sigmoid-softplus 2245 .78 
+
+Ours (additive RBF) exp-exp 1670 .68 exp-softplus 2227 .90 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 1621 .99 softplus-softplus 2247 .74 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-softplus 1655 .94 sigmoid-softplus 2241 .56 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 1670 .64 exp-softplus 2215 .98 
+
+Higher 𝐸 𝐿𝐿 indicates superior performance. Best and second-best results in terms of 𝐸 𝐿𝐿 are highlighted in red and blue, respectively. 
+
+22 Figure 12: Variational posterior mean on the background rate at selected timestamps for the Chicago shootings dataset (2022-2023) . 23 Figure 13: Variational posterior mean on the background rate at selected timestamps for the Vancouver break-ins dataset . 24 5 Discussion 
+
+We have proposed a fully Bayesian nonparametric framework for spatio-temporal Hawkes processes, where both the background rate and the triggering kernel are modeled using Gaussian processes with flexible covariance kernels. By leveraging variational inference and sparse GP approximations, our method scales to large spatio-temporal point patterns while retaining uncertainty quantification. Through comprehensive experiments on synthetic data with varying complexity, we demonstrated that our model can accurately recover complex spatial and temporal excitation patterns without imposing restrictive parametric assumptions. On real-world crime datasets (Chicago shootings and Vancouver break-ins), our model consistently outperforms existing parametric baselines, achieving higher 𝐸 𝐿𝐿 and providing interpretable insights into the self-exciting nature of criminal activities. Our key contributions can be summarised as follows: (i) we introduce a novel fully Bayesian nonparametric spatio-temporal Hawkes process model that flexibly captures both background rate and triggering kernel; (ii) we develop an efficient variational inference algorithm with sparse GP approximations that scales to high-dimensional settings; (iii) we demonstrate superior performance over state-of-the-art baselines on both synthetic and real-world datasets; and (iv) we provide interpretable estimates of branching ratios and spatial hotspots that offer actionable insights for crime analysis. Despite these strengths, several limitations remain. First, the current model assumes a single event type and may not capture interactions between different event categories. Second, our approach does not explicitly incorporate exogenous covariates that may influence event rates. Thus, there exist several promising directions for future work. First, extending the framework to multivariate Hawkes processes with both self-excitation and cross-excitation between different event types would enable more nuanced modelling of complex phenomena such as the interaction between different crime categories or between crimes and their responses. Second, including external covariates in the model would allow us to better account for environmental factors and provide more detailed insights. Third, exploring alternative nonparametric constructions such as neural network-based intensity estimators could further enhance model flexibility. In conclusion, the proposed framework represents a significant advance in flexible and scalable Bayesian nonparametric modelling of spatio-temporal Hawkes processes, offering both methodological contributions and practical insights for crime analysis and beyond. 
+
+# Acknowledgements 
+
+We acknowledge access to Piz Daint or Alps at the Swiss National Supercomputing Centre, Switzerland under the Università della Svizzera italiana’s share with the project ID u0. XM has received funding from the European Union’s Horizon Europe research and innovation programme under the Marie Sklodowska-Curie grant agreement 101151781 and from the University of Cyprus under the startup grant programme. 25 Appendix A Derivation of the Expected Total Number of Events 
+
+To derive the expected total number of events E[𝑁 (W)] using the branching process perspective, we can decompose the Hawkes process into discrete generations of events. Let 𝑁 𝑘 denote the number of events in the 
+
+𝑘 -th generation within the spatial-temporal domain W = T × S .First, the 0-th generation consists solely of background events (i.e., immigrants), which are generated independently by the background rate 𝜇 (𝑡, 𝑠 ). The expected number of these background events is the integral of the background rate over the domain: 
+
+E[𝑁 0] =
+
+∫
+
+> W
+
+𝜇 (𝑡, 𝑠 ) d𝑡 d𝑠 = ∥𝜇 ∥1. (24) Next, each event in the 0-th generation acts as a parent, generating the 1-st generation of offspring events. According to the definition of the triggering kernel, the expected number of offspring generated by a single event is given by the branching ratio ∥𝜙 ∥1. Thus, the expected number of 1-st generation events is: 
+
+E[𝑁 1] = E[𝑁 0] ∥ 𝜙 ∥1 = ∥𝜇 ∥1 ∥𝜙 ∥1. (25) Following this branching mechanism, the total number of events in the 𝑘 -th generation, 𝑁 𝑘 , is the sum of offspring generated by the 𝑁 𝑘 −1 parent events from the previous generation. Given 𝑁 𝑘 −1, the conditional expectation of 𝑁 𝑘 is E[𝑁 𝑘 | 𝑁 𝑘 −1] = 𝑁 𝑘 −1 ∥𝜙 ∥1, because each parent independently generates offspring with an expected count of ∥𝜙 ∥1. By applying the law of total expectation, we can express the unconditional expectation of 𝑁 𝑘 as: 
+
+E[𝑁 𝑘 ] = EE[𝑁 𝑘 | 𝑁 𝑘 −1] = E𝑁 𝑘 −1 ∥𝜙 ∥1
+
+ = E[𝑁 𝑘 −1] ∥ 𝜙 ∥1. (26) By mathematical induction, applying this recursive relationship starting from E[𝑁 0] = ∥𝜇 ∥1, the expected number of events in the 𝑘 -th generation is: 
+
+E[𝑁 𝑘 ] = ∥𝜇 ∥1 ∥𝜙 ∥𝑘  
+
+> 1
+
+. (27) The total number of events in the domain W is the sum of events across all generations, given by 
+
+𝑁 (W) = Í∞ 
+
+> 𝑘 =0
+
+𝑁 𝑘 . Taking the expectation on both sides yields: 
+
+E[𝑁 (W)] = E
+
+" ∞∑︁ 
+
+> 𝑘 =0
+
+𝑁 𝑘 
+
+#
+
+=
+
+> ∞
+
+∑︁ 
+
+> 𝑘 =0
+
+E[𝑁 𝑘 ]
+
+=
+
+> ∞
+
+∑︁ 
+
+> 𝑘 =0
+
+∥𝜇 ∥1 ∥𝜙 ∥𝑘 
+
+> 1
+
+= ∥𝜇 ∥1
+
+> ∞
+
+∑︁ 
+
+> 𝑘 =0
+
+∥𝜙 ∥𝑘  
+
+> 1
+
+. (28) Under the stationarity condition ∥𝜙 ∥1 < 1, the infinite geometric series converges to 1/( 1 − ∥ 𝜙 ∥1).Assuming the temporal and spatial boundaries are sufficiently large such that boundary truncation effects are negligible, we arrive at the final approximation: 
+
+E[𝑁 (W)] ≈ ∥𝜇 ∥1
+
+1 − ∥ 𝜙 ∥1
+
+. (29) 26 B Kernel Functions 
+
+In this section, we provide the detailed mathematical forms of the covariance kernels. We denote 𝑡, 𝑡 ′ ∈ [ 0, 𝑇 ]
+
+as temporal coordinates and 𝑠, 𝑠 ′ ∈ [ 0, 𝑋 ] × [ 0, 𝑌 ] as spatial coordinates, with 𝑠 = (𝑥, 𝑦 ) and 𝑠 ′ = (𝑥 ′, 𝑦 ′).Following the definitions in Section 3.2, each base kernel 𝑘 (𝑧, 𝑧 ′) is parameterised by a signal variance 𝜎 2 > 0
+
+and lengthscale ℓ > 0.
+
+Radial Basis Function (RBF) Kernel: The RBF kernel between two points 𝑧 and 𝑧 ′ is: 
+
+𝑘 RBF (𝑧, 𝑧 ′ | 𝜎 2, ℓ ) = 𝜎 2 exp 
+
+
+
+− ∥𝑧 − 𝑧 ′ ∥2
+
+2ℓ2
+
+
+
+. (30) 
+
+Matérn Kernels: The Matérn kernel with smoothness parameter 𝜈 ∈ { 0.5, 1.5, 2.5} is: 
+
+𝑘 Mat (𝑧, 𝑧 ′ | 𝜎 2, 𝜈, ℓ ) =
+
+
+
+𝜎 2 exp 
+
+
+
+− ∥ 𝑧 −𝑧 ′ ∥
+
+> ℓ
+
+
+
+, 𝜈 = 0.5,𝜎 2
+
+
+
+1 +  
+
+> √3∥𝑧 −𝑧 ′∥
+> ℓ
+
+
+
+exp 
+
+
+
+−  
+
+> √3∥𝑧 −𝑧 ′∥
+> ℓ
+
+
+
+, 𝜈 = 1.5,𝜎 2
+
+
+
+1 +   
+
+> √5∥𝑧 −𝑧 ′∥
+> ℓ
+
++ 5∥ 𝑧 −𝑧 ′ ∥2
+
+> 3ℓ2
+
+
+
+exp 
+
+
+
+−  
+
+> √5∥𝑧 −𝑧 ′∥
+> ℓ
+
+
+
+, 𝜈 = 2.5.
+
+(31) 
+
+B.1 Joint Kernel Forms 
+
+Using the base kernels above, we define the specific joint spatio-temporal structures. 
+
+Separable Joint Kernel: The separable kernel factorises the dependencies into independent marginal effects, incorporating Automatic Relevance Determination (ARD) [Liu et al., 2020] over the temporal and spatial dimensions: 
+
+𝐾 separable 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) = 𝜎 2 𝑘 𝑡 (𝑡, 𝑡 ′ | 1, ℓ 𝑡 ) 𝑘 𝑠 (𝑠, 𝑠 ′ | 1, ℓ 𝑥 , ℓ 𝑦 ), (32) where 𝑘 𝑡 and 𝑘 𝑠 are base kernels defined over the temporal and spatial domains, respectively, and 𝑠 = (𝑥, 𝑦 ).A common choice is the squared exponential kernel: 
+
+𝐾 separable (( 𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′)) = 𝜎 2 exp − (𝑡 − 𝑡 ′)2
+
+2ℓ2
+
+> 𝑡
+
+− (𝑥 − 𝑥 ′)2
+
+2ℓ2
+
+> 𝑥
+
+− (𝑦 − 𝑦 ′)2
+
+2ℓ2
+
+> 𝑦
+
+!
+
+. (33) Alternatively, with a Matérn-3/2 kernel, let 
+
+𝑠 =
+
+ 𝑥 ℓ𝑥 
+
+, 𝑦 ℓ𝑦 
+
+
+
+, 𝑠 ′ =
+
+ 𝑥 ′
+
+ℓ𝑥 
+
+, 𝑦 ′
+
+ℓ𝑦 
+
+
+
+.
+
+Then 
+
+𝐾 separable (( 𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′)) = 𝜎 2 1 +√3|𝑡 − 𝑡 ′ |
+
+ℓ𝑡 
+
+!
+
+exp −√3|𝑡 − 𝑡 ′ |
+
+ℓ𝑡 
+
+! 
+
+1 + √3 ∥𝑠 − 𝑠 ′ ∥
+
+
+
+exp 
+
+
+
+−√3 ∥𝑠 − 𝑠 ′ ∥
+
+
+
+.
+
+(34) 
+
+Additive Joint Kernel: The additive kernel sums marginal temporal ( 𝑘 𝑡 ), marginal spatial ( 𝑘 𝑠 ), and joint interacton ( 𝑘 𝑡 ,𝑠 ) components: 
+
+𝐾 additive 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) = 𝑘 𝑡 (𝑡, 𝑡 ′ | 𝜎 2 
+
+> 𝑡
+
+, ℓ 𝑡 ) + 𝑘 𝑠 (𝑠, 𝑠 ′ | 𝜎 2 
+
+> 𝑠
+
+, ℓ 𝑠 ) + 𝑘 𝑡 ,𝑠 
+
+ (𝑡, 𝑠 ), (𝑡 ′, 𝑠 ′) | 𝜎 2
+
+> 𝑡 ,𝑠
+
+, ℓ 𝑡 ,𝑠 
+
+, (35) where 𝑘 𝑠 is a 2D isotropic spatial kernel and 𝑘 𝑡 ,𝑠 is a 3D isotropic spatio-temporal kernel. 27 C Likelihood derivation 
+
+The likelihood 𝑝 (D | 𝜇, 𝜙 ) for a spatio-temporal Hawkes process is defined as: 
+
+𝐿 = exp 
+
+
+
+−
+
+∫ 𝑇 
+
+> 0
+
+∫ 𝑋 
+
+> 0
+
+∫ 𝑌 
+
+> 0
+
+𝜆 (𝑡, 𝑥, 𝑦 | H 𝑡 ) dtdxdy 
+
+ 𝑛 Ö
+
+> 𝑖 =1
+
+𝜆 (𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 | H 𝑡 𝑖 ). (36) By substituting the conditional intensity 𝜆 (𝑡, 𝑥, 𝑦 | H 𝑡 ) = 𝜇 (𝑡, 𝑥, 𝑦 ) + Í𝑗 :𝑡 𝑗 <𝑡 𝜙 (𝑡 − 𝑡 𝑗 , 𝑥 − 𝑥 𝑗 , 𝑦 − 𝑦 𝑗 ), the product over observed events is expressed as: 
+
+> 𝑛
+
+Ö
+
+> 𝑖 =1
+
+©«
+
+𝜇 (𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 ) + ∑︁  
+
+> 𝑗 :𝑡 𝑗 <𝑡 𝑖
+
+𝜙 (Δ𝑡 𝑖 𝑗 , Δ𝑥 𝑖 𝑗 , Δ𝑦 𝑖 𝑗 )ª®¬
+
+. (37) The compensator term Λ = ∭ 
+
+> W
+
+𝜆 (𝑡, 𝑥, 𝑦 ) dtdxdy can be decomposed into background and triggering components, Λ𝜇 + Λ𝜙 . By swapping the order of summation and integration for the triggering part, and applying the change of variables Δ𝑡 = 𝑡 − 𝑡 𝑖 , Δ𝑥 = 𝑥 − 𝑥 𝑖 , and Δ𝑦 = 𝑦 − 𝑦 𝑖 , we obtain: 
+
+Λ𝜙 =
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+∫ 𝑇 𝑡 𝑖 
+
+∫ 𝑋 
+
+> 0
+
+∫ 𝑌 
+
+> 0
+
+𝜙 (𝑡 − 𝑡 𝑖 , 𝑥 − 𝑥 𝑖 , 𝑦 − 𝑦 𝑖 ) dtdxdy 
+
+=
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+∫ 𝑇 −𝑡 𝑖 
+
+> 0
+
+∫ 𝑋 −𝑥 𝑖 
+
+> −𝑥 𝑖
+
+∫ 𝑌 −𝑦 𝑖 
+
+> −𝑦 𝑖
+
+𝜙 (Δ𝑡, Δ𝑥, Δ𝑦 ) d(Δt) d(Δx) d(Δy). (38) Under the triggering kernel support constraints (𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 ), the effective integration limits for each event 𝑖 
+
+become: 
+
+• Δ𝑡 ∈ [ 0, min (𝑇 𝜙 , 𝑇 − 𝑡 𝑖 )] 
+
+• Δ𝑥 ∈ [ max (− 𝑋 𝜙 , −𝑥 𝑖 ), min (𝑋 𝜙 , 𝑋 − 𝑥 𝑖 )] 
+
+• Δ𝑦 ∈ [ max (− 𝑌 𝜙 , −𝑦 𝑖 ), min (𝑌 𝜙 , 𝑌 − 𝑦 𝑖 )] 
+
+Combining these components leads to the final likelihood expression presented in Eq. (8). 
+
+# D Variational inference 
+
+VI approximates the intractable posterior 𝑝 (𝜃 | 𝐷 ) with a distribution 𝑞 (𝜃 ) from a tractable family Q that minimises the KL divergence: 
+
+𝑞 ∗ (𝜃 ) = arg min  
+
+> 𝑞 ∈ Q
+
+KL (𝑞 (𝜃 ) ∥ 𝑝 (𝜃 | 𝐷 )) =
+
+∫
+
+𝑞 (𝜃 ) log 𝑞 (𝜃 )
+
+𝑝 (𝜃 | 𝐷 ) 𝑑𝜃. (39) Using Bayes’ rule 𝑝 (𝜃 | 𝐷 ) = 𝑝 (𝐷, 𝜃 )/ 𝑝 (𝐷 ), the KL divergence can be expanded as: KL (𝑞 (𝜃 ) ∥ 𝑝 (𝜃 | 𝐷 )) =
+
+∫
+
+𝑞 (𝜃 )
+
+
+
+log 𝑞 (𝜃 )
+
+𝑝 (𝐷, 𝜃 ) + log 𝑝 (𝐷 )
+
+
+
+𝑑𝜃 
+
+=
+
+∫
+
+𝑞 (𝜃 ) log 𝑞 (𝜃 )
+
+𝑝 (𝐷, 𝜃 ) 𝑑𝜃 + log 𝑝 (𝐷 ). (40) Re-arranging terms yields the decomposition of the marginal log-likelihood: 
+
+log 𝑝 (𝐷 ) = L( 𝑞 ) + KL (𝑞 (𝜃 ) ∥ 𝑝 (𝜃 | 𝐷 )) , (41) where L( 𝑞 ) is the ELBO: 
+
+L( 𝑞 ) = E𝑞 [log 𝑝 (𝐷, 𝜃 )] − E𝑞 [log 𝑞 (𝜃 )] = E𝑞 [log 𝑝 (𝐷 | 𝜃 )] − KL (𝑞 (𝜃 ) ∥ 𝑝 (𝜃 )) . (42) Since KL (𝑞 ∥ 𝑝 ) ≥ 0, the ELBO provides a rigorous lower bound log 𝑝 (𝐷 ) ≥ L( 𝑞 ). Maximizing L( 𝑞 )
+
+with respect to 𝑞 is thus equivalent to minimizing the KL divergence to the posterior. 28 E Derivation of the Variational Marginal Distribution 𝑞 ( 𝑓 𝜇 )
+
+Given the conditional distribution 𝑝 ( 𝑓 𝜇 | u𝜇 ) = N ( 𝑚 𝑓 |𝑢 𝜇 , Σ 𝑓 |𝑢 𝜇 ) and the variational posterior over the inducing variables 𝑞 (u𝜇 ) = N ( 𝜇 𝜇 , 𝑆 𝜇 ), the marginal distribution 𝑞 ( 𝑓 𝜇 ) is obtained by integrating out u𝜇 :
+
+𝑞 ( 𝑓 𝜇 ) =
+
+∫
+
+𝑝 ( 𝑓 𝜇 | u𝜇 )𝑞 (u𝜇 ) du𝜇 . (43) Since this is a linear Gaussian system, the resulting marginal distribution 𝑞 ( 𝑓 𝜇 ) is also Gaussian, denoted as 
+
+N ( ˜𝑚 𝜇 , ˜Σ𝜇 ). We can derive its mean and covariance using the law of total expectation and the law of total variance, respectively. 
+
+Derivation of the Mean ˜𝑚 𝜇 : By the law of total expectation, the unconditional mean is the expectation of the conditional mean: 
+
+˜𝑚 𝜇 = E𝑞 (u𝜇 )
+
+E[ 𝑓 𝜇 | u𝜇 ]
+
+= E𝑞 (u𝜇 )
+
+h
+
+𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+u𝜇 
+
+i
+
+. (44) Since 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+is a deterministic matrix independent of u𝜇 , we can factor it out of the expectation: 
+
+˜𝑚 𝜇 = 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+E𝑞 (u𝜇 ) [u𝜇 ] = 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝜇 𝜇 . (45) 
+
+Derivation of the Covariance ˜Σ𝜇 : By the law of total variance, the unconditional variance is the sum of the expected conditional variance and the variance of the conditional mean: 
+
+˜Σ𝜇 = E𝑞 (u𝜇 )
+
+Var ( 𝑓 𝜇 | u𝜇 )| {z }
+
+> Term 1
+
++ Var 𝑞 (u𝜇 )
+
+ E[ 𝑓 𝜇 | u𝜇 ]| {z }
+
+> Term 2
+
+. (46) For Term 1, the conditional covariance Σ 𝑓 |𝑢 𝜇 = 𝐾 𝑍 𝑍 − 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 is deterministic and does not depend on the random variable u𝜇 . Thus, its expectation is simply itself: Term 1 = 𝐾 𝑍 𝑍 − 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 . (47) For Term 2, we compute the variance of the linear transformation of u𝜇 . Using the property Var ( 𝐴 x) =
+
+𝐴 Var (x) 𝐴 ⊤ and noting that (𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+)⊤ = 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 due to the symmetry of the kernel matrices, we have: Term 2 = Var 𝑞 (u𝜇 )
+
+
+
+𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+u𝜇 
+
+
+
+=
+
+
+
+𝐾 𝑍 𝑍 𝜇 𝐾 −1 
+
+> 𝑍 𝜇 𝑍 𝜇
+
+
+
+Var 𝑞 (u𝜇 ) (u𝜇 )
+
+
+
+𝐾 𝑍 𝑍 𝜇 𝐾 −1 
+
+> 𝑍 𝜇 𝑍 𝜇
+
+⊤
+
+= 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑆 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 . (48) Summing Term 1 and Term 2 yields the final expression for the marginal covariance: 
+
+˜Σ𝜇 = 𝐾 𝑍 𝑍 − 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 + 𝐾 𝑍 𝑍 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝑆 𝜇 𝐾 −1  
+
+> 𝑍 𝜇 𝑍 𝜇
+
+𝐾 𝑍 𝜇 𝑍 . (49) 29 F Experimental Settings 
+
+This section details the evaluation metrics, hyperparameter specifications, optimisation protocol, and numerical configurations used for the sparse GP variational inference framework. 
+
+F.1 Evaluation Metrics 
+
+To assess the performance of our model, we employ three metrics targeting point estimates, posterior uncertainty, and overall model fit: 
+
+• Posterior Mean Error ( 𝑃𝑀 mse ). This metric quantifies the accuracy of the point estimates by calculating the average squared distance between the posterior mean and the ground truth: 
+
+𝑃𝑀 mse (𝜇 ) = 1
+
+𝑁 𝜇 𝑁 𝜇 ∑︁ 
+
+> 𝑖 =1
+
+( ˆ𝜇 𝑖 − 𝜇 ∗ 
+
+> 𝑖
+
+)2, (50) 
+
+𝑃𝑀 mse (𝜙 ) = 1
+
+𝑁 𝜙 𝑁 𝜙 ∑︁ 
+
+> 𝑗 =1
+
+( ˆ𝜙 𝑗 − 𝜙 ∗ 
+
+> 𝑗
+
+)2, (51) where 𝜇 ∗, 𝜙 ∗ are ground truth values, and ˆ𝜇 = E𝑞 (𝜇 ), ˆ𝜙 = E𝑞 (𝜙 ) are the posterior mean estimates under the variational posterior 𝑞 .
+
+• Posterior Expected Error ( 𝑃𝐸 mse ). The expected mean squared error calculated under the variational posterior 𝑞 :
+
+𝑃𝐸 mse (𝜇 ) = 1
+
+𝑁 𝜇 𝑁 𝜇 ∑︁ 
+
+> 𝑖 =1
+
+E𝑞 
+
+(𝜇 𝑖 − 𝜇 ∗ 
+
+> 𝑖
+
+)2 , (52) 
+
+𝑃𝐸 mse (𝜙 ) = 1
+
+𝑁 𝜙 𝑁 𝜙 ∑︁ 
+
+> 𝑗 =1
+
+E𝑞 
+
+h
+
+(𝜙 𝑗 − 𝜙 ∗ 
+
+> 𝑗
+
+)2i
+
+. (53) 
+
+• Expected Log-Likelihood ( 𝐸 𝐿𝐿 ). This metric measures the model’s goodness-of-fit by calculating the expectation of the log-likelihood under the variational posterior 𝑞 :
+
+𝐸 𝐿𝐿 = E𝑞 
+
+∑︁ (𝑡 𝑖 ,𝑠 𝑖 ) ∈ D 
+
+log 𝜆 (𝑡 𝑖 , 𝑠 𝑖 ) − 
+
+∫ 𝑇 
+
+> 0
+
+∫
+
+> S
+
+𝜆 (𝑡, 𝑠 ) 𝑑𝑠 𝑑𝑡 
+
+
+
+, (54) where D = {( 𝑡 𝑖 , 𝑠 𝑖 )} 𝑛 𝑖 =1 denotes the set of observed events. 
+
+F.2 Generic Configurations 
+
+• Gaussian Process Priors: For the latent processes 𝑓 𝜇 and 𝑓 𝜙 , we place Gamma priors on the lengthscales ℓ and signal variances 𝜎 2 to ensure positivity. 
+
+• Optimisation: We employ Stochastic Variational Inference (SVI) by maximizing the ELBO. Optimisa-tion is performed using the Adam optimiser [Kingma and Ba, 2014]. 
+
+• Hardware: All computations are implemented using NumPyro [Phan et al., 2019, Bingham et al., 2019] and executed on NVIDIA GH200 GPUs. 30 F.3 Grid Resolution and Numerical Integration 
+
+To maintain consistency and computational stability across all experiments, we adopt a unified grid resolution for evaluating the intensity surfaces and performing the numerical integration of the Hawkes compensator. Specifically, we employ the trapezoidal rule for numerical integration over the following regular grids: 
+
+• Background rate ( 𝜇 ): The integration grid is set to 𝑛 𝜇,𝑡 = 𝑛 𝜇,𝑥 = 𝑛 𝜇,𝑦 = 70 .
+
+• Triggering kernel ( 𝜙 ): The integration grid is set to 𝑛 𝜙,𝑡 = 𝑛 𝜙,𝑥 = 𝑛 𝜙,𝑦 = 40 .Regarding the sparse GP approximation, we place the inducing variables on equidistant grids across their respective spatio-temporal domains. For the background component, we use a total of 𝑀 𝜇 = 4 × 4 × 4 = 64 
+
+inducing points. Similarly, for the triggering component, we employ 𝑀 𝜙 = 3 × 3 × 3 = 27 inducing points. 
+
+F.4 Synthetic Data Experiments 
+
+• Evaluation Protocol: We generate 8 independent realisations for each synthetic scenario. Due to the non-convex nature of the ELBO and the stochasticity in initial distributions, we perform 4 independent runs with different random initialisations for each realisation. The model achieving the best training ELBO (lowest final loss) is selected for reporting the final metrics. 
+
+• Metrics: We report the mean and standard deviation ( mean ± std ) across the 8 realisations for the indicators defined in Section 4.1. 
+
+F.5 Real-world Data Experiments 
+
+• Evaluation Protocol: For both the Chicago Shootings and Vancouver Break-ins datasets, we perform 20 independent SVI runs with different random seeds. Given the complexity of real-world event dynamics, a higher number of initialisations is used to avoid local optima. The model achieving the best final training ELBO is used for the evaluation on the held-out test set. 
+
+• Metrics: For real-world datasets, we report the performance metric from the model that achieved the best training loss among all initialisation attempts. 31 G Extended Results 
+
+G.1 Synthetic Experiment Results for Scenario 1 
+
+Table 7: Comparative analysis for Scenario 1 across various link functions and kernel smoothness specifications. 
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 1.21 ± 1.90 4.49 ± 2.26 1.90 ± 1.87 3.33 ± 0.47 
+
+Cox-Hawkes 4.63 ± 2.76 2.92 ± 1.66 13 .84 ± 4.90 4.42 ± 1.66 
+
+Ours (separable RBF kernel) softplus-softplus 8.13 ± 2.50 9.82 ± 2.31 14 .95 ± 2.73 14 .64 ± 2.42 
+
+Ours (separable RBF kernel) sigmoid-sigmoid 8.03 ± 2.86 8.16 ± 2.26 15 .96 ± 3.51 15 .23 ± 2.12 
+
+Ours (separable RBF kernel) exp-exp 8.48 ± 2.50 8.57 ± 1.97 16 .29 ± 2.85 14 .39 ± 2.12 
+
+Ours (separable Matérn, 𝜈 = 0.5) softplus-softplus 8.32 ± 2.03 9.82 ± 3.34 17 .10 ± 2.17 14 .49 ± 3.11 
+
+Ours (separable Matérn, 𝜈 = 0.5) sigmoid-sigmoid 9.54 ± 2.36 12 .33 ± 2.64 19 .78 ± 2.59 18 .39 ± 2.30 
+
+Ours (separable Matérn, 𝜈 = 0.5) exp-exp 11 .29 ± 2.79 15 .08 ± 2.23 22 .21 ± 3.08 21 .22 ± 1.94 
+
+Ours (separable Matérn, 𝜈 = 1.5) softplus-softplus 6.75 ± 1.99 6.89 ± 2.53 14 .15 ± 2.20 11 .68 ± 2.52 
+
+Ours (separable Matérn, 𝜈 = 1.5) sigmoid-sigmoid 7.77 ± 2.63 7.26 ± 2.30 16 .39 ± 3.16 13 .26 ± 2.19 
+
+Ours (separable Matérn, 𝜈 = 1.5) exp-exp 8.62 ± 2.66 8.79 ± 2.36 17 .60 ± 3.10 14 .62 ± 2.12 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 6.58 ± 2.08 7.36 ± 2.69 13 .27 ± 2.24 12 .03 ± 2.64 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 7.34 ± 2.61 7.04 ± 2.32 15 .13 ± 3.16 13 .35 ± 2.28 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 8.11 ± 2.69 8.12 ± 2.09 16 .18 ± 3.19 14 .01 ± 1.99 
+
+Ours (additive RBF kernel) softplus-softplus 2.88 ± 0.88 5.01 ± 1.36 7.63 ± 0.82 10 .16 ± 1.47 
+
+Ours (additive RBF kernel) sigmoid-sigmoid 3.43 ± 1.20 7.91 ± 2.93 9.75 ± 1.50 15 .43 ± 3.28 
+
+Ours (additive RBF kernel) exp-exp 4.78 ± 2.22 7.26 ± 3.46 13 .69 ± 4.23 14 .08 ± 3.78 
+
+Ours (additive Matérn, 𝜈 = 0.5) softplus-softplus 4.10 ± 1.49 7.20 ± 2.05 9.83 ± 2.16 12 .66 ± 2.06 
+
+Ours (additive Matérn, 𝜈 = 0.5) sigmoid-sigmoid 4.06 ± 1.09 11 .19 ± 2.39 9.84 ± 0.82 17 .67 ± 2.22 
+
+Ours (additive Matérn, 𝜈 = 0.5) exp-exp 5.96 ± 2.58 12 .74 ± 2.38 13 .82 ± 4.91 19 .48 ± 2.26 
+
+Ours (additive Matérn, 𝜈 = 1.5) softplus-softplus 3.18 ± 0.98 5.48 ± 1.77 8.66 ± 1.16 11 .13 ± 2.00 
+
+Ours (additive Matérn, 𝜈 = 1.5) sigmoid-sigmoid 3.31 ± 0.92 7.55 ± 2.71 9.40 ± 0.71 14 .11 ± 3.07 
+
+Ours (additive Matérn, 𝜈 = 1.5) exp-exp 4.96 ± 2.46 8.02 ± 2.29 13 .47 ± 4.73 14 .72 ± 2.18 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 3.14 ± 1.10 5.28 ± 1.77 8.44 ± 1.45 10 .83 ± 1.93 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 3.76 ± 1.51 7.55 ± 2.93 10 .45 ± 2.06 14 .62 ± 3.41 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 5.11 ± 2.50 7.36 ± 2.31 13 .82 ± 4.84 13 .97 ± 2.31 
+
+Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+32 G.2 Synthetic Experiment Results for Scenario 2 
+
+Table 8: Comparative analysis for Scenario 2 across various link functions and kernel smoothness specifications. 
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 152 .64 ± 3.24 16 .78 ± 7.56 153 .37 ± 3.26 11 .58 ± 6.34 
+
+Cox-Hawkes 16 .08 ± 4.72 4.21 ± 2.33 30 .57 ± 6.09 5.68 ± 2.27 
+
+Ours (separable RBF kernel) softplus-softplus 22 .09 ± 7.26 13 .24 ± 1.68 37 .01 ± 6.70 18 .04 ± 1.94 
+
+Ours (separable RBF kernel) sigmoid-sigmoid 19 .56 ± 5.97 11 .76 ± 2.07 36 .59 ± 5.88 19 .24 ± 2.48 
+
+Ours (separable RBF kernel) exp-exp 22 .34 ± 6.55 11 .58 ± 1.74 38 .29 ± 6.21 17 .71 ± 2.21 
+
+Ours (separable Matérn, 𝜈 = 0.5) softplus-softplus 19 .79 ± 6.30 11 .59 ± 1.64 34 .26 ± 5.79 16 .96 ± 1.87 
+
+Ours (separable Matérn, 𝜈 = 0.5) sigmoid-sigmoid 19 .98 ± 5.46 15 .67 ± 1.48 37 .52 ± 4.93 22 .18 ± 1.71 
+
+Ours (separable Matérn, 𝜈 = 0.5) exp-exp 21 .98 ± 6.45 18 .26 ± 1.46 39 .91 ± 6.14 24 .89 ± 1.85 
+
+Ours (separable Matérn, 𝜈 = 1.5) softplus-softplus 17 .78 ± 6.43 9.24 ± 1.43 31 .20 ± 5.73 14 .65 ± 1.87 
+
+Ours (separable Matérn, 𝜈 = 1.5) sigmoid-sigmoid 17 .27 ± 5.92 10 .46 ± 1.58 32 .90 ± 5.65 16 .91 ± 1.96 
+
+Ours (separable Matérn, 𝜈 = 1.5) exp-exp 18 .45 ± 6.14 11 .56 ± 1.37 33 .73 ± 5.64 17 .93 ± 1.79 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 18 .16 ± 6.48 9.16 ± 1.43 31 .73 ± 5.80 14 .58 ± 1.89 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 17 .28 ± 5.91 10 .14 ± 1.66 32 .90 ± 5.69 16 .91 ± 2.08 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 18 .62 ± 6.08 10 .87 ± 1.36 33 .69 ± 5.60 17 .27 ± 1.80 
+
+Ours (additive RBF kernel) softplus-softplus 11 .14 ± 6.21 7.67 ± 1.37 20 .22 ± 6.14 13 .44 ± 2.74 
+
+Ours (additive RBF kernel) sigmoid-sigmoid 11 .95 ± 6.18 11 .96 ± 2.58 22 .88 ± 6.12 20 .20 ± 3.56 
+
+Ours (additive RBF kernel) exp-exp 14 .12 ± 5.72 9.87 ± 1.91 25 .52 ± 5.75 17 .37 ± 3.16 
+
+Ours (additive Matérn, 𝜈 = 0.5) softplus-softplus 16 .37 ± 6.12 10 .32 ± 1.83 27 .42 ± 6.18 16 .21 ± 2.02 
+
+Ours (additive Matérn, 𝜈 = 0.5) sigmoid-sigmoid 17 .17 ± 5.52 14 .42 ± 1.56 28 .87 ± 5.77 21 .37 ± 1.89 
+
+Ours (additive Matérn, 𝜈 = 0.5) exp-exp 19 .66 ± 6.45 16 .07 ± 1.80 31 .81 ± 7.46 23 .69 ± 2.06 
+
+Ours (additive Matérn, 𝜈 = 1.5) softplus-softplus 12 .94 ± 5.98 8.36 ± 1.58 22 .89 ± 6.09 14 .80 ± 2.12 
+
+Ours (additive Matérn, 𝜈 = 1.5) sigmoid-sigmoid 13 .36 ± 5.71 10 .10 ± 1.37 24 .23 ± 5.64 16 .82 ± 1.74 
+
+Ours (additive Matérn, 𝜈 = 1.5) exp-exp 15 .03 ± 6.31 10 .90 ± 1.97 26 .03 ± 6.49 18 .42 ± 2.22 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 11 .81 ± 6.14 8.08 ± 1.26 21 .00 ± 5.86 14 .48 ± 1.71 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 12 .38 ± 5.80 10 .02 ± 1.85 23 .27 ± 5.79 16 .98 ± 2.55 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 14 .43 ± 6.22 10 .50 ± 1.97 25 .50 ± 6.44 18 .26 ± 2.01 
+
+Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+33 G.3 Synthetic Experiment Results for Scenario 3 
+
+Table 9: Comparative analysis for Scenario 3 across various link functions and kernel smoothness specifications. 
+
+Method Link 𝑃𝑀 mse (𝜇 ) 𝑃𝑀 mse (𝜙 ) 𝑃𝐸 mse (𝜇 ) 𝑃𝐸 mse (𝜙 )
+
+Parametric Hawkes 169 .55 ± 5.35 32 .50 ± 4.42 170 .35 ± 5.31 31 .11 ± 3.81 
+
+Cox-Hawkes 24 .39 ± 5.60 24 .97 ± 1.46 47 .32 ± 5.61 26 .02 ± 1.44 
+
+Ours (separable RBF) softplus-softplus 22 .92 ± 3.97 10 .72 ± 5.46 41 .49 ± 3.82 18 .92 ± 4.71 
+
+Ours (separable RBF) sigmoid-sigmoid 25 .24 ± 5.24 11 .61 ± 5.07 47 .67 ± 4.93 20 .31 ± 4.94 
+
+Ours (separable RBF) exp-exp 28 .08 ± 5.25 12 .41 ± 5.29 48 .23 ± 5.34 20 .75 ± 4.68 
+
+Ours (separable Matérn, 𝜈 = 0.5) softplus-softplus 22 .58 ± 3.49 12 .14 ± 4.82 40 .55 ± 3.42 19 .52 ± 4.33 
+
+Ours (separable Matérn, 𝜈 = 0.5) sigmoid-sigmoid 25 .75 ± 5.40 12 .94 ± 4.47 47 .83 ± 5.75 20 .81 ± 4.28 
+
+Ours (separable Matérn, 𝜈 = 0.5) exp-exp 28 .26 ± 4.94 13 .74 ± 4.25 51 .09 ± 5.11 21 .46 ± 3.82 
+
+Ours (separable Matérn, 𝜈 = 1.5) softplus-softplus 20 .54 ± 3.79 10 .53 ± 4.54 37 .82 ± 3.76 18 .83 ± 3.93 
+
+Ours (separable Matérn, 𝜈 = 1.5) sigmoid-sigmoid 23 .04 ± 5.37 10 .89 ± 5.17 43 .86 ± 5.32 18 .43 ± 4.79 
+
+Ours (separable Matérn, 𝜈 = 1.5) exp-exp 24 .47 ± 5.27 11 .70 ± 4.43 44 .36 ± 5.34 19 .91 ± 3.98 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 20 .75 ± 3.86 10 .23 ± 4.39 38 .07 ± 3.80 18 .74 ± 3.77 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-sigmoid 23 .00 ± 5.34 10 .57 ± 5.20 43 .84 ± 5.06 18 .39 ± 4.84 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-exp 24 .79 ± 5.32 11 .75 ± 4.36 44 .17 ± 5.43 20 .18 ± 3.93 
+
+Ours (additive RBF) softplus-softplus 19 .17 ± 5.28 10 .14 ± 4.27 37 .11 ± 4.42 18 .54 ± 4.23 
+
+Ours (additive RBF) sigmoid-sigmoid 25 .50 ± 4.14 9.31 ± 4.61 40 .57 ± 8.14 17 .49 ± 4.42 
+
+Ours (additive RBF) exp-exp 24 .88 ± 6.60 9.26 ± 4.24 43 .98 ± 6.32 17 .84 ± 3.96 
+
+Ours (additive Matérn, 𝜈 = 0.5) softplus-softplus 21 .08 ± 3.50 12 .18 ± 5.48 38 .85 ± 3.60 20 .14 ± 5.12 
+
+Ours (additive Matérn, 𝜈 = 0.5) sigmoid-sigmoid 26 .62 ± 6.17 12 .38 ± 5.21 49 .02 ± 6.70 20 .51 ± 4.67 
+
+Ours (additive Matérn, 𝜈 = 0.5) exp-exp 29 .36 ± 5.89 13 .31 ± 4.60 52 .82 ± 6.02 21 .00 ± 4.14 
+
+Ours (additive Matérn, 𝜈 = 1.5) softplus-softplus 18 .58 ± 3.51 11 .06 ± 5.78 37 .57 ± 3.68 18 .80 ± 5.36 
+
+Ours (additive Matérn, 𝜈 = 1.5) sigmoid-sigmoid 26 .55 ± 4.19 10 .21 ± 4.82 42 .19 ± 8.40 18 .16 ± 4.60 
+
+Ours (additive Matérn, 𝜈 = 1.5) exp-exp 25 .71 ± 6.77 11 .05 ± 5.25 46 .25 ± 7.67 18 .87 ± 4.93 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 18 .27 ± 3.56 10 .91 ± 5.89 37 .76 ± 3.77 18 .75 ± 5.45 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-sigmoid 26 .22 ± 4.27 9.70 ± 4.78 41 .47 ± 8.80 17 .94 ± 4.50 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-exp 25 .32 ± 6.85 10 .50 ± 4.39 45 .91 ± 7.83 19 .47 ± 4.47 
+
+Results are averaged over 8 independent realisations. Mean values and standard deviations ( ±) are reported. Red and blue indicate the best and second-best performance, respectively. All values are scaled by 10 2.
+
+34 G.4 Detailed Results for Real-world Data 
+
+Table 10: Performance comparison (Expected Log-Likelihood) on real-world datasets. 
+
+Chicago Shootings Vancouver Break-ins 
+
+Method Link 𝐸 𝐿𝐿 Link 𝐸 𝐿𝐿 
+
+Parametric Hawkes — 1471 .17 — 2203 .65 
+
+Log Gaussian Cox Process exp 1535 .49 exp 2000 .43 
+
+Cox-Hawkes exp 1647 .26 exp 2157 .32 
+
+Ours (separable RBF) softplus-softplus 1615 .71 softplus-softplus 2209 .45 
+
+Ours (separable RBF) sigmoid-softplus 1642 .24 sigmoid-softplus 2198 .64 
+
+Ours (separable RBF) exp-softplus 1643 .36 exp-softplus 2188 .72 
+
+Ours (separable Matérn, 𝜈 = 0.5) softplus-softplus 1626 .44 softplus-softplus 2233 .63 
+
+Ours (separable Matérn, 𝜈 = 0.5) sigmoid-softplus 1639 .41 sigmoid-softplus 2217 .16 
+
+Ours (separable Matérn, 𝜈 = 0.5) exp-softplus 1645 .53 exp-softplus 2203 .97 
+
+Ours (separable Matérn, 𝜈 = 1.5) softplus-softplus 1624 .10 softplus-softplus 2226 .73 
+
+Ours (separable Matérn, 𝜈 = 1.5) sigmoid-softplus 1648 .11 sigmoid-softplus 2212 .76 
+
+Ours (separable Matérn, 𝜈 = 1.5) exp-softplus 1652 .56 exp-exp 2197 .42 
+
+Ours (separable Matérn, 𝜈 = 2.5) softplus-softplus 1622 .09 softplus-softplus 2220 .85 
+
+Ours (separable Matérn, 𝜈 = 2.5) sigmoid-softplus 1645 .43 sigmoid-softplus 2205 .70 
+
+Ours (separable Matérn, 𝜈 = 2.5) exp-softplus 1651 .15 exp-softplus 2193 .20 
+
+Ours (additive RBF) softplus-softplus 1616 .90 softplus-softplus 2249 .02 
+
+Ours (additive RBF) sigmoid-softplus 1656 .78 sigmoid-softplus 2245 .78 
+
+Ours (additive RBF) exp-softplus 1670 .68 exp-softplus 2227 .90 
+
+Ours (additive Matérn, 𝜈 = 0.5) softplus-softplus 1623 .12 softplus-softplus 2239 .53 
+
+Ours (additive Matérn, 𝜈 = 0.5) sigmoid-softplus 1642 .45 sigmoid-softplus 2221 .36 
+
+Ours (additive Matérn, 𝜈 = 0.5) exp-softplus 1653 .71 exp-softplus 2207 .75 
+
+Ours (additive Matérn, 𝜈 = 1.5) softplus-softplus 1623 .46 softplus-softplus 2244 .67 
+
+Ours (additive Matérn, 𝜈 = 1.5) sigmoid-softplus 1655 .61 sigmoid-softplus 2238 .62 
+
+Ours (additive Matérn, 𝜈 = 1.5) exp-softplus 1669 .86 exp-softplus 2214 .18 
+
+Ours (additive Matérn, 𝜈 = 2.5) softplus-softplus 1621 .99 softplus-softplus 2247 .74 
+
+Ours (additive Matérn, 𝜈 = 2.5) sigmoid-softplus 1655 .94 sigmoid-softplus 2241 .56 
+
+Ours (additive Matérn, 𝜈 = 2.5) exp-softplus 1670 .64 exp-softplus 2215 .98 
+
+Higher 𝐸 𝐿𝐿 indicates superior performance. Best and second-best results are highlighted in red and blue, respectively. 
+
+35 G.5 Estimated Triggering Kernels for Real-World Datasets 
+
+Figure 14: Variational posterior mean on the self-excitation triggering kernel at selected timestamps for the Chicago shootings dataset. 
+
+Figure 15: Variational Posterior mean on the self-excitation triggering kernel at selected timestamps for the Vancouver break-ins dataset . 36 H Sensitivity Analysis of the Triggering Kernel Window 
+
+In this section, we study how sensitive our nonparametric framework is to the choice of the finite support window (𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 ) used for the triggering kernel. Choosing this window involves a trade-off. If the window is too small, part of the true self-exciting effect may be truncated, and some contagion information will be lost. If the window is too large, distant events that should belong to the background may be incorrectly included in the triggering component, and the computational cost also increases. To examine the robustness of the model, we vary the temporal range 𝑇 𝜙 ∈ { 0.4, 0.6, 0.8} and the spatial ranges 𝑋 𝜙 = 𝑌 𝜙 ∈ { 0.2, 0.4, 0.6, 0.8, 1.0}. The 𝐸 𝐿𝐿 values for our proposed model, as well as for the Parametric Hawkes and Cox-Hawkes baselines, are reported in Tables 11 and 12. The results show different behaviors in the spatial and temporal dimensions. For the spatial range, the 
+
+𝐸 𝐿𝐿 follows a clear unimodal pattern: performance improves when the window increases from small to moderate size, but decreases when the window becomes too large. This suggests that large spatial windows include too much distant background noise, which weakens the local triggering signal. For the temporal range, the 𝐸 𝐿𝐿 slightly increases as 𝑇 𝜙 becomes larger, but this improvement is small and likely comes from increased model flexibility rather than a better description of the true crime dynamics. Using a very long temporal window may also lead to overfitting and higher computational cost. Overall, a moderate window size provides a good balance between capturing the main triggering effects and keeping the model simple. More importantly, under most window settings, our nonparametric model achieves higher 𝐸 𝐿𝐿 than the parametric baselines. This overall pattern across different window sizes suggests that the proposed nonparametric framework is generally more robust than the parametric and semi-parametric alternatives. Table 11: Sensitivity analysis for different triggering kernel windows on the Chicago Shootings dataset. We report 𝐸 𝐿𝐿 under various temporal and spatial truncation thresholds ( 𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 ). The specific link function used for our proposed model is indicated for each configuration. 
+
+Window Size Expected Log-Likelihood ( 𝐸 𝐿𝐿 )
+
+𝑇 𝜙 𝑋 𝜙 𝑌 𝜙 Parametric Cox-Hawkes Link (Ours) Ours 0.4 0.2 0.2 1280.65 1644.08 exp-softplus 1637.28 0.4 0.4 1472.31 1659.15 exp-softplus 1660.30 0.6 0.6 1535.65 1670.45 exp-softplus 1675.61 0.8 0.8 1540.65 1671.34 exp-softplus 1674.27 1.0 1.0 1539.09 1671.37 exp-softplus 1673.08 0.6 0.2 0.2 1375.93 1673.33 exp-softplus 1679.37 0.4 0.4 1569.82 1686.78 exp-softplus 1693.48 0.6 0.6 1603.39 1699.08 exp-softplus 1723.94 0.8 0.8 1604.72 1699.77 exp-softplus 1719.28 1.0 1.0 1603.71 1699.76 exp-softplus 1712.97 0.8 0.2 0.2 1463.18 1708.16 exp-softplus 1720.70 0.4 0.4 1621.08 1717.60 exp-softplus 1735.83 0.6 0.6 1643.70 1728.81 exp-softplus 1761.38 0.8 0.8 1643.95 1729.21 exp-softplus 1757.17 1.0 1.0 1643.63 1729.20 exp-softplus 1751.01 37 Table 12: Sensitivity analysis for different triggering kernel windows on the Vancouver Break-ins dataset. We report 𝐸 𝐿𝐿 under various temporal and spatial truncation thresholds ( 𝑇 𝜙 , 𝑋 𝜙 , 𝑌 𝜙 ). The specific link function used for our proposed model is indicated for each configuration. 
+
+Window Size Expected Log-Likelihood ( 𝐸 𝐿𝐿 )
+
+𝑇 𝜙 𝑋 𝜙 𝑌 𝜙 Parametric Cox-Hawkes Link (Ours) Ours 0.4 0.2 0.2 2189.07 2151.20 exp-softplus 2178.71 0.4 0.4 2195.06 2157.38 exp-exp 2280.83 0.6 0.6 2193.22 2149.07 exp-exp 2249.51 0.8 0.8 2193.15 2147.06 exp-exp 2222.47 1.0 1.0 2193.16 2146.55 exp-exp 2206.10 0.6 0.2 0.2 2200.49 2168.45 exp-softplus 2224.25 0.4 0.4 2208.15 2180.96 exp-exp 2314.55 0.6 0.6 2208.02 2170.62 exp-exp 2283.94 0.8 0.8 2208.09 2168.49 exp-exp 2251.14 1.0 1.0 2208.11 2169.26 exp-exp 2229.18 0.8 0.2 0.2 2215.27 2200.45 exp-softplus 2264.96 0.4 0.4 2227.84 2216.78 exp-exp 2350.82 0.6 0.6 2228.86 2196.50 exp-exp 2311.60 0.8 0.8 2228.95 2194.79 exp-exp 2255.38 1.0 1.0 2228.97 2192.95 exp-exp 2263.91 38 I Model Diagnostics 
+
+I.1 Super-Thinning Algorithm 
+
+To assess the goodness-of-fit of our proposed model, we employ the super-thinning algorithm [Clements et al., 2012]. This method evaluates a fitted spatio-temporal point process by transforming the observed events into a residual process that, if the model is correctly specified, is distributed as a homogeneous Poisson process with rate 𝑘 .Let ˆ𝜆 (𝑡, 𝑥, 𝑦 ) be the estimated conditional intensity from our model. We choose the target rate 𝑘 such that 
+
+inf ˆ 𝜆 ≤ 𝑘 ≤ sup ˆ 𝜆 . The procedure involves two steps: 1. Thinning: Each observed event 𝑖 at location (𝑥 𝑖 , 𝑦 𝑖 ) and time 𝑡 𝑖 in the original dataset is retained with probability 
+
+𝑝 𝑖 = min 
+
+ 𝑘 
+
+ˆ𝜆 (𝑡 𝑖 , 𝑥 𝑖 , 𝑦 𝑖 ) , 1
+
+
+
+.
+
+2. Superposition: We simulate a new inhomogeneous Poisson process with rate 𝜆 sim (𝑡, 𝑥, 𝑦 ) = max {𝑘 −
+
+ˆ𝜆 (𝑡, 𝑥, 𝑦 ), 0}, and add these simulated points to the thinned observed process. If the estimated intensity ˆ𝜆 (𝑡, 𝑥, 𝑦 ) accurately reflects the true underlying data-generating mechanism, the resulting combined process is equivalent to a homogeneous Poisson process with a constant rate 𝑘 .
+
+I.2 Statistical Goodness-of-Fit Tests 
+
+We evaluate the homogeneity of the super-thinned process by examining its spatial and its temporal distributions. Let 𝑁 𝑡 ℎ𝑖𝑛𝑛𝑒𝑑 be the total number of events in the resulting super-thinned process. 
+
+Temporal Analysis (Inter-arrival Time Test) 
+
+To assess the temporal fit, we analyze the inter-arrival times Δ𝑡 𝑖 = 𝑡 (𝑖 ) − 𝑡 (𝑖 −1) of the sorted events. For a homogeneous Poisson process, these intervals follow an exponential distribution with rate Λ = 𝑁 𝑡 ℎ𝑖𝑛𝑛𝑒𝑑 /𝑇 𝑚𝑎𝑥 .We perform a Kolmogorov-Smirnov (KS) test against the cumulative distribution function: 
+
+𝐹 (Δ𝑡 ) = 1 − exp (− ΛΔ 𝑡 ) (55) A non-significant 𝑝 -value ( 𝑝 > 0.05 ) indicates that the model has successfully captured the temporal triggering effects. 
+
+Spatial Analysis (Quadrat Count Test) 
+
+To assess spatial fit, the domain 𝑋 × 𝑌 is partitioned into an 𝑛 𝑔𝑟𝑖𝑑 × 𝑛 𝑔𝑟𝑖𝑑 regular grid. The expected count per quadrat is denoted by 𝐸 = 𝑁 𝑡 ℎ𝑖𝑛𝑛𝑒𝑑 /𝑛 2 
+
+> 𝑔𝑟𝑖𝑑
+
+. We then perform a 𝜒 2 test: 
+
+𝜒 2 =
+
+> 𝑛 2
+> 𝑔𝑟𝑖𝑑
+
+∑︁ 
+
+> 𝑗 =1
+
+(𝑂 𝑗 − 𝐸 )2
+
+𝐸 (56) where 𝑂 𝑗 is the observed count in the 𝑗 -th quadrat. A significant result ( 𝑝 < 0.05 ) indicates residual spatial clustering not captured by the model. 39 References 
+
+Ryan Prescott Adams, Iain Murray, and David JC MacKay. Tractable nonparametric bayesian inference in poisson processes with gaussian process intensities. In Proceedings of the 26th annual international conference on machine learning , pages 9–16, 2009. Pierfrancesco Alaimo Di Loro, Marco Mingione, and Paolo Fantozzi. Semi-parametric spatio-temporal hawkes process for modelling road accidents in rome. Journal of Agricultural, Biological and Environmental Statistics , 30(1):8–38, 2025. Emmanuel Bacry, Iacopo Mastromatteo, and Jean-François Muzy. Hawkes processes in finance. Market Microstructure and Liquidity , 1(01):1550005, 2015. Alba Bernabeu, Jiancang Zhuang, and Jorge Mateu. Spatio-temporal hawkes point processes: a review. 
+
+Journal of Agricultural, Biological and Environmental Statistics , 30(1):89–119, 2025. Alba Bernabeu Atanasio, Jiancang Zhuang, and Jorge Mateu. Spatio-temporal hawkes point processes: A review. 2024. Eli Bingham, Jonathan P. Chen, Martin Jankowiak, Fritz Obermeyer, Neeraj Pradhan, Theofanis Karaletsos, Rohit Singh, Paul A. Szerlip, Paul Horsfall, and Noah D. Goodman. Pyro: Deep universal probabilistic programming. J. Mach. Learn. Res. , 20:28:1–28:6, 2019. URL http://jmlr.org/papers/v20/18-403. html .David M Blei, Alp Kucukelbir, and Jon D McAuliffe. Variational inference: A review for statisticians. Journal of the American statistical Association , 112(518):859–877, 2017. Marcos Costa Santos Carreira. Exponential kernels with latency in hawkes processes: Applications in finance. 
+
+arXiv preprint arXiv:2101.06348 , 2021. Jing Chen, Nick Taylor, Steve Yang, and Qian Han. Hawkes processes in finance: market structure and impact. 
+
+The European Journal of Finance , 28(7):621–626, 2022. Wen-Hao Chiang, Xueying Liu, and George Mohler. Hawkes process modeling of covid-19 with mobility leading indicators and spatial covariates. International journal of forecasting , 38(2):505–520, 2022. Robert Alan Clements, Frederic Paik Schoenberg, and Alejandro Veen. Evaluation of space–time point process models using super-thinning. Environmetrics , 23(7):606–616, 2012. D.J. Daley and D. Vere-Jones. An Introduction to the Theory of Point Processes: Volume II: General Theory and Structure . Probability and Its Applications. Springer, New York, 2nd edition, 2008. ISBN 978-0-387-21338-2. Peter J Diggle, Paula Moraga, Barry Rowlingson, and Benjamin M Taylor. Spatial and spatio-temporal log-gaussian cox processes: extending the geostatistical paradigm. 2013. Sophie Donnet, Vincent Rivoirard, and Judith Rousseau. Nonparametric bayesian estimation for multivariate hawkes processes. The Annals of statistics , 48(5):2698–2727, 2020. David K Duvenaud, Hannes Nickisch, and Carl Rasmussen. Additive gaussian processes. Advances in neural information processing systems , 24, 2011. Michael Eichler, Rainer Dahlhaus, and Johannes Dueck. Graphical modeling for multivariate hawkes processes with nonparametric link functions. Journal of Time Series Analysis , 38(2):225–242, 2017. 40 Seth Flaxman, Andrew Wilson, Daniel Neill, Hannes Nickisch, and Alex Smola. Fast kronecker inference in gaussian processes with non-gaussian likelihoods. In International conference on machine learning , pages 607–616. PMLR, 2015. Alan G Hawkes. Spectra of some self-exciting and mutually exciting point processes. Biometrika , 58(1): 83–90, 1971. James Hensman, Nicolas Durrande, and Arno Solin. Variational fourier features for gaussian processes. 
+
+Journal of Machine Learning Research , 18(151):1–52, 2018. Don H Johnson. Point process models of single-neuron discharges. Journal of computational neuroscience ,3:275–299, 1996. Michael I Jordan, Zoubin Ghahramani, Tommi S Jaakkola, and Lawrence K Saul. An introduction to variational methods for graphical models. Machine learning , 37(2):183–233, 1999. Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. Junhyeon Kwon, Yingcai Zheng, and Mikyoung Jun. Flexible spatio-temporal hawkes process models for earthquake occurrences. Spatial Statistics , 54:100728, 2023. Erik Lewis and George Mohler. A nonparametric em algorithm for multiscale hawkes processes. Journal of nonparametric statistics , 1(1):1–20, 2011. Haitao Liu, Yew-Soon Ong, Xiaobo Shen, and Jianfei Cai. When gaussian process meets big data: A review of scalable gps. IEEE transactions on neural networks and learning systems , 31(11):4405–4423, 2020. Chris Lloyd, Tom Gunter, Michael Osborne, and Stephen Roberts. Variational inference for gaussian process modulated poisson processes. In International Conference on Machine Learning , pages 1814–1822. PMLR, 2015. Xiaoyu Lu, Alexis Boukouvalas, and James Hensman. Additive gaussian processes revisited. In International conference on machine learning , pages 14358–14383. PMLR, 2022. Noa Malem-Shinitski, Cesar Ojeda, and Manfred Opper. Nonlinear hawkes process with gaussian process self effects. arXiv preprint arXiv:2105.09618 , 2021. Isaac Manring, Honglang Wang, George Mohler, and Xenia Miscouridou. Bstpp: a python package for bayesian spatiotemporal point processes. Journal of Applied Statistics , pages 1–20, 2025. David Marsan and Olivier Lengline. Extending earthquakes’ reach through cascading. Science , 319(5866): 1076–1079, 2008. Hongyuan Mei and Jason M Eisner. The neural hawkes process: A neurally self-modulating multivariate point process. Advances in neural information processing systems , 30, 2017. Xenia Miscouridou and Deborah Sulem. Posterior concentration in spatio-temporal hawkes processes. arXiv preprint arXiv:2601.03719 , 2026. Xenia Miscouridou, Samir Bhatt, George Mohler, Seth Flaxman, and Swapnil Mishra. Cox-hawkes: Doubly stochastic spatiotemporal poisson processes. Transactions on Machine Learning Research , 2023. URL 
+
+https://arxiv.org/abs/2210.11844 . arXiv preprint arXiv:2210.11844. 41 George Mohler. Marked point process hotspot maps for homicide and gun crime prediction in chicago. 
+
+International Journal of Forecasting , 30(3):491–497, 2014. George O Mohler, Martin B Short, P Jeffrey Brantingham, Frederic Paik Schoenberg, and George E Tita. Self-exciting point process modeling of crime. Journal of the american statistical association , 106(493): 100–108, 2011. Jesper Møller, Anne Randi Syversveen, and Rasmus Plenge Waagepetersen. Log gaussian cox processes. 
+
+Scandinavian journal of statistics , 25(3):451–482, 1998. Yosihiko Ogata. Statistical models for earthquake occurrences and residual analysis for point processes. 
+
+Journal of the American Statistical association , 83(401):9–27, 1988. Yosihiko Ogata. Space-time point-process models for earthquake occurrences. Annals of the Institute of Statistical Mathematics , 50:379–402, 1998. Manfred Opper and Cédric Archambeau. The variational gaussian approximation revisited. Neural computation , 21(3):786–792, 2009. Du Phan, Neeraj Pradhan, and Martin Jankowiak. Composable effects for flexible and accelerated probabilistic programming in numpyro. arXiv preprint arXiv:1912.11554 , 2019. Tony A Plate. Accuracy versus interpretability in flexible modeling: Implementing a tradeoff using gaussian process models. Behaviormetrika , 26(1):29–50, 1999. Joaquin Quinonero-Candela and Carl Edward Rasmussen. A unifying view of sparse approximate gaussian process regression. Journal of machine learning research , 6(Dec):1939–1959, 2005. Alex Reinhart. A review of self-exciting spatio-temporal point processes and their applications. Statistical Science , 33(3):299–318, 2018. Yves-Laurent Kom Samo and Stephen Roberts. Scalable nonparametric bayesian inference on point processes with gaussian processes. In International conference on machine learning , pages 2227–2236. PMLR, 2015. Frederic Schoenberg. Estimating covid-19 transmission time using hawkes point processes. The Annals of Applied Statistics , 17(4):3349–3362, 2023. Emilia Siviero, Guillaume Staerman, Stephan Clémençon, and Thomas Moreau. Flexible parametric inference for space-time hawkes processes. arXiv preprint arXiv:2406.06849 , 2024. Guillaume Staerman, Cédric Allain, Alexandre Gramfort, and Thomas Moreau. Fadin: Fast discretized inference for hawkes processes with general parametric kernels. In International Conference on Machine Learning , pages 32575–32597. PMLR, 2023. Deborah Sulem, Vincent Rivoirard, and Judith Rousseau. Scalable and adaptive variational bayes methods for hawkes processes. arXiv preprint arXiv:2212.00293 , 2022. Deborah Sulem, Vincent Rivoirard, and Judith Rousseau. Bayesian estimation of nonlinear hawkes processes. 
+
+Bernoulli , 30(2):1257–1286, 2024. Michalis Titsias. Variational learning of inducing variables in sparse gaussian processes. In Artificial intelligence and statistics , pages 567–574. PMLR, 2009. 42 Siyi Wang, Xu Wang, and Chenlong Li. Modeling terror attacks with self-exciting point processes and forecasting the number of terror events. Entropy , 25(7):1011, 2023. Christopher Williams and Matthias Seeger. Using the nyström method to speed up kernel machines. Advances in neural information processing systems , 13, 2000. Christopher KI Williams and Carl Edward Rasmussen. Gaussian processes for machine learning , volume 2. MIT press Cambridge, MA, 2006. Feng Zhou. Generalized Hawkes Process: Nonparametric and Nonstationary . PhD thesis, UNSW Sydney, 2019. Feng Zhou, Zhidong Li, Xuhui Fan, Yang Wang, Arcot Sowmya, and Fang Chen. Efficient inference for nonparametric hawkes processes using auxiliary latent variables. Journal of Machine Learning Research ,21(224):1–31, 2020. Ke Zhou, Hongyuan Zha, and Le Song. Learning triggering kernels for multi-dimensional hawkes processes. In International conference on machine learning , pages 1301–1309. PMLR, 2013. 43

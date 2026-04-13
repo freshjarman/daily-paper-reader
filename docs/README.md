@@ -6,71 +6,71 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-30
-- 运行时间：2026-03-30 20:03:36 UTC
+- 最新运行日期：2026-04-12
+- 运行时间：2026-04-12 19:43:01 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选时空数据与事件预测前沿论文，精读评分最高达满分。重点关注非参数时空点过程与动态知识图谱表示学习。建议读者优先了解 Kronecker 结构在时空建模中的应用价值。
-- 详情：[/202603/30/README](/202603/30/README)
+今日精读6篇、速读11篇，聚焦空间转录组学与关系事件建模。最值得关注的是DenMark模型识别细胞密度相关基因，以及关系事件建模的入门方法。建议读者优先了解空间转录组学在疾病研究中的应用潜力。
+- 详情：[/202604/12/README](/202604/12/README)
 
 ### 精读区论文标签
-1. [Kronecker-Structured Nonparametric Spatiotemporal Point Processes](/202603/30/2603.23746v1-kronecker-structured-nonparametric-spatiotemporal-point-processes)  
+1. [DenMark: A Bayesian Hierarchical Model for Identifying Cell-Density Correlated Genes from Spatial Transcriptomics](/202604/12/biorxiv-10-64898-2026-04-02-713482-v1-denmark-a-bayesian-hierarchical-model-for-identifying-cell-density-correlated-genes-from-spatial-transcriptomics)  
    标签：评分：10.0/10、query:tpp-es
-   evidence：用于事件预测的克罗内克结构非参数时空点过程
-2. [DyMRL: Dynamic Multispace Representation Learning for Multimodal Event Forecasting in Knowledge Graph](/202603/30/2603.24636v1-dymrl-dynamic-multispace-representation-learning-for-multimodal-event-forecasting-in-knowledge-graph)  
+   evidence：密度依赖的标记点过程框架 (DenMark)
+2. [Introduction to Relational Event Modelling](/202604/12/2604.07063v1-introduction-to-relational-event-modelling)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：多模态事件预测与动态表示学习
-3. [Bayesian Deep Count Regression and Anomaly Detection: Evidence from GDELT Event Panels](/202603/30/2603.25970v1-bayesian-deep-count-regression-and-anomaly-detection-evidence-from-gdelt-event-panels)  
+   evidence：用于特定时刻交互的关系事件模型
+3. [Modeling non-Poissonian temporal hypergraphs by Markovian node dynamics](/202604/12/2604.07694v1-modeling-non-poissonian-temporal-hypergraphs-by-markovian-node-dynamics)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：时空事件计数面板与用于预测的深度时间编码器
-4. [Scaling Recurrence-aware Foundation Models for Clinical Records via Next-Visit Prediction](/202603/30/2603.24562v1-scaling-recurrence-aware-foundation-models-for-clinical-records-via-next-visit-prediction)  
+   evidence：建模时序超图中的突发事件序列和事件间隔时间分布
+4. [Empowering Power Outage Prediction with Spatially Aware Hybrid Graph Neural Networks and Contrastive Learning](/202604/12/2604.04916v1-empowering-power-outage-prediction-with-spatially-aware-hybrid-graph-neural-networks-and-contrastive-learning)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：使用循环感知建模对序列临床记录进行下一次就诊事件预测
-5. [Infinite Gaze Generation for Videos with Autoregressive Diffusion](/202603/30/2603.24938v1-infinite-gaze-generation-for-videos-with-autoregressive-diffusion)  
+   evidence：用于事件预测的空间感知图神经网络
+5. [Forecasting the first Edge Localized Mode (ELM) after LH-transition with a neural network trained on Doppler Backscattering data from DIII-D](/202604/12/2604.06508v1-forecasting-the-first-edge-localized-mode-elm-after-lh-transition-with-a-neural-network-trained-on-doppler-backscattering-data-from-diii-d)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：连续空间坐标和高分辨率时间戳
-6. [Spatiotemporal System Forecasting with Irregular Time Steps via Masked Autoencoder](/202603/30/2603.25597v1-spatiotemporal-system-forecasting-with-irregular-time-steps-via-masked-autoencoder)  
+   evidence：神经网络预测设定时间窗口内的事件崩溃概率
+6. [Intensity Dot Product Graphs](/202604/12/2604.07810v1-intensity-dot-product-graphs)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：使用掩码自编码器处理不规则时间步的时空系统预测
+   evidence：在潜空间上使用泊松点过程扩展随机图
 
 ### 速读区论文标签
-1. [Long-Term Outlier Prediction Through Outlier Score Modeling](/202603/30/2603.20993v1-long-term-outlier-prediction-through-outlier-score-modeling)  
+1. [ART: Adaptive Relational Transformer for Pedestrian Trajectory Prediction with Temporal-Aware Relations](/202604/12/2604.03649v1-art-adaptive-relational-transformer-for-pedestrian-trajectory-prediction-with-temporal-aware-relations)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：基于观察到的离群点的时间结构预测未来的离群点得分
-2. [TETO: Tracking Events with Teacher Observation for Motion Estimation and Frame Interpolation](/202603/30/2603.23487v1-teto-tracking-events-with-teacher-observation-for-motion-estimation-and-frame-interpolation)  
+   evidence：时间感知关系与轨迹预测
+2. [VectraFlow: Long-Horizon Semantic Processing over Data and Event Streams with LLMs](/202604/12/2604.03855v1-vectraflow-long-horizon-semantic-processing-over-data-and-event-streams-with-llms)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：用于连续运动信息和点轨迹的事件相机
-3. [Hierarchical Spatial-Temporal Graph-Enhanced Model for Map-Matching](/202603/30/2603.24054v1-hierarchical-spatial-temporal-graph-enhanced-model-for-map-matching)  
+   evidence：事件流上的复杂事件处理与时间模式检测
+3. [El Nino Prediction Based on Weather Forecast and Geographical Time-series Data](/202604/12/2604.04998v1-el-nino-prediction-based-on-weather-forecast-and-geographical-time-series-data)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：用于轨迹地图匹配的分层时空图增强模型
-4. [A Bayesian Dynamic Latent Space Model for Weighted Networks](/202603/30/2603.24201v1-a-bayesian-dynamic-latent-space-model-for-weighted-networks)  
+   evidence：使用CNN-LSTM架构进行事件预测的时空特征提取
+4. [Anticipating tipping in spatiotemporal systems with machine learning](/202604/12/2604.06454v1-anticipating-tipping-in-spatiotemporal-systems-with-machine-learning)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：动态潜空间模型中的点过程表示
-5. [TIGFlow-GRPO: Trajectory Forecasting via Interaction-Aware Flow Matching and Reward-Driven Optimization](/202603/30/2603.24936v1-tigflow-grpo-trajectory-forecasting-via-interaction-aware-flow-matching-and-reward-driven-optimization)  
+   evidence：预测时空系统临界点的发生及其精确时间
+5. [Rhythm-consistent semi-Markov simulation of tourist mobility rhythms with probabilistic event-to-POI assignment: Hakone, Japan](/202604/12/2604.06672v1-rhythm-consistent-semi-markov-simulation-of-tourist-mobility-rhythms-with-probabilistic-event-to-poi-assignment-hakone-japan)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：时空观测与轨迹预测
-6. [Towards Video Anomaly Detection from Event Streams: A Baseline and Benchmark Datasets](/202603/30/2603.24991v1-towards-video-anomaly-detection-from-event-streams-a-baseline-and-benchmark-datasets)  
+   evidence：使用半马尔可夫模型从移动轨迹构建语义停留事件序列
+6. [Event-Centric World Modeling with Memory-Augmented Retrieval for Embodied Decision-Making](/202604/12/2604.07392v1-event-centric-world-modeling-with-memory-augmented-retrieval-for-embodied-decision-making)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：基于事件流的以事件为中心的时空视频异常检测
-7. [Sonny: Breaking the Compute Wall in Medium-Range Weather Forecasting](/202603/30/2603.21284v1-sonny-breaking-the-compute-wall-in-medium-range-weather-forecasting)  
+   evidence：将环境表示为结构化语义事件的以事件为中心的世界建模
+7. [SAIL: Scene-aware Adaptive Iterative Learning for Long-Tail Trajectory Prediction in Autonomous Vehicles](/202604/12/2604.04573v1-sail-scene-aware-adaptive-iterative-learning-for-long-tail-trajectory-prediction-in-autonomous-vehicles)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：高影响大气事件预测
-8. [Benchmarking Recurrent Event-Based Object Detection for Industrial Multi-Class Recognition on MTEvent](/202603/30/2603.21787v1-benchmarking-recurrent-event-based-object-detection-for-industrial-multi-class-recognition-on-mtevent)  
+   evidence：自动驾驶中稀有安全关键事件的轨迹预测
+8. [Towards Scaling Law Analysis For Spatiotemporal Weather Data](/202604/12/2604.05068v1-towards-scaling-law-analysis-for-spatiotemporal-weather-data)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：具有高时间分辨率的循环事件驱动目标检测
-9. [Detecting change regions on spheres](/202603/30/2603.22071v1-detecting-change-regions-on-spheres)  
+   evidence：时空天气预报及随预测时间范围变化的误差分析
+9. [Extending Tabular Denoising Diffusion Probabilistic Models for Time-Series Data Generation](/202604/12/2604.05257v1-extending-tabular-denoising-diffusion-probabilistic-models-for-time-series-data-generation)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：推广到球面空间区域的变点检测
-10. [Generative Event Pretraining with Foundation Model Alignment](/202603/30/2603.23032v1-generative-event-pretraining-with-foundation-model-alignment)  
+   evidence：在时间序列数据中建模时间上下文和序列感知
+10. [On Dominant Manifolds in Reservoir Computing Networks](/202604/12/2604.05967v1-on-dominant-manifolds-in-reservoir-computing-networks)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：从事件相机流中学习特定事件的时间动态
-11. [WaveSFNet: A Wavelet-Based Codec and Spatial--Frequency Dual-Domain Gating Network for Spatiotemporal Prediction](/202603/30/2603.23284v1-wavesfnet-a-wavelet-based-codec-and-spatial--frequency-dual-domain-gating-network-for-spatiotemporal-prediction)  
+   evidence：用于时间预测任务的连续时间储备池模型
+11. [Bridging Theory and Practice in Crafting Robust Spiking Reservoirs](/202604/12/2604.06395v1-bridging-theory-and-practice-in-crafting-robust-spiking-reservoirs)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：未来帧的时空预测学习
+   evidence：用于时间处理的脉冲水库计算
 
 
 <div class="dpr-home-promo-card">

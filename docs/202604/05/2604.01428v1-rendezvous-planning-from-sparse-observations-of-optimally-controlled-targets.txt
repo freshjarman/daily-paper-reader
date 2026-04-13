@@ -1,0 +1,734 @@
+Title: Rendezvous Planning from Sparse Observations of Optimally Controlled Targets
+
+URL Source: https://arxiv.org/pdf/2604.01428v1
+
+Published Time: Fri, 03 Apr 2026 00:12:35 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+> This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible.
+
+# Rendezvous Planning from Sparse Observations of Optimally Controlled Targets 
+
+Thomas A. Scott, Lukas Taus, Yen-Hsi Richard Tsai, Tan Bui-Thanh, Justin G.R. Delva 
+
+Abstract — We develop a probabilistic framework for ren-dezvous planning : given sparse, noisy observations of a fast-moving target, plan rendezvous spatiotemporal coordinates for a set of significantly slower seeking agents. The unknown target trajectory is estimated under uncertain dynamics using a filtering approach that combines a kernel-based maximum a posteriori estimation with Gaussian process correction, produc-ing a mixture over trajectory hypotheses. This estimate is used to select spatiotemporal rendezvous points that maximize the probability of successful rendezvous. Points are chosen sequen-tially by greedily minimizing failure probability in the current belief space, which is updated after each step by conditioning on unsuccessful rendezvous attempts. We show that the failure-conditioned update correctly captures the posterior belief for subsequent decisions, ensuring that each step in the greedy sequence is informed by a statistically consistent representation of the remaining search space, and derive the corresponding Bayesian updates incorporating temporal correlations intrinsic to the trajectory model. This result provides a systematic framework for planning under uncertainty in applications of autonomous rendezvous such as unmanned aerial vehicle refueling, spacecraft servicing, autonomous surface vessel op-erations, search and rescue missions, and missile defense. In each, the motion of the target entity can be modeled using a system of differential equations undergoing optimal control for a chosen objective, in our example case Hamilton–Jacobi– Bellman solutions for minimum arrival time of a Dubins car with uncertain turning radius and destination. 
+
+I. INTRODUCTION The rapid advancement of autonomous systems has shifted the paradigm of aerial and maritime monitoring from reactive tracking to the analysis of goal-oriented behavior. As agents increasingly operate with high degrees of onboard intelli-gence, predicting their future trajectories requires models that account for the underlying optimality of their decision-making processes. In many real-world scenarios, however, this predictive task is characterized by an “information gap” caused by intermittent observations, uncertainty about the target agent’s exact kinematics, and environmental con-straints. This challenge is further compounded when the tar-               
+
+> This work was supported in part by Lockheed Martin. Thomas A. Scott is with the Dept of Aerospace En-gineering and Engineering Mechanics, UT Austin, USA (
+
+thomas.scott@utexas.edu)          
+
+> Lukas Taus is with the Oden Institute, UT Austin, USA (
+
+l.taus@utexas.edu) 
+
+> Yen-Hsi Richard Tsai is with Dept of Mathematics and Oden Institute, UT Austin, USA (
+
+ytsai@math.utexas.edu)                 
+
+> Tan Bui-Thanh is with the Dept of Aerospace Engineering and Engineering Mechanics and the Oden Institute, UT Austin (
+
+tanbui@utexas.edu)        
+
+> Justin G.R. Delva is with Lockheed Martin, USA (
+
+justin.delva@lmco.com) 
+
+get agent possesses a significant velocity advantage over the responding pursuer. Examples include an unmanned aerial vehicle (UAV) attempting to deliver a payload to a moving recipient such as for mid-air refueling [1], [2], spacecraft servicing [3], space debris removal [4], search and rescue missions involving UAVs [5], autonomous surface vessel operations [6], and a pursuer attempting to rendezvous with an evader such as in a defensive missile scenario [1]. In such settings, this problem is often addressed through Kalman filtering methods and proportional guidance or model pre-dictive control [1], [2]. However, while Kalman filtering and MPC provide a foundational approach, they do not inherently leverage the reachability properties of the target, which are essential for guaranteeing rendezvous when observations are both rare and noisy. The current state estimate is propagated under an assumed governing equation with inferred parameters to predict fu-ture target states — typically via interacting Kalman filters with tailored linear dynamics [2], [7]. However, this only addresses the unknown parameters and state but not potential inaccuracy of the dynamics. The exact trajectory is uncertain due to noise in perception, environmental variability, or behavioral deviation from the assumed dynamics under-going optimal control. We model this uncertainty through a Gaussian process (GP), i.e. a stochastic process with a parameterized mean and covariance. After estimating a maximum a posteriori (MAP) trajectory, we propose using Gaussian process regression (GPR) with the MAP trajectory as the prior to provide the stochastic model. This can be viewed as a filtering step followed by a data assimilation step. We repeat this across potential parameter variations and through Bayesian inference arrive at a model of the uncer-tain trajectory. This is conceptually similar to existing data assimilation methods that utilize GPs such as the Kennedy-O’Hagan method [8] and the subsequent improvements [9]. However, these existing methods are costly, making them only suitable for offline data assimilation and not for real-time applications such as tracking for rendezvous. Formally, we consider the problem of planning spatiotem-poral rendezvous points that maximize the probability of suc-cessful rendezvous — a setting we term rendezvous planning .Traditionally, proportional guidance is used to follow the target entity, but this fails when the pursuer is significantly slower than the target: reactive tail-chasing becomes geomet-rically infeasible, making predictive planning essential rather than merely beneficial. Planning for rendezvous overcomes this limitation while accommodating additional operational constraints such as a desired contact angle. 
+
+> arXiv:2604.01428v1 [math.OC] 1 Apr 2026
+
+To guarantee that the computed rendezvous points are attainable in the required time, we utilize the reachable region R. This set defines the spatiotemporal coordinates attainable by the pursuer given its specific dynamics and initial configuration. By incorporating R directly into our algorithm, we ensure that proposed rendezvous points not only lead to high likelihood of contact but are also physically feasible. This framework allows us to enforce complex operational constraints, such as specified contact angles (e.g., side-on approaches) and restricted initial configurations (e.g., fixed launch headings), which are difficult to incorporate into traditional reactive guidance laws. We demonstrate that our method is more effective than Kalman filter paired with proportional guidance in the sparse observation regime, a common state of the art strategy for non-cooperative rendezvous problems. In this regime, a linear dynamics model (prior prediction of Kalman filter step) is very inaccurate at predicting the true, nonlinear dynamics and the sparse quantity of data is insufficient to correct for this. In contrast, MAP estimate models the nonlinear dynamics directly and the subsequent GPR step can correct for model inadequacy and provide uncertainty quantification (UQ). In the examples considered here, the proposed estimation pipeline yields target-state predictions sufficiently accurate to support rendezvous planning from sparse, highly noisy observations. II. PROBLEM FORMULATION The target entity is assumed to follow a trajectory that is approximately optimal with respect to a minimum travel-time objective toward an unknown goal, and can therefore be modeled by an ordinary differential equation (ODE) with unknown parameters. Since both the destination and the motion parameters of the target entity are unknown, multiple approximately optimal candidate trajectories must be computed. An efficient way to generate these trajectories is through a Hamilton–Jacobi formulation of optimal control, which enables the extraction of multiple trajectories to a destination from a single solve. The state, i.e. the trajectory function evaluated at time t ∈ R, is modeled as the state 
+
+z(t) ∈ Z = Rdz with ODE constraint ∂tz(t) = Φ( t, z (t); p),where p ∈ P = P1 × ... × P dp denotes the parameters. The estimated state of the target is periodically refined through noisy observations y ∈ Y , that at least includes the position x
+
+but may also include other variables dependent on the state 
+
+z. The observations are assumed to be i.i.d. normal after a sensing function i.e. yi ∼ N (sensor i(z(t)) , σ 2
+
+> s,i
+
+) where sensor i : Z → R. All observations y are used in the MAP estimation step, while only position observations are used in the GPR step. 
+
+A. Dubins Car 
+
+We consider the Dubins car model to test our methodology. This model, originally developed for ground vehicles with a constrained turning radius, has also been widely adopted for UAVs [10] and autonomous surface vessels [6], as ships and boats are similarly subject to minimum turning radius constraints. The model represents a target entity that follows a minimum arrival time trajectory to some candidate destina-tion region Γi. We consider the case where a set of possible candidate destinations Γ1... ΓNΓ are known. The Dubins car dynamics represent a vehicle following a two-dimensional trajectory with position x = ( x1, x 2) and orientation θ as the state z = ( x1, x 2, θ ) maintaining a constant speed v ∈ R+
+
+and whose path is limited by a minimum turning radius 
+
+ρ ∈ R+. We directly fully observe the state in this example i.e. Y = Z and sensor i(z) = zi. We treat ρ as an unknown parameter along with the index i corresponding to Γi, i.e. 
+
+p = ( ρ, i ). Thus ρ captures uncertainty in the ODE dynamics, while i captures uncertainty in the terminal condition of the HJB equation — both are inferred from observations. Formally target vehicle dynamics and control constraint are 
+
+˙x1 = v cos θ, ˙x2 = v sin θ, ˙θ = αv ρ , α ∈ [−1, 1] , (1) where α is the control parameter whose space enforces the turning radius constraint. The unknown parameter considered is thus p = ( ρ, i ) ∈ R+ × (1 . . . N Γ). The optimal behavior, a path to a given destination Γi in minimum time, can be modeled by a Hamilton–Jacobi–Bellman (HJB) equation [11] that describes time-optimal or cost-minimizing motion under known environmental constraints: 
+
+0 = cos( θ)ux1 +sin( θ)ux2 − 1
+
+ρ |uθ |+ 1
+
+v , u ≡ 0 in Γi. (2) Plugging in the optimal control to the dynamics we get the final parameterized ODE constraint for Dubins car, 
+
+Φ( x1, x 2, θ ; ρ, i ) = 
+
+
+
+v cos θv sin θ
+
+− vρ sgn ( ∂u ∂θ (x1, x 2, θ ; ρ, Γi)) 
+
+ (3) To solve Eq. 2, we employ an upwind finite difference scheme as described in [11]. However, for more complex dynamical systems, particularly those with high-dimensional state spaces, this approach becomes intractable. In such cases, a machine learning method for efficiently solving high-dimensional Hamilton–Jacobi equations has been proposed in [12]. 
+
+B. Proportional Guidance Baseline 
+
+For comparison with existing methods, we evaluate our proposed framework against a Proportional Guidance (PG) law coupled with a Kalman Filter. PG is fundamentally reactive and assumes a favorable velocity ratio. In the regime where the target moves significantly faster than the pursuer (ve ≫ vp), the pursuer cannot rely on closing velocity to compensate for estimation lags or sparse data. Furthermore, while more sophisticated filtering techniques such as Inter-acting Multiple Model (IMM) filters could improve state estimation, they do not inherently address the reachability constraints imposed by the target’s optimal control policy. By using PG as a baseline, we demonstrate that traditional reactive guidance is insufficient for rendezvous under these constraints, necessitating the predictive, reachability-aware approach developed in this work. The PG law can be described as 
+
+˙x1 = v cos θ, ˙x2 = v sin θ, (4) 
+
+˙θ = Cpatan2 (∆ x2 cos θ − ∆x1 sin θ, ∆x1 cos θ + ∆ x2 sin θ),
+
+where atan2 (y, x ) is the two-argument arctangent, 
+
+(∆ x1, ∆x2) is the difference between the Kalman filter state estimate of the target and the current pursuer state, and the gain Cp = vπρ links the proportional constant to the minimum turning radius. Unlike the Dubins car, which immediately takes the sharpest available turn to achieve the desired heading, proportional guidance does so only in the degenerate case where the pursuer is heading directly away from the target. The Kalman filter uses a constant-acceleration model, treating jerk as Gaussian noise. III. STOCHASTIC TRAJECTORY ESTIMATION 
+
+A. ODE-Constrained MAP Estimation 
+
+Our method begins with an optimal recovery step to compute a MAP trajectory of the target consistent with the assumed ODE dynamics. Specifically, we seek the minimum-norm solution subject to the ODE constraint, with a squared data loss over ny observations at times ty :
+
+min 
+
+> zdz
+
+X
+
+> i=1
+
+∥zi∥H +
+
+> dy
+
+X
+
+> i=1
+
+1
+
+β2
+
+> iny
+
+X
+
+> j=1
+
+(yi,j − sensor i(z(tj ))) 2
+
+s.t. ∂ tz = Φ( ·, z ; p) ∀t ∈ [0 , T ) (5) where we use a reproducing kernel Hilbert space (RKHS) H
+
+defined by a chosen kernel k : R2 → R Following the general method developed by [13], we can reformulate eq. (5) as a finite-dimensional optimization problem via the kernel trick. After discretizing — yielding a problem equivalent to standard GPR when constraints are removed and sensor i is the identity — 
+
+min 
+
+> w
+> dz
+
+X
+
+> i=1
+
+w⊤ 
+
+> i
+
+Θ−1 
+
+> i
+
+wi +
+
+> dy
+
+X
+
+> i=1
+
+1
+
+β2
+
+> iny
+
+X
+
+> j=1
+
+(yi,j − sensor i(wy,j )) 2
+
+s.t. ∂tz(t) = Φ( t, z (t); p) ∀t ∈ tΦ (6) where w contains pointwise values of the state z and its time derivatives to be regressed by the kernel. Subscripts 
+
+0 and 1 denote function values and first derivatives at the ODE collocation points tΦ; the y subscript denotes values at the ny observation times. The matrices Θi are the corresponding Gram matrices. Explicitly, Θi corresponding to wi = [ w⊤ 
+
+> i,y
+
+, w⊤
+
+> i, 0
+
+, w⊤
+
+> i, 1
+
+]⊤ is the block matrix 
+
+Θi =
+
+ k(t, t) (∂′
+
+> t
+
+k)( t, tΦ)(∂tk)( tΦ, t) (∂t∂′
+
+> t
+
+k)( tΦ, tΦ)
+
+
+
+, (7) where ∂′ denotes the derivative w.r.t. the second argu-ment, k(t, t) is the matrix Ki,j = k(ti, t j ), and t =[( ty )⊤, (tΦ)⊤]⊤. Meanwhile, the diagonal perturbation ma-trix that we will introduce for numerical stability is 
+
+Dηi =
+
+"ηI #t
+
+η ki(0 ,0) (∂t∂′ 
+
+> tki)(0 ,0)
+
+I#tΦ
+
+#
+
+, (8) where 0 ≤ η ≪ 1 is the typical nugget parameter introduced to make the matrix well conditioned enough to factor numer-ically. After forcing constraint satisfaction in the construction of w by simply setting the value of wi, 1 to the RHS of the 
+
+Φ in Equation (6), 
+
+min w1,0,w1,y ,..., 
+
+> wdz , 0,wdz ,y
+> dz
+
+X
+
+> i=1
+
+ w⊤ 
+
+> i
+
+(Θ i + Dηi )−1wi
+
+
+
++
+
+> dy
+
+X
+
+> i=1
+
+ 1
+
+β2
+
+> iny
+
+X
+
+> j=1
+
+(yi,j − sensor i(wy,j )) 2
+
+ .
+
+(9) After optimization, the MAP solution can be evaluated by computing the coefficients αi := (Θ i + Dηi )−1wi then 
+
+z∗ 
+
+> i
+
+(t) = 
+
+> #t
+
+X
+
+> j=1
+
+αi,j k(t, tj ) + 
+
+> #tΦ
+
+X
+
+> j=# t+1
+
+αi,j (∂tk)( t, tΦ 
+
+> j
+
+). (10) 
+
+B. Gaussian Process Trajectory Model 
+
+We model both the trajectory x(t) and parameters p
+
+stochastically, denoting all probability density functions as 
+
+f . The target trajectory is modeled as a stochastic process 
+
+Xt; conditioned on parameters p, we write Xt|p for the corresponding process with conditional density f (x|t, p ).Each component of state z in each Xt|p is modeled as an a priori independent GP, with the MAP position estimate 
+
+x∗ := pos (z∗)( t) as the prior mean and the kernels ki from the optimal recovery step as the prior covariance: 
+
+Xt|p ∼ GP 
+
+x∗,
+
+
+
+k♯
+
+> 1
+
+(t, t ′)
+
+. . .
+
+k♯dx (t, t ′)
+
+ . (11) Furthermore, we assume each component of the parameter is a priori independent. We will use a Monte Carlo approxima-tion for marginalization by sampling a finite set PMC ⊂ P .
+
+1) GPR for Uncertainty Quantification and Bias Cor-rection: The second step is standard GPR [14] with the MAP estimate as the prior mean, serving dual purposes: uncertainty quantification and correction of residual model-data discrepancies. Starting from the marginal likelihood of 
+
+Xt|p conditioned on ny position observations yx at times ty
+
+given parameter p, we apply Bayes’ theorem and marginalize over p to obtain the posterior density of x. For brevity, the MAP model and remaining GP hyperparameters are suppressed in the conditional notation but remain implicit. In log form, the density representing the marginal likelihood of the observations for a component of the position given a prior mean, in our case the MAP x∗ 
+
+> i
+
+, is given by 
+
+2 log f (yxi |ty , p ) = 
+
+− (yxi − x∗ 
+
+> i
+
+(ty ; p)) T K−1 
+
+> σ,i
+
+(yxi − x∗ 
+
+> i
+
+(ty ; p)) 
+
+− log |K♯i (ty , ty )| − ny log 2 π, 
+
+(12) where Kσ,i := K♯i (ty , ty ) + σ2
+
+> s,i
+
+I. (13) Since we model y1, . . . , y dz as a priori independent, 
+
+f (yx|ty , p ) = f (yx1 |ty , p ) . . . f (yxdx |ty , p ). (14) The parameter posterior is determined using Bayes rule and Monte Carlo integration of the parameters, 
+
+wp := f (p|yx, ty ) ≈ f (yx|ty , p )f (p)(# PMC )
+
+P 
+
+> p†∈P MC
+
+f (yx|ty , p †) , (15) where we assumed p is independent of ty . In the marginal-ization, dp formally denotes the product measure of the Lebesgue measure for the continuous variables and the counting measure for the discrete variables. A similar process can be used infer the probability density that an individual parameter pi ∈ P i is correct by applying Bayes theorem then marginalizing over all other parameters p¬i ∈ P ¬i := 
+
+P1 × · · · × P i−1 × P i+1 × · · · × P dp and again using a priori independence between parameters and with ty ,
+
+f (pi|yx, ty ) = 
+
+Z
+
+> P¬i
+
+f (yx|ty , p ¬i, p i)f (pi)
+
+f (yx|ty , p ¬i) f (p¬i)dp ¬i
+
+≈ X
+
+> p¬i∈P ¬i, MC
+
+f (yx|ty , p ¬i, p i)f (pi)
+
+P  
+
+> p†
+> i∈P i, MC
+
+f (yx|ty , p ¬i, p † 
+
+> i
+
+) ,
+
+(16) where we can borrow P¬i, MC and Pi, MC from the full PMC 
+
+due to a priori independence and then the sample count 
+
+#PMC cancels out. For example, eq. (16) can be used to find the probability the target will arrive at a given destination or the posterior probability density of turning radii in our Dubins car example. Finally, we are interested in the posterior probability density of spatial locations given a time and the current observations, 
+
+f (x|t, yx, ty ) = 
+
+Z
+
+> P
+
+f (x|t, yx, ty , p )wpdp 
+
+≈ X
+
+> p∈P MC
+
+wpf (x|t, yx, ty , p ) (17) where the conditional density at a single time is given by 
+
+log f (xi|t, yxi , ty , p ) = 
+
+− log(2 π ˜σi(t; p)2)2 − (xi − ˜xi(t; p)) 2
+
+2 ˜ σi(t; p)2 , (18) which uses the GP posterior mean and variance of the GP corresponding to p,
+
+˜xi(t; p) = x∗ 
+
+> i
+
+(ty ; p) + K♯i (t, ty )K−1 
+
+> σ,i
+
+(yxi − x∗ 
+
+> i
+
+(ty ; p)) ,
+
+˜σi(t; p)2 = k♯i (t, t ) − K♯i (t, ty )K−1 
+
+> σ,i
+
+K♯i (ty , t ). (19) IV. OPTIMAL RENDEZVOUS PLANNING We seek spatiotemporal rendezvous coordinates that maxi-mize the probability of contact under our stochastic model. A 
+
+rendezvous point (t, x ) ∈ Rd+1 is deemed successful when the target lies within distance R at time t:
+
+∥Xt − x∥ ≤ R. (20) Following the model established in the preceding sec-tion, we assume the trajectory of the target depends on latent parameters P , representing different potential intent, environmental models, or dynamics. Let P be the set of possible parameters, where wp = P[P = p]. For each parameter p ∈ P , let X(p) 
+
+> t
+
+denote the conditional stochastic process. The overall trajectory Xt is then represented by the conditional density: 
+
+f (x | t, p ) = fXt|P (x | p). (21) Our objective is to compute a fixed number of rendezvous points (t1, x 1), ..., (tn, x n) which maximizes the probability of at least one successful rendezvous 
+
+max  
+
+> (t1,x 1),..., (tn,x n)
+
+P[∃i ∈ { 1, ..., n }: ∥Xti − xi∥ ≤ R]. (22) By considering the complement (i.e. the probability of all points failing to make contact), this is equivalent to the minimization 
+
+min  
+
+> (t1,x 1),..., (tn,x n)
+
+P
+
+" n\
+
+> i=1
+
+Ci
+
+#
+
+, (23) where Ci is the event ∥Xti − xi∥ > R . Using the chain rule of probability: 
+
+P[C1, . . . , C n] = P[C1]
+
+> n
+
+Y
+
+> i=2
+
+P[Ci | C1, . . . , C i−1]. (24) This decomposition induces a natural sequential decision structure. Computing the globally optimal set of rendezvous points would require joint optimization over all stages, accounting for the dependence of future terms on earlier decisions through posterior updates, which is generally in-tractable. We therefore adopt a greedy strategy that selects rendezvous points sequentially by minimizing each condi-tional failure probability in (24) under the current belief. After each selection, the distribution of Xt is updated by conditioning on the event that the previous rendezvous at-tempt failed, yielding a Bayesian update over both parameter weights and trajectory distributions. This yields a tractable one-step lookahead policy in belief space: at each stage, the next rendezvous point is chosen by minimizing conditional failure probability under the current posterior, then the belief is updated after an unsuccessful attempt. 
+
+1) Pursuer Reachability Constraints: In practical appli-cations, the optimization in (23) cannot be performed over the entire space Rd+1 . The pursuers are subject to their own kinematic constraints. We assume the pursuers follow the Dubins car dynamics described in Equation (1), though their motion parameters (specifically turning radius and maximum velocity) differ from those of the target. Critically, we consider the regime where the pursuers are significantly slower than the target. In such scenarios, traditional pursuit-evasion strategies or ”tail-chasing” maneuvers are fundamentally infeasible, as the pursuer cannot close the distance from behind. In all our numerical experiments, the pursuers are constrained to a constant speed equal to 30% of the speed of the target, placing the system firmly in a velocity-disadvantaged regime. Our method overcomes this velocity deficit by leveraging the stochastic model of the target. Instead of reactive pursuit, the problem becomes one of optimal placement: identifying the spatiotemporal ”bottlenecks” where the probability of the target’s presence is high and the arrival of the pursuer is kine-matically guaranteed. This allows for successful rendezvous even when the target possesses a decisive maneuverability advantage. Let X = {Γ01, ..., Γ0
+
+> m
+
+} be initial configurations represent-ing fixed base-stations or deployment hubs. Each station Γ0
+
+> j
+
+is capable of launching multiple pursuers, allowing for the simultaneous coverage of several optimal rendezvous points from a single geographic origin. For each Γ0 
+
+> j
+
+, let uΓ0 
+
+> j
+
+(x) be the minimum time for the j-th pursuer to reach position x,calculated as the solution of the Hamilton-Jacobi equation (2). Since the value function uΓ0 
+
+> j
+
+is computed once per station, we can evaluate the reachability of any candidate rendezvous point for an entire fleet of pursuers without redundant PDE solves. The region that is viable for the j-th base-station is then 
+
+Rj =
+
+n
+
+(t, x ) ∈ Rd+1 | uΓ0 
+
+> j
+
+(x) ≤ t
+
+o
+
+. (25) Beyond simple spatial proximity, the use of the value func-tion uΓ0 
+
+> j
+
+allows for the enforcement of specific contact angles. Since Γ0 
+
+> j
+
+defines the set of initial states (position and orientation), it can naturally encode launch constraints (e.g. runway heading, port exit angle). By incorporating the stochastic heading of the target trajectory Xt, we can further refine the reachable set to include only those points where the pursuer arrives at a desired relative orientation. Mathematically, we can describe the constrained reachable set for station j as 
+
+Rj =
+
+n
+
+(t, x ) ∈ Rd+1 x ∈ F (t, X ·), u Γ0 
+
+> j
+
+(x) ≤ t
+
+o
+
+, (26) where F (t, X ·) represents a filter or geometric constraint on the configuration space at time t given the estimated path of the target (typically using the expected position at time t). This ensures that the pursuer not only meets the target in space and time but does so in a configuration (e.g., specific approach angle) that maximizes the likelihood of a stable rendezvous. We define the overall viable set of rendezvous points to be any spatiotemporal point reachable by at least one pursuer 
+
+R =
+
+> m
+
+[
+
+> j=1
+
+Rj . (27) The optimization problem is then constrained to this set, ensuring that for every selected (ti, x i), there exists at least one pursuer capable of arriving at the rendezvous point at the same time as the target. Once the optimal points are found, pursuers are assigned to points using a simple bottleneck assignment or by minimizing arrival slack ti − uΓ0 
+
+> j
+
+(xi).
+
+2) Approximate Belief Update After Rendezvous Failure: 
+
+Each unsuccessful rendezvous is incorporated by condition-ing the belief on no contact at the selected spatiotemporal point — formally, on ∥Xs − y∥ > R for attempted ren-dezvous (s, y ). A failure not only informs the distribution at time s but also influences nearby times, since trajectory continuity implies the target was likely absent from the surrounding region as well. Exact posterior recomputation after each such update is intractable in our setting, so we introduce a structured approximate update designed to retain the most important temporal dependencies while remaining computationally efficient. In our stochastic trajectory model, unsuccessful contacts can arise for two fundamentally different reasons. First, we may have selected an incorrect parameter set, causing the realized trajectory to deviate from the expected one. Alterna-tively, the parameter set may be correct, and the rendezvous fails purely due to inherent trajectory uncertainty. These two failure modes have markedly different implications: the cross-time correlations inherent to continuous trajectories are informative only when the parameter set is correct, and cannot be leveraged when the failure stems from parameter misidentification. For this reason, we treat the two scenarios separately in our analysis. First we assume that the parameter set P is correct. In this case we consider the implication of the spatiotemporal corre-lation of the continuous trajectories to update our distribution estimates f (x|t, p ) for the trajectories of each parameter set 
+
+p. For a failed rendezvous point (s, y ), the updated trajectory distribution is computed via 
+
+f (x | ∥ Xs − y∥ > R, t, p ) = f (x|t, p )g(x, y )
+
+R f (z|t, p )g(z, y )dz , (28) 
+
+g(z, z ′) = 1 − exp 
+
+
+
+− ∥z − z′∥2
+
+2σ(R)2
+
+
+
+. (29) This governs sequential belief updates for trajectories under parameter p. The parameter weights are updated as follows, again assuming (s, y ) is a failed rendezvous attempt: 
+
+P[P = a|∥ Xs − y∥ > R ] = P[∥X(a) 
+
+> s
+
+− y∥ > R ]
+
+P[∥Xs − y∥ > R ] P[P = a].
+
+(30) Together, these updates iteratively refine the trajectory distribution after each failed rendezvous, consistent with the sequential structure in (24). In practice, the pursuer’s dynam-ics impose constraints on which regions of the spatiotemporal domain can be reached from the initial state. Depending on the starting position, velocity, and admissible controls, large portions of the domain may be physically unattainable. To account for this, we pre-compute the reachable set R ⊆ 
+
+Rd+1 , defined as the collection of spatiotemporal points the pursuers can reach. All probability computations and opti-mization steps are then restricted to this subdomain. Points outside R are masked, ensuring that the algorithm considers only physically realizable rendezvous opportunities. The proposed strategy is summarized in Algorithm 1. By leveraging the Bayes updates derived above, the planner iter-atively selects the most promising reachable spatiotemporal points, while accounting for the evolving belief over the target’s trajectory and motion parameters. This procedure efficiently identifies a small set of high-value rendezvous points while accounting for uncertainty in both target dynamics and parameter configurations. Algorithm 1 MAP-Based Reachable Rendezvous Planner 
+
+Require: Prior mixture weights {wp}, conditional densities 
+
+{f (t, x |p)}, reachable set R, and number of rendezvous attempts n. 
+
+> 1:
+
+Discretize domain into grid G 
+
+> 2:
+
+Mask points (t, x ) /∈ R  
+
+> 3:
+
+for k = 1 , . . . , n do ▷ Select n rendezvous points  
+
+> 4:
+
+Step 1: Selection  
+
+> 5:
+
+Compute current failure probability:  
+
+> 6:
+
+P (t, x ) = P 
+
+> p∈P M C
+
+wp
+
+R 
+
+> ∥x−y∥>R
+
+f (t, y |p)dy  
+
+> 7:
+
+Select point (sk, y k) ∈ R ∩ G that minimizes P (t, x ) 
+
+> 8:
+
+Step 2: Belief Update (Conditioning on Failure)  
+
+> 9:
+
+Update mixture weights of parameter uncertainty:  
+
+> 10:
+
+w′ 
+
+> p
+
+← wp
+
+R 
+
+> ∥x−y∥>R
+
+f (x|s, p )dx  
+
+> 11:
+
+wp ← w′
+
+> p
+
+/ P 
+
+> p∈P M C
+
+w′ 
+
+> p
+> 12:
+
+Update conditional densities of trajectories:  
+
+> 13:
+
+f (x|t, p ) ← f (x|t,p )g(x,y )R f (z|t,p )g(z,y )dz  
+
+> 14:
+
+Record rendezvous point (s, y ) 
+
+> 15:
+
+end for 
+
+V. NUMERICAL RESULTS We present a scenario using our Dubins car example (fig. 1), where target entity #1 has true turning radius 0.055 and #2 has 0.066. The density of x is computed from eq. (17) for each target, and the hit probability from eq. (16). Observations y of position in the unit domain and orientation (in radians) are i.i.d. Gaussian with standard deviation σs =0.03 . Both targets move at known unit speed toward the leftmost destination region, where all regions have radius 0.03. The turning radius and destination index jointly define the true parameter p.Bayesian estimation uses a Gaussian prior with mean 0.05 and standard deviation 0.02 on the turning radius ρ,and a uniform prior over the destination index i, forming 
+
+f (p). For the solver, we set β = σs, corresponding to the equivalent weight in standard GPR. For MAP estimation, we use kernel k(t, t ′) = exp( − 14 0.05 −2(t − t′)2), while GPR uses k♯(t, t ′) = σ2 
+
+> s
+
+exp( − 14 0.1−2(t − t′)2).Despite sparse observations, the Bayesian inference cor-rectly identifies the destination and turning radius. As shown in fig. 2, this outperforms existing methods, where Kalman filtering and proportional guidance fail to yield a kinemati-cally viable rendezvous when the pursuer is subject to sig-nificant velocity disadvantages. The proportional controller uses the same minimum turning radius as the target in fig. 2, while fig. 5 shows a case with a pursuer at 30% of the target’s speed. We assume that the pursuers follow the dynamics stated in equation (1) with a turning radius of ρ = 0 .05 . Further we restrict the rendezvous points to make contact at aperpendicular angle (i.e., from the side). This perpendicular-rendezvous constraint significantly reduces the feasible ren-dezvous set, as the pursuer must arrive not only at the correct location and time, but also with a precise relative orientation. We consider two different scenarios for pursuer deployment:  
+
+> •
+
+Unrestricted Scenario: The initial configuration of the pursuers is entirely unconstrained.  
+
+> •
+
+Restricted Scenario: A more constrained setup where the initial configuration must have a specified angle (limited to heading east or west). These two scenarios yield differing reachable regions R,with the restricted scenario having fewer feasible choices than the unrestricted case. The set R at terminal time for both scenarios is illustrated in figure 3. The green dot indicates the base station from which pursuers are launched and the light green region shows which locations can be reached at the correct time and angle. While R generally expands as the time horizon increases, granting pursuers more time to navigate to distant locations, the reachable region is not necessarily strictly growing. Because of the specific maneuvers required to achieve a perpendicular rendezvous, certain spatiotemporal gaps may exist where a location is temporarily unreachable before becoming feasible again at a later time. To compute the reachable regions, we associate every location with the closest mean trajectory point E[X(p) 
+
+> t
+
+],compute the corresponding perpendicular rendezvous angle, and check reachability at that angle using the value function 
+
+u at every time point. The outcome of our optimization procedure, as governed by Algorithm 1, is shown in Figure 4. To determine the optimal rendezvous coordinates, we analyze the stochastic trajectory ensembles (represented by orange tubes), where each ensemble corresponds to a predicted path distribution for a specific parameter set. The red curves denote the mean trajectories under each model, and the surrounding orange regions capture the associated spatial uncertainty. Algorithm 1 selects the spatiotemporal positions where a rendezvous attempt is most informative according to our sequential objective. These targeted coordinates are marked by the cyan circles of radius R. As shown, these points are positioned to maximize the likelihood of intersecting at least one plausible trajectory while simultaneously providing strong disambiguation between parameter sets. The computed rendezvous points provide us with the specific time and spatial coordinates to target. Using the value function u, which is the solution of equation (2) and was previously computed for the construction of the reachable region R, we can compute the optimal rendezvous paths. This is achieved by applying the optimal control law: 
+
+dθ dt (x) = − ∇θ u(x)
+
+∥∇ θ u(x)∥ . (31) We note that by selecting the initial location of the pursuer and computing optimal trajectories in reverse from the com-puted rendezvous point to its initial position, the underlying Hamilton–Jacobi equation only needs to be solved once per pursuer initial location. The resulting optimal paths are illustrated in Figure 4 as green lines terminating at the cyan target regions. In practice, pursuers are not necessarily launched simul-taneously, but are deployed only when required by the Fig. 1: Multiple target, multiple destination estimates given very noisy data 0.2 0.4 0.6     
+
+> 0.25
+> 0.50
+> 0.75
+> t=0.19
+> Destination
+> Interceptor
+> Target's true state
+> Noisy observations
+> Kalman estimated target
+> 0.2 0.4 0.6
+> t=0.39
+> 0.2 0.4 0.6
+> t=0.58
+
+Fig. 2: Given sparse observations, proportional guidance using Kalman filtering misses on evenly matched target and pursuer entities due to lag caused by lack of a nonlinear dynamics constraint in the filter optimal solution. Because reachability is encoded directly in the value function u, the resulting trajectories implicitly determine both the launch time and the path of each pursuer. The green trajectories correspond to pursuers en route to their designated rendezvous points, following their respective optimal controls toward future spatiotemporal targets. VI. CONCLUSION In this paper, we presented a robust probabilistic frame-work for planning rendezvous points for a dynamically 
+
+Fig. 3: Reachable regions R at terminal time for the two pursuer deployment scenarios targeting perpendicular con-tact. Left: The unrestricted scenario where the initial pursuer configuration is unconstrained. Right: The restricted scenario where initial headings are limited to east or west. The green dot denotes the launch base station, and the light green regions highlight spatiotemporal coordinates where perpen-dicular contact is feasible according to the value function u.constrained, slower pursuer and a target observed through sparse and noisy data. By combining a kernel-based MAP estimation with a Gaussian process correction, the proposed method effectively models the spatial uncertainty of unknown target trajectories. Sequential optimization via greedy mini-mization of failure probability over the current belief state provides a systematic approach to predictive planning under uncertainty. In the scenarios considered here, our results indicate ad-Fig. 4: Optimal rendezvous points and pursuer trajectories for unrestricted (left) and restricted (right) scenarios. The green lines represent the optimal rendezvous paths derived from the value function u, targeting the stochastic trajectory ensembles (orange tubes) and their mean paths (red). The terminal points are marked by cyan circles of radius R,representing the optimized spatiotemporal coordinates for successful rendezvous and parameter disambiguation. 0.2 0.4 0.6     
+
+> 0.25
+> 0.50
+> 0.75
+> t=0.19
+> Destination
+> Interceptor
+> Target's true state
+> Noisy observations
+> Kalman estimated target
+> 0.2 0.4 0.6
+> t=0.39
+> 0.2 0.4 0.6
+> t=0.58
+
+Fig. 5: In the same slow-pursuer scenario, follower dynamics using a Kalman filter utterly fails due to lack of planning vantages over the Kalman-filter-plus-proportional-guidance baseline. Simulations with Dubins car dynamics show that Kalman filtering combined with proportional guidance fails to produce adequate pursuer trajectories, due to lag and a lack of predictive planning, particularly when the pursuer has nonlinear dynamics or lower speed. In contrast, our Bayesian inference framework rapidly and accurately infers critical target parameters, such as the destination region and turning radius, despite the sparsity of the observational data. Furthermore, we demonstrated the framework’s adaptabil-ity to strict kinematic and operational constraints. By leverag-ing the Hamilton-Jacobi-Bellman value function, the method accurately computes reachable regions and identifies feasible spatiotemporal rendezvous points, even under severe restric-tions such as mandatory perpendicular rendezvous angles or constrained initial launch configurations. In our examples, the algorithm converts stochastic trajectory estimates into feasible rendezvous plans and associated pursuer trajectories. It identifies spatiotemporal coordinates with high predicted rendezvous value under the current belief and yields cor-responding launch times and steering controls through the precomputed value function. Ultimately, this sequential optimization and Bayesian up-dating strategy overcomes the inherent limitations associated with slower pursuers and strict kinematic constraints. Future work includes optimizing the kernel hyperparameters for both the MAP and GPR steps, which is challenging for real-time scenarios; evaluating our method on more complex systems of ODEs; and extending our planning algorithm to non-myopic objectives. By providing a reliable method for generating optimal, executable rendezvous trajectories under uncertain dynamics, this framework offers broad utility for real-world autonomous rendezvous applications, includ-ing unmanned aerial vehicle refueling, spacecraft servicing, autonomous surface vessel operations, search and rescue missions, and missile defense. VII. ACKNOWLEDGMENTS A portion of this research was funded by Lockheed Martin. REFERENCES [1] Marina Moreira, Endre Papp, and Rodrigo Ventura. Interception of non-cooperative uavs. In 2019 IEEE International Symposium on Safety, Security, and Rescue Robotics (SSRR) , page 120–125. IEEE Press, 2019. [2] Michal Pliska, Matouˇ s Vrba, Tom´ aˇ s B´ aˇ ca, and Martin Saska. Towards safe mid-air drone interception: Strategies for tracking & capture. 
+
+IEEE Robotics and Automation Letters , 9(10):8810–8817, 2024. [3] Mohammad Alizadeh and Zheng H. Zhu. A comprehensive survey of space robotic manipulators for on-orbit servicing. Frontiers in Robotics and AI , Volume 11 - 2024, 2024. [4] Michele Maestrini and Pierluigi Di Lizia. Guidance strategy for autonomous inspection of unknown non-cooperative resident space objects. Journal of Guidance, Control, and Dynamics , 45(6):1126– 1136, 2022. [5] Bj¨ orn D¨ oschl, Kai Sommer, and Jane Jean Kiam. Auspex: An integrated open-source decision-making framework for uavs in rescue missions. Frontiers in Robotics and AI , Volume 12 - 2025, 2025. [6] C. Mirabito, D.N. Subramani, T. Lolla, P.J. Haley Jr., A. Jain, P.F.J. Lermusiaux, C. Li, D.K.P. Yue, Y. Liu, F.S. Hover, N. Pulsone, J. Edwards, K.E. Railey, and G. Shaw. Autonomy for surface ship interception. In Oceans ’17 MTS/IEEE Aberdeen , June 2017. [7] A.F. Genovese. The interacting multiple model algorithm for accurate state estimation of maneuvering targets. Johns Hopkins APL Technical Digest (Applied Physics Laboratory) , 22:614–623, 10 2001. [8] Marc C. Kennedy and Anthony O’Hagan. Bayesian calibration of computer models. Journal of the Royal Statistical Society Series B: Statistical Methodology , 63(3):425–464, 01 2002. [9] Daniel Andr´ es Arcones, Martin Weiser, Phaedon-Stelios Koutsoure-lakis, and J¨ org F. Unger. Model bias identification for bayesian calibration of stochastic digital twins of bridges. Applied Stochastic Models in Business and Industry , 41(3):e2897, 2025. [10] Brian Burns, Paul Blue, and Michael Zollars. Autonomous Control for Automated Aerial Refueling with Minimum-time Rendezvous . 2007. [11] Ryo Takei and Richard Tsai. Optimal trajectories of curvature con-strained motion in the hamilton—jacobi formulation. J. Sci. Comput. ,54(2–3):622–644, February 2013. [12] Carlos Esteve-Yag¨ ue, Richard Tsai, and Alex Massucco. Finite-difference least square methods for solving hamilton-jacobi equations using neural networks. Journal of Computational Physics , 524:113721, 2025. [13] Yifan Chen, Bamdad Hosseini, Houman Owhadi, and Andrew M. Stuart. Solving and learning nonlinear PDEs with gaussian processes. 447:110668, 2021. [14] Carl Edward Rasmussen and Christopher K. I. Williams. Gaussian processes for machine learning . The MIT Press, November 2005.
