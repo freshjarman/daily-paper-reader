@@ -1,0 +1,1216 @@
+Title: Deep Situation-Aware Interaction Network for Click-Through Rate Prediction
+
+URL Source: https://arxiv.org/pdf/2604.12298v1
+
+Published Time: Wed, 15 Apr 2026 00:42:02 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Deep Situation-Aware Interaction Network for Click-Through Rate Prediction 
+
+## YIMIN LV, Institute of Software, Chinese Academy of Sciences, University of Chinese Academy of Sciences, China 
+
+## SHULI WANG, Meituan, China 
+
+## BEIHONG JIN ∗, Institute of Software, Chinese Academy of Sciences, University of Chinese Academy of Sciences, China 
+
+## YISONG YU, Institute of Software, Chinese Academy of Sciences, University of Chinese Academy of Sciences, China 
+
+## YAPENG ZHANG, Meituan, China 
+
+## JIAN DONG, Meituan, China 
+
+## YONGKANG WANG, Meituan, China 
+
+## XINGXING WANG, Meituan, China 
+
+## DONG WANG, Meituan, China 
+
+User behavior sequence modeling plays a significant role in Click-Through Rate (CTR) prediction on e-commerce platforms. Except for the interacted items, user behaviors contain rich interaction information, such as the behavior type, time, location, etc. However, so far, the information related to user behaviors has not yet been fully exploited. In the paper, we propose the concept of a situation and situational features for distinguishing interaction behaviors and then design a CTR model named Deep Situation-Aware Interaction Network (DSAIN). DSAIN first adopts the reparameterization trick to reduce noise in the original user behavior sequences. Then it learns the embeddings of situational features by feature embedding parameterization and tri-directional correlation fusion. Finally, it obtains the embedding of behavior sequence via heterogeneous situation aggregation. We conduct extensive offline experiments on three real-world datasets. Experimental results demonstrate the superiority of the proposed DSAIN model. More importantly, DSAIN has increased the CTR by 2.70%, the CPM by 2.62%, and the GMV by 2.16% in the online A/B test. Now, DSAIN has been deployed on the Meituan food delivery platform and serves the main traffic of the Meituan takeout app. Our source code is available at https://github.com/W-void/DSAIN. CCS Concepts: • Information systems → Recommender systems ; Online advertising .Additional Key Words and Phrases: situation-aware, click-through rate prediction, user behavior modeling 
+
+ACM Reference Format: 
+
+Yimin Lv, Shuli Wang, Beihong Jin, Yisong Yu, Yapeng Zhang, Jian Dong, Yongkang Wang, Xingxing Wang, and Dong Wang. 2023. Deep Situation-Aware Interaction Network for Click-Through Rate Prediction. In Seventeenth ACM Conference on Recommender Systems (RecSys ’23), September 18–22, 2023, Singapore, Singapore. ACM, New York, NY, USA, 19 pages. https://doi.org/10.1145/3604915.3608793 
+
+1 INTRODUCTION 
+
+CTR prediction is a critical task in both recommendation systems and online advertising, and improving the accuracy of the CTR prediction has been receiving attention from both academia and industry. 
+
+> ∗
+
+Beihong Jin is the corresponding author. Permission to make digital or hard copies of part or all of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for third-party components of this work must be honored. For all other uses, contact the owner/author(s). 
+
+© 2023 Copyright held by the owner/author(s). Manuscript submitted to ACM 1 
+
+> arXiv:2604.12298v1 [cs.IR] 14 Apr 2026 RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+
+Recently, modeling user behavior sequences [ 5, 9 , 19 , 20 , 24 , 25 , 37 , 38 ] has been introduced into CTR prediction. Generally, a user behavior sequence refers to a sequence of traces of a user performing actions on the app provided by an online service. For an e-commerce platform, a user behavior sequence at least contains the items that the user interacts with. For a specific scenario, a user behavior sequence can be augmented to include the side information of the interaction. Besides item-related and user-related side information, there are three types of behavior-related side information, i.e., the type of the specific behavior, and the time and (physical or virtual) location the specific behavior occurs. Early work on user behaviors (e.g., GRU4Rec [ 16 ], Caser [ 31 ]) adopts Recurrent Neural Networks (RNNs) or Con-volutional Neural Networks (CNNs) to capture the dependency relationships implied in the user behavior sequences. However, these models cannot obtain the semantics of user behaviors due to limited behavior information (e.g., only item ID is available). Recent work introduces the side information of an interaction behavior to understand the user behaviors. Some work (e.g., [ 8 , 22 , 23 , 30 , 34 , 39 ]) exploits temporal and spatial information of behaviors to help model user interest. Some work (e.g., [ 10 , 11 , 32 ]) extracts behavior patterns and captures complicated correlations among different behaviors from a multi-behavior sequence. However, existing models focus on modeling a certain aspect of side information (such as behavior type or temporal information). No work can simultaneously incorporate behavior types and behavior spatio-temporal information in modeling user behavior sequences, which leads to the waste of some valuable side-information and neglects complex interdependencies among different side information of behaviors. We argue that for an interaction of a user with an item, the behavior type, temporal features, and spatial features make up a situation of the interaction, and they are collectively called situational features. Taking a takeout scenario as an example, temporal features, which depict the temporal context in which the behavior occurred, include the hour of the day, the meal time period of day (e.g., breakfast, lunch, dinner, etc.), and the period of week (e.g., weekday and weekend). Nevertheless, when the geographic locations of users are not available, we can treat an app as a virtual space, thus features of the location where a user triggers an action can be listed under spatial features. In particular, we have one feature to record the location of triggering an action (on the search results page or the recommendation list page) and another feature to indicate whether the location of performing an action is an advertising place. Obviously, each situation has its own semantics. For modeling the sequences of user behaviors with situational features, we have to face the following challenge. Given a user behavior and the corresponding situational features, how do we generate the high-quality embeddings for these situational features and the behavior, if taking into account multiple internal correlations, including but not limited to the correlations between different situational features of the same behavior? In this paper, we devise a novel CTR model named DSAIN (Deep Situation-Aware Interaction Network), which deals with the above challenge efficiently and elegantly. Our main contributions can be summarized as follows. 
+
+• We identify the noise in user behavior sequences and utilize the reparameterization trick to reduce noise interference. 
+
+• We combine commonalities and differences in situational features of the same type into their embeddings, and parameterize the embeddings of situational features to learn the approximated interaction between item ID and each situational feature, obtaining refined embeddings of situational features. 
+
+• We devise a light-weighted scheme of modeling tri-directional correlations to coherently capture cross-behavior, cross-situational feature, and cross-channel correlations, obtaining enhanced embeddings of situational features. 
+
+• We conduct extensive offline experiments on three real-world datasets (i.e., two public and one industrial datasets) and an online A/B test. Offline experimental results demonstrate the proposed DSAIN model achieves state-of-the-art  
+
+> 2Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+performance. Results from the online A/B test show that DSAIN increases the CTR by 2.70%, the CPM by 2.62%, and the GMV by 2.16%. The rest of the paper is organized as follows. Section 2 introduces the related work. Section 3 describes the DSAIN model in detail. Section 4 gives the experimental evaluation. Finally, the paper is concluded in Section 5. 
+
+2 RELATED WORK 
+
+Our work is related to the research under two closely related topics: CTR prediction and user behavior modeling. 
+
+2.1 CTR Prediction 
+
+Traditional CTR models learn feature interactions with the aid of deep neural networks. The representative work at this stage includes Wide&Deep [7], PNN [27], DeepFM [12], xDeepFM [21], ONN [35] and CAN [2]. Benefiting from the increase in computing power and model capacity, many efforts are put into sequential behavior modeling, which aims to infer the user interest with respect to the candidate based on the user historical behavior sequences. Specifically, DIN [ 38 ] employs an attention mechanism to dynamically reweight a user’s historical behavior w.r.t. the candidate. Following this line, DIEN [ 37 ] introduces an interest-evolving layer to capture the interest-evolving process with the combination of attention and GRU. To further consider the intrinsic session structure of user behaviors, DSIN [ 9 ] uses a self-attention and a Bi-LSTM to extract in-session interest representations and cross-session evolution patterns, respectively. Later, Transformer-based models such as BST [6] also achieve great success in CTR prediction. With the ever-growing volume of user interactions, many researchers pay attention to capturing user interest from long behavior sequences, which enables recommender systems to mine long-term behavior dependencies and the periodicity of user behaviors. Representative work in this field can be roughly divided into two categories, i.e., memory-augmented methods (e.g., HPMN [ 29 ] and MIMN [ 24 ]) and user behavior retrieval-based methods (e.g., UBR [26 ], two-phase model SIM [ 25 ], end-to-end behavior retrieval model ETA [ 5], and simple hash sampling-based approach SDIM [3]). 
+
+2.2 User Behavior Modeling 
+
+Originating from the conventional user behavior research on simple user behaviors, researchers have extended to further utilize more diverse and richer user behavior data to improve user behavior modeling performance. Recent research on behavior modeling can be roughly divided into two directions, and then we briefly introduce the main work in these two directions as follows. The first direction is increased multiplicity - oriented user behavior modeling, i.e., multi-behavior recommendation. For instance, NMTR [ 10 ] first separately predicts the user-item interactions concerning different behavior types, then assembles them in a cascading manner to account for the cross-type behavior relations. Based on the concatenation of representations of single-type sequences, DMT [ 11 ] devises the deep multifaceted Transformers to simultaneously model users’ multiple types of behaviors and utilizes MMoE (Multi-gate Mixture of Experts) to optimize multiple objectives. Taking into account complicated relationships among different behaviors as well as the behavior priority, FeedRec [ 32 ]proposes a strong-to-weak attention network that uses strong feedback to distill accurate positive and negative user interest from weak feedback. Furthermore, researchers attempt to explore the multiplex user-item interactive semantics with graph learning techniques in MBGCN [18], GHCF [4], MB-GMN [33].  
+
+> 3RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+
+The second direction is growing heterogeneity - oriented user behavior modeling. Most of the above-mentioned behavior modeling methods underuse the rich side information of interaction behaviors. To fill this gap, some work further takes into consideration the heterogeneous and diverse features associated with interactions. For instance, Trans2D [ 30 ] utilizes a modified Transformer with 2D self-attention to capture changes in attributes over time. To avoid fusing side information straightforward, which may deteriorate the original item ID representations, NOVA [ 23 ] proposes to leverage side information as an auxiliary for the self-attention module to learn a better attention distribution, instead of being fused into item representations. DIF-SR [ 34 ] argues that integrating side information before the attention will limit the learning of attention matrices, thus decoupling various side information with separate attention calculations to further improve NOVA. Moreover, CARCA [ 28 ], FDSA [ 36 ], S3Rec [ 39 ], and MISS [ 13 ] also achieve satisfied performance in behavior modeling with heterogeneous features. Compared to existing work, DSAIN introduces the situation and situational features for each behavior, providing a new perspective on user behaviors. Further, DSAIN gives a simple yet effective method to integrate situational features into behavior embedding. 
+
+3 METHODOLOGY 
+
+In this section, we first give the problem formulation and then describe the proposed DSAIN model in detail. At the end of this section, we present the optimization objective and analyze the complexity of DSAIN. Fig. 1 gives the architecture of DSAIN. Except for the embedding layer, DSAIN includes four modules, i.e., the Behavior Denoising Module (BDM), the Situational Feature Encoder (SFE), the Correlation Fusion Module (CFM), and the Situation Aggregation Module (SAM). 
+
+3.1 Problem Formulation 
+
+Let 𝑈 , 𝑉 denote the user set and the item set, respectively. For a user 𝑢 ∈ 𝑈 , his/her historical behavior sequence is denoted as 𝑆 = {𝑠 𝑖 }𝐿 𝑖 =1, where 𝐿 is the length of the behavior sequence, 𝑠 𝑖 = (𝑣 𝑖 , 𝐵 𝑖 ) is the 𝑖 -th behavior, 𝑣 𝑖 ∈ 𝑉 is the interacted item, and 𝐵 𝑖 is the situation w.r.t. the behavior 𝑠 𝑖 . Supposing we have 𝑛 types of situational features in total, then the situation 𝐵 𝑖 can further be represented as {𝑓 𝑘 𝑖 }𝑛 𝑘 =1, where 𝑓 𝑘 𝑖 represents the 𝑘 -th situational feature of the behavior 𝑠 𝑖 . Furthermore, we adopt the context of the current request to represent the current situation for clicking on the candidate 𝑣 𝑐 , denoted as 𝐶 = {𝑓 𝑘 𝑐 }𝑛 𝑘 =1.Given X = {( 𝑢, 𝑆 )} ∪ { 𝑣 𝑐 , 𝐶 } as input and 𝑦 ∈ { 0, 1} as the label of clicking the candidate, our CTR prediction task can be formalized as: 
+
+P ( 𝑦 = 1|X) = 𝐹 (X ; 𝜃 ) (1) where 𝐹 is the probability value output by the network we will develop and 𝜃 represents the parameters of the network. 
+
+3.2 Embedding Layer 
+
+There exist four groups of features, i.e., user profiles, item profiles, behavior sequences, and the current request context, used as the input of the embedding layer. Specifically, the user profile includes user ID, user age, user gender, etc. The item profile refers to item ID, category ID, etc. The user behavior sequence consists of interacted items and behaviors with corresponding situational features as defined above. Further, the current request context refers to the situation of the target behavior, i.e., the click on the candidate. Specifically, we utilize two different embedding tables to generate embeddings for situational features and common features, respectively. By looking up embedding tables, the embedding 
+
+> 4
+
+Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore . . . 
+
+> Embedding Layer
+> user pro fi le features item pro fi le features
+> . . .
+> MLP Layer
+> candidate
+> . . .  . . .
+> . . .
+
+. . . 
+
+> . . .
+> Transpose
+> B-Mixer
+> B-Mixer
+> B-Mixer
+> Shared
+> Transpose
+> C-Mixer
+> Shared
+> C-Mixer
+> Transpose
+> F-Mixer
+> F-Mixer
+> F-Mixer
+> Transpose Shared
+
+× M  
+
+> Fusion Layer Fusion Layer
+
+. . . . . . . . . . . .  
+
+> . . .  . . .
+> . . .
+> . . .
+> Dimension-Adaptive Aggregation Layer
+
+BDM BDM BDM 
+
+> . . .  . . .
+> . . .
+> . . .
+> . . .
+
+SFE 
+
+> C-Mixer
+
+CFM 
+
+Stack 
+
+Disassemble  
+
+> Fusion Layer Fusion Layer
+
+SAM 
+
+Fig. 1. Architecture of our DSAIN (Deep Situation-Aware Interaction Network). 
+
+layer outputs the initial embedding vectors including user embedding u, historical interacted items embeddings v𝑖 ,behavior situation embeddings B𝑖 = {f𝑘 𝑖 }𝑛 𝑘 =1, candidate item embedding v𝑐 , and the current situation embedding 
+
+C = {f𝑘 𝑐 }𝑛 𝑘 =1. Specifically, the dimensions of situational feature embeddings are 𝑑 1, while others are 𝑑 2.
+
+5RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al. 
+
+3.3 Behavior Denoising Module 
+
+Except for clicked items, the user historical behavior sequence considered in this paper is heavily mixed with abundant exposed items, which are imposed on the user by online e-commerce services rather than stemming from the user’s active selection. Although these exposed items can reflect the user interest to a certain extent, there exists much noise which may deteriorate the performance of the CTR model. Therefore, decreasing noise interference in the user behavior sequence by some mechanism is of vital importance. We start by analyzing a simple filter mechanism. Instead of taking some features such as the category and brand to pick out the top-𝑘 items most relevant to the candidate from the user historical behavior sequence, we calculate the correlation between the item and candidate in a soft mode and then sample items based on probabilities. The calculation process of the correlation score is shown in Eq. 2. 
+
+𝑝 𝑖 = sigmoid 
+
+
+
+W2
+
+
+
+v𝑖 + W1
+
+
+
+(f𝑘 𝑐 )∥ 𝑛 𝑘 =1 ⊗ ( f𝑘 𝑖 )∥ 𝑛 𝑘 =1
+
+
+
++ v𝑐 
+
+ 
+
+(2) where W1 ∈ R𝑑 2 × ( 𝑛 ×𝑑 1 ) and W2 ∈ R1×𝑑 2 are learnable parameters. ⊗ means the element-wise product. (f𝑘 𝑐 )∥ 𝑛 𝑘 =1 and 
+
+(f𝑘 𝑖 )∥ 𝑛 𝑘 =1 concatenate 𝑛 situational features of the target click and historical behavior 𝑠 𝑖 , respectively. 𝑝 𝑖 denotes the correlation score of the item 𝑣 𝑖 w.r.t. the candidate 𝑣 𝑐 , which is adopted as the keeping probability of 𝑣 𝑖 . Then, the probability of discarding the item 𝑣 𝑖 is 1 −𝑝 𝑖 . Furthermore, we generate a binary variable named selection factor, denoted as 𝑑 𝑖 ∈ { 0, 1}, 𝑑 𝑖 = 1 represents that 𝑣 𝑖 is reserved and 𝑑 𝑖 = 0 means that 𝑣 𝑖 is discarded. Then, a feasible way of behavior denoising is sampling from [𝑝 𝑖 , 1 − 𝑝 𝑖 ] and drawing a conclusion of keeping or dropping the item 𝑣 𝑖 to generate 𝑑 𝑖 . However, it should be noted that the sampling process is discontinuous and non-differentiable, which is a stumbling block in the model training process based on gradient back-propagation. Inspired by [ 17 ], we leverage the reparameterization trick with Gumbel-Max and then transition to its smooth approximation Gumbel-Softmax, thereby transferring the non-differentiable sampling process into a continuous and differentiable sampling from the Gumbel distribution. The calculation equation is as follows. 
+
+ˆ𝑑 𝑖 = exp (( 𝑔 0 + log 𝑝 𝑖 )/ 𝜏 )
+
+exp (( 𝑔 0 + log 𝑝 𝑖 )/ 𝜏 ) + exp (( 𝑔 1 + log (1 − 𝑝 𝑖 ))/ 𝜏 ) (3) where 𝜏 is the softmax temperature. 𝑔 0 and 𝑔 1 are i.i.d. samples drawn from the standard Gumbel distribution G(0,1). Taking 𝑔 0 as an example, sampling a value 𝛾 from the standard uniform distribution U(0,1) and then taking − log (− log 𝛾 )
+
+as the final sample value 𝑔 0.Based on the above reparameterization process with Gumbel-Softmax, we update the embedding v𝑖 of the item 𝑣 𝑖 
+
+with corresponding selection factor ˆ𝑑 𝑖 to decrease noise interference in original behavior sequence, as shown in Eq. 4. 
+
+ˆv𝑖 = ˆ𝑑 𝑖 v𝑖 (4) 
+
+3.4 Situational Feature Encoder 
+
+For one behavior of a user interacting with an item, Situational Feature Encoder (SFE) generates the embeddings for situational features of the behavior by combining commonalities and differences in the situational features of the same type, and parameterizes the embeddings of situational features in the form of MLP, approximating the interaction between item ID and each situational feature. Concretely, for the situational feature 𝑓 𝑘 , 1 ≤ 𝑘 ≤ 𝑛 , we generate the general vector f𝑘 for this feature (e.g., period of the week) and the specific vector list {f𝑘,𝑡 }𝑚 𝑘  
+
+> 𝑡 =1
+
+for all values of this situational feature (e.g., weekday or weekend), where 𝑚 𝑘 is the number of values of the situational feature 𝑓 𝑘 (e.g., 𝑚 𝑘 = 2 for the above example). We think that the  
+
+> 6Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+general vector and the specific vector list describe the commonalities and differences in the situational features of the same type, respectively. Specifically, for situational feature 𝑓 𝑘 𝑖 , we adopt its embedding f𝑘 𝑖 as the specific vector. Then, taking into consideration the candidate information, SFE fuses the general vector f𝑘 and the specific vector f𝑘 𝑖 as shown in Eq. 5 and Eq. 6. 
+
+gate 𝑖,𝑘 = sigmoid 
+
+
+
+MLP (( v𝑐 ∥f𝑘 𝑐 ) ⊗ ( ˆv𝑖 ∥f𝑘 𝑖 )) 
+
+
+
+(5) 
+
+ˆf𝑘 𝑖 = gate 𝑖,𝑘 f𝑘 𝑖 +
+
+
+
+1 − gate 𝑖,𝑘 
+
+
+
+f𝑘 (6) where ∥ indicates the concatenation operation and it is easy to find that the dimension of ˆf𝑘 𝑖 is equal to f𝑘 𝑖 , that is, 𝑑 1.Then, ˆf𝑘 𝑖 is reshaped and split into the weight matrix and bias vector as the parameters of a micro-MLP named MLP 𝑘 𝑖 
+
+w.r.t. 𝑓 𝑘 𝑖 . This process can be formularized as follows. 
+
+
+
+𝑤 𝑘 𝑖,𝑗 ∥𝑏 𝑘 𝑖,𝑗 
+
+
+
+∥𝐷 −1 
+
+> 𝑗 =0
+
+= ˆf𝑘 𝑖 (7)  
+
+> 𝐷 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+
+
+𝑤 𝑘 𝑖,𝑗 + 𝑏 𝑘 𝑖,𝑗 
+
+
+
+= ˆf𝑘 𝑖 = 𝑑 1 (8) where 𝑤 𝑘 𝑖,𝑗 and 𝑏 𝑘 𝑖,𝑗 denote the weight and bias of 𝑗 -th layer of MLP 𝑘 𝑖 , 𝐷 determines the depth of the micro-MLP and |·| 
+
+gets the size of the variables. Then, we feed ˆv𝑖 into MLP 𝑘 𝑖 as Eq. 9 to refine the embedding of the situational feature 𝑓 𝑘 𝑖 .
+
+v𝑖,𝑘 = MLP 𝑘 𝑖 ( ˆv𝑖 ) (9) Following the above process, we can obtain the refined situational features representations {v𝑖,𝑘 }𝑛 𝑘 =1 for each historical behavior 𝑠 𝑖 and {v𝑐,𝑘 }𝑛 𝑘 =1 for the target behavior (i.e., the click on the candidate 𝑣 𝑐 ). 
+
+3.5 Correlation Fusion Module 
+
+In this section, we devise the Correlation Fusion Module (CFM) to coherently learn tri-directional correlations. Specifi-cally, the first direction is along the behavior sequence. The information in the second direction refers to the relationships among situational features of the same behavior. Moreover, the third direction information describes the correlations among different dimensions (i.e., channels) of the situational feature embedding, where distinct channels contains various latent semantics. Concretely, CFM consists of stacked 𝑀 layers of the identical block. Each block is equipped with three MLP-based mixers, i.e., a behavior-mixer , a channel-mixer , and a feature-mixer , capturing the cross-behavior, cross-channel and cross-feature (i.e., cross-situational feature) correlations, respectively. Within each block, we first apply the behavior-mixer on the behavior sequence and then utilize channel-mixer to learn the latent semantics of the embedding for each situational feature. Then, feature-mixer is adopted to learn intrinsic correlations among all situational features of the same behavior. Specifically, the proposed CFM can learn tri-directional information without introducing the position information, unlike the series of methods based on Transformer, since CFM is an MLP-based method and the MLP is inherently sensitive to the position. It is worth noting that the parameters of each block are shared between 𝑀 layers to lighten the burden of model training and online inference. 
+
+3.5.1 Preprocessing. 
+
+Based on the refined representation v𝑖,𝑘 ∈ R𝑑 2 of the situational feature 𝑓 𝑘 𝑖 obtained by the SFE module, we stack 
+
+{v𝑖,𝑘 }𝐿 𝑖 =1 and generate a two-dimensional matrix V𝑘 ∈ R𝐿 ×𝑑 2 corresponding to 𝑓 𝑘 . Following this line, we further stack 
+
+{V𝑘 }𝑛 𝑘 =1 to construct a three-dimensional matrix V ∈ R𝑛 ×𝐿 ×𝑑 2 . 
+
+> 7RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+
+3.5.2 Behavior-Mixer. 
+
+The behavior-mixer aims to capture the correlations among behaviors in the user historical behavior sequence. As aforementioned, we first apply the behavior-mixer and the channel-mixer successively for each situational feature and then adopt the feature-mixer . Therefore, we detail the behavior-mixer based on the two-dimensional matrix V𝑘 ∈ R𝐿 ×𝑑 2
+
+corresponding to the situational feature 𝑓 𝑘 .The simplest implementation of behavior-mixer is feeding the column vector of V𝑘 into a MLP block, which contains two fully-connected layers with a nonlinear activation function, and then outputting an embedding with the same dimension as the input. For easy understanding, the above process is essentially equivalent to transposing the matrix V𝑘 
+
+and then performing the transformation on the row vector of the V𝑘 ⊤ as shown in Fig. 1. The behavior-mixer maps from 
+
+R𝐿 to R𝐿 and is shared across all columns of V𝑘 . Formally, the output V𝑘, Beh of the behavior-mixer for the situational feature 𝑓 𝑘 can be represented as Eq. 10. 
+
+V𝑘, Beh  
+
+> ∗,𝛼
+
+= V𝑘  
+
+> ∗,𝛼
+
++ W2 𝜎 
+
+
+
+W1 LayerNorm 
+
+
+
+V𝑘 
+
+> ∗,𝛼
+
+
+
+, for 𝛼 = 1, . . . , 𝑑 2 (10) where V𝑘, Beh  
+
+> ∗,𝛼
+
+is the 𝛼 -th column of V𝑘, Beh and 𝜎 is an activation function named GELU [15 ]. W1 ∈ R𝐷 𝐿 ×𝐿 and W2 ∈ R𝐿 ×𝐷 𝐿 
+
+denote two trainable matrices corresponding to two fully-connected layers, respectively. 𝐷 𝐿 is the tunable hidden size of the behavior-mixer . Aside from the MLP layers, we further employ other standard architectural components, i.e., layer normalization [ 1 ] and residual connection [ 14 ]. It can be easily found that the behavior-mixer is sensitive to the order of behaviors in a sequence by adopting the MLP-based architecture, which frees the behavior-mixer from the position embedding. Although the above process can capture the correlations among all behaviors, there exist three critical issues. First, this method indiscriminately feeds the entire behavior sequence of length 𝐿 into the same MLP block, which may lead to noise interference. Second, the intrinsic and complex relationships of the behavior subsequence, consisting of adjacent behaviors within a certain range, are neglected by the above method. Third, the behavior subsequence is not strictly independent of each other and the latent correlations among them should be modeled by some mechanism. To deal with the above three issues, we optimize the behavior-mixer with a partition-and-fusion pattern. To materialize this idea, we divide the entire sequence of length 𝐿 into three types of subsequences according to different partition strategies. Then, we derive three distinct behavior-mixer to capture the correlations implied in the above three types of subsequences, respectively. We elaborate on these three behavior-mixers as follows. 
+
+Adjacent Behavior-Mixer sets the window size as 𝐿 𝑤 , where 𝐿 is divisible by 𝐿 𝑤 , and then divides the entire sequence into 𝐿 𝐿 𝑤 segments from the beginning, i.e., each segment consists of 𝐿 𝑤 behaviors. For the 𝜑 -th segment, where 
+
+𝜑 ∈ { 1, . . . , 𝐿 𝐿 𝑤 }, the consecutive 𝐿 𝑤 behaviors are mapped by the MLP block, which has a nonlinear activation function and two fully connected layers denoted as W𝜑  
+
+> 1
+
+∈ R𝐷 𝐿𝑤 ×𝐿 𝑤 and W𝜑  
+
+> 2
+
+∈ R𝐿 𝑤 ×𝐷 𝐿𝑤 , respectively. It is worth noting that the MLP blocks adopted by different segments are shared. The calculation result of the adjacent behavior-mixer for the 
+
+𝜑 -th segment is denoted as V𝑘, Adj ⟨𝜑 ⟩, which can be formalized as follows. 
+
+V𝑘, Adj  
+
+> ∗,𝛼
+
+⟨𝜑 ⟩ = V𝑘, Div  
+
+> ∗,𝛼
+
+⟨𝜑 ⟩ + W𝜑  
+
+> 2
+
+𝜎 
+
+
+
+W𝜑  
+
+> 1
+
+LayerNorm 
+
+
+
+V𝑘, Div ⟨𝜑 ⟩
+
+
+
+> ∗,𝛼
+
+
+
+, for 𝛼 = 1, . . . , 𝑑 2 (11) where V𝑘, Adj ⟨𝜑 ⟩ ∈ R𝐿 𝑤 ×𝑑 2 and V𝑘, Div ⟨𝜑 ⟩ refers to the 𝜑 -th segment obtained by dividing the matrix V𝑘 ∈ R𝐿 ×𝑑 2
+
+along the 𝐿 -axis. Then, we concat all of V𝑘, Adj  
+
+> ∗,𝛼
+
+⟨𝜑 ⟩ ∈ R𝐿 𝑤 ×𝑑 2 with 𝜑 from 1 to 𝐿 𝐿 𝑤 to derive the final output of the 
+
+adjacent behavior-mixer as shown in Eq. 12. 
+
+V𝑘, Adj  
+
+> ∗,𝛼
+
+=
+
+
+
+V𝑘, Adj  
+
+> ∗,𝛼
+
+⟨𝜑 ⟩
+
+
+
+∥
+
+> 𝐿 𝐿𝑤
+> 𝜑 =1
+
+, for 𝛼 = 1, . . . , 𝑑 2 (12)  
+
+> 8Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+Dilated Behavior-Mixer is devised for capturing long-range correlations. Specifically, inspired by the dilated convo-lution, dilated behavior-mixer gathers behaviors from the entire sequence in intervals of 𝐿 𝐿 𝑤 and generate 𝐿 𝐿 𝑤 segments. Apparently, each segment is composed of 𝐿 𝑤 inconsecutive behaviors. The dilated behavior-mixer concentrates on learn-ing the long-term dependency while disregarding the local patterns across adjacent behaviors, which is complementary to the adjacent behavior-mixer . For 𝐿 𝑤 behaviors in the 𝜑 ′-th segment, where 𝜑 ′ ∈ { 1, . . . , 𝐿 𝐿 𝑤 }, we feed them into a 
+
+MLP block with the same structure as that of the adjacent behavior-mixer . Similarly, the MLP blocks are shared among different segments. We implement the dilated behavior-mixer as Eq. 13. 
+
+V𝑘, Dil  
+
+> ∗,𝛼
+
+⟨𝜑 ′⟩ = V𝑘, Gat  
+
+> ∗,𝛼
+
+⟨𝜑 ′⟩ + W𝜑 ′ 
+
+> 2
+
+𝜎 
+
+
+
+W𝜑 ′ 
+
+> 1
+
+LayerNorm 
+
+
+
+V𝑘, Gat ⟨𝜑 ′⟩
+
+
+
+> ∗,𝛼
+
+
+
+, for 𝛼 = 1, . . . , 𝑑 2 (13) where V𝑘, Dil ⟨𝜑 ′⟩ ∈ R𝐿 𝑤 ×𝑑 2 is the output of dilated behavior-mixer with respect to the 𝜑 ′-th segment, and V𝑘, Gat ⟨𝜑 ′⟩
+
+refers to the 𝜑 ′-th segment generated by gathering behaviors from V𝑘 ∈ R𝐿 ×𝑑 2 along the 𝐿 -axis in intervals of 𝐿 𝐿 𝑤 ,starting with the 𝜑 ′-th row of V𝑘 . Then, we concat all of V𝑘, Dil  
+
+> ∗,𝛼
+
+⟨𝜑 ′⟩ ∈ R𝐿 𝑤 ×𝑑 2 with 𝜑 ′ from 1 to 𝐿 𝐿 𝑤 as Eq. 14. 
+
+V𝑘, Dil  
+
+> ∗,𝛼
+
+=
+
+
+
+V𝑘, Dil  
+
+> ∗,𝛼
+
+⟨𝜑 ′⟩
+
+
+
+∥
+
+> 𝐿 𝐿𝑤
+> 𝜑 ′=1
+
+, for 𝛼 = 1, . . . , 𝑑 2 (14) 
+
+Shifted Behavior-Mixer aims to learn the correlations of two adjacent segments, which is another supplementary operation of the adjacent behavior-mixer . Specifically, we shift the partition of segments in the adjacent behavior-mixer 
+
+by an offset of ⌊ 𝐿 𝑤  
+
+> 2
+
+⌋. For several behaviors near the beginning and end of the sequence, since they are not covered by the shifted window, we concatenate them into V𝑘, Remain ∈ R𝐿 𝑤 ×𝑑 2 and skip them when performing the MLP 
+
+mapping. Apparently, shift-window operation generates 𝐿 𝐿 𝑤 − 1 segments. Then, for the 𝜑 ′′ -th segments, where 
+
+𝜑 ′′ ∈ { 1, . . . , 𝐿 𝐿 𝑤 − 1}, we feed the consecutive 𝐿 𝑤 behaviors in the 𝜑 ′′ -th segments into a specific MLP block, which is shared between different segments. The shifted behavior-mixer can be formalized as Eq. 15. 
+
+V𝑘, Shi ′ 
+
+> ∗,𝛼
+
+⟨𝜑 ′′ ⟩ = V𝑘, Sft  
+
+> ∗,𝛼
+
+⟨𝜑 ′′ ⟩ + W𝜑 ′′  
+
+> 2
+
+𝜎 
+
+
+
+W𝜑 ′′  
+
+> 1
+
+LayerNorm 
+
+
+
+V𝑘, Sft ⟨𝜑 ′′ ⟩
+
+
+
+> ∗,𝛼
+
+
+
+, for 𝛼 = 1, . . . , 𝑑 2 (15) where V𝑘, Shi ′
+
+⟨𝜑 ′′ ⟩ ∈ R𝐿 𝑤 ×𝑑 2 is the output of shifted behavior-mixer with respect to the 𝜑 ′′ -th segment, and V𝑘, Sft ⟨𝜑 ′′ ⟩
+
+refers to the 𝜑 ′′ -th segment obtained by shifting the V𝑘, Div ⟨𝜑 ′′ ⟩ by an offset of ⌊ 𝐿 𝑤  
+
+> 2
+
+⌋ along the 𝐿 -axis. Then, we concat all of V𝑘, Shi ′ 
+
+> ∗,𝛼
+
+⟨𝜑 ′′ ⟩ ∈ R𝐿 𝑤 ×𝑑 2 with 𝜑 ′′ from 1 to 𝐿 𝐿 𝑤 − 1 and the remaining behaviors representations V𝑘, Remain ∈ R𝐿 𝑤 ×𝑑 2
+
+to generate the final output of the shifted behavior-mixer as shown in Eq. 16. 
+
+V𝑘, Shi  
+
+> ∗,𝛼
+
+= V𝑘, Remain  
+
+> ∗,𝛼
+
+∥
+
+
+
+V𝑘, Shi ′ 
+
+> ∗,𝛼
+
+⟨𝜑 ′′ ⟩
+
+
+
+∥ 
+
+> 𝐿 𝐿𝑤 −1
+> 𝜑 ′′ =1
+
+
+
+, for 𝛼 = 1, . . . , 𝑑 2 (16) Now, three types of complementary correlations among all behaviors have been captured by the adjacent behavior-mixer ,
+
+dilated behavior-mixer and shifted behavior-mixer , respectively. To obtain V𝑘, Beh , which incorporates above three types of behavior correlations, we aggregate V𝑘, Adj ∈ R𝐿 ×𝑑 2 , V𝑘, Dil ∈ R𝐿 ×𝑑 2 and V𝑘, Shi ∈ R𝐿 ×𝑑 2 in a weight-adaptive manner as shown in Eq. 17. 
+
+V𝑘, Beh = 𝑤 1V𝑘, Adj + 𝑤 2V𝑘, Dil + 𝑤 3V𝑘, Shi (17) where 𝑤 1, 𝑤 2 and 𝑤 3 are learnable weight parameters. 
+
+3.5.3 Channel-Mixer. 
+
+Aside from the correlations among different behaviors, the internal relationships among different channels of the situational feature embedding deserve more attention. Specifically, the embedding of the situational feature is multi-dimensional and usually implies latent semantics on each dimension. Modeling the intrinsic relationships among these dimensions by some mechanism can further improve performance.  
+
+> 9RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+
+After performing the behavior mixing, the correlations along the user behavior sequence have been injected into V𝑘, Beh 
+
+for each situational feature 𝑓 𝑘 as shown in Eq. 17. Then, the channel-mixer takes the row vector of V𝑘, Beh ∈ R𝐿 ×𝑑 2 as input, feeds it into a MLP block and maps from R𝑑 2 to R𝑑 2 as shown in Eq. 18. All rows of V𝑘, Beh share the channel-mixer .
+
+V𝑘, Cha  
+
+> 𝛽, ∗
+
+= V𝑘, Beh  
+
+> 𝛽, ∗
+
++ W4 𝜎 W3
+
+
+
+LayerNorm 
+
+
+
+V𝑘, Beh 
+
+> 𝛽, ∗
+
+T !! T
+
+, for 𝛽 = 1, . . . , 𝐿 (18) where V𝑘, Cha  
+
+> 𝛽, ∗
+
+is the 𝛽 -th row of V𝑘, Cha , 𝜎 is GELU , W3 ∈ R𝐷 𝑑 2 ×𝑑 2 and W4 ∈ R𝑑 2 ×𝐷 𝑑 2 denote two trainable matrices. 𝐷 𝑑 2
+
+is the tunable hidden size of the channel-mixer . After Eq. 18, the internal relationships among different channels have been incorporated into V𝑘, Cha .
+
+3.5.4 Feature-Mixer. 
+
+After behavior mixing and channel mixing, the cross-behavior and cross-channel correlations have been incorporated into the embedding of each situational feature. However, the inherent and complex relationships among all the situational features, which jointly portray the situation of the behavior, have not been effectively captured. Thus, we derive the 
+
+feature-mixer to fuse the cross-feature correlation into the embedding of the situational feature. Concretely, for each situational feature 𝑓 𝑘 , the cross-behavior and cross-channel relationships have been injected into V𝑘, Cha along the path 
+
+V𝑘 → V𝑘, Beh → V𝑘, Cha . We re-express V𝑘, Cha as eV𝑘 and concat all eV𝑘 ∈ R𝐿 ×𝑑 2 , where 𝑘 = 1, . . . , 𝑛 , corresponding to 𝑛 
+
+situational features, to generate a three-dimensional matrix eV ∈ R𝑛 ×𝐿 ×𝑑 2 . We transpose it into eV ∈ R𝐿 ×𝑑 2 ×𝑛 and feed 
+
+eV𝑖 ∈ R𝑑 2 ×𝑛 for each behavior 𝑠 𝑖 into the feature-mixer separately. The feature-mixer maps from R𝑛 to R𝑛 for each row vector of eV𝑖 with a shared MLP block, which has a similar marco architecture to the channel-mixer . This process is shown in Eq. 19. 
+
+eV𝑖, Fea  
+
+> 𝛼, ∗
+
+= eV𝑖 𝛼, ∗ +
+
+
+
+W6 𝜎 
+
+
+
+W5
+
+
+
+LayerNorm (eV𝑖 )𝛼, ∗
+
+T  T
+
+, for 𝛼 = 1, . . . , 𝑑 2 (19) where 𝜎 is GELU , W5 ∈ R𝐷 𝑛 ×𝑛 and W6 ∈ R𝑛 ×𝐷 𝑛 denote two trainable matrices. 𝐷 𝑛 is the tunable hidden size of the feature-mixer . Since the feature-mixer is subsequent to the behavior-mixer and channel-mixer , empowers the 
+
+feature-mixer not only to model the cross-feature correlations but also to build a bridge for information communication of cross-behavior and cross-channel correlations among all situational features. Therefore, the feature-mixer coherently connects the tri-directional information. 
+
+3.6 Situation Aggregation Module 
+
+We have incorporated the tri-directional information, i.e., cross-behavior, cross-channel, and cross-feature correlations, into eV𝑖, Fea ∈ R𝑑 2 ×𝑛 for each historical behavior 𝑠 𝑖 as shown in Eq. 19. Specifically, we slice eV𝑖, Fea along the 𝑛 -axis and obtain the { ˜v𝑖,𝑘 }𝑛 𝑘 =1 corresponding to 𝑛 situational features of the historical behavior 𝑠 𝑖 . It should be noted that we do not apply the CFM module on the situational features of the target behavior, thus the embeddings {v𝑐,𝑘 }𝑛 𝑘 =1 generated by the SFE module are maintained. Subsequently, we adopt two different methods to aggregate { ˜v𝑖,𝑘 }𝑛 𝑘 =1 and {v𝑐,𝑘 }𝑛 𝑘 =1,respectively, thus generating the embeddings for the historical behavior 𝑠 𝑖 and the target behavior, respectively. For the target behavior, with the consideration of importance difference among distinct situational features, we aggregate {v𝑐,𝑘 }𝑛 𝑘 =1 into the embedding b𝑐 of the target behavior in a weight-adaptive way, as shown in Eq. 20. 
+
+b𝑐 = MLP (v𝑐 +
+
+> 𝑛
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑤 𝑐,𝑘 v𝑐,𝑘 ) (20) where 𝑤 𝑐,𝑘 is a trainable weight parameter.  
+
+> 10 Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+Further, we dynamically reweight the embeddings of situational features for each historical behavior 𝑠 𝑖 with respect to the situational features of the target behavior, and then generate the embedding b𝑖 of the historical behavior 𝑠 𝑖 as follows. 
+
+𝑤 𝑖,𝑘 = MLP ( ˜v𝑖,𝑘 + v𝑐,𝑘 ⊗ ˜v𝑖,𝑘 ) (21) 
+
+𝑤 ′ 
+
+> 𝑖,𝑘
+
+= exp (𝑤 𝑖,𝑘 )
+
+Í𝑛 𝑘 =1 exp (𝑤 𝑖,𝑘 ) (22) 
+
+b𝑖 = MLP (v𝑖 +
+
+> 𝑛
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑤 ′ 
+
+> 𝑖,𝑘
+
+˜v𝑖,𝑘 ) (23) Then, to adjust the contributions of historical behavior representations at the channel level, we devise a channel-adaptive unit and give up the method in DIN [ 38 ], since the method in DIN simply calculates the similarity score at the granularity of the item. For each historical behavior embedding b𝑖 , the channel-adaptive factor g𝑖 , which is a vector with the same dimension as b𝑖 rather than a scalar, is computed as Eq. 24. 
+
+g𝑖 = sigmoid  W𝑔 (b𝑖 ∥( b𝑖 ⊗ b𝑐 )∥ b𝑐 ) (24) where W𝑔 ∈ R𝑑 2 ×3𝑑 2 is a learnable weight matrix. Finally, the embedding e𝑠 of the behavior sequence is obtained by the following aggregation based on g𝑖 as Eq. 25. 
+
+e𝑠 = 1
+
+𝐿 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+g𝑖 ⊗ b𝑖 (25) 
+
+3.7 Model Optimization 
+
+Finally, the user embedding u, the embedding e𝑠 of the behavior sequence, and the embedding b𝑐 of the target behavior (i.e., the click on the candidate), along with other feature embeddings denoted as e𝑜 , are concatenated and fed into an 
+
+MLP to perform the CTR prediction, as shown in Eq. 26. 
+
+ˆ𝑦 = sigmoid (MLP (u ∥ e𝑠 ∥ b𝑐 ∥ e𝑜 )) (26) DSAIN is optimized by minimizing the following negative log-likelihood function defined as Eq. 27. 
+
+L = − 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+(𝑦 𝑖 log ˆ 𝑦 𝑖 + ( 1 − 𝑦 𝑖 ) log (1 − ˆ𝑦 𝑖 )) (27) where 𝑁 denotes the batch size, 𝑦 𝑖 ∈ { 0, 1} is the label and ˆ𝑦 𝑖 is the predicted CTR value. 
+
+3.8 Complexity Analysis 
+
+Space Complexity. The learnable parameters in DSAIN are from the item embeddings (𝑂 (|V | 𝑑 2)) , situational features embeddings 𝑂 (𝑛𝑑 1), and parameters in the BDM (𝑂 (𝑛𝑑 1𝑑 2)) , CFM (𝑂 (𝑛𝐿 𝑤 𝐷 𝐿 𝑤 + 𝑛𝑑 2𝐷 𝑑 2 + 𝑛𝐷 𝑛 )) , and SAM (𝑂 (𝑑 22 )) .There are no extra parameters in SFE. Specifically, 𝑑 1 can be represented as 𝛿𝑑 2, where 𝛿 is a constant with a certain range. Furthermore, 𝐿 𝑤 , 𝐷 𝐿 𝑤 , 𝐷 𝑑 2 and 𝐷 𝑛 are hyperparameters, usually set to relatively small values. Thus, the total number of parameters is 𝑂 (|V | 𝑑 2 + 𝑛𝑑 22 ), which is moderate compared to other classic and effective methods (e.g., 
+
+𝑂 (|V | 𝑑 + 𝑑 2) for FeedRec[32]) since 𝑛 is quite limited. 
+
+Time Complexity. The computation amount of DSAIN is composed of four parts: the BDM module accounts for 
+
+𝑂 (𝐿𝑛𝑑 1𝑑 2), the SFE module accounts for 𝑂 (𝐿𝑛 (𝑑 1 + 𝑑 2 + 𝑑 22 )) , the CFM module accounts for 𝑂 (𝑀𝐿𝑛𝑑 2), and the SAM module accounts for 𝑂 (𝐿𝑑 22 ). As aforementioned, 𝑑 1 can be represented as 𝛿𝑑 2. Therefore, the total computational  
+
+> 11 RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+> Table 1. Statistics of datasets.
+
+Datasets #Users #Items #Categories #Behaviors Taobao 1,141,729 99,815 6,769 26,557,961 Eleme 14,427,689 7,446,116 10 177,114,244 Meituan 130,648,310 14,054,691 184 1,331,247,488 complexity is 𝑂 (𝐿𝑛𝑑 22 + 𝑀𝐿𝑛𝑑 2). Since 𝑛 and 𝑀 are relatively small, our model does not increase the computational cost, compared to other CTR models (e.g., 𝑂 (𝑛𝑑 2 + 𝑛 2𝑑 ) for FeedRec[ 32 ]). A convenient property in our model is that the computation of all items in the behavior sequence is fully parallelizable, which is amenable to GPU acceleration. 
+
+4 EXPERIMENTS 
+
+In this section, we conduct extensive offline experiments on three real-world datasets and an online A/B test to answer the following research questions. 
+
+• RQ1 : Does DSAIN outperform the existing CTR models on performance? 
+
+• RQ2 : How do four components in the DSAIN contribute to the recommendation performance? 
+
+• RQ3 : How do the key hyper-parameters in DSAIN affect its performance? 
+
+• RQ4 : What is the online performance of DSAIN in a live production environment, e.g., the Meituan food delivery platform? 
+
+4.1 Experimental Setup 
+
+4.1.1 Datasets. We conduct offline experiments on the following three datasets. 
+
+• Taobao. It is a public dataset 1 collected from the display advertising system of Taobao. This dataset contains more than 26 million interaction records of 1.14 million users within 8 days. Each sample comprises five features: user ID, timestamp, behavior type, item brand ID, and category ID. It should be noted that this dataset does not include item ID but adopts brand ID as the alternative. We construct temporal features based on timestamp information, which together with the behavior type constitute the situational features of this dataset. 
+
+• Eleme. It is a public dataset 2 constructed from logs of ele.me service. This dataset contains interactions within 8 days. Aside from the behavior type, this dataset naturally contains rich temporal features (e.g., the hour of day, weekday or weekend, etc.), which jointly form the situational features. 
+
+• Meituan. It is an industrial dataset collected from the Meituan food delivery platform, which contains 1.3 billion interaction records of 130 million users within 30 days. This industrial dataset not only includes behavior type and temporal features (e.g., the period of the day corresponding to breakfast/lunch/dinner, and weekday/weekend, etc.) but also incorporates behavior-related spatial information, such as the page (e.g., search result page and recommendation list page) in which the behavior occurs. The statistics of the three datasets are shown in Table 1. 
+
+4.1.2 Comparison Models. The following eight baselines are chosen for comparative experiments and they are divided into three groups.  
+
+> 1https://tianchi.aliyun.com/dataset/56
+> 2https://tianchi.aliyun.com/dataset/131047 12 Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+Group I includes three models that treat behavior-related side information as common features. 
+
+• DIN [38] employs a local activation unit to dynamically reweight users’ historical behaviors w.r.t. the candidate. 
+
+• DIEN [37] introduces an interest-evolving layer to capture the evolution of interest on the basis of DIN. 
+
+• CAN [2 ] disentangles representation learning and feature interaction modeling via a co-action unit, which is also equipped with multi-order enhancement and multi-level independence to enhance the feature interaction. Group II includes two models that conduct modeling for the behavior type. 
+
+• DMT [ 11 ] exploits Deep Multifaceted Transformers to model users’ diverse behavior sequences, utilizes MMoE to jointly optimize multi-objectives and uses the Bias Deep Neural Networks to reduce the selection bias in implicit feedback. 
+
+• FeedRec [ 32 ] gives a user modeling framework to incorporate various explicit and implicit user feedback to infer user interest. Group III includes three models that focus on modeling for behavior temporal and/or spatial information. 
+
+• CARCA [ 28 ] captures the dynamic nature of the user profiles in terms of contextual features and item attributes via dedicated multi-head self-attention blocks. 
+
+• Trans2D [30 ] devises a novel extended attention mechanism named attention2D to learn item-item, attribute-attribute and item-attribute patterns from sequences with multiple item attributes. 
+
+• DIF-SR [34 ] decouples the behavior-related side information and the item embedding to prevent information entan-glement. 
+
+4.1.3 Evaluation Metrics. We adopt two metrics, i.e., AUC (Area Under ROC Curve) and Logloss , to evaluate our proposed model in offline experiments. A larger AUC indicates better recommendation performance, but Logloss performs the opposite. It is noteworthy that a small improvement in AUC is likely to lead to a significant increase in online CTR [ 38 ]. In online experiments, we adopt CTR (Click-Through Rate), CPM (Cost-Per-Mille) and GMV (Gross Merchandise Volume) as evaluation metrics. 
+
+4.1.4 Implementation Details. We implement DSAIN by TensorFlow. For all comparison models and our DSAIN model, we adopt Adam as the optimizer with the learning rate fixed to 0.001 and initialize the model parameters with normal distribution by setting the mean and standard deviation to 0 and 0.01, respectively. For our proposed DSAIN model, 𝐿 ,
+
+𝐿 𝑤 , 𝑛 , 𝑑 1, and 𝑑 2 are set to 300, 30, 5, 144, and 8, respectively. The temperature parameter 𝜏 in BDM and the layer depth in CFM are set to 1 and 4, respectively. For the hidden dimensions of three mixers, i.e., 𝐷 𝐿 𝑤 for the behavior-mixer , 𝐷 𝑑 2
+
+for the channel-mixer , and 𝐷 𝑛 for the feature-mixer , in CFM are set to 10, 16, 8, respectively. 
+
+4.2 Overall Performance (RQ1) 
+
+Table 2 lists the performance results of baselines and our DSAIN model on Taobao, Eleme, and Meituan datasets. All experiments are repeated three times. The best results of compared models and the average results of DSAIN are reported. From Table 2, we find performance trends of all the baselines are consistent on three datasets and have some observations as follows. (1) FeedRec in Group II outperforms all models in Group I, and DIF-SR in Group III outperforms all the other models in Groups I, II, and III. This demonstrates the significance of fully utilizing the behavior-related side information. (2) DMT in Group II performs better than DIN and DIEN in Group I, while slightly worse than CAN in Group I. Moreover, CARCA and Trans2D in Group III surpass models in Group I and DMT in Group II, but are slightly worse  
+
+> 13 RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al.
+> Table 2. Performance comparison. The best result and the second-best result in each row are in bold and underlined, respectively.
+
+Dataset Metric Group I Group II Group III DSAIN DIN DIEN CAN DMT FeedRec CARCA Trans2D DIF-SR Taobao AUC 0.6223 0.6241 0.6276 0.6268 0.6312 0.6289 0.6303 0.6330 0.6452 ± 0.5 ‰
+
+Logloss 0.2622 0.2618 0.2607 0.2611 0.2592 0.2603 0.2599 0.2588 0.2571 ± 0.1 ‰
+
+Eleme AUC 0.6368 0.6420 0.6450 0.6435 0.6477 0.6455 0.6464 0.6502 0.6634 ± 0.4 ‰
+
+Logloss 0.1245 0.1198 0.1157 0.1173 0.1143 0.1152 0.1149 0.1135 0.1116 ± 0.1 ‰
+
+Meituan AUC 0.6577 0.6612 0.6645 0.6635 0.6715 0.6683 0.6709 0.6740 0.6823 ± 0.4 ‰
+
+Logloss 0.1922 0.1884 0.1855 0.1861 0.1819 0.1842 0.1825 0.1799 0.1763 ± 0.1 ‰
+
+> Table 3. Performance of variants with different BDMs or without BDM.
+
+DSAIN ∗ 
+
+> 1
+
+DSAIN ∗ 
+
+> 2
+
+(2) DSAIN ∗ 
+
+> 2
+
+(4) DSAIN ∗ 
+
+> 2
+
+(8) DSAIN ∗ 
+
+> 2
+
+(12 ) DSAIN ∗ 
+
+> 2
+
+(16 ) DSAIN ∗ 
+
+> 2
+
+(20 ) DSAIN 
+
+AUC 0.6808 0.6778 0.6797 0.6808 0.6811 0.6804 0.6803 0.6823 
+
+Logloss 0.1765 0.1770 0.1767 0.1764 0.1764 0.1767 0.1765 0.1763 
+
+than FeedRec in Group II. This phenomenon inspires us that the improvement of model performance does not merely depend on utilizing richer information of interaction and the model architecture imposes a significant effect on the performance. (3) Our DSAIN consistently outperforms all baseline models and achieves state-of-the-art performance on all datasets. We think, compared to DSAIN, all competitors either underutilize the behavior-related side information, or neglect to capture multi-directional correlations implied in the user behavior sequence, especially the dependencies among different situational features, thus suffering the degradation of model performance. 
+
+4.3 Ablation Study (RQ2) 
+
+In this section, we perform the ablation study on the Meituan dataset to investigate the different impacts of four modules on the performance of DSAIN. 
+
+4.3.1 Effect of Behavior Denoising Module. In this section, we investigate the impact of the Behavior Denoising Module (BDM) in DSAIN. We consider the following variants: (1) DSAIN ∗
+
+> 1
+
+: it simplifies the DSAIN by dropping BDM, and performs nothing on the original user historical behavior sequence and then directly feeds it into the model; (2) DSAIN ∗
+
+> 2
+
+:it keeps a specified number of exposed items before each clicked item and discards the remaining exposed items, thereby forming a new sequence, which is the subsequence of the original user historical behavior sequence. Specifically, 
+
+DSAIN ∗ 
+
+> 2
+
+(𝑥 ) sets the number of reserved exposures to 𝑥 , where 𝑥 ∈ { 2, 4, 8, 12 , 16 , 20 }.As shown in Table 3, (1) compared to DSAIN ∗ 
+
+> 1
+
+and DSAIN ∗ 
+
+> 2
+
+(·) , DSAIN consistently fosters the improvement of recommendation performance, which demonstrates the effectiveness of BDM. (2) We find that the model performance is the worst when only keeping two exposed items before each clicked item. This may be because the historical behavior sequence considered in this paper contains a large number of exposed items while clicked items are relatively sparse. Too much valuable information is discarded when almost all exposures are dropped. Therefore, DSAIN performs better when 𝑥 increases from 2 to 12. However, the model performance suffers a decrease as 𝑥 continues to increase from 12, which may be owing to the noise interference introduced by excessive exposures.  
+
+> 14 Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore
+
+4.3.2 Effect of Situational Feature Encoder. To demonstrate the significance of the Situational Feature Encoder (SFE), we consider the following variants: (1) DSAIN † 
+
+> 1
+
+: it simplifies DSAIN by replacing SFE with an average pooling over all 
+
+ˆf𝑘 𝑖 , 𝑘 = 1, . . . , 𝑛, plus the concatenation of the result and the item embedding ˆv𝑖 ; (2) DSAIN † 
+
+> 2
+
+: it performs the average pooling over all ˆf𝑘 𝑖 , 𝑘 = 1, . . . , 𝑛, and obtain a vector ¯f𝑘 𝑖 , then splits ¯f𝑘 𝑖 into several vectors adopted as parameters of the weight matrix and the bias vector of a micro-MLP , then feeds the item embedding ˆv𝑖 into the micro-MLP; (3) DSAIN † 
+
+> 3
+
+:it concatenates the item embedding ˆv𝑖 with each situational feature embedding ˆf𝑘 𝑖 to generate v𝑖,𝑘 ; (4) DSAIN † 
+
+> 4
+
+: it only uses the specific vector f𝑘 𝑖 and drops the general vector f𝑘 to generate the embedding ˆf𝑘 𝑖 for the situational feature 𝑓 𝑘 𝑖 .The results are shown in Table 4. We can infer from Table 4 that (1) the original DSAIN outperforms all four variants, which shows the effectiveness of SFE. (2) Compared to the original DSAIN , the sharp performance degradation of 
+
+DSAIN † 
+
+> 1
+
+and DSAIN † 
+
+> 2
+
+indicates that fusing situational features prematurely may lead to information distraction and deteriorate the model performance. In this case, even with a more complex interaction scheme, such as an micro-MLP 
+
+structure in DSAIN † 
+
+> 2
+
+, the performance improvement is also very limited in comparison to DSAIN † 
+
+> 1
+
+, which highlights the necessity of considering each situational feature separately. (3) Compared to DSAIN , DSAIN † 
+
+> 3
+
+drops the micro-MLP and suffers poor performance, which illustrates that the micro-MLP can assist in achieving full-fledged feature interactions between item embedding and situational features. (4) Comparing DSAIN † 
+
+> 4
+
+to DSAIN, the decrease in AUC indicates that the commonalities of the situational features of the same type are successfully injected into the general vector in SFE. 
+
+> Table 4. Performance of variants with different SFEs.
+
+DSAIN † 
+
+> 1
+
+DSAIN † 
+
+> 2
+
+DSAIN † 
+
+> 3
+
+DSAIN † 
+
+> 4
+
+DSAIN 
+
+AUC 0.6790 0.6795 0.6801 0.6810 0.6823 
+
+Logloss 0.1766 0.1766 0.1765 0.1764 0.1763 
+
+> Table 5. Performance of variants with different SAMs.
+
+DSAIN ⋄ 
+
+> 1
+
+DSAIN ⋄ 
+
+> 2
+
+DSAIN ⋄ 
+
+> 3
+
+DSAIN 
+
+AUC 0.6805 0.6800 0.6812 0.6823 
+
+Logloss 0.1765 0.1767 0.1764 0.1763 
+
+4.3.3 Effect of Correlation Fusion Module. To validate the importance of the Correlation Fusion Module (CFM), we design seven variants as follows: (1) DSAIN ‡ 
+
+> 1
+
+: it only performs behavior mixing; (2) DSAIN ‡ 
+
+> 2
+
+: it only performs channel mixing; (3) DSAIN ‡ 
+
+> 3
+
+: it only performs feature mixing; (4) DSAIN ‡ 
+
+> 4
+
+: it removes the feature-mixer in CFM, i.e., performs behavior mixing and channel mixing; (5) DSAIN ‡ 
+
+> 5
+
+: it simplifies CFM by removing the channel-mixer ; (6) DSAIN ‡ 
+
+> 6
+
+: it simplifies CFM by removing the behavior-mixer ; (7) DSAIN ‡ 
+
+> 7
+
+: it removes the nonlinear activation function GELU from the MLP block used in three mixers. The results are shown in Table 6. From Table 6, we can observe that (1) all seven variants suffer a decline in AUC and an increase in Logloss, com-pared to the original DSAIN. (2) Comparison between the variants with only a single mixer (i.e., DSAIN ‡ 
+
+> 1
+
+, DSAIN ‡ 
+
+> 2
+
+,
+
+DSAIN ‡ 
+
+> 3
+
+) and the original DSAIN shows that the behavior-mixer and feature-mixer play more important roles than 
+
+channel-mixer , and the behavior-mixer is the most significant. (3) Comparing the variants with two mixers (i.e., DSAIN ‡ 
+
+> 4
+
+,
+
+DSAIN ‡ 
+
+> 5
+
+, DSAIN ‡ 
+
+> 6
+
+) and the original DSAIN , we find that DSAIN ‡ 
+
+> 6
+
+suffers most drastic performance degradation, which shows the behavior-mixer has a significant effect on model performance. Moreover, the AUC decrease of DSAIN ‡ 
+
+> 4
+
+by more than two thousand points compared to the original DSAIN illustrates that the feature-mixer coherently connects the tri-directional information, which fosters the improvement of model performance. (4) Performance decrease of 
+
+DSAIN ‡ 
+
+> 7
+
+compared to the original DSAIN demonstrates the necessity of introducing nonlinearity into the CFM mod-ule by adopting the activation function GELU . (5) Compared to using behavior-mixer or feature-mixer alone, further introducing the channel-mixer consistently leads to performance degradation, which may be due to information entan-glement. Nevertheless, comparison between DSAIN ‡ 
+
+> 5
+
+and the original DSAIN shows the effectiveness of channel-mixer 
+
+in capturing latent semantics across multiple channels while using three mixers together. (6) DSAIN achieves the 
+
+> 15
+
+RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al. 
+
+Table 6. Performance of variants with different CFMs. 
+
+DSAIN ‡ 
+
+> 1
+
+DSAIN ‡ 
+
+> 2
+
+DSAIN ‡ 
+
+> 3
+
+DSAIN ‡ 
+
+> 4
+
+DSAIN ‡ 
+
+> 5
+
+DSAIN ‡ 
+
+> 6
+
+DSAIN ‡ 
+
+> 7
+
+DSAIN 
+
+behavior-mixer ✓ ✓ ✓ ✓ ✓
+
+channel-mixer ✓ ✓ ✓ ✓ ✓
+
+feature-mixer ✓ ✓ ✓ ✓ ✓
+
+GELU ✓ ✓ ✓ ✓ ✓ ✓ ✓
+
+AUC 0.6805 0.6779 0.6793 0.6798 0.6812 0.6770 0.6806 0.6823 
+
+Logloss 0.1765 0.1767 0.1767 0.1766 0.1764 0.1769 0.1765 0.1763 
+
+best performance by jointly leveraging three mixers, thus coherently capturing the tri-directional correlations, i.e., cross-behavior, cross-channel, and cross-feature correlations. 
+
+4.3.4 Effect of Situation Aggregation Module. In this section, we investigate the impact of the Situation Aggregation Module (SAM) in DSAIN by considering the following variants: (1) DSAIN ⋄ 
+
+> 1
+
+: it performs the average pooling over all 
+
+˜v𝑖,𝑘 , 𝑘 = 1, . . . , 𝑛, to aggregate the embeddings of situational features of the same behavior; (2) DSAIN ⋄ 
+
+> 2
+
+: it aggregates 
+
+˜v𝑖,𝑘 , 𝑘 = 1, . . . , 𝑛 in a weight-adaptive manner; (3) DSAIN ⋄ 
+
+> 3
+
+: it calculates the correlation score between the target behavior (a click on the candidate) and each historical behavior to dynamically adjust contributions of historical behaviors. From Table 5, we find that (1) both DSAIN ⋄ 
+
+> 1
+
+and DSAIN ⋄ 
+
+> 2
+
+suffer a decline in AUC compared to the original DSAIN ,which demonstrates the significance of making the utmost of the target behavior to guide the aggregation of embeddings of situational features of the same behavior; (2) The performance degradation of DSAIN ⋄ 
+
+> 3
+
+compared to DSAIN shows the effectiveness of the channel-adaptive unit in the SAM, which empowers DSAIN to modulate contributions at the dimensional level of behavioral embeddings, where the dimensional level is more fine-grained than item level. 
+
+4.4 Hyperparameter Analysis (RQ3) 
+
+In this section, we conduct the experiments to analyze the sensitivity of several critical hyperparameters in our model, including the layer depth 𝑀 in CFM (Correlation Fusion Module), the hidden dimensions of three mixers (i.e., 𝐷 𝐿 𝑤 
+
+of behavior-mixer , 𝐷 𝑑 2 of channel-mixer and 𝐷 𝑛 of feature-mixer ) in CFM, and the temperature 𝜏 in BDM (Behavior Denoising Module). As mentioned in the methodology, CFM consists of stacked 𝑀 layers of the identical block. Thus, we first vary the layer depth 𝑀 from 1 to 8 to investigate its influence on model performance. As shown in Fig. 2 (a), the model performs better as 𝑀 increases from 1 to 4, but then worse as 𝑀 further increases. We consider the reason for this phenomenon is that stacking more layers moderately contributes to fully exploiting the tri-directional correlations, while excessive layers might also introduce noise interference and blur the representations of situational features. Therefore, we set 𝑀 to 4 according to the results.           
+
+> 
+> 
+> 
+> 
+> 
+> AUC
+> Logloss
+> AUC
+> 
+> 
+> 
+> 
+> 
+> Logloss
+
+(a) Layer depth 𝑀 in CFM.     
+
+> 
+> 
+> 
+> 
+> 
+> AUC
+> Logloss
+> AUC
+> 
+> 
+> 
+> 
+> 
+> Logloss
+
+(b) Hidden dimensions c-f in CFM.         
+
+> 
+> 
+> 
+> 
+> AUC
+> Logloss
+> AUC
+> 
+> 
+> 
+> 
+> 
+> 
+> Logloss
+
+(c) Temperature 𝜏 in BDM. Fig. 2. Influence of critical hyperparameters on the model performance. 
+
+16 Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore 
+
+Then, we evaluate the effect of the hidden dimensions of three mixers (i.e., 𝐷 𝐿 𝑤 , 𝐷 𝑑 2 , and 𝐷 𝑛 ) in CFM. Firstly, fixing 
+
+𝐷 𝑑 2 to 16 and 𝐷 𝑛 to 8, we tune the hidden dimension 𝐷 𝐿 𝑤 of the behavior-mixer in {2, 4, 8, 10 , 12 , 16 , 20 } w.r.t. the sequence with a total length of 300 used in our DSAIN. The results present DSAIN performs best when 𝐷 𝐿 𝑤 = 10 .Due to the limited space, we omit the visualization of the results. Then, we consider different combinations of hidden dimensions 𝐷 𝑑 2 ∈ { 8, 16 , 32 } of the channel-mixer and 𝐷 𝑛 ∈ { 8, 16 , 32 } of the feature-mixer with 𝐷 𝐿 𝑤 fixed to 10. Fig. 2 (b) shows the performance of DSAIN with different configurations of 𝐷 𝑑 2 and 𝐷 𝑛 denoted as " c-f " (e.g., " 8-16 " represents 
+
+𝐷 𝑑 2 = 8 and 𝐷 𝑛 = 16 ). From Fig. 2 (b), we find that DSAIN achieves the peak performance when 𝐷 𝑑 2 = 16 and 𝐷 𝑛 = 8.Finally, we tune the temperature 𝜏 in {0.1, 0.3, 1.0, 3.0, 10 .0} to observe its influence on model performance. From Fig. 2 (c), we find that a moderate value of 𝜏 such as 1.0 is suitable for our DSAIN, while the performance is suboptimal when 𝜏 is either too small or too large. 
+
+4.5 Online A/B Test (RQ4) 
+
+We conduct the online A/B test by deploying our DSAIN to handle real 40% traffic in the Meituan food delivery platform for seven days beginning on December 6, 2022, where the baseline model is the online-serving CTR model of the Meituan food delivery platform. Compared to the baseline model, DSAIN has increased the CTR by 2.70%, the CPM by 2.62%, and the GMV by 2.16%. Currently, DSAIN has been deployed in the list-advertisement recommender system of the Meituan food delivery platform and is now serving hundreds of millions of users, which contributes to significant business revenue growth. 
+
+5 CONCLUSION 
+
+In this paper, we propose the concept of the situation and situational features for behaviors and then devise a novel CTR model DSAIN (Deep Situation-Aware Interaction Network). Given a sequence of user behaviors and the corresponding situational features, DSAIN reduces noise behaviors in the sequence, learns the high-quality embeddings for situational features by taking into consideration multiple internal correlations, and aggregates them into the embedding of the behavior sequence for final CTR prediction. The results of offline experiments on three datasets and the online A/B test demonstrate the superiority of our DSAIN model. 
+
+ACKNOWLEDGMENTS 
+
+This research was supported by Meituan and the Natural Science Foundation of China under Grant No. 62072450. 
+
+REFERENCES               
+
+> [1] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton. 2016. Layer normalization. Stat 1050 (2016), 21. [2] Weijie Bian, Kailun Wu, Lejian Ren, Qi Pi, Yujing Zhang, Can Xiao, Xiang-Rong Sheng, Yong-Nan Zhu, Zhangming Chan, Na Mou, et al .2022. CAN: Feature co-action network for click-through rate prediction. In Proceedings of the Fifteenth ACM International Conference on Web Search and Data Mining . 57–65. [3] Yue Cao, Xiaojiang Zhou, Jiaqi Feng, Peihao Huang, Yao Xiao, Dayao Chen, and Sheng Chen. 2022. Sampling is all you need on modeling long-term user behaviors for CTR prediction. In Proceedings of the 31st ACM International Conference on Information & Knowledge Management . 2974–2983. [4] Chong Chen, Weizhi Ma, Min Zhang, Zhaowei Wang, Xiuqiang He, Chenyang Wang, Yiqun Liu, and Shaoping Ma. 2021. Graph heterogeneous multi-relational recommendation. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 35. 3958–3966. [5] Qiwei Chen, Changhua Pei, Shanshan Lv, Chao Li, Junfeng Ge, and Wenwu Ou. 2021. End-to-end user behavior retrieval in click-through rate prediction model. arXiv preprint arXiv:2108.04468 (2021). [6] Qiwei Chen, Huan Zhao, Wei Li, Pipei Huang, and Wenwu Ou. 2019. Behavior sequence transformer for e-commerce recommendation in alibaba. In
+> Proceedings of the 1st International Workshop on Deep Learning Practice for High-Dimensional Sparse Data . 1–4. 17
+
+RecSys ’23, September 18–22, 2023, Singapore, Singapore Y. Lv and S. Wang, et al. 
+
+[7] Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra, Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei Chai, Mustafa Ispir, et al . 2016. Wide & deep learning for recommender systems. In Proceedings of the 1st Workshop on Deep Learning for Recommender Systems .7–10. [8] Qiang Cui, Chenrui Zhang, Yafeng Zhang, Jinpeng Wang, and Mingchen Cai. 2021. ST-PIL: Spatial-temporal periodic interest learning for next point-of-interest recommendation. In Proceedings of the 30th ACM International Conference on Information & Knowledge Management . 2960–2964. [9] Yufei Feng, Fuyu Lv, Weichen Shen, Menghan Wang, Fei Sun, Yu Zhu, and Keping Yang. 2019. Deep session interest network for click-through rate prediction. In Proceedings of the 28th International Joint Conference on Artificial Intelligence . 2301–2307. [10] Chen Gao, Xiangnan He, Dahua Gan, Xiangning Chen, Fuli Feng, Yong Li, Tat-Seng Chua, and Depeng Jin. 2019. Neural multi-task recommendation from multi-behavior data. In 2019 IEEE 35th International Conference on Data Engineering (ICDE) . IEEE, 1554–1557. [11] Yulong Gu, Zhuoye Ding, Shuaiqiang Wang, Lixin Zou, Yiding Liu, and Dawei Yin. 2020. Deep multifaceted transformers for multi-objective ranking in large-scale e-commerce recommender systems. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management .2493–2500. [12] Huifeng Guo, Ruiming Tang, Yunming Ye, Zhenguo Li, and Xiuqiang He. 2017. DeepFM: a factorization-machine based neural network for CTR prediction. arXiv preprint arXiv:1703.04247 (2017). [13] Wei Guo, Can Zhang, Zhicheng He, Jiarui Qin, Huifeng Guo, Bo Chen, Ruiming Tang, Xiuqiang He, and Rui Zhang. 2022. MISS: Multi-interest self-supervised learning framework for click-through rate prediction. In 2022 IEEE 38th International Conference on Data Engineering (ICDE) . IEEE, 727–740. [14] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition . 770–778. [15] Dan Hendrycks and Kevin Gimpel. 2016. Gaussian error linear units (gelus). arXiv preprint arXiv:1606.08415 (2016). [16] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2016. Session-based recommendations with recurrent neural networks. In International Conference on Learning Representations .[17] Eric Jang, Shixiang Gu, and Ben Poole. 2016. Categorical reparameterization with gumbel-softmax. In International Conference on Learning Representations .[18] Bowen Jin, Chen Gao, Xiangnan He, Depeng Jin, and Yong Li. 2020. Multi-behavior recommendation with graph convolutional networks. In 
+
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval . 659–668. [19] Xiang Li, Shuwei Chen, Jian Dong, Jin Zhang, Yongkang Wang, Xingxing Wang, and Dong Wang. 2023. Context-aware modeling via simulated exposure page for CTR prediction. In Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval . 1904–1908. [20] Xiang Li, Shuwei Chen, Jian Dong, Jin Zhang, Yongkang Wang, Xingxing Wang, and Dong Wang. 2023. Decision-making context interaction network for click-through rate prediction. In Proceedings of the AAAI Conference on Artificial Intelligence .[21] Jianxun Lian, Xiaohuan Zhou, Fuzheng Zhang, Zhongxia Chen, Xing Xie, and Guangzhong Sun. 2018. XDeepFM: Combining explicit and implicit feature interactions for recommender systems. In Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining . 1754–1763. [22] Shaochuan Lin, Yicong Yu, Xiyu Ji, Taotao Zhou, Hengxu He, Zisen Sang, Jia Jia, Guodong Cao, and Ning Hu. 2022. Spatiotemporal-enhanced network for click-through rate prediction in location-based services. arXiv preprint arXiv:2209.09427 (2022). [23] Chang Liu, Xiaoguang Li, Guohao Cai, Zhenhua Dong, Hong Zhu, and Lifeng Shang. 2021. Noninvasive self-attention for side information fusion in sequential recommendation. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 35. 4249–4256. [24] Qi Pi, Weijie Bian, Guorui Zhou, Xiaoqiang Zhu, and Kun Gai. 2019. Practice on long sequential user behavior modeling for click-through rate prediction. In Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining . 2671–2679. [25] Qi Pi, Guorui Zhou, Yujing Zhang, Zhe Wang, Lejian Ren, Ying Fan, Xiaoqiang Zhu, and Kun Gai. 2020. Search-based user interest modeling with lifelong sequential behavior data for click-through rate prediction. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management . 2685–2692. [26] Jiarui Qin, Weinan Zhang, Xin Wu, Jiarui Jin, Yuchen Fang, and Yong Yu. 2020. User behavior retrieval for click-through rate prediction. In 
+
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval . 2347–2356. [27] Yanru Qu, Han Cai, Kan Ren, Weinan Zhang, Yong Yu, Ying Wen, and Jun Wang. 2016. Product-based neural networks for user response prediction. In 2016 IEEE 16th International Conference on Data Mining (ICDM) . IEEE, 1149–1154. [28] Ahmed Rashed, Shereen Elsayed, and Lars Schmidt-Thieme. 2022. Context and attribute-aware sequential recommendation via cross-attention. In 
+
+Proceedings of the 16th ACM Conference on Recommender Systems . 71–80. [29] Kan Ren, Jiarui Qin, Yuchen Fang, Weinan Zhang, Lei Zheng, Weijie Bian, Guorui Zhou, Jian Xu, Yong Yu, Xiaoqiang Zhu, et al . 2019. Lifelong sequential modeling with personalized memorization for user response prediction. In Proceedings of the 42nd International ACM SIGIR Conference on Research and Development in Information Retrieval . 565–574. [30] Uriel Singer, Haggai Roitman, Yotam Eshel, Alexander Nus, Ido Guy, Or Levi, Idan Hasson, and Eliyahu Kiperwasser. 2022. Sequential modeling with multiple attributes for watchlist recommendation in e-commerce. In Proceedings of the Fifteenth ACM International Conference on Web Search and Data Mining . 937–946. 18 Deep Situation-Aware Interaction Network for Click-Through Rate Prediction RecSys ’23, September 18–22, 2023, Singapore, Singapore 
+
+[31] Jiaxi Tang and Ke Wang. 2018. Personalized top-n sequential recommendation via convolutional sequence embedding. In Proceedings of the Eleventh ACM International Conference on Web Search and Data Mining . 565–573. [32] Chuhan Wu, Fangzhao Wu, Tao Qi, Qi Liu, Xuan Tian, Jie Li, Wei He, Yongfeng Huang, and Xing Xie. 2022. FeedRec: News feed recommendation with various user feedbacks. In Proceedings of the ACM Web Conference 2022 . 2088–2097. [33] Lianghao Xia, Yong Xu, Chao Huang, Peng Dai, and Liefeng Bo. 2021. Graph meta network for multi-behavior recommendation. In Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Information Retrieval . 757–766. [34] Yueqi Xie, Peilin Zhou, and Sunghun Kim. 2022. Decoupled side information fusion for sequential recommendation. In Proceedings of the 45th International ACM SIGIR Conference on Research and Development in Information Retrieval . 1611–1621. [35] Yi Yang, Baile Xu, Shaofeng Shen, Furao Shen, and Jian Zhao. 2020. Operation-aware neural networks for user response prediction. Neural Networks 
+
+121 (2020), 161–168. [36] Tingting Zhang, Pengpeng Zhao, Yanchi Liu, Victor S Sheng, Jiajie Xu, Deqing Wang, Guanfeng Liu, and Xiaofang Zhou. 2019. Feature-level deeper self-attention network for sequential recommendation. In Proceedings of the 28th International Joint Conference on Artificial Intelligence . 4320–4326. [37] Guorui Zhou, Na Mou, Ying Fan, Qi Pi, Weijie Bian, Chang Zhou, Xiaoqiang Zhu, and Kun Gai. 2019. Deep interest evolution network for click-through rate prediction. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 33. 5941–5948. [38] Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin, Han Li, and Kun Gai. 2018. Deep interest network for click-through rate prediction. In Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining . 1059–1068. [39] Kun Zhou, Hui Wang, Wayne Xin Zhao, Yutao Zhu, Sirui Wang, Fuzheng Zhang, Zhongyuan Wang, and Ji-Rong Wen. 2020. 𝑆 3-Rec: Self-supervised learning for sequential recommendation with mutual information maximization. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management . 1893–1902. 
+
+Received 20 February 2007; revised 12 March 2009; accepted 5 June 2009 
+
+19

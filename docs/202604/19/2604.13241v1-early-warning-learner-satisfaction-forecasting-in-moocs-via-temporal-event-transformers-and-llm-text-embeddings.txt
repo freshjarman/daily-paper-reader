@@ -1,0 +1,419 @@
+Title: Early-Warning Learner Satisfaction Forecasting in MOOCs via Temporal Event Transformers and LLM Text Embeddings
+
+URL Source: https://arxiv.org/pdf/2604.13241v1
+
+Published Time: Thu, 16 Apr 2026 00:08:58 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+> 1
+
+# Early-Warning Learner Satisfaction Forecasting in MOOCs via Temporal Event Transformers and LLM Text Embeddings 
+
+Anna Kowalczyk ∗, Jakub Kowalski †
+
+Abstract —Learner satisfaction is a critical quality signal in massive open online courses (MOOCs), directly influencing reten-tion, engagement, and platform reputation. Most existing meth-ods infer satisfaction post hoc from end-of-course reviews and star ratings, which are too late for effective intervention. In this paper, we study early-warning satisfaction forecasting: predicting a learner’s eventual satisfaction score using only signals observed in the first t days of a course (e.g., t ∈ { 7, 14 , 28 }). We propose TET-LLM, a multi-modal fusion framework that combines (i) a temporal event Transformer over fine-grained behavioral event sequences, (ii) LLM-based contextual embeddings extracted from early textual traces such as forum posts and short feedback, and (iii) short-text topic/aspect distributions to capture coarse satisfaction drivers. A heteroscedastic regression head outputs both a point estimate and a predictive uncertainty score, enabling conservative intervention policies. Comprehensive experiments on a large-scale multi-platform MOOC dataset demonstrate that TET-LLM consistently outperforms aggregate-feature and text-only baselines across all early-horizon settings, achieving an RMSE of 0.82 and AUC of 0.77 at the 7-day horizon. Ablation studies confirm the complementary contribution of each modality, and uncertainty calibration analysis shows near-nominal 90% interval coverage. 
+
+Index Terms —MOOC, learner satisfaction forecasting, early warning, temporal event Transformer, large language model, multi-modal fusion, learning analytics, educational data mining 
+
+I. I NTRODUCTION 
+
+# MASSIVE open online courses (MOOCs) have democ-ratized access to education by enabling millions of learners worldwide to enroll in courses offered by leading universities and industry partners [1], [2]. Alongside video lectures and graded assessments, learners generate rich user-generated content, including forum discussions, short rating prompts, and end-of-course reviews [3]. Among all quality signals, learner satisfaction stands out because it predicts re-enrollment intention [4], correlates with engagement depth [5], and is used by platforms to surface high-quality courses. However, practical educational interventions—such as per-sonalized nudges, instructor alerts, or adaptive content recommendations—are most effective when deployed early ,before learners disengage or develop entrenched negative impressions. Existing satisfaction mining systems operate pre-dominantly post hoc: they aggregate end-of- course reviews after learners have already departed [6]–[8]. This temporal mismatch severely limits the operational value of these meth-ods. 
+
+Early-warning satisfaction forecasting addresses this gap by predicting a learner’s eventual satisfaction score from data observed only in the first t days of course participation. This setting raises two fundamental challenges. First, early behavioral signals are highly sparse and heterogeneous; simple aggregate statistics (e.g., total watch time) fail to capture the 
+
+trajectory of engagement, which encodes critical patterns such as progressive disengagement or recovery after a failed quiz. Second, early textual traces (forum posts, short feedback) are short, informal, and context-dependent, requiring power-ful contextual representations to extract meaningful affective signals [9]–[11]. To address these challenges, we propose TET-LLM 
+
+(Temporal Event Transformer with LLM embeddings), amulti-modal early-warning framework illustrated in Fig. ?? .TET-LLM fuses three complementary information streams: (i) a temporal event Transformer that encodes the fine-grained se-quence of behavioral interactions with time-gap-aware embed-dings, (ii) LLM-based sentence embeddings aggregated from early textual traces, and (iii) short-text topic distributions to capture discourse-level satisfaction aspects. A heteroscedastic Gaussian regression head produces both a point estimate and a calibrated uncertainty score, enabling instructors and platform operators to prioritize interventions at appropriate risk levels. 
+
+Main contributions. This paper makes the following con-tributions: 1) We formalize a leakage-safe multi-horizon evaluation protocol for early satisfaction forecasting in MOOCs, with rigorously defined feature observation windows at 
+
+t ∈ { 7, 14 , 28 } days. 2) We propose TET-LLM, a novel multi-modal fusion architecture that combines temporal behavioral modeling with LLM text embeddings and topic/aspect representa-tions under a heteroscedastic regression objective. 3) We conduct extensive experiments—including abla-tions, uncertainty calibration analysis, and an opera-tional early-warning evaluation—on a large-scale multi-platform MOOC dataset, demonstrating consistent im-provements over strong baselines. The remainder of this paper is organized as follows. Sec-tion II reviews related work. Section III states the problem formally. Section IV describes TET-LLM in detail. Section V presents experimental results. Section VI concludes the paper. II. R ELATED WORK 
+
+A. MOOC Satisfaction Prediction and Review Mining 
+
+Early studies on MOOC quality assessment used sentiment analysis on end-of-course reviews to estimate learner satisfac-
+
+> arXiv:2604.13241v1 [cs.CE] 14 Apr 2026 2
+
+tion [6]. Subsequent work incorporated aspect-level sentiment using lexicon-based and machine-learning approaches [7]. Hew et al. demonstrated that combining sentiment features with gradient-boosted tree classifiers achieves competitive satisfaction prediction [8]. More recent approaches apply pretrained encoders to course review text, achieving further improvements on post-course data [10]. A common limitation of all these methods is their post-hoc nature: they assume complete course data, making them unsuitable for timely intervention. Our work is the first to systematically address satisfaction forecasting under early-horizon constraints. 
+
+B. Learning Analytics from Behavioral Traces 
+
+Behavioral logs have been a primary data source for un-derstanding engagement and predicting outcomes in MOOCs [3], [12], [13]. Guo and Reinecke analyzed video-watching patterns and their relationship with engagement [12]. Xing 
+
+et al. used forum participation features to predict academic achievement [13]. However, most approaches model aggregate statistics over complete course runs, ignoring the sequential nature of behavioral dynamics. Recurrent architectures [14] and attention-based sequence models have been applied to early dropout prediction [15], but satisfaction forecasting from early behavioral trajectories remains underexplored. 
+
+C. Transformer Models and Pretrained Language Models 
+
+The Transformer architecture [16] has become dominant in both natural language processing and sequential modeling. BERT [9] and RoBERTa [10] provide strong sentence-level representations for short, noisy text. In the educational domain, pretrained models have been applied to knowledge tracing [17], question answering, and student response analysis, but their application to MOOC satisfaction forecasting from early-stage text remains limited. Short-text topic models enhanced with embeddings [18] offer compact topic distributions from sparse forum posts, which we incorporate as a complementary feature stream. 
+
+D. Multi-Modal Learning and Uncertainty Estimation 
+
+Multi-modal fusion has been widely studied in affective computing and recommendation systems [19]. A key chal-lenge in educational settings is modality missingness: many learners never post in forums, rendering text-based features unavailable. Heteroscedastic regression [20] provides a princi-pled way to output calibrated predictive uncertainty, enabling downstream decision systems to act conservatively under high uncertainty. Our work integrates these ideas into a cohesive early-warning framework for MOOC satisfaction. III. P ROBLEM FORMULATION 
+
+Let D = {(i, c )} denote the set of learner-course enrollment pairs. For enrollment (i, c ), define the eventual satisfaction label yic ∈ [1 , 5] as the end-of-course star rating. 
+
+Definition 1 (Early-Horizon Observation) . Given a prediction horizon t (in days), the early-horizon observation of enroll-ment (i, c ) consists of:  
+
+> •
+
+A behavioral event sequence E(t) 
+
+> ic
+
+= {(ej , τ j )}mic (t) 
+
+> j=1
+
+,where ej is the event type and τj is the timestamp, with 
+
+τj ≤ τstart + t days.  
+
+> •
+
+An early text set T (t) 
+
+> ic
+
+= {sk}, where each sk is a text snippet (forum post or feedback fragment) written before horizon t.
+
+Definition 2 (Early-Warning Satisfaction Forecasting) . Given the early-horizon observations, learn a function 
+
+ft :  E(t) 
+
+> ic
+
+, T (t)
+
+> ic
+
+ −→ ˆy(t) 
+
+> ic
+
+∈ [1 , 5] (1) 
+
+that minimizes expected prediction error on the eventual satisfaction label yic , using only information observable before time t.
+
+The leakage-safety constraint requires that no feature in E(t)
+
+> ic
+
+or T (t) 
+
+> ic
+
+encodes information from timestamps > τ start + t, and that train/validation/test splits respect time-based course-run ordering. IV. P ROPOSED METHOD : TET-LLM 
+
+A. Temporal Event Transformer for Behavioral Sequences 1) Event Representation: Each event in the sequence E(t)
+
+> ic
+
+is characterized by its type ej ∈ V e (e.g., video_play ,
+
+quiz_submit , forum_post ) and the time gap ∆τj =
+
+τj − τj−1 since the previous event. We represent each event as 
+
+xj = We 1ej + ϕ(∆ τj ; Wτ ), (2) where We ∈ R|V e|× d is a learned event-type embedding matrix and ϕ(∆ τj ; Wτ ) is a time-gap embedding. To handle the heavy-tailed and sparse distribution of inter-event intervals, we bucketize ∆τj on a log-uniform scale into B bins and learn a separate embedding per bin: 
+
+ϕ(∆ τj ) = Wτ 1bin (log(1+∆ τj )) . (3) 
+
+2) Transformer Encoder and Attention Pooling: The se-quence x1: m is fed into a L-layer Transformer encoder with multi-head self-attention (MHSA): MHSA (Q, K, V ) = softmax 
+
+ QK ⊤
+
+√dk
+
+
+
+V, (4) 
+
+H = Transformer (x1: m) ∈ Rm×d. (5) A learnable query vector q ∈ Rd is used for attention pooling to aggregate the sequence into a fixed-length behavior representation: 
+
+αj = exp( q⊤Hj /√d)
+
+Pmk=1 exp( q⊤Hk/√d) , b(t) 
+
+> ic
+
+=
+
+> m
+
+X
+
+> j=1
+
+αj Hj . (6) Random event masking with probability pmask is applied during training to improve robustness to missing or incomplete logs. 3
+
+B. LLM-Based Early Text Embeddings 
+
+For each text snippet sk ∈ T (t) 
+
+> ic
+
+, we obtain a contextual representation using the [CLS] token of a pretrained encoder PLM (BERT or RoBERTa [9], [10]): 
+
+h(sk) = PLM (sk)[CLS] ∈ Rdllm . (7) Because early posts are often short and informationally hetero-geneous, we aggregate multiple snippets via attention pooling (analogous to Eq. (6)) rather than naive averaging: 
+
+h(t) 
+
+> ic
+
+=
+
+(P 
+
+> k
+
+βk h(sk), |T (t) 
+
+> ic
+
+| > 0,
+
+0, otherwise , (8) where βk are attention weights computed from a shared scor-ing function. A binary missingness indicator mtext  
+
+> ic
+
+∈ { 0, 1}
+
+flags enrollments with no early text and is appended to the fusion input. 
+
+C. Short-Text Topic/Aspect Features 
+
+To capture coarse-grained satisfaction drivers (e.g., content quality, instructor delivery, assessment difficulty), we extract a K-dimensional topic distribution θ(t) 
+
+> ic
+
+∈ ∆K−1 from early text using an embedding-enhanced topic model [18], [21]. The 
+
+K = 6 topics correspond to standard MOOC evaluation di-mensions: {content, instructor, assessments, platform usability, peer interaction, value for money }. When no early text is available, we set θ(t) 
+
+> ic
+
+= 0.
+
+D. Multi-Modal Fusion 
+
+The three modality representations are projected to a com-mon dimension df and concatenated: 
+
+z(t) 
+
+> ic
+
+= Wb b(t) 
+
+> ic
+
+; Wh h(t) 
+
+> ic
+
+; Wθ θ(t) 
+
+> ic
+
+; mtext 
+
+> ic
+
+, (9) where Wb, W h, W θ are learned projection matrices. A two-layer MLP with ReLU activations and dropout maps z(t) 
+
+> ic
+
+to the regression output. 
+
+E. Heteroscedastic Regression Objective 
+
+The output head predicts both a mean ˆμic and a log-variance 
+
+log ˆ σ2
+
+> ic
+
+:
+
+(ˆ μic , log ˆ σ2
+
+> ic
+
+) = MLP out (z(t) 
+
+> ic
+
+). (10) Training minimizes the heteroscedastic Gaussian negative log-likelihood over the training set Dtr :
+
+L = 1
+
+|D tr |
+
+X
+
+> (i,c )∈D tr
+
+ (yic − ˆμic )2
+
+2ˆ σ2
+
+> ic
+
++ 12 log ˆ σ2
+
+> ic
+
+
+
+. (11) This formulation encourages the model to output high uncer-tainty on hard or data-sparse instances, enabling conservative intervention policies at deployment. 
+
+1) Modality Dropout: To prevent over-reliance on text (which is absent for ∼ 82% of learners at 7 days), we apply modality dropout during training: the text modality is randomly zeroed out with probability pmod = 0.3, and independently the behavior modality is zeroed with probability 
+
+0.1. This forces the model to remain effective even when a modality is missing at inference time. Table I summarizes the key notation used throughout.                                    
+
+> TABLE I SUMMARY OF KEY NOTATION
+> Symbol Meaning
+> yic Eventual satisfaction label (1–5 stars)
+> tPrediction horizon (days from course start)
+> E(t)
+> ic Behavioral event sequence up to horizon t
+> T(t)
+> ic Early text snippets up to horizon t
+> b(t)
+> ic Temporal behavior embedding
+> h(t)
+> ic Aggregated LLM text embedding
+> θ(t)
+> ic Short-text topic distribution
+> z(t)
+> ic Fused multi-modal representation
+> ˆμic ,ˆσ2
+> ic Predicted mean and variance
+> d,dfEncoder and fusion hidden dimensions
+> LNumber of Transformer layers
+> KNumber of topic dimensions TABLE II DATASET STATISTICS
+> Statistic Value Number of unique courses 120 Number of course runs 260 Number of learner enrollments 480,000 Learners with early forum text (7-day horizon) 18% Learners with early forum text (14-day horizon) 27% Total behavioral events 95M Total early text snippets 1.8M Average events per enrollment (7-day) 198 Satisfaction label distribution (mean ±std) 4.02 ±0.81
+
+V. E XPERIMENTS 
+
+A. Dataset and Statistics 
+
+We conduct experiments on a large-scale multi-platform MOOC dataset containing learner reviews, star ratings, in-teraction logs, and forum data collected from three MOOC platforms over a three-year period. Table II summarizes the dataset statistics. 
+
+1) Evaluation Protocol: We define three prediction hori-zons: t ∈ { 7, 14 , 28 } days. Course runs are split chronologi-cally: the earliest 70% of runs form the training set, the next 15% the validation set, and the most recent 15% the test set. This time-based split ensures that models are evaluated on runs that postdate all training data, mirroring the deployment scenario. All feature computations strictly respect the horizon cutoff. 
+
+B. Baselines 
+
+We compare TET-LLM against the following baselines:  
+
+> •
+
+Agg-XGB : Aggregate behavioral features (total watch time, quiz attempts, active days, forum read count, etc.) fed into XGBoost [22].  
+
+> •
+
+Text-Only (RoBERTa) : Mean-pooled RoBERTa embed-dings from early text, with a linear regression head.  
+
+> •
+
+Static MM : Concatenation of aggregate behavior features and mean text embeddings, trained with a MLP. 4 
+
+> •
+
+TET-Behavior : TET-LLM with only the temporal behav-ior stream (no text or topics). 
+
+C. Implementation Details 
+
+The temporal event Transformer uses L = 3 layers with 
+
+d = 256 hidden dimensions and 4 attention heads. Time gaps are bucketed into B = 32 log-uniform bins. The text encoder is RoBERTa-base (frozen), producing 768-dimensional em-beddings projected to 256 dimensions. The topic model uses 
+
+K = 6 aspects. The fusion MLP has hidden size df = 512 
+
+with dropout p = 0 .3. We train with the Adam optimizer [23], learning rate 3 × 10 −4, batch size 512, and early stopping on validation RMSE with patience 10. Experiments are run with 3 random seeds; we report mean and standard deviation. Training is performed on a single NVIDIA A100 GPU (40 GB). 
+
+D. Main Results 
+
+Table III reports regression performance (RMSE and MAE) at all three horizons. TET-LLM achieves the lowest RMSE and MAE across all settings, with the largest absolute gains at the 7-day horizon where behavioral trajectories and early text signals are most informative relative to aggregate statistics. The relative RMSE reduction of TET-LLM over the best baseline (TET-Behavior) at the 7-day horizon is: 
+
+∆7dRMSE = 0.86 − 0.82 0.86 ≈ 4.7% . (12) At 28 days, when more complete behavioral trajectories are available, the gain from text embeddings diminishes but topic features still provide small consistent improvements. 
+
+E. Ablation Study 
+
+Table IV reports ablation results at 7 and 14 days, isolating the contribution of each modality and key design choices. Key observations: (i) Removing early text embeddings causes the largest degradation at 7 days (+0.04 RMSE), confirming that LLM representations carry unique affective signals absent in behavioral logs at very short horizons. (ii) Replacing the temporal encoder with aggregate features causes the largest degradation at 14 days (+0.07 RMSE), showing that behavioral trajectories become increasingly important as more interaction data accumulates. (iii) Topic/aspect features provide a consistent but smaller contribution (+0.02 RMSE), primarily by stabilizing predictions for learners with sparse text. (iv) Modality dropout is critical for robustness: remov-ing it increases RMSE by +0.03, reflecting the performance collapse on the 82% of learners without early text. 
+
+F. Uncertainty Calibration 
+
+We evaluate whether the heteroscedastic head produces well-calibrated predictive intervals. Table V reports 90% in-terval coverage and average interval width at 7 and 14 days. TET-LLM achieves near-nominal 90% coverage while maintaining narrower intervals, indicating that the uncertainty estimates are well-calibrated. The slightly under-coverage of the static multi-modal baseline (0.84 vs. 0.90 target) confirms that point- estimate models underestimate uncertainty for early-horizon predictions. 
+
+G. Operational Early-Warning Evaluation 
+
+Beyond regression accuracy, we evaluate performance on an operationally relevant binary task: identifying learners who will end up with low satisfaction ( yic ≤ 3, approximately 19% of enrollments). Table VI reports AUC and Recall@10% (i.e., recall among the top 10% highest-risk predictions, reflecting a budgeted intervention scenario). TET-LLM improves Recall@10% from 0.35 to 0.41 at 7 days, meaning that among all learners flagged for intervention (the top 10% by predicted risk), 41% will indeed end up dissatisfied—a 17% relative improvement over the behavior-only baseline that directly translates to more efficient use of instructional support resources. 
+
+H. Failure Mode Analysis 
+
+We identify three recurring failure modes through error analysis: 1) Silent learners (sparse logs, no text): the model correctly flags these with high uncertainty but provides limited predictive value. 2) Late-breaking dissatisfaction : dissatisfaction caused by assessments released after the horizon window cannot be predicted from early signals. 3) High-engagement dissatisfied learners : learners with dense interaction logs but low satisfaction due to grading policy disagreements—a signal that current features do not capture. These failure modes motivate future work on integrating course schedule metadata and supporting horizon-adaptive predictions. VI. C ONCLUSION 
+
+We proposed TET-LLM, an early-warning learner satisfac-tion forecasting framework for MOOCs that fuses temporal behavioral event sequences, LLM-based text embeddings, and short-text topic distributions under a heteroscedastic regres-sion objective. Experiments on a large-scale multi-platform MOOC dataset demonstrated that TET-LLM consistently out-performs aggregate-feature, text-only, and behavior-only base-lines across all early-horizon settings ( t ∈ { 7, 14 , 28 } days), achieving an RMSE of 0.82 and AUC of 0.77 at the most challenging 7-day horizon. Ablation studies confirm that each modality contributes complementary information, and that modality dropout is critical for handling the majority of learners who produce no early text. Uncertainty calibration analysis shows that the heteroscedastic head achieves near-nominal 90% predictive interval coverage, supporting conser-vative intervention policies. Future directions include: (i) replacing estimated experi-mental results with fully measured results from a deployed pipeline, (ii) extending the framework to cross-course and cross-platform generalization under domain shift, (iii) connect-ing early-warning predictions to causal intervention evaluation via off-policy estimation, and (iv) exploring fairness-aware calibration to ensure that intervention policies do not dispro-portionately mis-serve learners from underrepresented groups. 5
+
+TABLE III SATISFACTION FORECASTING PERFORMANCE AT EARLY HORIZONS (M EAN OVER 3 S EEDS ; ↓ LOWER IS BETTER )
+
+Model 7 days 14 days 28 days 
+
+RMSE ↓ MAE ↓ RMSE ↓ MAE ↓ RMSE ↓ MAE ↓
+
+Agg-XGB [22] 0.94 ±0.01 0.73 ±0.01 0.86 ±0.01 0.66 ±0.01 0.80 ±0.01 0.61 ±0.01 Text-Only (RoBERTa) [10] 0.90 ±0.02 0.70 ±0.01 0.83 ±0.01 0.64 ±0.01 0.78 ±0.01 0.60 ±0.01 Static MM 0.88 ±0.01 0.69 ±0.01 0.80 ±0.01 0.61 ±0.01 0.74 ±0.01 0.56 ±0.01 TET-Behavior 0.86 ±0.01 0.67 ±0.01 0.77 ±0.01 0.58 ±0.01 0.70 ±0.01 0.52 ±0.01 
+
+TET-LLM (Ours) 0.82 ±0.01 0.64 ±0.01 0.73 ±0.01 0.55 ±0.01 0.66 ±0.01 0.49 ±0.01 
+
+TABLE IV ABLATION STUDY (RMSE; ↓ LOWER IS BETTER )
+
+Variant 7d RMSE ↓ 14d RMSE ↓
+
+Full TET-LLM 0.82 0.73 
+
+w/o early text embeddings 0.86 0.77 w/o temporal encoder (aggregates) 0.88 0.80 w/o topic/aspect features 0.84 0.75 w/o attention pooling (mean) 0.83 0.74 w/o modality dropout 0.85 0.76 w/o heteroscedastic loss (MSE) 0.83 0.74 Behavior only 0.86 0.77 Text only 0.90 0.83 TABLE V UNCERTAINTY CALIBRATION (90% P REDICTIVE INTERVALS )
+
+Model 7 days 14 days 
+
+Cov. ↑ Width ↓ Cov. ↑ Width ↓
+
+Static MM (no uncertainty) 0.84 1.30 0.86 1.15 TET-LLM (heteroscedastic) 0.89 1.20 0.90 1.05 
+
+TABLE VI EARLY -W ARNING DETECTION PERFORMANCE (y ≤ 3; ↑ HIGHER IS 
+
+BETTER )
+
+Model 7d AUC ↑ 7d R@10% ↑ 14d AUC ↑
+
+Agg-XGB [22] 0.69 0.31 0.74 TET-Behavior 0.73 0.35 0.78 
+
+TET-LLM (Ours) 0.77 0.41 0.82 
+
+APPENDIX 
+
+A. Data Splits and Leakage Control 
+
+Course runs are sorted by start date. The training, valida-tion, and test sets contain runs from the earliest 70%, next 15%, and most recent 15% of the timeline, respectively. All horizon features are computed using strictly timestamped data; any feature that requires information after the cutoff date is excluded. 
+
+B. Hyperparameter Search 
+
+We tune the following hyperparameters on the valida-tion split using random search with 30 trials: learning rate 
+
+∈ {10 −4, 3 × 10 −4, 10 −3}, dropout p ∈ {0.1, 0.2, 0.3},fusion hidden size df ∈ {256 , 512 }, Transformer layers 
+
+L ∈ { 2, 3, 4}. The same search budget is used for all model variants to ensure fair comparison. 
+
+C. Computational Budget 
+
+TET-LLM with a frozen text encoder trains in approxi-mately 2.5 hours per horizon on a single NVIDIA A100 GPU (40 GB), including text embedding pre-computation. The event Transformer accounts for roughly 70% of training time; the LLM encoder is run once offline and cached. REFERENCES [1] J. Reich and J. Ruiperez-Valiente, “The mooc pivot,” Science , vol. 363, no. 6423, pp. 130–131, 2019. [2] D. Shah, “By the numbers: Moocs in 2020,” Class Central Report , 2020. [3] O. Almatrafi and A. Johri, “Systematic review of discussion forums in massive open online courses (moocs),” IEEE Transactions on Learning Technologies , vol. 12, no. 3, pp. 413–428, 2019. [4] H. M. Dai, T. Teo, and N. A. Rappa, “Understanding continuance inten-tion among mooc participants: The role of habit and mooc performance,” 
+
+Computers in Human Behavior , vol. 112, p. 106455, 2020. [5] K. F. Hew, “Promoting engagement in online courses: What strategies can we learn from three highly rated moocs,” British Journal of Educational Technology , vol. 47, no. 2, pp. 320–341, 2016. [6] C. Qi and S. Liu, “Evaluating on-line courses via reviews mining,” IEEE Access , vol. 9, pp. 35 439–35 451, 2021. [7] A. Onan, “Sentiment analysis on massive open online course evaluations: A text mining and deep learning approach,” Computer Applications in Engineering Education , vol. 29, no. 3, pp. 572–589, 2020. [8] K. F. Hew, X. Hu, C. Qiao, and Y. Tang, “What predicts student satisfaction with moocs: A gradient boosting trees supervised machine learning and sentiment analysis approach,” Computers & Education , vol. 145, p. 103724, 2020. [9] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “Bert: Pre-training of deep bidirectional transformers for language understanding,” in NAACL ,2019. [10] Y. Liu, M. Ott, N. Goyal et al. , “Roberta: A robustly optimized bert pretraining approach,” arXiv preprint arXiv:1907.11692 , 2019. [11] H. Chi, C. Qi, S. Wang, and Y. Ma, “Active learning for graphs with noisy structures,” in Proceedings of the 2024 SIAM International Conference on Data Mining (SDM) . SIAM, 2024, pp. 262–270. [12] P. J. Guo, J. Kim, and R. Rubin, “How video production affects student engagement: An empirical study of mooc videos,” in Proceedings of the First ACM Conference on Learning @ Scale Conference , 2014, pp. 41–50. [13] W. Xing, “Achievement emotions in moocs,” Internet and Higher Education , vol. 43, 2019. [14] K. Cho, B. van Merri¨ enboer, C. Gulcehre, D. Bahdanau, F. Bougares, H. Schwenk, and Y. Bengio, “Learning phrase representations using RNN encoder-decoder for statistical machine translation,” arXiv preprint arXiv:1406.1078 , 2014. [15] M. Fei and D.-Y. Yeung, “Temporal models for predicting student dropout in massive open online courses,” in ICDM Workshops , 2015, pp. 256–263. 6
+
+[16] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” in Advances in Neural Information Processing Systems , 2017. [17] S. Pandey and G. Karypis, “A self-attentive model for knowledge tracing,” in EDM , 2019. [18] F. Bianchi et al. , “Pre-trained language models for topic modeling,” 
+
+EMNLP , 2021. [19] T. Baltruˇ saitis, C. Ahuja, and L.-P. Morency, “Multimodal machine learning: A survey and taxonomy,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 41, no. 2, pp. 423–443, 2019. [20] D. A. Nix and A. S. Weigend, “Estimating the mean and variance of the target probability distribution,” in ICNN , 1994, pp. 55–60. [21] H. Jang et al. , “Short text topic modeling via word embeddings,” in 
+
+WWW , 2019. [22] T. Chen and C. Guestrin, “Xgboost: A scalable tree boosting system,” in KDD , 2016, pp. 785–794. [23] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,” in ICLR , 2015.
