@@ -1,0 +1,788 @@
+Title: Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols
+
+URL Source: https://arxiv.org/pdf/2604.20374v1
+
+Published Time: Thu, 23 Apr 2026 00:48:52 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols 
+
+# Huaiyu Jia ∗
+
+hjia351@connect.hkust-gz.edu.cn HKUST(GZ) GUANGZHOU, China 
+
+# Jiehshun You ∗
+
+24041917g@connect.polyu.hk Hong Kong Polytechnic University Hong Kong, Hong Kong SAR China 
+
+# Yizhi Luo 
+
+yluo198@connect.hkust-gz.edu.cn HKUST(GZ) GUANGZHOU, China 
+
+# Jingyu Liu 
+
+jliu514@connect.hkust-gz.edu.cn HKUST(GZ) GUANGZHOU, China 
+
+# Shuo Sun 
+
+shuosun@hkust-gz.edu.cn HKUST(GZ) GUANGZHOU, China 
+
+## Abstract 
+
+Automated Market Makers (AMMs), as a core infrastructure of de-centralized finance (DeFi), uniquely drive on-chain asset pricing through a deterministic reserve ratio mechanism. Unlike traditional markets, AMM price dynamics is triggered largely by on-chain events (e.g., swap) that change the reserve ratio, rather than by con-tinuous responses to off-chain information. This makes event-level analysis crucial for understanding price formation mechanisms in AMMs. However, existing research generally neglects the micro-structural dynamics at the AMMs level, lacking both a comprehen-sive dataset covering multiple protocols with fine-grained event classification and an effective framework for event-aware model-ing. To fill this gap, we construct a dataset containing 8.9 million on-chain event records from four representative AMMs protocols: Pendle, Uniswap v3, Aave and Morpho, with precise annotations of transaction type and block height timestamps. Furthermore, we propose an Uncertainty Weighted Mean Squared Error (UWM) loss function, which incorporates the block interval regression term into the traditional Time-Point Process (TPP) objective function by weighting the uncertainty with homoscedasticity. Extensive ex-periments on eight advanced TPP architectures demonstrate that this loss function reduces the time prediction error by an average of 56.41% while maintaining the accuracy of event type prediction, establishing a robust benchmark for event-aware prediction in the AMMs ecosystem. This work provides the necessary data founda-tion and methodological framework for modeling the discreteness and event-driven characteristics of on-chain price discovery. All datasets and source code are publicly available. 1
+
+## CCS Concepts 
+
+• Computing methodologies → Machine learning approaches .
+
+## Keywords 
+
+Decentralized Finance, Automated Market Makers, Dataset 
+
+## 1 INTRODUCTION 
+
+Decentralized Finance (DeFi) [1] has evolved into a robust ecosys-tem, with Automated Market Makers (AMMs) serving as the foun-dational infrastructure. Unlike traditional limit order book models 
+
+> ∗These authors contributed equally to this work.
+> 1https://github.com/yosen-king/Deep-AMM-Events
+
+Table 1: Evolution of AMM State and Price Impact Event Phase Block Height Action Pool Reserves Asset Price                                       
+
+> (Interval) Asset A Asset B 𝑃 𝐴 𝑃 𝐵
+> Initialization 1768873664 Create Pool 100 100 1.00 1.00
+> Liquidity Mint 1768873714 Mint(100A, 100B) 200 ↑200 ↑1.00 1.00 (+50 blocks) (+100%) (+100%) (-) (-)
+> Token Swap 1768873814 Swap(20B →A) 220 ↑180 ↓0.82 ↓1.22 ↑
+> (+100 blocks) (+10%) (-10%) (-18%) (+22%)
+
+[ 2], AMMs facilitate automated, peer-to-peer execution via smart contract-governed liquidity pools. This paradigm has driven in-novation across decentralized exchanges (e.g., Uniswap V3 [ 3 ]), lending protocols (e.g., Morpho [ 4]) and yield trading (e.g., Pendle [ 5]). By enabling continuous liquidity without centralized inter-mediaries, AMMs have significantly enhanced market efficiency. One key feature of AMMs is their deterministic pricing mechanism, where the exchange rate is governed strictly by the reserve ratio of assets in the liquidity pool. While execution is driven by on-chain events, price fluctuations occur only when this ratio is altered. As shown in Table 1, during the Liquidity Mint phase, reserves in-crease symmetrically (+100%); however, since the asset proportion remains invariant, the price persists at 𝑃 𝐴 = 1.00 . Conversely, the 
+
+Token Swap event induces an asymmetric shift—increasing Asset A while burning Asset B—thereby modifying the reserve ratio. Con-sequently, the asset reprices to 0.82. This comparison validates that price volatility in AMMs is exclusively a derivative of ratio-altering events rather than aggregate liquidity changes. Despite the importance of event-level analysis, there is still a lack of comprehensive event-level datasets for different on-chain protocols [ 6 –8 ]. Furthermore, an in-depth analysis of on-chain transaction types remains largely underexplored. Bridging this gap offers critical insights for market traders. For example, by predict-ing the type of the next transaction, traders can deterministically infer the directional movement of the asset price within the liq-uidity pool, thereby identifying enhanced opportunities for profit and arbitrage. To address data scarcity, we introduce a generalized pipeline designed for automated extraction and standardization of on-chain event data. To validate the robustness and universality of our framework, we curated a comprehensive dataset spanning a 21-month period from Jan 2024 to Sep 2025. We instantiated this pipeline across four AMMs protocols: Uniswap v3 (decentralized  
+
+> arXiv:2604.20374v1 [cs.LG] 22 Apr 2026 KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al.
+
+exchange), Aave and Morpho (lending), and Pendle (yield trading) to ensure coverage of diverse mechanisms and complex event logic. Additionally, beyond dataset construction, we embrace the mod-eling challenge of forecasting both next transaction type and occur-rence block height within this yield-trading environment. Conven-tional temporal point process (TPP) models have been extensively applied to continuous-time data [ 9, 10 ], such as financial events [ 11 ], where timestamps follow wall-clock units and events are single-labeled. However, our setting departs from this norm in two critical ways. Firstly, time is measured in discrete block heights, which exhibit heavy-tailed gaps. Secondly, events are not atomic but may involve concurrent transaction types within the same block. These characteristics undermine standard intensity-based formulations and in calibration when ported to on-chain data. For stadnard neu-ral TPP models, we found that while standard training achieves reasonable event type accuracy, it produces large block height er-rors, reflected in high RMSE, which severely limits usability in fast-moving DeFi markets where timing is critical. To address this, we extend the TPP framework by augmenting the log-likelihood objective with an additional regression term on block height gaps, weighted by homoscedastic uncertainty. This design allows the model not only to fit the overall time distribution but also to minimize numerical deviations in prediction, a property crucial for downstream valuation of PT/YT lifecycles. As shown in our experiments, this modification substantially reduces timing error while maintaining event-type accuracy across TPP families. 
+
+## 2 RELATED WORK 2.1 Blockchain Datasets 
+
+A rich body of literature has introduced blockchain-specific datasets that span a variety of analytical tasks. Early efforts concentrated on the trading ecosystem [ 23 , 24 ]: several works fuse on-chain transfers with off-chain social signals to forecast cryptocurrency prices [ 12 , 13 ]. Reddit-driven high-frequency discussions were later harvested to create a micro-structure-oriented dataset for crypto-asset trading [ 14 ]. To support graph-based learning, a cross-chain transaction graph that covers Bitcoin, Ethereum, and BSC has also been released [ 15 , 16 ]. Beyond price prediction, fraud detection [ 8, 17 ] and account profiling [ 25 , 26 ] have received significant at-tention. More recently, fine-grained datasets targeting Meme Coins have been proposed to detect rug-pull events and characterize price manipulation [ 7, 18 ]. In the NFT space, asset-level datasets that cap-ture the full lifecycle—minting, bidding, and airdrop hunting—have been constructed to predict post-launch floor-price dynamics and hunter behavior [ 19 , 20 ]. In Table 2, we show the uniqueness of our datasets with a comparison with previous work. Crucially, no publicly available dataset to date systematically labels or summarizes the events generated by on-chain yield-trading activities, leaving a conspicuous gap for data-driven research on fixed-income-style DeFi instruments. 
+
+## 2.2 AI for Blockchain 
+
+Transaction prediction on blockchains have long been central re-search themes. Classical financial indicators [ 27 ] and statistical models [ 28 ] , however, fail to capture micro-level dynamics of indi-vidual users or single transactions in a decentralized environment. Motivated by the success of recurrent neutral networks [ 29 ], re-searchers have transplanted deep learning to on-chain data: convo-lutional networks extract short-term candlestick motifs [ 30 ], while CryptoMixer [ 21 ] designs a two-stream MLP mixer to capure user trading behavior patterns. Yet these studies remain entrenched in a conventional-finance mindset, overlooking the blockchain-native coupling of liquidity pools, instantaneous trades, and price updates. Recently, many work focus on liquidity providers [ 6, 31 , 32 ]. [ 33 ]empirically measure historical LP payoffs and emit rebalancing strategies, whereas [ 22 ] search for the globally optimal liquidity-mining allocation under a fixed set of tokens and pools. Notably, no existing work has yet employed models to forecast the next-transaction type, leaving the micro-temporal evolution of pool state an open prediction problem for data-driven DeFi research. 
+
+## 3 DATASETS 3.1 Background 
+
+Automated Market Makers (AMMs). Unlike traditional financial markets that rely on Limit Order Books (LOB) to match buyers and sellers, AMMs utilize liquidity pools to facilitate permission-less, automated digital asset trading. In this model, users (Liquidity Providers) deposit asset pairs into a smart contract, where prices are determined not by an order book, but by a deterministic mathe-matical formula. Formally, let a liquidity pool consist of two crypto-assets, 𝑋 and 𝑌 , with reserves denoted as 𝑥 and 𝑦 , respectively. The trading mechanism is governed by a pricing function 𝑓 (·) 
+
+that maintains a constant invariant 𝑘 . When a user executes a trade—swapping an amount 𝛿 𝑥 for 𝛿 𝑦 —the protocol ensures the state transition satisfies: 
+
+𝑓 (𝑥, 𝑦 ) = 𝑓 (𝑥 + 𝛿 𝑥 , 𝑦 − 𝛿 𝑦 ) = 𝑘 
+
+To capture a comprehensive view of the DeFi ecosystem, we selected four representative protocols: 
+
+Uniswap V3. As the largest and most active Decentralized Exchange (DEX), it provides the foundational dataset for high-frequency spot trading events. 
+
+Aave & Morpho. Representing the lending sector, these proto-cols are crucial for analyzing events related to liquidity supply and borrowing interest. 
+
+Pendle. The leading protocol in the yield trading domain. Its inclusion allows us to analyze complex pricing events derived from the separation of principal and yield tokens. More details refer to the Appendix A.1. 
+
+## 3.2 Data Collection 
+
+To construct a high-fidelity dataset encompassing diverse DeFi sec-tors, we operate a read-only Ethereum full node via the Chainstack infrastructure. 2 All data are collected exclusively through the pub-lic JSON-RPC interface, ensuring both verifiability and on-chain reproducibility of our dataset. Event-Based Extraction Pipeline. Rather than processing the global ERC-20 Transfer stream, which is semantically ambiguous and computationally prohibitive due to its volume, we implement a targeted event-driven extraction strategy. We focus on application-level events explicitly emitted by the smart contracts of the target  
+
+> 2https://ethereum-mainnet.core.chainstack.com/ Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea
+
+Figure 1: Event-aware forecasting framework for AMM protocols. (1) Blockchain data pipeline extracts standardized on-chain events; (2) TPP model processes event sequences for joint prediction; (3) Uncertainty-weighted loss enhances temporal accuracy; (4) Downstream applications leverage predictions for yield trading strategies. Table 2: Comparisons with other blockchain datasets and ours. Dataset Field AMM focus Datasets detail Granularity Application richness 
+
+[12, 13] transaction — on-chain transfers with off-chain social signals tx-level price forecasting [14] transaction — Reddit-driven high-frequency transaction tx-level high frequency trading [15, 16] transaction — cross-chain transaction graph tx-level social-driven trading [8, 17] fraud — fraud detection amount-level defi risk [7, 18] MEME COIN — rug-pull txs and price manipulation coin-level meme coin risk [19, 20] NFT — NFT minting, bidding, and airdrop hunting NFT-level NFT price and airdrop [21, 22] AMM ✓ AMM pools transaction and profit tx-level AMM profit max ours AMM ✓ AMM pools event driven event-level lifecycle modeling protocols (Uniswap V3, Aave, Morpho, and Pendle) during state transitions. To ensure universality across different AMM and mech-anisms, we categorize relevant events into three types: 
+
+Trading Events: Events representing the exchange of assets (e.g., Swap in Uniswap and Pendle). 
+
+Liquidity Events: Events reflecting the modification of market depth (e.g., Mint/Burn in AMMs). 
+
+State Update Events: Protocol-specific signals affecting pricing logic (e.g., UpdateImpliedRate in Pendle). More details refer to the Appendix B.2. 
+
+## 3.3 Data Structure 
+
+We organized the raw logs from Uniswap, Aave, Morpho, and Pen-dle into a standardized, human-readable JSON format. Each entry comprises a universal header for temporal alignment (e.g., times-tamps, block numbers) and a protocol-specific payload that trans-lates complex smart contract logic into interpretable metrics—such as trade volumes, lending interest rates, or yield adjustments. This design decouples financial analysis from underlying technical com-plexities, allowing researchers to treat on-chain events simply as high-granularity time-series data. Detailed schema definitions are provided in Appendix B. 
+
+## 3.4 Data Analysis 
+
+3.4.1 Dataset Overview. We introduce a high-fidelity, block-level DeFi dataset capturing 8,917,353 on-chain events from the Ethereum mainnet, spanning from Jan 1, 2024, to Sep 16, 2025 (block height: 18,908,896–23,374,292). The dataset aggregates micro-structural dynamics across four distinct protocol architectures—Uniswap V3, Aave, Pendle, and Morpho—covering a total of 359 liquidity pools (Pendle: 296, Aave: 53, Uniswap: 5, Morpho: 5) 3.
+
+3.4.2 Dataset Details. As shown in the Figure 2 a, the heatmap visualizes the temporal density of on-chain interactions by the metric Average Events per Block (EpB) across binned block heights (10k blocks/bin). The visualization reveals a stark dichotomy in protocol behavior: Pendle exhibits a high-intensity, continuous utilization pattern (consistent deep red), attributable to its frequent state-updating mechanism. Conversely, Uniswap V3 demonstrates "bursty" utilization characterized by intermittent vertical red stripes, indicating that its block space consumption is highly correlated with exogenous market volatility shocks. Aave and Morpho maintain a sparse, low-entropy state (predominantly yellow), reflecting the lower frequency of lending interactions compared to AMM trading or yield tokenization updates.  
+
+> 3The disparity in market counts reflects our rigorous selection of the most represen-tative and active pools for each protocol to ensure high-fidelity analysis, rather than indicating the relative importance of the protocols themselves. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al.
+
+Figure 2: Block utilization, event synchronization, and occupancy distributions in DeFi protocols 
+
+As shown in the Figure 2 b, this plot investigates the causal synchronization between protocols using Conditional Event Prob-ability relative to a Uniswap V3 Trigger Block (defined as the 95th percentile of swap volume). The probability density func-tion 𝑃 (𝐸𝑣𝑒𝑛𝑡 𝑝𝑟𝑜𝑡𝑜𝑐𝑜𝑙 |𝐵𝑙𝑜𝑐𝑘 𝑜 𝑓 𝑓 𝑠𝑒𝑡 = 𝑘 ) exhibits a sharp, synchronous peak at 𝑘 = 0 for all observed protocols (Aave, Morpho, Pendle). This indicates that liquidity events and interest rate updates occur atomically within the same block as the spot price shock. The rapid decay at 𝑘 = 1 suggests an extremely short information diffusion window. The absence of a "right-shifted" peak implies that off-chain keepers and MEV bots effectively bridge price disparities instantly, negating any significant inter-block latency. In the Figure 2 c, the scatter plot presents the Probability Mass Function (PMF) of block occupancy on a Log-Log scale, confirm-ing that transaction frequency follows a Power Law distribution (𝑃 (𝑥 ) ∝ 𝑥 −𝛼 ). Uniswap V3 (red) exhibits the heaviest tail, extending to 𝑥 > 200 , which signifies its distinct capability to absorb extreme "Black Swan" traffic surges. The horizontal alignment of data points at 𝑦 = 1 (10 0) in the tail region represents discrete, unique con-gestion events—blocks that historically occurred exactly once with such high transaction counts. In contrast, Morpho (orange) shows the steepest decay, indicating a more predictable and sparse usage pattern without the extreme outliers seen in the AMM layer. 
+
+## 4 TASK FORMULATION 
+
+The on-chain behavior of 4 protocol markets is inherently discrete and governed by operational time (i.e., block height and event index) rather than continuous wall-clock time. While physical time gaps between blocks may vary, the state of these AMMs is invariant to these durations and changes only upon the execution of a valid transaction. Typically, one block height corresponds to 12 to 15 seconds. Consequently, modeling based on physical time introduces artificial sparsity and sampling bias, whereas treating the event sequence as the native temporal dimension aligns strictly with the Ethereum Virtual Machine (EVM) state transition logic. By adopting this event-driven perspective, our model filters out the stochastic noise of block intervals and focuses on the causal chain of liquidity interactions. This approach ensures that the modeled dynamics reflect the system’s true microstructure, where actionable signals and price updates occur exclusively at discrete block boundaries, regardless of the physical time elapsed. Based on the data collected in Sec. 3, we formalize our research problem as an event-driven modeling task. In Pendle markets, events happen solely when certain lifecycle events are induced, which are Mint , Burn , Swap , and UpdateImpliedRate . During inter-vals between these periods, contract states are constant, so event sequences, not smooth wall-clock time, are best to characterize the progression of the system. Measuring along block height guarantees proper order of executions and evades anomalies of wall-clock time. This definition thus encodes the real dynamic of market activity and offers a natural foundation for arbitrage. 
+
+Event Sequence and Modeling Objective. We model the evolution of each pool as a marked event sequence along the block height axis. For an asset 𝑎 , the transaction history can be denoted as 
+
+S𝑎 = {( 𝑡 𝑖 , 𝑦 𝑖 )} 𝐿 𝑎 
+
+> 𝑖 =1
+
+,
+
+where 𝑡 𝑖 ∈ N denotes the block height of the 𝑖 -th event, and 𝑦 𝑖 ∈ Y 
+
+is its (atomic or composite) mark (event type). The event history up to block 𝑡 is 
+
+H𝑡 = {( 𝑡 𝑗 , 𝑦 𝑗 ) : 𝑡 𝑗 < 𝑡 },
+
+and the inter-block gap is Δ𝑖 = 𝑡 𝑖 − 𝑡 𝑖 −1 ∈ N+.Our benchmark task is to predict the next mark 𝑦 𝑖 +1 and the 
+
+next event time 𝑡 𝑖 +1 = 𝑡 𝑖 + Δ𝑖 +1 given H𝑡 𝑖 . We adopt the Marked Temporal Point Process (TPP) framework [ 10 , 34 ], in which the joint distribution of times and marks is modeled conditionally on his-torical observations. Note that representation for Δ𝑖 +1 and 𝑡 𝑖 +1 is isomorphic in this framework. This formulation provides a prob-abilistic foundation for forecasting on-chain behavior and under-standing the microstructure dynamics of Pendle AMM markets. 
+
+## 5 BENCHMARK 
+
+Pendle pool states change only when lifecycle events occur. Be-tween events, reserves and implied rates are constant. The history is therefore a sequence of block indexed event times and marks (𝑡 𝑖 , 𝑦 𝑖 ).And TPPs fit this setting. They model the conditional law of the next gap and mark given H𝑡 𝑖 , capturing dependence across events. This yields a principled likelihood for joint time–type prediction and a clear basis for benchmarking on block height. Hence, this section will concisely illustrate the objective of TPP and its standard likelihood loss for training. Besides, due to the numerical characteristics of block height, directly adopting stan-dard loss would amplify the time prediction flaws inherent in TPP Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+architecture. Therefore, this section will also introduce the loss function improvements we implemented, resulting in the new loss function, Uncertainty Weighted MSE (UWM). 
+
+## 5.1 Temporal Point Process 
+
+Drawing on [ 10 , 34 ] , we get the following standard TPP objective. Conditioned on H𝑡 𝑖 , we factor the joint of the next event as 
+
+𝑝 (𝑡 𝑖 +1, 𝑦 𝑖 +1 | H 𝑡 𝑖 ) = 𝑝  𝑦 𝑖 +1 | H 𝑡 𝑖 
+
+ · 𝑝  𝑡 𝑖 +1 | H 𝑡 𝑖 
+
+
+
+= 𝜋 𝑖 [𝑦 𝑖 +1] · 𝑓 𝜓 (Δ𝑖 +1 | H 𝑡 𝑖 ).
+
+where the 𝜋 𝑖 [𝑦 𝑖 +1] is a function that represents the distribu-tion over the next event type. The 𝑓 𝜓 (Δ𝑖 +1 | H 𝑡 𝑖 ) is the condi-tional density of the next gap for times, involving cumulative haz-ard and survival relationship. The sequence log-likelihood over 
+
+[𝑡 0, 𝑡 𝐿 𝑎 ] is the usual sum of event terms and time terms. In the haz-ard formulation, the negative log-likelihood for times reduces to 
+
+− Í𝑖 log 𝑓 𝜓 (Δ𝑖 +1 | H 𝑡 𝑖 ). This is equivalent in value to the standard intensity-based objective, and easier to implement with basis haz-ards under block time. Hence, the standard loss can be written as 
+
+𝐿𝑜𝑠𝑠 = − Í𝑖 log 𝜋 𝑖 [𝑦 𝑖 +1] − Í𝑖 log 𝑓 𝜓 (Δ𝑖 +1 | H 𝑡 𝑖 ).
+
+## 5.2 Uncertainty Weighted MSE Loss 
+
+The blockchain market is characterized by rapid trading, meaning that any disruptive transaction event requires investors to respond promptly. In this context, the occurrence of such events, reflected in block height, is particularly crucial. However, pure standard likelihood loss can fit distributions well but still yield large numeric errors on block gaps when tails are heavy. It is hypothesized that this is due to TPP placing excessive emphasis on the disparities in distributions, while concomitantly disregarding the discrepancies in numerical residuals. We therefore add MSE to balance and combine it as: (1) Mark likelihood ℓmark = − Í𝑖 log 𝜋 𝑖 [𝑦 𝑖 +1],(2) Time likelihood ℓtime = − Í𝑖 log 𝑓 𝜓 (Δ𝑖 +1 | H 𝑡 𝑖 ),(3) Time regression ℓmse = Í𝑖 
+
+ bΔ𝑖 +1 − Δ𝑖 +1
+
+2.We aggregate them with Homoscedastic Uncertainty weighting 
+
+[ 35 ]. Let 𝑠 = (𝑠 1, 𝑠 2, 𝑠 3) be unconstrained scalars and define 𝜎 𝑚 =
+
+softplus (𝑠 𝑚 ) > 0. The objective for this Uncertainty Weighted MSE (UWM) loss is 
+
+𝐿𝑜𝑠𝑠 = 12
+
+> 3
+
+∑︁ 
+
+> 𝑚 =1
+
+
+
+𝜎 −2 
+
+> 𝑚
+
+ℓ𝑚 + log 𝜎 2
+
+> 𝑚
+
+
+
+ℓ1 = ℓmark , ℓ 2 = ℓtime , ℓ 3 = ℓmse .
+
+This scheme learns the relative weights from data and stabilizes training across assets with the large block gaps. The idea is or-thogonal to the encoder and compatible with RNN-, attention-, or ODE-style TPPs. Likelihood-based training for TPPs and joint time or mark modeling are well established. Therefore, we adopt 8 representative TPP models with UWM loss for our task. 
+
+## 6 EXPERIMENT 
+
+In this section, we evaluate the performance of our proposed loss on the task of next-event prediction over yield-bearing blockchain as-sets, with the objective of jointly mark (event type) multi-classification and event time (in block height units) forecasting. We describe the processed dataset, baseline models, training settings, and metrics, followed by detailed comparisons, ablation studies. 
+
+## 6.1 Experimental Setup 
+
+Dataset. From the dataset we build, each transaction involves the transaction type and the block height of occurrence. We choose two representative protocols 4 as the dataset for our task, high density event dataset (Uniswap V3) and sparse event dataset (Pendle). Also due to the highly imbalanced sequence length for each asset in both protocols, we choose to split the long sequence into multiple short sequences. After processing and chronological ordering, the Pendle dataset comprises 295 distinct assets and 1,624 sequences of transaction series data. These are partitioned into training, valida-tion, and testing splits of 1,141, 239, and 244 sequences, respectively. Across all splits, the dataset contains 484,004 individual transac-tions (340,178 training, 71,040 validation, 72,786 testing). And for Uniswap V3, it comprises 10,596 transaction series data, involving 7,417, 1,589 and 1,590 sequences for training, validation and test-ing. Across all splits, it contains 2,632,486 individual transactions (1,840,860 training, 393,956 validation, 397,670 testing) 
+
+Temporal structure. We treat block height as the temporal axis. Hence, the Pendle dataset contains 483,994 inter-event intervals with a mean interval of 48.5 blocks, a median of 16 blocks, and a long-tailed distribution with a maximum gap of 1,426 blocks. This heavy-tailed and sparse pattern confirms that some assets experience bursty transaction phases separated by long idle spans, making prediction more challenging than representative neural TPP benchmarks. Conversely, the Uniswap V3 dataset involves 2,632,486 inter-event intervals with a mean interval of 2.6 blocks and a median of 1.0 block, exhibiting a dense pattern. Consequently, block heights (8-digit numbers) were not normalized due to the presence of large event intervals within the temporal structure. 
+
+Event types. The processed dataset finally involves 5 transaction types from raw dataset, indicating Swap in, Swap out, Mint, Burn and UpdateImpliedRate. However, concurrency is common, with multiple types occurring simultaneously. To capture this phenome-non, we represent each unique co-occurrence as a single categorical label, yielding 31 distinct event-type combinations. This multi-label collapse reflects the true stochasticity of blockchain execution en-vironments while remaining tractable for sequence modeling. 
+
+Evaluation splits. Following standard practice, all metrics are reported on the held-out test set. Validation is used for hyperparam-eter tuning and early stopping. Splits are performed chronologically at the sequence level to avoid event-level leakage. We additionally verify that no assets overlap across splits. 
+
+## 6.2 Baselines and Metrics 
+
+Baseline models. We benchmark against eight state-of-the-art temporal point process (TPP) models spanning recurrent, attention, and neural-ODE families: 
+
+• Neural Hawkes Process (NHP) [ 34 ]: Uses a continuous time LSTM whose hidden state evolves between events to produce neurally self-modulating intensities.  
+
+> 4Through exploratory data analysis, it was determined that Uniswap V3, Aave, and Morpho are all high-density event data. Hence, Uniswap V3 was selected as the representative dataset. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al.
+
+• RMTPP [36 ]: Encodes event history with an RNN and mod-els the conditional intensity as a learned nonlinear function of that history to jointly predict next event. 
+
+• Self-Attentive Hawkes Process (SAHP) [ 37 ]: Links self attention to Hawkes modeling and introduces time shifted positional encodings that convert inter-event intervals into sinusoidal phase shifts for history dependent intensities. 
+
+• Transformer Hawkes Process (THP) [38 ]: Replaces recur-rence with multi-head self-attention and continuous-time temporal encodings to summarize long histories. 
+
+• Attentive NHP (AttNHP) [39 ]: Attends over past events with continuous time positional encodings and, uniquely, embeds each possible event 𝑒 @𝑡 so that 𝜆 𝑒 (𝑡 ) is derived from the candidate event’s own embedding. 
+
+• IntensityFree [40 ]: Dispenses with intensity parameteri-zation by learning the conditional inter-event-time density via normalizing flows and a log-normal mixture that allows closed form sampling. 
+
+• FullyNN [41 ]: Parameterizes the integrated conditional in-tensity with a feed-forward network conditioned on history and obtains 𝜆 ∗ (𝑡 ) by differentiation. 
+
+• ODETPP : Combines Neural ODEs with continuous-time normalizing flows [ 42 ] without spatial elements to model high-fidelity temporal mark distributions with likelihoods. 
+
+Training objective. All baselines are trained with the standard negative log-likelihood (NLL), decomposed into event-type like-lihood and inter-event time likelihood. For our contribution, we extend the objective by adding a mean-squared error (MSE) term on time prediction, balanced by learnable uncertainty weights 𝜎 𝑖 .
+
+Metrics. Following Temporal Point Process Benchmark convention [43], we adapt the following evaluation metrics: 
+
+• Type Accuracy : classification accuracy over 31 event-types. 
+
+• Time RMSE : root mean squared error between predicted and observed inter-event times. The smaller root mean squared error can ensure the occurrence time of next indicated event transaction without delay. 
+
+• OTD: (Optimal Transport Distance) [ 44 ]: evaluation metric for long-horizon prediction. A sequence-level edit distance capturing both transaction type and occurrence time mis-matches, evaluated with horizon 𝐻 = 5.
+
+## 6.3 Standard TPP Loss 
+
+The Baseline (NLL) column in Table 3 report baseline performance under the conventional NLL objective on the testing set for both Pendle and Uniswap V3. Across datasets, IntensityFree remains a strong non-intensity baseline due to its closed-form likelihood evaluation, while intensity-based baselines rely on Monte Carlo integration and can incur approximation errors. In particular, In-tensityFree achieves the lowest time RMSE on Pendle (81.32), and it is tied for the best RMSE on Uniswap V3 (4.64, matched by SAHP). Under NLL, Pendle is substantially more challenging for several intensity-based architectures, with RMSE exploding for RMTPP (769.14), THP (958.37), FullyNN (665.56), and ODETPP (6815.47), reflecting temporal miscalibration under blockchain-style bursts. In summary, these results establish a challenging NLL baseline across two distinct regimes. Pendle exposes large temporal errors for multiple intensity-based models, whereas Uniswap V3 is gener-ally easier but still admits sharp failures for specific architectures. his motivates our introduction of an uncertainty weighted MSE loss term to better balance likelihood fitting and time regression under bursty dynamics. The complete results for Type accuracy and OTD ( 𝐻 = 5) is shown in table 6 in Appendix C. 
+
+## 6.4 Uncertainty Weighted MSE Loss 
+
+The “With UWM Loss” column in Table 3 presents performance when augmenting the objective with our proposed uncertainty weighted MSE. On Pendle, temporal accuracy improves substan-tially across nearly all models. NHP’s RMSE decreases from 109.48 to 94.33, and RMTPP achieves its best balance at 95.591 RMSE with OTD reduction and higher type accuracy. Even THP, previously unstable, improves dramatically from 1053.819 RMSE to 94.58. The RMSE metric saw an average improvement of 56.41% . This suggests that the auxiliary regression term stabilizes temporal predictions across architectures. Besides, based on the conversion between block height and Greenwich Mean Time (GMT), an RMSE of 93 can be approximated as the result of a 19 minute floating error at the time of occurrence. On Uniswap V3, where several baselines already cluster at low RMSE (e.g., SAHP 4.64), UWM yields smaller changes (SAHP 4.64 → 4.63; NHP 5.26 → 4.70), but can still provide a strong corrective effect when the baseline collapses. Most notably, AttNHP drops from 25.49 to 5.03 (an ∼80% improvement). From Fig 3, the green arrow indicates that the model with UWM outperforms the baseline in Pendle dataset. These improvements validate our claim that distributional likelihood alone is insufficient for block-level time forecasting, especially in sparse event datasets. The uncertainty weighted MSE complements the probabilistic fit by directly minimizing numeric deviations. The IntensityFree model, which doesn’t use intensity, has a similar implicit function for penalizing the residual between block height. This means it is not included in the UWM loss. 
+
+## 6.5 Ablation Studies 
+
+We next investigate the contribution of each loss component, the effect of learned uncertainty, and the sensitivity to horizon length. 
+
+Effect of the MSE term. Define "UW-nll" as the UWM loss without 
+
+ℓmse , and "UW-Event+MSE" as the UWM loss without ℓtime . Shown in Figure 4, removing the MSE term leads to degradation in temporal accuracy, confirming its necessity. Conversely, removing ℓtime while retaining MSE yields under-calibrated likelihoods, though with competitive RMSE. A balanced combination is essential. 
+
+Uncertainty learning. Shown in Figure 4, fixing 𝜎 values rather than learning them degrades performance, particularly when time variance is high. Learned uncertainties adaptively rescale contribu-tions, yielding more stable training across assets. 
+
+Horizon sensitivity. Figure 5 shows the OTD metrics across hori-zons 𝐻 = {3, 3, 7, 11 } with UWM series model. This type of model represents a linear and stable growth from short to long horizon predictions, building a scaling law between OTD and prediction horizon across different TPPs. Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+Table 3: Time RMSE ( ↓) comparison on Pendle and Uniswap V3 Datasets. We compare baseline models against their Uncertainty Weighted MSE (UWM) variants. Values are mean ± std over 5 random seeds. Red indicates improvement, green indicates degradation, and bold red marks dramatic improvement (> 30%). 
+
+Model Pendle Dataset Uniswap V3 Dataset 
+
+Baseline (NLL) With UWM Loss Baseline (NLL) With UWM Loss NHP 108.89 ± 1.84 94.28 ± 0.21 5.26 ± 0.24 4.70 ± 0RMTPP 769.14 ± 147.25 95.55 ± 0.1 5.28 ± 0.07 6.59 ± 0.54 SAHP 93.87 ± 3.85 93.98 ± 0.29 4.64 ± 0.05 4.63 ± 0.02 THP 958.37 ± 62.97 94.50 ± 1.28 5.06 ± 0.03 5.06 ± 0AttNHP 100.63 ± 2.22 96.73 ± 3.32 25.49 ± 1.13 5.03 ± 0.33 
+
+IntensityFree 81.32 ± 2.50 — 4.64 ± 0.16 —FullyNN 665.56 ± 100.64 91.08 ± 1.71 108.72 ± 1.61 105.43 ± 0.29 ODETPP 6815.47 ± 1266.82 277.07 ± 293.57 5.20 ± 0.08 7.47 ± 2.39 NHP 
+
+> RMT
+> SAHP
+> THP
+> Att
+> FNN
+> ODE
+
+Model 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Accuracy
+> Higher is Better
+> Baseline
+> UWM
+
+Type Accuracy Comparison NHP 
+
+> RMT
+> SAHP
+> THP
+> Att
+> FNN
+> ODE
+
+Model 
+
+> 0
+> 200
+> 400
+> 600
+> 800
+> 1000
+> RMSE
+> * Capped at 1000
+> Lower is Better
+> Baseline
+> UWM
+
+Time RMSE Comparison NHP 
+
+> RMT
+> SAHP
+> THP
+> Att
+> FNN
+> ODE
+
+Model 
+
+> 8.50
+> 8.75
+> 9.00
+> 9.25
+> 9.50
+> 9.75
+> 10.00
+> 10.25
+> OTD Score
+> Lower is Better
+> Baseline
+> UWM
+
+OTD Comparison 
+
+Figure 3: Improvement from Metrics. AttNHP 
+
+> FullyNN
+> NHP
+> ODETPP
+> RMTPP
+> SAHP
+> THP
+> Model
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Type Accuracy
+> Type Accuracy Comparison
+> Baseline
+> UWL
+> UW-NLL
+> UW-Event+MSE
+> NLL+MSE AttNHP
+> FullyNN
+> NHP
+> ODETPP
+> RMTPP
+> SAHP
+> THP
+> Model
+> 10 2
+> 10 3
+> Time RMSE (log scale)
+> Time RMSE Comparison AttNHP
+> FullyNN
+> NHP
+> ODETPP
+> RMTPP
+> SAHP
+> THP
+> Model
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> OTD (5 events)
+> OTD (5 events) Comparison
+
+Figure 4: Ablation study: Effect of MSE term and Uncertainty Weighting. 
+
+## 7 DOWNSTREAM APPLICATIONS 7.1 Applications 
+
+This section explores potential downstream applications of the 
+
+Pendle-Event dataset. 
+
+Yield Trading. Modeling Mint , Burn , Swap , and UpdateIm-pliedRate sequences as temporal processes enables predicting short-term PT/SY ratio fluctuations, which directly reflect Pendle’s implied yields. For instance, anticipating Swap events that decrease the PT/SY ratio signals lower future yields, prompting traders to increase exposure to Yield Tokens (YT). Conversely, a rising ra-tio suggests higher future yield value, guiding optimal allocation between PT and YT positions. This event-driven framework pro-vides a data-driven foundation for adaptive yield speculation and portfolio rebalancing based on predicted market transitions. 
+
+Arbitrage. Structured event data facilitates identifying arbitrage opportunities by forecasting event types and magnitudes, such as traded volume or implied rate shifts. By simulating anticipated price KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 3 5 7 9 11 
+
+> Prediction Horizon (Number of Events)
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> OTD (Overall Time Distortion)
+> OTD Performance Across Different Horizons
+> NHP
+> RMTPP
+> SAHP
+> THP
+> AttNHP
+> FullyNN
+> ODETPP
+
+Figure 5: Ablation study: Horizon sensitivity. 
+
+adjustments, agents can detect predictable deviations between PT, YT, and underlying SY tokens. This predictive layer allows for real-time arbitrage execution, capturing temporary mispricings before market corrections occur. 
+
+## 7.2 Case Study: Event-Aware Trading in sUSDe 
+
+In this section, we present a case by Pendle sUSDe pools[45]. Consider a Pendle AMM pool for sUSDe (Ethena) that initially holds 1,000 PT and 2,000 SY (ratio = 0.50). A predicted Swap in 2 blocks will add 200 PT and remove 400 SY, yielding 1,200 PT and 1,600 SY (ratio = 0.75). In Pendle’s design, a higher PT/SY ratio means more PT is available relative to SY, so each PT is worth less SY on the market. Equivalently, the price of PT in terms of SY falls. Because PT price is inversely related to its embedded fixed yield, this shift implies a higher implied yield on holding PT to maturity. (Pendle’s implied APY rises when PT is cheap: when the Implied APY is high, PT is cheaper (relative to the underlying token), and the resulting fixed yield APY is higher.) In this example, PT goes from 2 SY (initial price = 2000 SY /1000 PT ) to about 1.333 SY (final price = 1600 /1200 ), a ∼33% drop. This larger discount means the fixed payout at maturity (1 PT = 1 SY of underlying) represents a higher yield. 
+
+Yield Trading Strategy. Given the higher implied yield, a yield trader might rebalance their position. For example, one could sell PT and increase exposure to YT. Selling PT realizes capital at the now-lower price, and buying YT captures the rising future yield stream. This is a classic yield-speculation move in Pendle: investors buy YT when they expect the asset’s yield to climb. Concretely, suppose a trader holds 100 PT from before. After the predicted ratio change, each PT is worth fewer SY, so selling those 100 PT yields 133.3 SY (since 100 × 1.333 ). Such a reallocation is supported by Pendle’s design: YT holders profit if the underlying APY exceeds market expectations, while PT locks in a fixed rate. 
+
+Arbitrage Opportunity: Buying PT and Selling into the Pool. The predicted price shift also creates a short-term arbitrage opportunity between the Pendle pool and external markets. Suppose that on an external exchange or another liquidity pool, PT trades at 1.50 SY per PT. Before the swap event, the Pendle pool priced PT at 2 SY, so one could buy PT externally (1.50 SY) and sell into the pool (2 SY) for profit. For example: 
+
+• Step 1: Buy 100 PT off-platform for 150 SY (100 * 1.50). 
+
+• Step 2: Immediately sell these 100 PT into the Pendle pool at the pool price of 2 SY, receiving 200 SY. 
+
+• Profit: 200 − 150 = 50 SY (minus fees). After the swap (when pool PT price falls to 1.333 SY), the arbi-trage flips direction. Now the pool is cheaper: one could buy PT in the pool at 1.333 SY and sell externally at 1.50 SY. For instance: 
+
+• Step 1: Use SY to buy 100 PT from the pool at 1.333 SY each (cost 133.3 SY). 
+
+• Step 2: Sell those 100 PT on the external market at 1.50 SY, receiving 150 SY. 
+
+• Profit: 150 − 133 .3 = 16 .7 SY (minus fees). Either way, the price discrepancy is arbitraged away. In Pendle’s mechanism, such trades leverage the fact that PT is normally dis-counted relative to the underlying (reflecting its fixed yield). By buying low and selling high across markets (or vice versa), arbi-trageurs enforce price efficiency. Pendle’s pools therefore allow traders to exploit exactly these discrepancies: investors can uti-lize the price differences between different maturities of PT/YT for arbitrage. 
+
+## 7.3 Auxiliary Information 
+
+Due to space limitations, we provide comprehensive supplementary materials in the appendices. Appendix A details the mathematical formulation of Automated Market Makers. Appendix B elaborates our dataset construction methodology, presenting protocol-specific extraction pipelines, event schema definitions, and in-depth statis-tical analyses of temporal patterns across 4 protocols. Appendix C reports complete evaluation results for all eight TPP baselines under both standard NLL and our proposed UWM loss across mul-tiple random seeds. Appendix D documents the full experimental setup, including hardware specifications, hyperparameters, and reproducibility protocols. 
+
+## 8 CONCLUSION 
+
+Despite the central role of Automated Market Makers (AMMs) in Decentralized Finance (DeFi) for driving asset pricing through de-terministic reserve mechanisms, existing research has largely over-looked the micro-structural event dynamics and lacked fine-grained modeling frameworks. To address these gaps, we present a compre-hensive dataset comprising 8.9 million events from four representa-tive protocols—Pendle, Uniswap V3, Aave, and Morpho—covering the period from January 2024 to September 2025, with precise anno-tations of transaction types and block heights. Furthermore, we pro-pose the Uncertainty Weighted MSE (UWM) Loss function, which adaptively integrates block-interval regression into the Temporal Point Process (TPP) objective. Empirical results across eight ad-vanced TPP architectures demonstrate that our approach reduces time prediction error by an average of 56.41% while maintaining high event-type accuracy. Our work establishes a critical bench-mark for event-aware forecasting and provides a foundation for future research in multi-protocol synchronization and the optimiza-tion of high-frequency trading strategies in on-chain ecosystems. Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+## References 
+
+[1] Raphael Auer, Bernhard Haslhofer, Stefan Kitzler, Pietro Saggese, and Friedhelm Victor. The technology of decentralized finance (defi). BIS Working Papers 1066, Bank for International Settlements, January 2023. [2] Ioanid Roşu. A dynamic model of the limit order book. The Review of Financial Studies , 22(11):4601–4641, 2009. [3] Uniswap. Accessed: 2025-09-25. [4] Morpho Labs. Morpho: Open lending infrastructure, 2026. Accessed: February 5, 2026. [5] Pendle. Accessed: 2025-09-25. [6] Zhou Fan, Francisco J Marmolejo-Cossío, Ben Altschuler, He Sun, Xintong Wang, and David Parkes. Differential liquidity provision in uniswap v3 and implications for contract design. In Proceedings of the Third ACM International Conference on AI in Finance , pages 9–17, 2022. [7] Bo Xu, Tingting Li, Junzhe Zheng, Mehdi Naseriparsa, Zhehuan Zhao, Hongfei Lin, and Feng Xia. Met-meme: A multimodal meme dataset rich in metaphors. In Proceedings of the 45th international ACM SIGIR conference on research and development in information retrieval , pages 2887–2899, 2022. [8] Muhammad Muzammil, Abisheka Pitumpe, Xigao Li, Amir Rahmati, and Nick Nikiforakis. The poorest man in babylon: A longitudinal study of cryptocurrency investment scams. In Proceedings of the ACM on Web Conference 2025 , pages 1034–1045, 2025. [9] Daryl J Daley and David Vere-Jones. An introduction to the theory of point processes: volume II: general theory and structure . Springer, 2008. [10] Alan G. Hawkes. Spectra of some self-exciting and mutually exciting point processes. Biometrika , 58:83–90, 1971. [11] Joel Hasbrouck. Measuring the information content of stock trades. The Journal of Finance , 46(1):179–207, 1991. [12] Federico Cernera, Massimo La Morgia, Alessandro Mei, and Francesco Sassi. Token spammers, rug pulls, and sniper bots: An analysis of the ecosystem of tokens in ethereum and in the binance smart chain ( { { { { { BNB } } } } } ). In 32nd USENIX Security Symposium (USENIX Security 23) , pages 3349–3366, 2023. [13] Yuan Li, Bingqiao Luo, Qian Wang, Nuo Chen, Xu Liu, and Bingsheng He. Cryp-totrade: A reflective llm-based agent to guide zero-shot cryptocurrency trading. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 1094–1106, 2024. [14] Qiuhan Han, Qian Wang, Atsushi Yoshikawa, and Masayuki Yamamura. Pulsered-dit: A novel reddit dataset for benchmarking mas in high-frequency cryptocur-rency trading. arXiv preprint arXiv:2506.03861 , 2025. [15] Kiarash Shamsi, Friedhelm Victor, Murat Kantarcioglu, Yulia Gel, and Cuneyt G Akcora. Chartalist: Labeled graph datasets for utxo and account-based blockchains. Advances in Neural Information Processing Systems , 35:34926–34939, 2022. [16] Bingqiao Luo, Zhen Zhang, Qian Wang, and Bingsheng He. Multi-chain graphs of graphs: A new approach to analyzing blockchain datasets. Advances in Neural Information Processing Systems , 37:28490–28514, 2024. [17] Sihao Hu, Tiansheng Huang, Ka-Ho Chow, Wenqi Wei, Yanzhao Wu, and Ling Liu. Zipzap: Efficient training of language models for large-scale fraud detection on blockchain. In Proceedings of the ACM Web Conference 2024 , pages 2807–2816, 2024. [18] Hou-Wan Long, Hongyang Li, and Wei Cai. Coinclip: A multimodal framework for assessing viability in web3 memecoins. arXiv preprint arXiv:2412.07591 , 2024. [19] Chenyu Zhou, Hongzhou Chen, Hao Wu, Junyu Zhang, and Wei Cai. Artemis: Detecting airdrop hunters in nft markets with a graph learning system. In 
+
+Proceedings of the ACM Web Conference 2024 , pages 1824–1834, 2024. [20] Davide Costa, Lucio La Cava, and Andrea Tagarelli. Show me your nft and i tell you how it will perform: Multimodal representation learning for nft selling price prediction. In Proceedings of the ACM Web Conference 2023 , pages 1875–1885, 2023. [21] Tingsheng Feng, Zhihao Shen, Xi Zhao, Xiaoni Lu, and Yuyang Zhou. Cryp-tomixer: Fine-grained market information-aware mlp networks for individual cryptocurrency trading prediction. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , pages 603–614, 2025. [22] Wangze Ni, Zhao Yiwei, Weijie Sun, Lei Chen, Peng Cheng, Chen Jason Zhang, and Xuemin Lin. Money never sleeps: Maximizing liquidity mining yields in decentralized finance. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 2248–2259, 2024. [23] Jingfeng Chen, Wanlin Deng, Dangxing Chen, and Luyao Zhang. Finml-chain: A blockchain-integrated dataset for enhanced financial machine learning. arXiv preprint arXiv:2411.16277 , 2024. [24] Zhen Zhang, Bingqiao Luo, Shengliang Lu, and Bingsheng He. Live graph lab: Towards open, dynamic and real transaction graphs with nft. Advances in Neural Information Processing Systems , 36:18769–18793, 2023. [25] Qian Wang, Zhen Zhang, Zemin Liu, Shengliang Lu, Bingqiao Luo, and Bingsheng He. Ex-graph: A pioneering dataset bridging ethereum and x. arXiv preprint arXiv:2310.01015 , 2023. [26] Haoyuan Li, Mengxiao Zhang, Maoyuan Li, Jianzheng Li, Junyi Yang, Shuangyan Deng, Zijian Zhang, and Jiamou Liu. Multi-source multi-level multi-token ethereum dataset and benchmark platform. arXiv preprint arXiv:2501.11906 ,2025. [27] Gbenga Ibikunle, Frank McGroarty, and Khaladdin Rzayev. More heat than light: Investor attention and bitcoin price discovery. International Review of Financial Analysis , 69:101459, 2020. [28] Khaladdin Rzayev and Gbenga Ibikunle. A state-space modeling of the informa-tion content of trading volume. Journal of Financial Markets , 46:100507, 2019. [29] Alex Sherstinsky. Fundamentals of recurrent neural network (rnn) and long short-term memory (lstm) network. Physica D: Nonlinear Phenomena , 404:132306, 2020. [30] Qiguo Sun, Xueying Wei, and Xibei Yang. Graphsage with deep reinforcement learning for financial portfolio optimization. Expert Systems with Applications ,238:122027, 2024. [31] Lioba Heimbach, Eric Schertenleib, and Roger Wattenhofer. Risks and returns of uniswap v3 liquidity providers. In Proceedings of the 4th ACM Conference on Advances in Financial Technologies , pages 89–101, 2022. [32] Sizheng Fan, Tian Min, Xiao Wu, and Cai Wei. Towards understanding gover-nance tokens in liquidity mining: a case study of decentralized exchanges. World Wide Web , 26(3):1181–1200, 2023. [33] Zhou Fan, Francisco Marmolejo-Cossio, Daniel J Moroz, Michael Neuder, Rithvik Rao, and David C Parkes. Strategic liquidity provision in uniswap v3. arXiv preprint arXiv:2106.12033 , 2021. [34] Hongyuan Mei and Jason M Eisner. The neural hawkes process: A neurally self-modulating multivariate point process. Advances in neural information processing systems , 30, 2017. [35] Alex Kendall, Yarin Gal, and Roberto Cipolla. Multi-task learning using uncer-tainty to weigh losses for scene geometry and semantics. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 7482–7491, 2018. [36] Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. Recurrent marked temporal point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining , pages 1555–1564, 2016. [37] Qiang Zhang, Aldo Lipani, Omer Kirnap, and Emine Yilmaz. Self-attentive hawkes process. In International conference on machine learning , pages 11183– 11193. PMLR, 2020. [38] Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, and Hongyuan Zha. Trans-former hawkes process. In International conference on machine learning , pages 11692–11702. PMLR, 2020. [39] Chenghao Yang, Hongyuan Mei, and Jason Eisner. Transformer embeddings of irregularly spaced events and their participants. arXiv preprint arXiv:2201.00044 ,2021. [40] Oleksandr Shchur, Marin Biloš, and Stephan Günnemann. Intensity-free learning of temporal point processes. arXiv preprint arXiv:1909.12127 , 2019. [41] Takahiro Omi, Kazuyuki Aihara, et al. Fully neural network based model for general temporal point processes. Advances in neural information processing systems , 32, 2019. [42] Ricky TQ Chen, Brandon Amos, and Maximilian Nickel. Neural spatio-temporal point processes. arXiv preprint arXiv:2011.04583 , 2020. [43] Siqiao Xue, Xiaoming Shi, Zhixuan Chu, Yan Wang, Hongyan Hao, Fan Zhou, Caigao Jiang, Chen Pan, James Y Zhang, Qingsong Wen, et al. Easytpp: Towards open benchmarking temporal point processes. arXiv preprint arXiv:2307.08097 ,2023. [44] Hongyuan Mei, Guanghui Qin, and Jason Eisner. Imputing missing events in continuous-time event streams. In International Conference on Machine Learning ,pages 4475–4485. PMLR, 2019. [45] Pendle Finance. susde pool — trade & zap interface. https://app.pendle.finance/ trade/pools/0xe06c3b972ba630ccf3392cecdbe070690b4e6b55/zap/in?chain= plasma, 2025. Accessed: 2025-10-07. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 
+
+## A Auto Market Makers A.1 AMM Formulation 
+
+Unlike the Limit Order Book (LOB) mechanism prevalent in centralized exchanges, Decentralized Exchanges (DEXs) predominantly utilize the Automated Market Maker (AMM) protocol. An AMM acts as an algorithmic agent that provides continuous, 24/7 liquidity without the need for a specific counterparty. It replaces traditional "maker" orders with a deterministic pricing formula governed by a conservation function stored in a smart contract. Protocol Participants: The AMM ecosystem primarily consists of three roles: 
+
+• Liquidity Providers (LPs): Agents who deposit assets (e.g., pairs of tokens) into a liquidity pool to facilitate trading, earning protocol fees (typically 0.3%) in return. 
+
+• Traders: Users who execute swaps with the liquidity pool. 
+
+• Arbitrageurs: Sophisticated agents who monitor external market prices (CEXs) and execute trades to align the AMM price with the market price, thereby ensuring price efficiency. Conservation Function: The generic class of these protocols is termed Constant Function Market Makers (CFMMs). A liquidity pool holding reserves of two assets, 𝑥 and 𝑦 , is governed by a convex function 𝜓 (𝑥, 𝑦 ) such that the value remains constant across a trade: 
+
+𝜓 (𝑥, 𝑦 ) = 𝜓 (𝑥 − Δ𝑥, 𝑦 + Δ𝑦 ) = 𝑘 (1) where Δ𝑥 is the output amount withdrawn by the trader and Δ𝑦 is the input amount deposited. Pricing Mechanism:The spot price 𝑃 𝑥 (the price of asset 𝑋 in terms of 𝑌 ) is defined as the marginal rate of substitution at the current state, derived via the implicit function theorem: 
+
+𝜕𝜓 𝜕𝑥 𝑑𝑥 + 𝜕𝜓 𝜕𝑦 𝑑𝑦 = 0 =⇒ 𝑃 𝑥 = −𝑑𝑦 𝑑𝑥 = 𝜕 𝑥 𝜓 𝜕 𝑦 𝜓 (2) For the standard Constant Product Market Maker (CPMM) where 𝑥𝑦 = 𝑘 , the spot price is simply the ratio of reserves: 𝑃 𝑥 = 𝑦 /𝑥 .
+
+## A.2 AMM Insights 
+
+While the formulation provides the mechanism, the economic implications of AMMs differ significantly from traditional markets.Slippage and Execution Price:In AMMs, large orders traverse a significant portion of the bonding curve, resulting in slippage —the difference between the spot price at the time of the order and the effective execution price. 
+
+Example A.1. Consider a pool with reserves 𝑥 = 100 ETH, 𝑦 = 40 , 000 USDC ( 𝑘 = 4 × 10 6). The initial spot price is 𝑃 𝑠𝑝𝑜𝑡 = 400 USDC/ETH. A trader purchasing Δ𝑥 = 10 ETH effectively shifts the pool to 𝑥 ′ = 90 . Based on (𝑥 − Δ𝑥 )( 𝑦 + Δ𝑦 ) = 𝑘 , the new 𝑦 ′ requires Δ𝑦 ≈ 4, 444 .44 
+
+USDC.The effective price is ¯𝑃 = 444 .44 USDC/ETH. The slippage is ¯𝑃 − 𝑃 𝑠𝑝𝑜𝑡 = 44 .44 USDC/ETH ( 11 .11% ). While positive slippage (favorable execution) is possible via mean-reversion, negative slippage is inherent to convex invariant curves. Impermanent Loss (IL) vs. Arbitrage Loss (AL):LPs face specific risks distinct from holding assets. 
+
+• Impermanent Loss (IL): The opportunity cost of providing liquidity versus holding the assets outside the pool (HODL). If the external price shifts from 𝑃 0 to 𝑃 1, the pool rebalances. If prices revert to 𝑃 0, IL vanishes. 
+
+• Arbitrage Loss (AL): Also known as Loss-Versus-Rebalancing (LVR). This represents the absolute profit extracted by arbitrageurs. When the pool price lags behind the external market, arbitrageurs trade against the pool at a stale price. Event-Driven Price Dynamics: A critical and often overlooked distinction in DeFi forecasting is the fundamental nature of price updates. In traditional Centralized Finance (CeFi), market makers and high-frequency trading algorithms actively adjust quotes in milliseconds based on continuous off-chain information flows (news, sentiment, macro data). In stark contrast, AMMs operate as passive, deterministic state machines . This passive nature dictates that the on-chain price is not a continuous function of time, but a discrete function of transaction events. 
+
+• Typology of Event Impact: Not all events impact the system identically. We distinguish between two primary classes of updates: 
+
+– Swap Events (First-Order Impact): These events directly traverse the bonding curve 𝜓 (𝑥, 𝑦 ) = 𝑘 , altering the ratio 𝑦 /𝑥 and thus causing an immediate shift in the spot price 𝑃 . The magnitude of the shift is deterministic and dependent on the swap size relative to the pool depth. 
+
+– Liquidity Events (Second-Order Impact): Mint and Burn events typically do not alter the spot price directly (assuming assets are deposited at the current ratio), but they alter the curvature of the bonding curve (changing 𝑘 ). This modifies the pool’s price sensitivity (or depth). A massive Burn event, for instance, makes the pool shallow, causing subsequent Swap events to trigger significantly larger price slippage. 
+
+• Arbitrage as the Information Bridge: Since the AMM is isolated from the real world, the "Event" serves as the sole bridge for information transmission. When off-chain prices shift, an arbitrage opportunity opens. The arrival of an arbitrage Swap event on-chain is the actualization of that off-chain information. Therefore, forecasting the arrival and magnitude of these arbitrage events is functionally equivalent to forecasting the convergence of the on-chain price to the fair market value. Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+## B Dataset B.1 Dataset Notions 
+
+We provide detailed descriptions of the event schemas and field definitions for each protocol in Tables 8, 9, 10, and 11. 
+
+## B.2 Dataset Pipelines 
+
+Our data acquisition infrastructure leverages a read-only Ethereum full node via Chainstack’s JSON-RPC interface to extract historical events from Aave V3, Morpho Blue, Uniswap V3, and Pendle spanning Jan 2024 to Sep 2025. Block-level temporal resolution is achieved by mapping timestamps to block heights through binary search on eth_getBlockByNumber, while parallel processing via a 6–8 worker pool accelerates large-range scans. Transient RPC failures are mitigated through exponential backoff retries, ensuring fault-tolerant execution over multi-month ranges. For Aave, Morpho, and Uniswap V3, we employ event-log extraction using eth_getLogs with ABI-derived topic filters (e.g., Swap , Supply , Liquidate ), segmenting large ranges into 2,000–10,000 block chunks to avoid timeouts; raw logs are parsed and normalized by token decimals. Pendle requires a state-based approach: we invoke view functions (e.g., readState) via eth_call every 100 blocks to snapshot market state and derive Principal Token (PT) and Yield Token (YT) prices according to Pendle’s pricing model. All outputs are standardized into a unified JSON schema with block-aligned timestamps and decimal-normalized values, organized by asset/pool identifiers for efficient downstream analysis. 
+
+## B.3 Dataset Description 
+
+This study utilizes high-fidelity blockchain event data extracted from the smart contracts of four major DeFi protocols: Uniswap V3, Aave, Morpho, and Pendle. The data covers a diverse range of liquidity pools and lending markets. Each dataset is structured in JSON format, chronologically ordered by block number. Common attributes across all datasets include block_number , timestamp , transaction_hash ,and log_index , ensuring precise temporal alignment and event ordering. 
+
+B.3.1 Uniswap V3 Event Data. The Uniswap V3 dataset captures liquidity and trading activities within specific Token 0–Token 1 liquidity pools on Ethereum mainnet. We consider five major pools: USDC-ETH , WBTC-ETH , WBTC-USDC , ETH-USDT , and WBTC-USDT .The dataset comprises 4,861,101 events in total, spanning blocks approximately 18.9M–23.3M (circa January 2024–August 2025). The most active pool, USDC-ETH, contributes roughly 80% of all events (3.9M); the remaining pools each contain between 137k and 507k events. This volume and coverage make the dataset representative of both high- and moderate-liquidity AMM venues. 
+
+• Event Types: – Mint/Burn: Liquidity provision and removal events. These alter the pool’s active liquidity distribution and, indirectly, execution prices. 
+
+– Swap: Token exchange events. Each swap corresponds to a price-moving trade. 
+
+• Schema: Key fields include type , blockNumber , txHash , and timestamp . It also tracks token flows via amount0 and amount1 (where negative values indicate outgoing assets and positive values indicate incoming ones). 
+
+Figure 6: Uniswap Event Analysis 
+
+Event composition. Trading (Swap) events dominate. Across all pools, 94.2% of events are Swaps and 5.8% are Mint/Burn; the Swap-to-liquidity ratio is approximately 16.2:1 overall. The share of liquidity events varies by pool: USDC-ETH is most swap-heavy (96.0% Swap, ratio 24.3), while WBTC-ETH and WBTC-USDC have a larger liquidity component (about 18% Mint/Burn, ratio ∼4.6). This imbalance indicates that price-relevant signals (Swaps) are interspersed with liquidity updates (Mint/Burn), which can be treated as regime-changing or auxiliary events depending on the forecasting objective. 
+
+Temporal sparsity and irregularity. The data are block-indexed 
+
+and event-driven : timestamps align with block times, and events occur only when user or protocol actions trigger them. Con-secutive events are separated by a block difference Δ𝑏 =
+
+blockNumber 𝑖 +1 − blockNumber 𝑖 . Our analysis yields the fol-lowing: 
+
+Block intervals: The median inter-event block interval across all pools is 1 block; the mean is 4.5 blocks. The mean is inflated by long idle periods: per-pool averages range from 1.1 (USDC-ETH) to 31.8 (WBTC-USDT) blocks. 
+
+Zero-event blocks: A large fraction of blocks in the covered range contain no Uniswap events for a given pool. For USDC-ETH, 46.4% of blocks are empty; for WBTC-ETH, WBTC-USDC, and WBTC-USDT, the fraction rises to 96.7–97.1% . Only USDC-ETH exhibits a moderate share of non-empty blocks; the others are highly sparse. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 
+
+Maximum gap: The largest observed gap between two consecutive events within a single pool is 3,423 blocks (WBTC-USDT). Gaps of hundreds to thousands of blocks are common for less active pools, underscoring long periods of inactivity. This sparsity and irregularity have direct implications for modeling. Standard continuous time-series methods (e.g., fixed-step ARIMA, many RNN-based forecasts) assume regularly sampled observations. Here, neither clock-time nor block-time is regular at the event level: many blocks have zero events, and inter-arrival times vary from 0 (multiple events in one block) to thousands of blocks. Treating the stream as a regular series therefore requires arbitrary resampling (e.g., aggregating by block or hour), which discards event-level structure and can distort lead-lag relationships. Event-aware approaches that operate directly on the point process (e.g., block index and inter-arrival statistics) are better aligned with the data-generating process. 
+
+Burstiness. Hourly event counts exhibit substantial variance. The coefficient of variation (CV) of counts per hour ranges from 0.43 
+
+(USDC-ETH) to 1.18 (WBTC-USDC), indicating periods of intense activity followed by relative silence. This burstiness supports the view that AMM activity is driven by discrete, clustered events rather than a smooth, continuous flow—further motivation for event-centric forecasting. 
+
+B.3.2 Lending Protocols: Aave and Morpho. In contrast to the temporal sparsity analysis of Uniswap, we examine the market structure and 
+
+capital dynamics of lending protocols. These protocols exhibit fundamentally different patterns: while AMMs are driven by discrete trading events, lending protocols reveal how capital flows through supply, borrowing, and repayment cycles. 
+
+Figure 7: aave 
+
+Value Distribution & Whale Dominance. Transaction sizes in lending protocols follow heavy-tailed distributions, indicating significant concentration among large actors (“whales”). In Mor-pho, we analyze 94,662 events across five types: Supply (44,020), Withdraw (33,958), Borrow (10,272), Repay (6,155), and Liquidate (257). The distribution of transaction values (Figure 8) reveals several patterns: 
+
+Heavy-tailed distribution: All event types exhibit log-normal-like distributions with long tails. The median transaction sizes range from 28B (Borrow) to 253B (Withdraw) in the small-est token units, while means are inflated by extreme outliers (e.g., Supply mean: 2.82 × 10 19 , median: 9.71 × 10 10 ). 
+
+Event-type differences: Withdraw events show the highest median value ( 2.53 × 10 11 ), suggesting that users tend to withdraw larger positions than they supply. Borrow events have the lowest median (2.80 × 10 10 ), indicating more frequent, smaller borrows. 
+
+Liquidation scale: While liquidations are rare (257 events, 0.27% of total), they involve substantial notional value. The median liquidation size ( 8.35 × 10 10 ) is comparable to typical borrows, but the 99th percentile reaches 2.65 × 10 12 —nearly 100 × the median—highlighting the risk concentration in large positions. The heavy-tailed nature of these distributions confirms that lending protocols are dominated by a small number of large actors, with the majority of capital controlled by whales. This concentration has implications for protocol stability: large withdrawals or liquidations can cause significant market impact. 
+
+Event Interdependence. Lending protocols exhibit strong temporal coupling between different event types, reflecting the interdependent nature of supply, borrowing, and repayment cycles. We analyze Aave event counts aggregated into 4-hour windows (3,654 windows covering 2024–2025) and compute correlation matrices between Supply, Borrow, Withdraw, and Repay activities (Figure 7). The analysis excludes 
+
+liquidationCall events, which lack amount metadata and occur infrequently relative to core liquidity events. 
+
+Figure 8: morpho 
+
+The correlation analysis reveals: Strong supply-withdraw coupling: Supply and Withdraw events show the highest cor-relation ( 𝜌 Pearson = 0.933 , 𝜌 Spearman = 0.959 ), indicating that periods of high deposit activity coincide with high withdrawal activity. This suggests active capital rotation rather than simple accumulation. 
+
+Supply-borrow correlation: Supply and Borrow are strongly correlated ( 𝜌 Pearson = 0.848 , 𝜌 Spearman = 0.927 ), demon-strating that available liquidity is quickly utilized. This immedi-ate utilization pattern is consistent with efficient market behav-ior where capital is deployed as soon as it becomes available. 
+
+Repayment patterns: Repay events correlate strongly with both Supply ( 𝜌 Pearson = 0.840 ) and Withdraw ( 𝜌 Pearson = 0.825 ), suggesting that repayment activity often coincides with cap-ital movements. The Spearman correlation is even higher Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+(𝜌 Spearman > 0.90 for all pairs), indicating robust rank-order relationships. The strong temporal correlations indicate that lending proto-cols exhibit market coupling : supply and borrowing activities are not independent but occur in coordinated patterns. This coupling has implications for forecasting: models that treat events as independent will miss important cross-event dependencies. Event-aware approaches that capture these interdependencies can provide more accurate predictions of protocol dynamics. 
+
+Table 4: Token Distribution Across Different Categories. 
+
+Categories Token Name Amt. 
+
+Stablecoin usd, usdc, usdt, dai, frax, gho 171 ETH eth, weth, steth, reth, ezeth 91 BTC btc, wbtc, pbtc, ebtc, lbtc 33 
+
+B.3.3 Pendle. Product Type and Asset Composition. 
+
+We catalogued 295 active Pendle markets as of August 2024, as described in Table 4. The distribution reveals a significant concentration in stablecoin-based markets (58%), followed by Ethereum liquid staking derivatives (31%). This dominance is economically intuitive within the DeFi ecosystem: on-chain lending and restaking pro-tocols overwhelmingly utilize interest-bearing stablecoins as collateral and reward mechanisms. Consequently, there exists a persistent, low-volatility demand for fixed-rate exposure on stable assets to hedge against yield compression. From a data perspective, this composition introduces a specific bias: since stablecoins are pegged to fiat, the volatility in the majority of these markets is driven almost exclusively by 
+
+yield volatility rather than underlying asset price volatility . This separation allows our analysis to isolate pure interest-rate dynamics, distinct from the speculative noise often found in volatile crypto-asset trading. 
+
+Temporal Dynamics and Market Regimes. We consider each on-chain event as a discrete transaction and aggregate them daily to measure frequency. Our dataset encompasses nearly two million transactions across 295 products spanning from January 2024 to September 2025. The temporal analysis, presented in Figure 9, uncovers three critical behavioral patterns relevant to forecasting: (1) Declining Trend and Market Maturation: As shown in Figure 9a, the trend line exhibits a gradual downward slope. This suggests that while the protocol’s Total Value Locked (TVL) may be growing, the velocity of trading per unit of capital is decreasing, a sign of market maturation where high-frequency speculative farming gives way to longer-term holding strategies. 2024-01 
+
+> 2024-03
+> 2024-05
+> 2024-07
+> 2024-09
+> 2024-11
+> 2025-01
+> 2025-03
+> 2025-05
+> 2025-07
+> 2025-09
+> Date
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> Daily Trade Count  Trend Line
+
+(a) Daily Count 0 2000 4000 6000 8000  
+
+> Daily Trade Count
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> Frequency
+> Mean: 2706
+> Median: 2060
+
+(b) Frequency Dist. 40000 60000 80000 100000 120000 
+
+> BTC Price (USD)
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> Daily Trade Count
+
+(c) vs BTC Price 1500 2000 2500 3000 3500 4000 4500  
+
+> ETH Price (USD)
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> Daily Trade Count
+
+(d) vs ETH Price 
+
+Figure 9: Trading Frequency of Pendle Products. 
+
+(2) Heavy-Tailed Activity Distribution: Figure 9b illus-trates that trading frequency follows a right-skewed dis-tribution. The mean daily trading count (2,706) signifi-cantly exceeds the median (2,060), indicating the presence of "bursty" days with exceptionally high activity. These outliers typically correspond to major DeFi events (e.g., EigenLayer airdrops or sudden gas spikes), suggesting that models must be robust to non-Gaussian noise. (3) The Capital Rotation Effect: Perhaps the most intrigu-ing insight is the negative correlation between trading frequency and the spot prices of Bitcoin and Ethereum (Figures 9c and 9d). This counter-intuitive relationship supports a "capital rotation" hypothesis: when BTC/ETH prices surge (bull market), capital flows into spot as-sets for delta exposure, reducing yield-derivative trading. Conversely, in stagnant or bearish market conditions, investors flock to Pendle to lock in fixed yields or spec-ulate on interest rates, increasing protocol activity. This implies that Pendle acts as a counter-cyclical instrument, providing valuable diversification signals for holistic mar-ket forecasting. 
+
+Product Lifecycle and Event Stratification. To fully characterize the micro-structure of these markets, we analyze four key on-chain event types: Mint , Swap , Burn , and UpdateImpliedRate . These events map directly to the creation, secondary trading, redemption, and yield revaluation phases of the Pendle lifecycle. The data reveal a clear temporal stratification. Mint and Swap events occur at high frequency with smaller typical sizes, representing continuous retail participation and arbitrage bots smoothing price disparities. In stark contrast, Burn 
+
+events are sparse but involve magnitudes orders significantly larger, consistent with the expiration of large institutional positions. Finally, the extremely frequent UpdateImpliedRate events provide a high-resolution heartbeat of the system’s internal accounting. From a modeling perspective, this heterogeneity poses a challenge for uniform time-series sampling: a standard 1-hour window might capture dozens of Swaps but miss the structural "shocks" introduced by rare Burn events. This necessitates the event-aware architecture proposed in our methodology, which can dynamically adapt to the irregular arrival times of these distinct event classes. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 
+
+Table 5: Summary of experiment environment and hyperparameters. 
+
+Category Specification Category Specification Hardware 2 × AMD EPYC 9554 (64 cores per socket, 256 threads) 
+
+GPU NVIDIA GeForce RTX 5090 (32 GB, CUDA 13.0) 
+
+Memory 1.1 TiB RAM OS / Arch. Linux x86_64, AVX512 enabled 
+
+Framework EasyTPP v0.1.3 (PyTorch 2.8.0+cu128) Precision FP32 (single precision) 
+
+Random Seeds {2019, 2020, 2021, 2022, 2023} Reproducibility Fixed seeds, identical splits 
+
+Padding Right-side, pad token ID = 31 Truncation Dynamic, max length = 300 blocks 
+
+Hidden Size 64 Dropout Rate 0.1 
+
+MC Samples (Integral) 20 per step Loss NLL or UWM 
+
+Optimizer Adam Learning Rate {1e-2, 1e-3, 1e-4} (constant) 
+
+Batch Size 16 per GPU Epochs / Stop 100 epochs, early stop by validation log-likelihood 
+
+Gradient Accumulation 4 Scheduler None 
+
+Validation Metric Log-likelihood (for selection) Test Metrics Type-Acc, Time-RMSE, OTD (horizon = 3,5,7,9,11) 
+
+Evaluation Frequency Every epoch Runs Mean ± std. over 5 seeds 
+
+Training Time ≈1–4 h per model on RTX 5090 GPU Memory < 20 GB usage 
+
+Table 6: Evaluation results of baseline models and their Uncertainty Weighted MSE (UWM) variants of Pendle Dataset. The first row for each model is the mean, the second row is the standard deviation. We run each experiment for 5 independent seeds and report mean ± std. 
+
+Baseline (NLL) With UWM Loss Model Type-Acc ↑ Time RMSE ↓ OTD ↓ Type-Acc ↑ Time RMSE ↓ OTD ↓
+
+NHP 0.550 108.888 9.051 0.555 94.280 9.265 
+
+±0.003 ±1.84 ±0.043 ±0.003 ±0.21 ±0.048 RMTPP 0.464 769.139 9.281 0.480 95.546 9.248 
+
+±0.018 ±147.25 ±0.070 ±0.00 ±0.1 ±0.054 SAHP 0.547 93.872 9.155 0.531 93.983 9.128 
+
+±0.006 ±3.85 ±0.063 ±0.021 ±0.29 ±0.070 THP 0.219 958.375 9.733 0.358 94.498 9.044 
+
+±0.067 ±62.965 ±0.116 ±0.014 ±1.279 ±0.041 AttNHP 0.484 100.634 9.151 0.531 96.730 9.040 
+
+±0.004 ±2.222 ±0.027 ±0.003 ±3.32 ±0.032 IntensityFree 0.558 81.318 9.607 – – –
+
+±0.001 ±2.497 ±0.016 – – –FullyNN 0.471 665.560 9.762 0.431 91.084 9.430 
+
+±0.042 ±110.6 ±0.159 ±0.062 ±1.714 ±0.089 ODETPP 0.431 6815.468 9.820 0.195 277.069 9.739 
+
+±0.040 ±1266.82 ±0.056 ±0.092 ±2.24 ±0.277 Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+Table 7: Evaluation results of baseline models and their Uncertainty Weighted MSE (UWM) variants of Uniswap V3 Dataset. The first row for each model is the mean, the second row is the standard deviation. We run each experiment for 5 independent seeds and report mean ± std. 
+
+Baseline (NLL) With UWM Loss Model Type-Acc ↑ Time RMSE ↓ OTD ↓ Type-Acc ↑ Time RMSE ↓ OTD ↓
+
+NHP 0.454 5.259 9.051 0.453 4.704 9.265 
+
+±0.002 ±0.124 ±0.039 ±0.002 ±0.098 ±0.042 RMTPP 0.459 5.283 9.281 0.428 6.591 9.248 
+
+±0.009 ±0.074 ±0.065 ±0.005 ±0.537 ±0.051 SAHP 0.405 4.640 9.155 0.407 4.630 9.128 
+
+±0.002 ±0.049 ±0.058 ±0.018 ±0.018 ±0.062 THP 0.462 5.059 9.733 0.450 5.056 9.044 
+
+±0.020 ±0.030 ±0.102 ±0.020 ±0.004 ±0.035 AttNHP 0.340 25.490 9.151 0.430 5.030 9.040 
+
+±0.020 ±2.310 ±0.025 ±0.010 ±0.020 ±0.029 IntensityFree 0.447 4.638 9.607 – – –
+
+±0.015 ±0.159 ±0.019 – – –FullyNN 0.074 108.725 9.762 0.082 105.43 9.430 
+
+±0.011 ±1.606 ±0.145 ±0.008 ±1.295 ±0.081 ODETPP 0.438 5.198 9.820 0.356 7.469 9.739 
+
+±0.005 ±0.285 ±0.052 ±0.093 ±1.389 ±0.215 
+
+Table 8: Event information and field descriptions in Uniswap V3. Information category Name Description Basic Information 
+
+type The event type: one of mint , burn , or swap 
+
+timestamp Unix timestamp of the block in which the transaction occurred blockNumber The block height at which the event occurred txHash The unique hash of the transaction (0x-prefixed hexadecimal string) 
+
+Detailed Information By Event Parameters vary by event type; see amount0 and amount1 below. 
+
+Mint amount0 Amount of token0 added to the pool; empty string if not recorded amount1 Amount of token1 added to the pool; empty string if not recorded 
+
+Burn amount0 Amount of token0 withdrawn from the pool; empty string if not recorded amount1 Amount of token1 withdrawn from the pool; empty string if not recorded 
+
+Swap amount0 Signed amount of token0: negative = outgoing from the pool, positive = incoming to the pool amount1 Signed amount of token1: negative = outgoing from the pool, positive = incoming to the pool 
+
+## C Complete Evaluation Results of Baseline Models and UWM Variants 
+
+Table 6 and Table 7 present the full evaluation results of the baseline models and their Uncertainty Weighted MSE (UWM) variants in Pendle dataset and Uniswap V3 dataset.. A partial version of this table was included in the table 3. Here, we provide the complete set of metrics and statistics for all models. Higher ↑ values indicate better Type-Acc performance, while lower ↓ values indicate better RMSE and OTD. KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 
+
+Table 9: Event information and field descriptions in Aave Protocol. Information category Name Description Basic Information 
+
+event_type The transaction event type: one of Supply, Borrow, Withdraw, or Repay timestamp The exact time when the transaction occurred (Unix timestamp of the block) block_number The block height at which the transaction occurred transaction_hash The unique hash value of the transaction tx_index The index of the transaction within the block log_index The log index of this event within the transaction asset The address of the reserve token (0x-prefixed hexadecimal string) asset_role Role of the asset, typically “reserve” user The address of the user performing the action on_behalf_of The address on whose behalf the action is performed; zero address for direct actions 
+
+Detailed Information By Event Parameters vary depending on the type of event 
+
+Supply referral_code Referral code used (optional; only present for some supply events) amount Amount of tokens supplied (optional; may be missing for some events) 
+
+Borrow No additional fields beyond Basic Information 
+
+Withdraw amount The amount of tokens withdrawn from the reserve to The recipient address receiving the withdrawn tokens 
+
+Repay 
+
+amount The amount of tokens repaid to the reserve repayer The address of the account repaying the debt use_a_tokens Whether repayment was made using aTokens ( true ) or the underlying asset (false )
+
+## D Experiment Settings 
+
+To ensure reproducibility, all experiments were performed under a consistent hardware-software environment. Table 5 summarizes the complete setup, covering hardware, framework, model configuration, and key hyperparameters. Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols KDD ’26, August 09–13, 2026, Jeju, Korea 
+
+Table 10: Event information and field descriptions in Morpho Protocol. Information category Name Description Basic Information 
+
+event_type The transaction event type: one of Supply, Borrow, Withdraw, Repay, or Liquidate block_number The block height at which the transaction occurred transaction_hash The unique hash value of the transaction log_index The log index of this event within the transaction market_id Unique identifier for the Morpho market (0x-prefixed hexa-decimal string) 
+
+Detailed Information By Event All event types share the following fields; event_type distin-guishes the action. 
+
+Supply / Borrow / Withdraw / Repay / Liquidate 
+
+user The address of the user performing the action (0x-prefixed hexadecimal string) receiver The address receiving the tokens (0x-prefixed hexadecimal string) amount Gross amount of tokens involved, in wei or smallest unit net_amount Net amount after protocol fees and adjustments, in wei or smallest unit KDD ’26, August 09–13, 2026, Jeju, Korea Trovato et al. 
+
+Table 11: Event information and field descriptions in Pendle Protocol. Information category Name Description Basic Information 
+
+event_type The transaction event type: one of Mint, Burn, UpdateImpliedRate, or Swap timestamp The exact time when the transaction occurred block_number The block height at which the transaction occurred transaction_hash The unique hash value of the transaction log_index The log index of this event within the block 
+
+Detailed Information By Event Parameters vary depending on the type of event 
+
+Mint 
+
+receiver The address receiving the newly minted LP tokens netLpMinted The actual amount of LP tokens minted and assigned to the receiver netSyUsed The actual amount of SY tokens used and deposited into the pool for liquidity netPtUsed The actual amount of PT tokens used and deposited into the pool for liquidity 
+
+Burn 
+
+receiverSy The address receiving the returned SY tokens receiverPt The address receiving the returned PT tokens netLpBurned The amount of LP tokens burned in this transaction netSyOut The actual amount of SY tokens withdrawn after burning netPtOut The actual amount of PT tokens withdrawn after burning 
+
+UpdateImpliedRate lnLastImpliedRate The implied rate at the previous block 
+
+Swap 
+
+caller The external contract/account initiating the call, and the actual payer of SY tokens receiver The target address receiving the exact amount of PT tokens netPtOut The exact amount of PT the user wants to receive; negative means PT flows into the pool, positive means PT flows to the receiver netSyOut The amount of SY the user must deposit into the pool to get PT; negative means SY flows into the pool, positive means SY flows to the receiver netSyFee The SY fee paid to liquidity providers, retained in the pool to increase reserves netSyToReserve Additional SY transferred to the protocol reserve for long-term incentives and insurance

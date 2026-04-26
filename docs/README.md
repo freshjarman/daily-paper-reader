@@ -6,67 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-19
-- 运行时间：2026-04-19 19:41:21 UTC
+- 最新运行日期：2026-04-26
+- 运行时间：2026-04-26 20:32:13 UTC
 - 运行状态：成功
-- 本次总论文数：15
-- 精读区：4
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日深度研读 15 篇前沿成果，核心聚焦时空点过程的渐近理论与复杂因果推断。
-重点解析了极端值时空分布的数学极限，并为存在溢出效应的因果分析提供了新框架。
-推荐关注时空随机过程在卫星降水修正及极端天气预报中的落地应用。
-- 详情：[/202604/19/README](/202604/19/README)
+今日深度研读 17 篇前沿成果，重点聚焦获满分评价的公平性感知时空事件图框架 FASE。
+核心突破在于通过图神经网络消除警务预测中的算法偏见，同时医疗多模态大模型与 DeFi 链上预测亦有亮眼表现。
+推荐关注 AI 如何在社会治理与智慧医疗中平衡效率与公平，探索跨领域技术的落地可能。
+- 详情：[/202604/26/README](/202604/26/README)
 
 ### 精读区论文标签
-1. [Asymptotic behavior of spatio-temporal point processes of exceedances](/202604/19/2604.11691v1-asymptotic-behavior-of-spatio-temporal-point-processes-of-exceedances)  
+1. [FASE : A Fairness-Aware Spatiotemporal Event Graph Framework for Predictive Policing](/202604/26/2604.18644v1-fase--a-fairness-aware-spatiotemporal-event-graph-framework-for-predictive-policing)  
    标签：评分：10.0/10、query:tpp-es
-   evidence：时空点过程超越值的渐近行为分析
-2. [Causal inference for spatiotemporal point processes in the presence of outcome spillover and carryover](/202604/19/2604.12124v1-causal-inference-for-spatiotemporal-point-processes-in-the-presence-of-outcome-spillover-and-carryover)  
+   evidence：用于时空犯罪预测的多变量霍克斯过程
+2. [FASE : A Fairness-Aware Spatiotemporal Event Graph Framework for Predictive Policing](/202604/26/2604.18644v2-fase--a-fairness-aware-spatiotemporal-event-graph-framework-for-predictive-policing)  
    标签：评分：10.0/10、query:tpp-es
-   evidence：连续时空点过程结果的因果推理框架。
-3. [Early-Warning Learner Satisfaction Forecasting in MOOCs via Temporal Event Transformers and LLM Text Embeddings](/202604/19/2604.13241v1-early-warning-learner-satisfaction-forecasting-in-moocs-via-temporal-event-transformers-and-llm-text-embeddings)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：针对细粒度行为事件序列的时间事件Transformer
-4. [GenTac: Generative Modeling and Forecasting of Soccer Tactics](/202604/19/2604.11786v1-gentac-generative-modeling-and-forecasting-of-soccer-tactics)  
+   evidence：用于时空犯罪预测的多变量霍克斯过程
+3. [Causal-Temporal Event Graphs: A Formal Model for Recursive Agent Execution Traces](/202604/26/2604.17557v1-causal-temporal-event-graphs-a-formal-model-for-recursive-agent-execution-traces)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：连续轨迹和离散语义事件上的随机过程
+   evidence：带有时间戳和事件类型的递归代理执行轨迹的形式化模型
+4. [LiquidTAD: An Efficient Method for Temporal Action Detection via Liquid Neural Dynamics](/202604/26/2604.18274v1-liquidtad-an-efficient-method-for-temporal-action-detection-via-liquid-neural-dynamics)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：用于时间动作检测的液态神经网络中的连续时间动力学
+5. [A multimodal and temporal foundation model for virtual patient representations at healthcare system scale](/202604/26/2604.18570v1-a-multimodal-and-temporal-foundation-model-for-virtual-patient-representations-at-healthcare-system-scale)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：用于纵向医疗事件的多模态时间基础模型
+6. [STK-Adapter: Incorporating Evolving Graph and Event Chain for Temporal Knowledge Graph Extrapolation](/202604/26/2604.19042v1-stk-adapter-incorporating-evolving-graph-and-event-chain-for-temporal-knowledge-graph-extrapolation)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：基于时序知识图谱中的历史事实预测未来事件
 
 ### 速读区论文标签
-1. [A Linear Temporal Logic of Frequencies on Series of Events](/202604/19/2604.10669v1-a-linear-temporal-logic-of-frequencies-on-series-of-events)  
-   标签：评分：7.5/10、query:tpp-es
-   evidence：用于评估事件序列频率并预测未来发生的正式框架。
-2. [Neural Stochastic Processes for Satellite Precipitation Refinement](/202604/19/2604.10414v1-neural-stochastic-processes-for-satellite-precipitation-refinement)  
+1. [Circadian Phase Locking of Epilepsy Seizures in Wearable Data: A Single-Patient Case Study](/202604/26/2604.18297v1-circadian-phase-locking-of-epilepsy-seizures-in-wearable-data-a-single-patient-case-study)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：针对连续信号中离散事件的癫痫发作预测技术
+2. [A multimodal and temporal foundation model for virtual patient representations at healthcare system scale](/202604/26/2604.18570v2-a-multimodal-and-temporal-foundation-model-for-virtual-patient-representations-at-healthcare-system-scale)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：整合独特医学事件的时间基础模型
+3. [Towards Event-Aware Forecasting in DeFi: Insights from On-chain Automated Market Maker Protocols](/202604/26/2604.20374v1-towards-event-aware-forecasting-in-defi-insights-from-on-chain-automated-market-maker-protocols)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：价格动态的事件感知建模与事件级分析
+4. [Promoting Simple Agents: Ensemble Methods for Event-Log Prediction](/202604/26/2604.21629v1-promoting-simple-agents-ensemble-methods-for-event-log-prediction)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：使用神经和自动机模型对流式事件日志进行下一活动预测
+5. [EdgeVTP: Exploration of Latency-efficient Trajectory Prediction for Edge-based Embedded Vision Applications](/202604/26/2604.16783v1-edgevtp-exploration-of-latency-efficient-trajectory-prediction-for-edge-based-embedded-vision-applications)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：使用潜神经微分方程进行时空建模的神经随机过程
-3. [Forecasting Return Time of Extreme Precipitation by Large Deviation Theory](/202604/19/2604.10890v1-forecasting-return-time-of-extreme-precipitation-by-large-deviation-theory)  
+   evidence：使用图建模和Transformer进行未来运动轨迹预测
+6. [Learning Lifted Action Models from Unsupervised Visual Traces](/202604/26/2604.19043v1-learning-lifted-action-models-from-unsupervised-visual-traces)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：利用大偏差理论预测极端降水事件的回归时间
-4. [Sheaf Diffusion with Adaptive Local Structure for Spatio-Temporal Forecasting](/202604/19/2604.11275v1-sheaf-diffusion-with-adaptive-local-structure-for-spatio-temporal-forecasting)  
+   evidence：从状态图像序列中学习动作模型以进行事件预测
+7. [StormNet: Improving storm surge predictions with a GNN-based spatio-temporal offset forecasting model](/202604/26/2604.20688v2-stormnet-improving-storm-surge-predictions-with-a-gnn-based-spatio-temporal-offset-forecasting-model)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：使用层扩散图神经网络进行时空预测
-5. [DBGL: Decay-aware Bipartite Graph Learning for Irregular Medical Time Series Classification](/202604/19/2604.11842v1-dbgl-decay-aware-bipartite-graph-learning-for-irregular-medical-time-series-classification)  
+   evidence：用于预测和捕捉依赖关系的时空图神经网络
+8. [Scalable Sensor Scheduling for Continuous-Discrete Kalman Filtering via Information-Form Surrogate Dynamics](/202604/26/2604.21302v1-scalable-sensor-scheduling-for-continuous-discrete-kalman-filtering-via-information-form-surrogate-dynamics)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：时间序列中的不规则采样模式和变量间隔
-6. [FAST: A Synergistic Framework of Attention and State-space Models for Spatiotemporal Traffic Prediction](/202604/19/2604.13453v1-fast-a-synergistic-framework-of-attention-and-state-space-models-for-spatiotemporal-traffic-prediction)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：结合注意力和状态空间模型的时空交通预测
-7. [Deep Situation-Aware Interaction Network for Click-Through Rate Prediction](/202604/19/2604.12298v1-deep-situation-aware-interaction-network-for-click-through-rate-prediction)  
+   evidence：具有泊松测量到达的卡尔曼滤波
+9. [OFlow: Injecting Object-Aware Temporal Flow Matching for Robust Robotic Manipulation](/202604/26/2604.17876v1-oflow-injecting-object-aware-temporal-flow-matching-for-robust-robotic-manipulation)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：包含行为类型、时间和地点的用户行为序列建模
-8. [Precursors of extreme events and critical transitions](/202604/19/2604.12869v1-precursors-of-extreme-events-and-critical-transitions)  
+   evidence：用于未来潜变量预测的时间流匹配
+10. [ST-$π$: Structured SpatioTemporal VLA for Robotic Manipulation](/202604/26/2604.17880v1-st--structured-spatiotemporal-vla-for-robotic-manipulation)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：利用动力系统预测极端事件的发生
-9. [Event-Adaptive State Transition and Gated Fusion for RGB-Event Object Tracking](/202604/19/2604.13426v1-event-adaptive-state-transition-and-gated-fusion-for-rgb-event-object-tracking)  
+   evidence：顺序行为中的时空操作和显式时空边界
+11. [Sessa: Selective State Space Attention](/202604/26/2604.18580v2-sessa-selective-state-space-attention)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：针对事件流密度变化的事件自适应状态转移机制
-10. [DyGraphTrans: A temporal graph representation learning framework for modeling disease progression from Electronic Health Records](/202604/19/biorxiv-10-64898-2026-01-28-702347-v2-dygraphtrans-a-temporal-graph-representation-learning-framework-for-modeling-disease-progression-from-electronic-health-records)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：用于疾病进展预测的时间图表示
-11. [VeloTrace Reconciles Divergent Velocity and Trajectory in Single-cell Transcriptomics with Deep Neural ODE](/202604/19/biorxiv-10-64898-2026-04-09-717458-v1-velotrace-reconciles-divergent-velocity-and-trajectory-in-single-cell-transcriptomics-with-deep-neural-ode)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：使用神经常微分方程建模连续分子过程和动态轨迹
+   evidence：结合循环反馈和注意力的序列建模
 
 
 <div class="dpr-home-promo-card">
