@@ -1,0 +1,244 @@
+Title: PDRS : A Linear $\mathcal{O}(N)$ Algorithm for Segmentation of High-Activity Regions in Irregularly Sampled Time Series
+
+URL Source: https://arxiv.org/pdf/2605.02843v1
+
+Published Time: Tue, 05 May 2026 02:20:54 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+> Version May 5, 2026
+> Preprint typeset using L ATEX style openjournal v. 09/06/15
+
+PDRS : A LINEAR O(N ) ALGORITHM FOR SEGMENTATION OF HIGH-ACTIVITY REGIONS IN IRREGULARLY SAMPLED TIME SERIES 
+
+Atal Agrawal 
+
+> Department of Physics, Indian Institute of Technology Roorkee, Roorkee 247667, India
+> Version May 5, 2026
+
+Abstract Identifying transient high-activity episodes in astronomical time series requires partitioning the data into regions of distinct statistical behavior — a process known as time series segmentation. A widely adopted approach combines Bayesian Blocks, which partition light curves into segments of constant statistical properties, with a subsequent hill-climbing procedure to merge and isolate high-activity regions. However, this combined approach carries an O(N 2) time complexity, posing a significant scalability challenge for wide-field time-domain surveys like the Zwicky Transient Facility (ZTF) and the upcoming Rubin Observatory (LSST), where individual light curves routinely contain thousands of irregularly sampled observations. We present Peak-Driven Region Segmentation (PDRS), a linear-time O(N ) algorithm designed for the rapid extraction of high-activity regions in irregularly sampled data. PDRS seeds candidate regions at statistically significant local maxima and expands them via a gradient-aware multi-source breadth-first search (BFS). To suppress spurious detections, the algo-rithm employs saddle-point merging and a final median-based filter. Functioning as a computationally efficient pre-processing stage, PDRS isolates candidate transient events for downstream analysis. We demonstrate the efficacy of the algorithm on a sample of quasar light curve from SDSS Stripe 82 and AGN light curves from ZTF Data Release 23, showing that PDRS identifies candidate high-activity regions comparable to those flagged by the Bayesian Blocks approach at substantially reduced com-putational cost. Because of its domain-agnostic formulation and physically interpretable parameters, PDRS extends beyond astronomy; it is broadly applicable to any irregularly sampled time series exhibiting high-activity episodes, including biomedical signals such as electrocardiograms, seismic ground motion recordings, and industrial sensor monitoring. 
+
+Subject headings: Time-domain Astronomy 
+
+1. INTRODUCTION 
+
+Regions of anomalously high activity in a time series signal the occurrence of physical processes that deviate from the quiescent behavior of a source. Identifying and characterizing such regions is therefore essential for understanding the underlying astrophysical mechanisms. Active Galactic Nuclei (AGN) variability is widely studied in this context, as transient high-activity episodes serve as windows into the physics of supermassive black holes and the processes occurring in their vicinity. These include Tidal Disruption Events Zheng et al. (2024), Black Hole Mergers Graham 
+
+et al. (2017), Supernovae Drake et al. (2011), and Microlensing Lawrence et al. (2016). Because these events release massive amounts of energy in the form of aperiodic bursts, they must be identified through the direct detection of flux excesses in time-domain light curves. Considerable effort has been devoted to detecting this flaring activity in AGN light curves. McLaughlin et al. 
+
+(2024) applied Gaussian processes to detect AGN flares in ZTF data. Meyer et al. (2019) combined the Bayesian Blocks algorithm Scargle et al. (2013) with a hill-climbing approach based on the HOP topological grouping method Eisenstein and Hut (1998) to characterize the gamma-ray variability of the brightest flat-spectrum radio quasars. This methodology has since been widely adopted: Kouch et al. (2026) applied it to identify flares in blazar light curves from the CRTS, ATLAS, and ZTF surveys, and He et al. (2025) used it to detect flares in AGN light curves from ZTF Data Release 23. While the Bayesian Blocks algorithm is a powerful dynamic programming tool that partitions a time series into seg-ments of statistically constant flux, its O(N 2) time complexity Scargle et al. (2013) creates a significant computational bottleneck. This quadratic scaling is a notable limitation for current surveys like the Zwicky Transient Facility (ZTF) and upcoming facilities such as the Rubin Observatory Legacy Survey of Space and Time (LSST), where individual light curves routinely contain thousands of observations. In this work, we present Peak-Driven Region Segmentation 
+
+(PDRS), a linear-time O(N ) algorithm (Algorithm 1) designed as a scalable alternative to the Meyer et al. (2019) approach for identifying high-activity regions in large-scale time series datasets. 
+
+> atal a@ph.iitr.ac.in
+> arXiv:2605.02843v1 [astro-ph.IM] 4 May 2026
+
+2The remainder of this paper is structured as follows. Section 2 describes the core logic and implementation of the PDRS algorithm. Section 3 presents our results and discussion, Section 4 summarizes our conclusions and plots of PDRS applied to ZTF DR23 and SDSS stripe 82 quasar data are present in Appendix A.  
+
+> 2. PDRS ALGORITHM
+
+PDRS algorithm operates in four sequential stages: (1) peak identification, (2) gradient-aware region expansion, (3) saddle-point merging, and (4) median-based filtering. Each stage is described below.  
+
+> 2.1.
+
+Preprocessing: Temporal Binning 
+
+Raw photometric light curves from time-domain surveys typically contain multiple observations per night with varying cadence and photometric uncertainties. Prior to binning, observations with non-zero photometric flags are excluded, as major time-domain surveys such as ZTF apply quality flagging at the pipeline level. The light curve is then binned into fixed-width temporal bins of size ∆ tbin days using inverse-variance weighted averaging, which suppresses intra-bin noise while preserving the overall flux structure. The binned flux and its uncertainty are propagated through to the detection stage. This binning step is O(N ) and does not affect the overall complexity of the algorithm.  
+
+> 2.2.
+
+Stage 1: Peak Identification 
+
+All detection and segmentation operations are performed in flux space, as flux is a linear measure of source brightness and better preserves the statistical properties required for threshold-based detection. The final output is converted back to magnitudes for visualization purposes. The algorithm begins by computing the global baseline of the light curve. The median flux μ and standard deviation σ are computed over all N data points. The median is preferred over the mean as it is robust to the presence of flaring activity, which would otherwise bias the baseline upward. A smoothed local gradient g is then estimated at each point using a sliding window linear regression of size wsmooth ,computed in O(N ) via prefix sums of the relevant statistical moments ( t, f , t2, and t · f ). This gradient is used in the subsequent expansion stage to handle non-monotonic flux variations near flare boundaries. Local maxima are identified as points where the flux exceeds both its immediate neighbors. A candidate peak must additionally satisfy fi > μ + σthresh · σ, ensuring that only statistically significant flux excesses seed the expansion. Points that do not satisfy this condition are discarded, preventing noise fluctuations near the baseline from initiating spurious regions.  
+
+> 2.3.
+
+Stage 2: Gradient-Aware Multi-Source BFS Expansion 
+
+Each candidate peak p ∈ P is assigned a frontier [ lp, r p], initialised at [ p, p ]. All frontiers expand simultaneously in a multi-source breadth-first search, meaning that each unassigned point can be claimed by at most one peak — whichever frontier reaches it first. This prevents overlapping regions and ensures that boundaries between adjacent flares are drawn at the natural flux minimum between them. At each step, the left frontier attempts to expand to lp − 1 and the right frontier to rp + 1. Expansion is permitted only if four conditions are simultaneously satisfied: (1) the candidate point is unassigned, (2) its flux is at or above the global median μ, (3) the temporal gap to the frontier does not exceed ∆ tmax , and (4) the flux trend supports inclusion. For condition (4), strict monotonicity is checked first — if the flux at the candidate point is lower than at the current frontier, expansion proceeds unconditionally. If monotonicity is broken (i.e., a local dip or plateau is encountered), the algorithm falls back to the pre-computed gradient: left expansion requires glp ≥ 0 and right expansion requires grp ≤ 0, ensuring the smoothed trend still supports the direction of expansion. A frontier is deactivated once neither left nor right expansion is possible. After all frontiers are deactivated, clusters with fewer than Nmin points are discarded.  
+
+> 2.4.
+
+Stage 3: Saddle-Point Merging 
+
+A single physical flare may produce multiple candidate peaks if its light curve contains minor sub-structure or noise fluctuations near the top. To consolidate such cases, adjacent clusters are considered for merging under three conditions. First, if the temporal gap between the end of one cluster and the start of the next exceeds ∆ tmax , the clusters are always kept separate, as no meaningful saddle flux can be defined across a data void. Second, if two clusters overlap or are separated by fewer than two data points, they are merged unconditionally, as the gap is too small to constitute a meaningful valley. Third, if the saddle flux fsaddle — defined as the minimum flux strictly between the end of one cluster and the start of the next, excluding the boundary points themselves — satisfies (fsaddle − μ) > r saddle · (min( fcurr , f peak ,i ) − μ), the valley is considered too shallow to warrant a separation and the clusters are merged. Here fcurr is the peak flux of the current merged cluster (i.e., the strongest peak accumulated so far in the merge chain), and fpeak ,i is the peak flux of the incoming cluster. The parameter rsaddle controls the minimum fractional elevation of the inter-cluster saddle above the global median μ, relative to the weaker of the two peak elevations above μ. A lower value of rsaddle permits merging when the saddle is only weakly elevated above μ,while a higher value requires the saddle to be more substantially elevated before a merge is triggered.  
+
+> 2.5.
+
+Stage 4: Median-Based Filtering 
+
+A candidate region may survive the BFS expansion and minimum cluster size requirement while still being driven by a sparse collection of randomly scattered high-flux points rather than a genuinely sustained flux excess. To suppress such 3
+
+Algorithm 1: Peak-Driven Region Segmentation (PDRS) 
+
+Input: Time series ( t, f ), parameters σthresh , r saddle , N min , w smooth , σ region , ∆tmax 
+
+Output: Set of candidate regions R
+
+// Stage 1: Peak Identification 
+
+Compute μ ← median( f ) and σ ← std( f ); Compute smoothed gradient g ← LocalGradient (t, f, w smooth ); Identify local maxima: candidate peak at index i if fi > f i−1 and fi > f i+1 ;Also check endpoints: include index 0 if f0 > f 1, and index N − 1 if fN −1 > f N −2;Retain only peaks where fi > μ + σthresh · σ; collect in P;
+
+if P is empty then return ∅;
+
+end 
+
+// Stage 2: Gradient-Aware Multi-Source BFS Expansion 
+
+Mark all points as unassigned; For each peak p ∈ P : initialise left and right frontier at p, mark p as assigned to p;
+
+// All frontiers expand simultaneously; a point is claimed by the first frontier to reach it 
+
+while any frontier is active do 
+
+// Each peak advances its frontier by one step per iteration 
+
+foreach peak p ∈ P with active frontier do 
+
+expanded ← False; 
+
+// Expand left: only if neighbor is still unassigned 
+
+if left neighbor is unassigned, flux ≥ μ, and time gap ≤ ∆tmax then if left neighbor flux < current left frontier flux then 
+
+Assign left neighbor to p; advance left frontier; expanded ← True; 
+
+else if gradient at left frontier ≥ 0 then 
+
+Assign left neighbor to p; advance left frontier; expanded ← True; 
+
+end end 
+
+// Expand right: only if neighbor is still unassigned 
+
+if right neighbor is unassigned, flux ≥ μ, and time gap ≤ ∆tmax then if right neighbor flux < current right frontier flux then 
+
+Assign right neighbor to p; advance right frontier; expanded ← True; 
+
+else if gradient at right frontier ≤ 0 then 
+
+Assign right neighbor to p; advance right frontier; expanded ← True; 
+
+end end if not expanded then 
+
+Deactivate frontier of p;
+
+end end end 
+
+Collect clusters: for each p ∈ P , retain cluster if it contains ≥ Nmin points; 
+
+if no clusters remain then return ∅;
+
+end 
+
+// Stage 3: Saddle-Point Merging 
+
+Initialise merged list with first cluster; set running peak ← peak flux of first cluster; 
+
+foreach subsequent cluster do 
+
+Compute temporal gap ← tcurr start − tprev end ;
+
+if temporal gap > ∆tmax then 
+
+// Large data void | always separate 
+
+Add current cluster to merged list; Update running peak ← current peak flux; 
+
+else if current cluster start ≤ previous cluster end +2 then 
+
+// Overlap or proximity: merge unconditionally 
+
+Extend previous cluster end to current cluster end; Update running peak ← max(running peak, current peak flux); 
+
+else 
+
+// True saddle exists: compute minimum flux strictly between cluster boundaries 
+
+Compute saddle flux ← min( f strictly between previous cluster end and current cluster start); 
+
+if (saddle flux − μ) > r saddle · (min(running peak , current peak flux) − μ) then 
+
+Extend previous cluster end to current cluster end; Update running peak ← max(running peak, current peak flux); 
+
+end else 
+
+Add current cluster to merged list; Update running peak ← current peak flux; 
+
+end end end 
+
+// Stage 4: Median-Based Filtering 
+
+R ← ∅ ;
+
+foreach merged cluster do if median flux of cluster ≥ μ + σregion · σ then 
+
+Add ( tstart , t end , peak flux) to R;
+
+end end return R;4           
+
+> Parameter Description
+> σthresh Minimum peak significance above the global median (in units of σ).
+> rsaddle Minimum fractional elevation of the inter-cluster saddle above the global median μ, relative to the weaker of the two peak elevations above μ.
+> Nmin Minimum number of data points required to define a valid region.
+> wsmooth Window size for the local gradient estimation.
+> σregion Minimum median flux of a candidate region above the global median (in units of σ). ∆tmax Maximum temporal gap (days) permitted during region expansion to prevent crossing observing gaps.
+> TABLE 1 Free parameters of the PDRS algorithm and their roles.
+
+spurious detections, a final gate requires that the median flux of the entire candidate region satisfies median( fs:e) ≥
+
+μ + σregion · σ. Since the median is robust to isolated high values, a region populated by randomly scattered flux spikes will fail this criterion even if its peak and cluster size are sufficient. Regions that fail this criterion are discarded. The surviving regions constitute the final output R, each characterised by a start time ts, end time te, and peak flux max( fs:e). 
+
+2.6. Computational Complexity 
+
+Each stage of PDRS operates in linear time. The preprocessing and peak identification in Stage 1 require a single pass over the data, O(N ). The gradient estimation uses prefix sums and is likewise O(N ). The multi-source BFS in Stage 2 assigns each point at most once across all frontiers, giving O(N ) total. The saddle-point merging in Stage 3 and median filtering in Stage 4 operate over the set of clusters, which is bounded by the number of peaks and therefore 
+
+O(N ) in the worst case. The overall time complexity of PDRS is therefore O(N ), in contrast to the O(N 2) complexity of the Bayesian Blocks algorithm. 
+
+3. RESULTS AND DISCUSSION 
+
+3.1. Free Parameters 
+
+The algorithm has six free parameters, summarised in Table 1. σthresh controls the minimum significance of a candidate peak above the global baseline. It must be tuned to the contrast between flaring activity and the quiescent level of the source. For ZTF Data Release 23 AGN light curves we adopt σthresh = 2, while for SDSS Stripe 82 quasar light curves a lower value of σthresh = 1 is used, as quasars at cosmological distances appear intrinsically faint, causing their flaring activity to produce only modest flux excesses above the quiescent baseline that would be missed at a higher threshold. Nmin sets the minimum number of data points required to constitute a valid candidate region, ensuring that isolated photometric defects or single-point spikes are not retained as flare candidates. ∆ tmax prevents the BFS expansion from bridging seasonal observing gaps. For ZTF, where seasonal gaps are of the order of months, we set ∆tmax = 60 days. For SDSS Stripe 82, which has longer inter-season gaps, we adopt ∆ tmax = 200 days. σregion acts as a final gate on the merged candidate regions, requiring that the median flux of the entire region exceeds the baseline by at least σregion · σ. This ensures that a region is not retained on the basis of a few isolated spikes but represents a genuinely sustained flux excess. This filter is applied after saddle-point merging, by which point the region boundary already reflects the physical structure of the flare. We set σregion = 0 .5 for both ZTF data and SDSS Stripe 82 data. 
+
+wsmooth controls the window size for the local gradient estimation used during BFS expansion. It should be chosen relative to the cadence of the data, as a larger window smooths over short-timescale flux fluctuations during the rise and decay phases of a flare, allowing the expansion to navigate minor dips without prematurely terminating. rsaddle 
+
+governs the saddle-point merging criterion. Two adjacent clusters are merged if the flux at the inter-cluster saddle is sufficiently elevated above the global median μ, as quantified by rsaddle , relative to the weaker of the two peak elevations above μ. This merging step is conceptually inspired by the basin-merging logic of the HOP algorithm Eisenstein and Hut (1998), adapted here to operate on the elevation above the global baseline rather than absolute valley depth. 
+
+3.2. Comparison with Bayesian Blocks 
+
+We apply PDRS to flaring AGN light curves from ZTF Data Release 23, drawn from the AGNFRC catalog He et al. 
+
+(2025), which provides a sample of high-confidence flare labels. For comparison, we process the same light curves using the combined Bayesian Blocks and hill-climbing methodology, adopting the implementation described by Meyer 
+
+et al. (2019) and He et al. (2025). For the PDRS configuration, we fix the algorithmic parameters as follows: peak significance threshold σthresh = 2, saddle-point depth ratio rsaddle = 0 .2, minimum cluster size Nmin = 3, gradient smoothing window wsmooth = 7, region median threshold σregion = 0 .5, and maximum temporal gap ∆ tmax = 60 days. As demonstrated in Figure 1, PDRS yields highly stable segmentations across a range of peak significance thresholds (σthresh ). At σthresh = 1 .0, PDRS detects 2 candidate regions, converging to a single high-activity region at higher thresholds, accurately encompassing both the rise and decay phases of the event while ignoring stochastic background fluctuations. In contrast, the Bayesian Blocks approach exhibits high sensitivity to its penalty parameter ( ncp prior ). 5Even at elevated penalties, the dynamic programming method is prone to over-segmenting the baseline noise, resulting in a highly variable number of spurious detected regions depending on the chosen prior. Additional demonstrations of the PDRS framework, including its application to a multi-year SDSS Stripe 82 quasar light curve containing a previously identified flare Agrawal (2026) and further example from the AGNFRC catalog, are provided in Appendix A.                 
+
+> Fig. 1.— Comparison of PDRS (left) and Bayesian Blocks combined with hill-climbing (right) applied to the ZTF light curve of J214054.29+101930.3, an AGN from the AGNFRC catalog He et al. (2025). Raw photometry (grey points) is binned into 3-day bins (red points) prior to detection. Each row corresponds to a different parameter setting: σthresh = 1 .0,1.5,2.0 for PDRS and ncp prior
+> = 85 ,105 ,155 for Bayesian Blocks. PDRS detects 2 regions at σthresh = 1 .0 and converges to a single candidate high-activity region at higher thresholds, capturing the prominent flux excess near MJD 59500 including its rise and decay. The Bayesian Blocks approach detects between 2 and 5 regions depending on ncp prior , flagging several noise fluctuations as candidate flares at lower prior values.
+
+4. CONCLUSIONS 
+
+In this work, we present Peak-Driven Region Segmentation (PDRS), an O(N ) algorithm designed to efficiently isolate transient high-activity regions in irregularly sampled time series for downstream physical analysis. PDRS serves as a scalable alternative to the widely adopted Bayesian Blocks and hill-climbing pipeline, which carries an O(N 2)computational cost and can over-segment quiescent background noise depending on the choice of penalty parameter. PDRS instead adopts a targeted, peak-first approach, seeding candidate regions at statistically significant local maxima and expanding them via a gradient-aware multi-source breadth-first search, extracting flaring events in linear time. A trade-off of the PDRS framework is its reliance on a set of user-defined free parameters. However, unlike abstract algorithmic penalties, these parameters are physically interpretable. The inclusion of morphological constraints— specifically the minimum cluster size ( Nmin ), the region median threshold ( σregion ), and the maximum temporal gap (∆ tmax )—provides researchers with granular control to suppress false-positive detections. The computational efficiency of PDRS makes it well-suited as a rapid pre-processing stage for the massive data volumes anticipated from upcoming wide-field time-domain surveys, while its domain-agnostic architecture ensures broad applicability to any discipline analyzing stochastic, bursty signals. 
+
+> ACKNOWLEDGMENTS
+
+6We acknowledge Masci et al. (2019) for the ZTF DR23 data and MacLeod et al. (2010) for the SDSS Stripe 82 quasar data used to demonstrate the algorithm. Based on observations obtained with the Samuel Oschin Telescope 48-inch and the 60-inch Telescope at the Palomar Observatory as part of the Zwicky Transient Facility project. ZTF is supported by the National Science Foundation under Grants No. AST-1440341 and AST-2034437 and a collaboration including current partners Caltech, IPAC, the Oskar Klein Center at Stockholm University, the University of Maryland, University of California, Berkeley , the University of Wisconsin at Milwaukee, University of Warwick, Ruhr University, Cornell University, Northwestern University and Drexel University. Operations are conducted by COO, IPAC, and UW. Funding for the Sloan Digital Sky Survey V has been provided by the Alfred P. Sloan Foundation, the Heising-Simons Foundation, the National Science Foundation, and the Participating Institutions. SDSS acknowledges support and resources from the Center for High-Performance Computing at the University of Utah. SDSS telescopes are located at Apache Point Observatory, funded by the Astrophysical Research Consortium and operated by New Mexico State University, and at Las Campanas Observatory, operated by the Carnegie Institution for Science. The SDSS web site is www.sdss.org. SDSS is managed by the Astrophysical Research Consortium for the Participating Institutions of the SDSS Col-laboration, including the Carnegie Institution for Science, Chilean National Time Allocation Committee (CNTAC) ratified researchers, Caltech, the Gotham Participation Group, Harvard University, Heidelberg University, The Flat-iron Institute, The Johns Hopkins University, L’Ecole polytechnique f´ ed´ erale de Lausanne (EPFL), Leibniz-Institut f¨ ur Astrophysik Potsdam (AIP), Max-Planck-Institut f¨ ur Astronomie (MPIA Heidelberg), Max-Planck-Institut f¨ ur Extraterrestrische Physik (MPE), Nanjing University, National Astronomical Observatories of China (NAOC), New Mexico State University, The Ohio State University, Pennsylvania State University, Smithsonian Astrophysical Ob-servatory, Space Telescope Science Institute (STScI), the Stellar Astrophysics Participation Group, Universidad Na-cional Aut´ onoma de M´ exico, University of Arizona, University of Colorado Boulder, University of Illinois at Urbana-Champaign, University of Toronto, University of Utah, University of Virginia, Yale University, and Yunnan University. 
+
+Software: NumPy Harris et al. (2020), Matplotlib Hunter (2007), Pandas McKinney (2010) 
+
+> DATA AND SOFTWARE AVAILABILITY
+
+The Python implementation of the Peak-Driven Region Segmentation (PDRS) algorithm presented in this work, along with the script necessary to reproduce the figures, is open-source and publicly available on GitHub at https: //github.com/zerozole/Peak Driven Region Segmentation.                             
+
+> REFERENCES Z. Zheng, Y. Shi, S. Jin, H. Dannerbauer, Q. Gu, X. Li, and X. Yu, Monthly Notices of the Royal Astronomical Society
+> 530 , 3527 (2024). M. J. Graham, S. G. Djorgovski, A. J. Drake, D. Stern, A. A. Mahabal, E. Glikman, S. Larson, and E. Christensen, Monthly Notices of the Royal Astronomical Society 470 , 4112 (2017). A. J. Drake et al. , Astrophys. J. 735 , 106 (2011). A. Lawrence, A. G. Bruce, C. MacLeod, S. Gezari, M. Elvis, M. Ward, S. J. Smartt, K. W. Smith, D. Wright, M. Fraser, P. Marshall, N. Kaiser, W. Burgett, E. Magnier, J. Tonry, K. Chambers, R. Wainscoat, C. Waters, P. Price, N. Metcalfe, S. Valenti, R. Kotak, A. Mead, C. Inserra, T. W. Chen, and A. Soderberg, Monthly Notices of the Royal Astronomical Society 463 , 296 (2016). S. A. J. McLaughlin, J. R. Mullaney, and S. P. Littlefair, Monthly Notices of the Royal Astronomical Society 529 , 2877 (2024). M. Meyer, J. D. Scargle, and R. D. Blandford, The Astrophysical Journal 877 , 39 (2019). J. D. Scargle, J. P. Norris, B. Jackson, and J. Chiang, The Astrophysical Journal 764 , 167 (2013). D. J. Eisenstein and P. Hut, The Astrophysical Journal 498 , 137 (1998). P. M. Kouch, E. Lindfors, T. Hovatta, I. Liodakis, K. I. I. Koljonen, A. Paggi, K. Nilsson, J. Jormanainen, V. Fallah Ramazani, S. Kankkunen, F. Wierda, S. M. Wagner, and M. J. Graham, Astronomy & Astrophysics 708 , A382 (2026). L. He, Z.-Y. Liu, R. Niu, M.-S. Zhou, P.-R. Zou, B.-Z. Gao, R.-D. Liang, L.-G. Zhu, J.-M. Wang, N. Jiang, Z.-Y. Cai, J. an Jiang, Z.-G. Dai, Y.-F. Yuan, Y.-J. Chen, and W. Zhao, The Astrophysical Journal Supplement Series 277 , 33 (2025). A. Agrawal, arXiv preprint (2026), arXiv:2604.08196. F. J. Masci, R. R. Laher, B. Rusholme, and et al., Publications of the Astronomical Society of the Pacific 131 , 018003 (2019). C. MacLeod, ˇZ. Ivezi´ c, C. S. Kochanek, S. Kozlowski, B. Kelly, E. Bullock, A. Hope, R. J. Assef, R. Becker, P. B. Hall, P. Harding, M. Juri´ c, R. M. Kratzer, M. R. Meade, W. Ricketts, B. Sesar, D. P. Schneider, and P. R. Wozniak, The Astrophysical Journal 721 , 1014 (2010). C. R. Harris et al. , Nature 585 , 357 (2020). J. D. Hunter, Computing in Science & Engineering 9, 90 (2007). W. McKinney, in Proceedings of the 9th Python in Science Conference (2010) pp. 56–61 APPENDIX
+> APPLICATION OF PDRS TO ZTF DR23 AND SDSS STRIPE 82 QUASAR LIGHT CURVES
+
+In this appendix, we present supplementary examples of astronomical light curves segmented using the PDRS algorithm. For the SDSS Stripe 82 quasar light curve, we adopted the foundational parameters defined in Section 3.1, supplemented by the specific configuration rsaddle = 0 .2, Nmin = 3, and wsmooth = 7. For the ZTF Data Release 23 AGN light curve, we utilized the identical suite of free parameters established in Section 3.2. 7
+
+Fig. 2.— Application of the PDRS algorithm to the multi-band light curve of J172950.51+255031.8, an AGN from the AGNFRC catalog He et al. (2025). The top and bottom panels display the g-band and r-band photometry, respectively. Raw observations are shown in grey, overlaid with 3-day binned data (red). The solid black line illustrates the baseline and elevated states defined by the PDRS segmentation blocks. Operating independently on each band with a peak significance threshold of σthresh = 2, the algorithm successfully isolates a broadly contemporaneous flaring event (shaded regions), demonstrating its robustness across different optical filters. 
+
+Fig. 3.— Application of the PDRS algorithm to the light curve of the SDSS Stripe 82 quasar 2597579 Agrawal (2026). The 3-day binned data are shown in red; the sparse cadence of Stripe 82 renders the raw and binned photometry nearly indistinguishable at this scale. The solid black line represents the baseline and elevated states defined by the PDRS segmentation blocks. Operating with a peak significance threshold of σthresh = 1, the algorithm successfully identifies and isolates a distinct flaring episode (shaded orange region) despite the prominent seasonal gaps and long-term variability characteristic of sparsely sampled historical survey data. The narrow extent of the detected region reflects the sparse cadence of Stripe 82 rather than an intrinsically short flare duration. 
+
+This paper was built using the Open Journal of Astrophysics L ATEX template. The OJA is a journal which provides fast and easy peer review for new papers in the astro-ph section of the arXiv, making the reviewing process simpler for authors and referees alike. Learn more at http://astro.theoj.org.

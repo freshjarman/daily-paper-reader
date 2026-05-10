@@ -6,64 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-03
-- 运行时间：2026-05-03 20:32:34 UTC
+- 最新运行日期：2026-05-10
+- 运行时间：2026-05-10 20:03:10 UTC
 - 运行状态：成功
-- 本次总论文数：14
-- 精读区：3
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 14 篇论文，重点突破了利用 Transformer 模拟疾病演化进程及点过程收敛率的理论前沿。
-高分论文 TEMPO 实现了从跨断面数据推断疾病时序的创新，同时时序图解释性与音乐识别研究也取得新进展。
-建议优先研读 TEMPO 以掌握医疗 AI 建模新范式，并关注 Shapley 值在动态图预测中的透明化应用。
-- 详情：[/202605/03/README](/202605/03/README)
+今日精选 17 篇前沿成果，深度解析了时空事件建模与非平稳极值分析的两项满分突破。
+重点推荐分层流模型在任意条件预测中的应用，以及利用非参数霍克斯过程解决复杂极值建模的新路径。
+建议关注时空表征学习在微服务故障诊断与事件流追踪等实际工业场景中的落地潜力。
+- 详情：[/202605/10/README](/202605/10/README)
 
 ### 精读区论文标签
-1. [TEMPO: Transformers for Temporal Disease Progression from Cross-Sectional Data](/202605/03/2604.23368v1-tempo-transformers-for-temporal-disease-progression-from-cross-sectional-data)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：学习序数和连续事件序列的 Transformer 架构
-2. [Wasserstein convergence rates for empirical measures of point processes](/202605/03/2604.23928v1-wasserstein-convergence-rates-for-empirical-measures-of-point-processes)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：点过程的统计推断和收敛率
-3. [ABC: Any-Subset Autoregression via Non-Markovian Diffusion Bridges in Continuous Time and Space](/202605/03/2604.27443v1-abc-any-subset-autoregression-via-non-markovian-diffusion-bridges-in-continuous-time-and-space)  
+1. [Arbitrarily Conditioned Hierarchical Flows for Spatiotemporal Events](/202605/10/2605.01226v1-arbitrarily-conditioned-hierarchical-flows-for-spatiotemporal-events)  
+   标签：评分：10.0/10、query:tpp-es
+   evidence：用于时空事件建模和条件强度的分层流匹配框架
+2. [Bayesian Modelling of Nonstationary Extreme Values Using a Nonparametric Hawkes Process](/202605/10/2605.03331v1-bayesian-modelling-of-nonstationary-extreme-values-using-a-nonparametric-hawkes-process)  
+   标签：评分：10.0/10、query:tpp-es
+   evidence：使用自激Hawkes过程的贝叶斯点过程模型
+3. [Coupled-NeuralHP: Directional Temporal Coupling Between AI Innovation Exposure and Public Response](/202605/10/2605.04194v1-coupled-neuralhp-directional-temporal-coupling-between-ai-innovation-exposure-and-public-response)  
+   标签：评分：9.5/10、query:tpp-es
+   evidence：针对不规则事件流和创新计数预测的混合事件加状态模型
+4. [Road Risk Monitor: A Deployable U.S. Road Incident Forecasting System with Live Weather and Road-Level Tiles](/202605/10/2605.04242v1-road-risk-monitor-a-deployable-us-road-incident-forecasting-system-with-live-weather-and-road-level-tiles)  
    标签：评分：8.5/10、query:tpp-es
-   evidence：连续时间随机过程和任意子集自回归
+   evidence：使用美国事故事件的道路事故预测系统
+5. [High-Fidelity Full-Sky Video Prediction for Photovoltaic Ramp Event Forecasting](/202605/10/2605.03165v1-high-fidelity-full-sky-video-prediction-for-photovoltaic-ramp-event-forecasting)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：利用时空模式进行光伏爬坡事件预测
+6. [FLUID: Continuous-Time Hyperconnected Sparse Transformer for Sink-Free Learning](/202605/10/2605.04421v1-fluid-continuous-time-hyperconnected-sparse-transformer-for-sink-free-learning)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：用于不规则和长程建模的连续时间Transformer
 
 ### 速读区论文标签
-1. [An event-based sequence modeling approach to recognizing non-triad chords with oversegmentation minimization](/202605/03/2604.24386v1-an-event-based-sequence-modeling-approach-to-recognizing-non-triad-chords-with-oversegmentation-minimization)  
+1. [Joint Temporal-Structural Representation Learning for Distributed Fault Discrimination in Microservice Architectures](/202605/10/2605.01776v1-joint-temporal-structural-representation-learning-for-distributed-fault-discrimination-in-microservice-architectures)  
    标签：评分：7.5/10、query:tpp-es
-   evidence：基于事件的序列建模，用于时间对齐的和弦标签
-2. [Anchored Variational Inference for Personalized Sequential Latent-State Models](/202605/03/2604.23454v1-anchored-variational-inference-for-personalized-sequential-latent-state-models)  
+   evidence：用于动态图序列演化的时间图神经网络
+2. [Scalable inference of spatial regions and temporal signatures from time series](/202605/10/2605.05008v1-scalable-inference-of-spatial-regions-and-temporal-signatures-from-time-series)  
+   标签：评分：7.5/10、query:tpp-es
+   evidence：从时间序列中推断空间区域和时间特征
+3. [Dynamic Pondering Sparsity-aware Mixture-of-Experts Transformer for Event Stream based Visual Object Tracking](/202605/10/2605.06112v1-dynamic-pondering-sparsity-aware-mixture-of-experts-transformer-for-event-stream-based-visual-object-tracking)  
+   标签：评分：7.5/10、query:tpp-es
+   evidence：基于具有时间分辨率的事件流视觉目标跟踪
+4. [Efficient Temporal Datalog Materialisation for Composite Event Recognition](/202605/10/2605.02488v1-efficient-temporal-datalog-materialisation-for-composite-event-recognition)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：利用局部潜变量动力学建模时间结构数据
-3. [Explaining Temporal Graph Predictions With Shapley Values](/202605/03/2604.24078v1-explaining-temporal-graph-predictions-with-shapley-values)  
+   evidence：高流速符号事件流上的复合事件识别
+5. [TRACE: Temporal Reasoning over Context and Evidence for Activity Recognition in Smart Homes](/202605/10/2605.02841v2-trace-temporal-reasoning-over-context-and-evidence-for-activity-recognition-in-smart-homes)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：解释预测模型中的单个时间事件
-4. [A Control Framework for Induced Seismicity Mitigation in Groningen Gas Reservoir](/202605/03/2604.26802v1-a-control-framework-for-induced-seismicity-mitigation-in-groningen-gas-reservoir)  
+   evidence：针对活动识别的事件窗口时间推理
+6. [PDRS : A Linear $\mathcal{O}(N)$ Algorithm for Segmentation of High-Activity Regions in Irregularly Sampled Time Series](/202605/10/2605.02843v1-pdrs--a-linear-mathcalon-algorithm-for-segmentation-of-high-activity-regions-in-irregularly-sampled-time-series)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：随机事件生成和地震率动态
-5. [Probabilistic Circuits for Irregular Multivariate Time Series Forecasting](/202605/03/2604.27814v1-probabilistic-circuits-for-irregular-multivariate-time-series-forecasting)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：不规则多变量时间序列的概率预测
-6. [Differentiable latent structure discovery for interpretable forecasting in clinical time series](/202605/03/2604.27967v1-differentiable-latent-structure-discovery-for-interpretable-forecasting-in-clinical-time-series)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：用于不规则临床时间序列预测的连续时间多任务高斯过程
-7. [Keypoint-based Dynamic Object 6-DoF Pose Tracking via Event Camera](/202605/03/2604.23387v1-keypoint-based-dynamic-object-6-dof-pose-tracking-via-event-camera)  
+   evidence：非规则采样时间序列中高活动区域的分段
+7. [DynoSLAM: Dynamic SLAM with Generative Graph Neural Networks for Real-World Social Navigation](/202605/10/2605.02759v1-dynoslam-dynamic-slam-with-generative-graph-neural-networks-for-real-world-social-navigation)  
    标签：评分：6.5/10、query:tpp-es
-   evidence：利用事件流处理和空间坐标进行动态追踪
-8. [SpikeLab: Agentic tools for spike data analysis](/202605/03/biorxiv-10-64898-2026-04-25-720833-v1-spikelab-agentic-tools-for-spike-data-analysis)  
+   evidence：将行人运动预测建模为随机世界模型
+8. [Event-Based Dynamic Programming for Pumped-Storage Hydropower Scheduling](/202605/10/2605.03374v1-event-based-dynamic-programming-for-pumped-storage-hydropower-scheduling)  
    标签：评分：6.5/10、query:tpp-es
-   evidence：用于神经脉冲数据分析和事件相关任务的代理工具
-9. [Follow the TRACE: Exploiting Post-Click Trajectories for Online Delayed Conversion Rate Prediction](/202605/03/2604.23197v1-follow-the-trace-exploiting-post-click-trajectories-for-online-delayed-conversion-rate-prediction)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：将点击后行为演变建模为轨迹，用于延迟转化预测
-10. [Temporal connection probabilities in real networks](/202605/03/2604.23714v1-temporal-connection-probabilities-in-real-networks)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：时序网络拓扑和链路动态的概率预测
-11. [Transformer as an Euler Discretization of Score-based Variational Flow](/202605/03/2604.23740v1-transformer-as-an-euler-discretization-of-score-based-variational-flow)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：用于表示学习的连续时间动力系统
+   evidence：调度表示为特定模式事件的序列
+9. [Beyond Long Tail POIs: Transition-Centered Generalization for Human Mobility Prediction](/202605/10/2605.05771v1-beyond-long-tail-pois-transition-centered-generalization-for-human-mobility-prediction)  
+   标签：评分：6.5/10、query:tpp-es
+   evidence：基于历史轨迹的人类移动预测与转移级泛化
+10. [A Deep Learning Framework for Spatiotemporal Modeling of Visual Task fMRI](/202605/10/biorxiv-10-64898-2026-05-05-722117-v1-a-deep-learning-framework-for-spatiotemporal-modeling-of-visual-task-fmri)  
+   标签：评分：6.5/10、query:tpp-es
+   evidence：神经转移函数的时空建模
+11. [Efficient Stochastic Trace Generation for Transcription](/202605/10/biorxiv-10-64898-2026-05-05-722871-v1-efficient-stochastic-trace-generation-for-transcription)  
+   标签：评分：6.5/10、query:tpp-es
+   evidence：具有加性零星跳跃的随机轨迹生成
 
 
 <div class="dpr-home-promo-card">
