@@ -1,0 +1,617 @@
+Title: Dynamic Pondering Sparsity-aware Mixture-of-Experts Transformer for Event Stream based Visual Object Tracking
+
+URL Source: https://arxiv.org/pdf/2605.06112v1
+
+Published Time: Fri, 08 May 2026 01:23:32 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> IEEE TRANSACTIONS ON ***, 2026 1
+
+# Dynamic Pondering Sparsity-aware Mixture-of-Experts Transformer for Event Stream based Visual Object Tracking 
+
+Shiao Wang, Xiao Wang*, Member, IEEE , Duoqing Yang, Wenhao Zhang, Bo Jiang*, Lin Zhu, Yonghong Tian, Fellow, IEEE , Bin Luo, Senior Member, IEEE 
+
+Abstract —Despite significant progress, RGB-based trackers remain vulnerable to challenging imaging conditions, such as low illumination and fast motion. Event cameras offer a promising alternative by asynchronously capturing pixel-wise brightness changes, providing high dynamic range and high temporal res-olution. However, existing event-based trackers often neglect the intrinsic spatial sparsity and temporal density of event data, while relying on a single fixed temporal-window sampling strategy that is suboptimal under varying motion dynamics. In this paper, we propose an event sparsity-aware tracking framework that ex-plicitly models event-density variations across multiple temporal scales. Specifically, the proposed framework progressively injects sparse, medium-density, and dense event search regions into a three-stage Vision Transformer backbone, enabling hierarchical multi-density feature learning. Furthermore, we introduce asparsity-aware Mixture-of-Experts module to encourage expert specialization under different sparsity patterns, and design a dynamic pondering strategy to adaptively adjust the inference depth according to tracking difficulty. Extensive experiments on FE240hz, COESOT, and EventVOT demonstrate that the pro-posed approach achieves a favorable trade-off between tracking accuracy and computational efficiency. The source code will be released on https://github.com/Event-AHU/OpenEvTracking. 
+
+Index Terms —Event Camera; Event Tracking; Mixture-of-Experts; Vision Transformer 
+
+I. I NTRODUCTION 
+
+# VISUAL Object Tracking (VOT) aims to continuously estimate the location of a target in subsequent frames, given its initial bounding box in the first frame. Most exist-ing trackers [1]–[5] are built upon traditional RGB imaging technology and have achieved remarkable success across a wide range of applications, including autonomous driving, surveillance, and drone photography. However, RGB cameras are inherently sensitive to challenging imaging conditions, such as overexposure, low illumination, motion blur, and fast motion, which often result in severe performance degradation or even tracking failure. These limitations substantially hinder 
+
+• Shiao Wang, Duoqing Yang, Wenhao Zhang, Xiao Wang, Bo Jiang, Bin Luo are with the School of Computer Science and Technology, Anhui Univer-sity, Hefei 230601, China. (email: {e24101001, e125221163}@stu.ahu.edu.cn, {xiaowang, jiangbo, luobin}@ahu.edu.cn) 
+
+• Lin Zhu is with Beijing Institute of Technology, Beijing, China. (email: linzhu@pku.edu.cn) 
+
+• Yonghong Tian is with Peng Cheng Laboratory, Shenzhen, China; National Key Laboratory for Multimedia Information Processing, School of Computer Science, Peking University, China; School of Electronic and Computer Engineering, Shenzhen Graduate School, Peking University, China. (email: yhtian@pku.edu.cn) * Corresponding Author: Xiao Wang, Bo Jiang HDETrack 
+
+DiMP50 
+
+TransT 
+
+STARK 
+
+SimTrack 
+
+ATOM 
+
+MixFormer 
+
+ARTrack 
+
+OSTrack 
+
+Ours 
+
+ROMTrack 
+
+MCITrack 
+
+LMTrack 
+
+ODTrack 
+
+ARTrackV2 
+
+SpikeTrack 
+
+MambaEvT 
+
+42 
+
+44 
+
+46 
+
+48 
+
+50 
+
+52 
+
+54 
+
+56 
+
+58 
+
+60 
+
+62 
+
+0 20 40 60 80 100 Success Rate 
+
+Tracking Speed (FPS) 
+
+Fig. 1. Comparison with other trackers in terms of accuracy (Success Rate) and efficiency (FPS). 
+
+the deployment of robust RGB-only trackers in complex real-world scenarios. Bio-inspired event cameras offer an alternative sensing paradigm by asynchronously capturing pixel-wise brightness changes. Specifically, each pixel independently monitors the logarithmic intensity of incoming light and triggers an event once the intensity variation exceeds a predefined threshold. Each event is represented as e = ( x, y, t, p ), where (x, y )
+
+denotes the spatial location, t is the timestamp, and p ∈{+1 , −1} indicates the polarity of brightness increase or decrease. Owing to their event-driven acquisition mechanism, event cameras offer high temporal resolution, high dynamic range, low latency, and inherent privacy preservation, making them a promising complement or alternative to conventional RGB cameras, particularly in challenging imaging condi-tions [6]. Motivated by the distinctive advantages of event cameras, recent studies [7]–[11] have investigated event-based tracking methods, aiming to exploit the high temporal resolution and high dynamic range of event streams for robust visual object tracking in challenging scenarios. For example, Wang et al. [7] introduce MambaEVT, an event stream-based visual object tracking framework that leverages state space models to reduce the computational complexity of the model. Zhang et al. [8] proposed STNet, a spiking-based tracking framework that exploits the asynchronous nature of event streams to capture rich spatiotemporal information, thereby improving tracking        
+
+> arXiv:2605.06112v1 [cs.CV] 7 May 2026 IEEE TRANSACTIONS ON ***, 2026 2Vi T
+> Backbone
+> Tracking
+> Head
+> Vi T
+> Backbone
+> Vi T
+> Backbone
+> Tracking
+> Head
+> Tracking
+> Head
+> Grouped ViT Backbone
+> Sparse Search
+> Medium Search Medium Search
+> Dense Search Dense Search
+> Temporal view
+> Sparse Search
+> Medium Search Medium Search
+> Dense Search Dense Search
+> Temporal view
+> MHA
+> SA -MoE
+> Sparsity  Selector
+> IoU = 0.72
+> Tracking Head
+> (a) (b)
+> IoU = 0.46 IoU = 0.46
+> IoU = 0.52 IoU = 0.52
+> IoU = 0.65 IoU = 0.65
+> Stage1:  Sparsity -aware
+> block ×  L1
+> Stage1:  Sparsity -aware
+> block ×  L1
+> Dynamic
+> Pondering
+> Stage1:  Sparsity -aware
+> block ×  L2
+> Stage1:  Sparsity -aware
+> block ×  L2
+> Stage1:  Sparsity -aware
+> block ×  L3
+> Stage1:  Sparsity -aware
+> block ×  L3
+> Fig. 2. (a) Different temporal windows produce event representations with varying densities, affecting the tracking results. Sparse backgrounds are often highly distinguishable from the target, and such relatively simple scenarios should be allocated fewer computational resources to improve tracking efficiency. (b) Overview of the proposed Dynamic Pondering Sparsity-aware Mixture-of-Experts Transformer for efficient event-based tracking.
+
+performance under challenging motion conditions. Wang et al. [9] further introduce cross-modal knowledge distillation, transferring complementary knowledge from multimodal data to the event domain to enhance tracking efficiency. Despite these advances, existing methods still struggle to achieve a favorable trade-off between tracking accuracy and computational efficiency, as shown in Fig. 1. This limitation mainly arises from three aspects. 1). Insufficient temporal-scale utilization : existing event-based trackers commonly rely on a fixed temporal window to construct event representations, leaving the influence of different temporal scales insufficiently utilized. As shown in Fig. 2 (a), short and long temporal windows preserve contour details and motion cues differently, making a single temporal scale insufficient to fully char-acterize event streams under varying motion dynamics. 2). Underexplored spatial sparsity : the inherent spatial sparsity of event data remains underexploited, resulting in limited sparsity-specific feature modeling. 3). Redundant backbone inference : existing trackers typically allocate computation uni-formly across the backbone network regardless of scenario difficulty, leading to redundant inference for simple scenarios. To address these limitations, we propose PSMTrack, adynamic pondering sparsity-aware Mixture-of-Experts Trans-former for efficient event-based visual object tracking. PSM-Track explicitly models multi-scale event-density variations, enhances sparsity-aware representations through expert spe-cialization, and adaptively adjusts inference depth to achieve a favorable trade-off between tracking accuracy and computa-tional efficiency. As illustrated in Fig. 2 (b), sparse, medium-density, and dense search regions are jointly fed into a vision Transformer (ViT) [12] backbone for feature learning. Specif-ically, the proposed framework organizes the ViT backbone into three stages and progressively injects search regions with different sparsity levels into deeper stages, enabling hierarchical multi-density feature modeling while reducing the computational overhead introduced by multi-sparsity in-puts. Furthermore, we introduce a sparsity-aware Mixture-of-Experts (MoE) module into the feed-forward networks of Transformer blocks. This design encourages different experts to specialize in modeling feature representations with varying sparsity levels, thereby enhancing representation capacity and feature discriminability. Finally, we propose a dynamic pon-dering strategy that adaptively determines whether to terminate inference at intermediate layers according to the difficulty of different tracking scenarios. This mechanism dynamically adjusts the inference depth, improving tracking efficiency while maintaining robust tracking performance. To sum up, the contributions of this work can be summa-rized as follows: 
+
+1). We propose a unified multi-sparsity modeling framework that captures event-density variations across temporal scales through hierarchical feature learning, thereby effectively ex-ploiting the inherent spatial sparsity and temporal density of event data. 
+
+2). We introduce a sparsity-adaptive tracking paradigm that integrates a sparsity-aware Mixture-of-Experts module with a dynamic pondering strategy, enabling efficient and robust tracking under diverse motion dynamics. 
+
+3). Extensive experiments on three public benchmarks, i.e., FE240hz, COESOT, and EventVOT, demonstrate the effective-ness and efficiency of the proposed approach. II. R ELATED WORKS 
+
+In this section, we review the most related research top-ics to our paper, including Event-based tracking, Efficient Transformer Tracking, and Mixture of Experts Network. More related works can be found in the following surveys [6], [13] and paper list 1.
+
+A. Event-based Tracking 
+
+By asynchronously capturing pixel-level brightness changes, event cameras have attracted considerable attention due to their unique advantages, including high temporal resolution, low latency, and high dynamic range [6]. These properties make them particularly well-suited for visual tracking in challenging scenarios, such as motion blur and low-light conditions, where conventional RGB cameras often struggle.  
+
+> 1github.com/wangxiao5791509/Single_Object_Tracking_Paper_List IEEE TRANSACTIONS ON ***, 2026 3
+
+The early event-based tracker ESVM [14] was proposed by Huang et al. for high-speed moving object tracking. Chen et al. [15] introduced ATSLTD, an adaptive event-to-frame conversion algorithm designed for asynchronous tracking. EKLT [16] combined frame and event streams for high-temporal-resolution feature tracking. Recently, deep learn-ing architectures have shown their advantages in tracking tasks. STNet [17] integrated a Transformer and an SNN for spatiotemporal modeling. Zhu et al. [10] improved tracking accuracy and speed through key event sampling and graph network embedding. Wang et al. [9] proposed a novel hierar-chical cross-modality knowledge distillation approach. Zhang et al. [11] propose an efficient Vision Transformer architecture that reduces computational cost while maintaining compara-ble performance for event-based tracking. Wang et al. [18] propose a novel paradigm for event stream-based tracking that integrates a slow, high-accuracy tracker with a fast, low-latency tracker to enhance both efficiency and effectiveness. In this work, we advance event-based tracking with a sparsity-aware Mixture-of-Experts Transformer that effectively exploits the spatial sparsity and temporal density of event data. We further design a dynamic pondering strategy to adaptively adjust the inference depth according to tracking difficulty, thereby improving tracking efficiency. 
+
+B. Efficient Transformer Tracking 
+
+Transformer-based efficient tracking algorithms have re-cently received increasing attention, as they aim to balance the powerful modeling capability of Transformers with the practical constraints of model complexity and inference speed. Early Transformer-based trackers, such as TransT [1] and STARK [19], demonstrated the effectiveness of attention mechanisms in modeling search-template interactions. How-ever, the quadratic complexity of self-attention with respect to the token length limits its efficiency, especially in high-resolution or long-term tracking scenarios. To mitigate this issue, numerous RGB-based trackers [9], [20]–[23], [23], [24] have focused on lightweight archi-tectures and token pruning strategies. OSTrack [20] intro-duces a candidate elimination strategy to remove irrele-vant background regions, thereby improving efficiency. Light-Track [25] leverages neural architecture search to design compact Transformer-based trackers with reduced computa-tional cost. MixFormerV2 [26] improves tracking efficiency through distillation-based backbone reduction. Zhu et al. [27] achieve efficient object tracking via intermediate terminating branches. Hong et al. [22] proposed CompressTracker, whose replacement training strategy improves the student model’s ability to mimic the teacher model while simplifying the training process. For event-based tracking, HDETrack [9] achieves high-speed visual tracking using only event streams during in-ference via a hierarchical knowledge distillation framework. Wang et al. [18] improve both efficiency and performance by combining a slow, high-accuracy tracker with a fast, low-latency tracker. Zhang et al. [11] further reduce computa-tional cost through two adaptive token sparsification strategies tailored to event data and tracking-specific characteristics. Inspired by A-ViT [28], we propose a dynamic pondering strategy that adaptively adjusts the inference depth of ViT layers according to tracking difficulty. Unlike conventional dynamic inference methods [27], [28], our strategy is tailored to event-based tracking by explicitly considering the spatial sparsity and temporal density of event streams, thereby achiev-ing a favorable trade-off between tracking performance and computational efficiency. 
+
+C. Mixture-of-Experts Network 
+
+Mixture-of-Experts (MoE) Network has emerged as an effective paradigm for improving model capacity and com-putational efficiency by dynamically routing tokens to asubset of expert networks. The sparsely gated MoE layer proposed in [29] demonstrates that large model capacity can be achieved with limited computation by activating only a few experts for each input. Subsequent studies, such as Switch Transformer [30], further simplify the routing mechanism and improve training stability, making MoE more practical for large-scale applications. Recent studies have extended MoE to vision tasks, partic-ularly in combination with Vision Transformers. V-MoE [31] incorporates sparse expert layers into ViT and demonstrates improved scalability for image classification. Tutel [32] fo-cuses on system-level optimization, significantly improving the efficiency of MoE training and inference on modern hard-ware. Moreover, several works investigate advanced routing strategies and expert utilization. Lewis et al. [33] introduce a balanced assignment mechanism to alleviate expert load imbalance. Zoph et al. [34] propose stability-enhanced routing and training strategies for sparse expert models. Roller et al. [35] adopt hash-based routing to reduce routing overhead. Lu et al. [36] integrate MoE to achieve real-time open-vocabulary object detection. Zhao et al. [37] apply MoE to out-of-distribution detection in visual foundation models. In this work, we propose a sparsity-aware MoE module for event-based visual tracking, in which multiple sub-experts are designed to specialize in event representations with dif-ferent sparsity levels. This design enables flexible expert specialization and improves adaptation to the inherent sparsity characteristics of event data. III. O UR PROPOSED APPROACH 
+
+A. Overview 
+
+To fully exploit the spatial sparsity and temporal density of event data while improving tracking efficiency, we propose PSMTrack, as illustrated in Fig. 4. Specifically, based on short-, medium-, and long-term temporal windows, we construct three event search regions with different sparsity levels instead of relying on a single fixed temporal window. This design enables the model to capture sharp object contours from short-term observations and rich motion dynamics from long-term information. Building upon this design, we divide the Vision Transformer backbone into three stages to progressively incorporate event features with varying sparsity levels. Mean-while, we introduce a sparsity-aware MoE module into the IEEE TRANSACTIONS ON ***, 2026 4
+
+feed-forward network of the Transformer block, encouraging different experts to specialize in features with different spar-sity levels, thereby enhancing feature discriminability across diverse event densities. To further improve efficiency, as shown in Fig. 5, we propose a dynamic pondering strategy that adaptively adjusts the inference depth according to tracking difficulty, achieving a favorable trade-off between tracking accuracy and computational cost. The overall architecture will be detailed in the following sections, including the sparsity-aware Transformer block and the dynamic pondering strategy. 
+
+B. Input Representation 
+
+Given an event stream EP = {ei}Mi=1 within a time interval 
+
+T , consisting of M asynchronously generated events, each event ei is represented as a quadruple (xi, y i, t i, p i). Here, 
+
+(xi, y i) denotes the spatial coordinates, ti ∈ [0 , T ] is the timestamp, and pi ∈ {− 1, 1} indicates the polarity. The event stream is partitioned into N = T / ∆t temporal segments, where ∆t denotes the duration of each segment. As observed in [38] and Fig. 3, event frames constructed from short tem-poral windows preserve sharper edge details, whereas those generated from long temporal windows encode richer motion cues. For the k-th segment centered at time tk, we construct three temporal windows at different scales, denoted as Wks ,
+
+Wkm, and Wkd :
+
+Wks = tk − 14 ∆t, t k + 14 ∆t ,
+
+Wkm = tk − 12 ∆t, t k + 12 ∆t ,
+
+Wkd = tk − 34 ∆t, t k + 34 ∆t ,
+
+(1) where the subscripts s, m, and d denote sparse, medium-density, and dense temporal windows, respectively. These windows are used to generate sparse, medium-density, and dense spatiotemporal event representations. Accordingly, we obtain the stacked event representation E ∈ R3N ×3×H×W ,where the second dimension denotes the channel number, and 
+
+H and W represent the height and width of each event frame, respectively. 
+
+C. Network Architecture 
+
+• Three-Stage Vision Transformer Backbone. Given event frames with multiple sparsity levels, we adopt the medium-density representation of the first frame as the template to provide a balanced reference. For subsequent frames, event representations at all three density levels are used as search regions. All inputs are cropped and resized to fixed spatial resolutions, yielding the template frame Z0 ∈ R3×Hz ×Wz
+
+and the search frames {Xis, X im, X id}, where Xis, X im, X id ∈
+
+R3×Hx×Wx correspond to sparse, medium-density, and dense search inputs, respectively. The cropped event frames are then partitioned into non-overlapping patches of size P × P .Each patch is projected into a D-dimensional embedding space through a linear projection layer. After adding positional encodings, we obtain the template tokens Z ∈ RNz ×D and the search tokens {Xs, X m, X d}, where Xs, X m, X d ∈ RNx×D .Here, Nz = Hz Wz /P 2 and Nx = HxWx/P 2 denote the numbers of template and search tokens, respectively. Sparse Event Frame  Medium Event Frame  Dense Event Frame  
+
+> Fig. 3. Visualization of event representations with different event densities.
+
+Although multi-sparsity search representations provide com-plementary event cues, naively concatenating all search to-kens with the template tokens and feeding them into the entire Transformer backbone would substantially increase the computational cost due to the quadratic complexity of self-attention. To address this issue, we divide the Transformer backbone into three stages, containing {6, 4, 2} layers in our final implementation, and design a multi-stage feature learning strategy. Specifically, in the first stage , a search region with a specific sparsity level is selected as the initial input. Taking the dense search region as an example, we concatenate it with the template tokens to obtain Fd ∈ R(Nz +Nx)×D , which is then fed into the first-stage Vision Transformer blocks to model template-search interactions. In the second stage ,another search region with a different sparsity level, e.g., the medium-density search region, is incorporated into the token sequence, forming Fd,m ∈ R(Nz +2 Nx)×D . Since the dense search tokens have already been processed in the first stage, whereas the medium-density search tokens have not, we introduce a feature transformation module, as shown in Fig. 4 (b), to align newly introduced shallow features with previously processed deeper features across sparsity levels. The transformed medium-density search tokens are then con-catenated with the existing sequence and fed into the second-stage Vision Transformer blocks for further feature learning. 
+
+Finally , the remaining search region with the last sparsity level, e.g., the sparse search region, is also processed by the feature transformation module and appended to the token sequence, yielding Fd,m,s ∈ R(Nz +3 Nx)×D . The resulting tokens are jointly fed into the third-stage Vision Transformer blocks for deeper feature learning. By progressively incorporating search regions with differ-ent density levels through the proposed multi-stage learning strategy, our framework achieves two key advantages. First, it substantially reduces the computational burden caused by excessive search tokens, thereby improving computational efficiency. Second, the stage-wise integration facilitates pro-gressive feature learning across different sparsity levels, en-abling effective cross-scale interactions and enhancing the discriminability of the learned representations. Finally, the search features with different sparsity levels are separated from IEEE TRANSACTIONS ON ***, 2026 5Medium        
+
+> Search
+> Medium
+> Search
+> Template Template
+> …
+> P.E.
+> Projection layer Projection layer
+> Sparsity  Selector
+> Fe at ure
+> Tr ansfor mation
+> Temporal view
+> Tracking Head
+> (a) Sparsity -Aware Transformer Block
+> Sparsity Router
+> ...
+> ...
+> Linear
+> Linear
+> 3072
+> Linear
+> Linear
+> 3072
+> Shared
+> LayerNorm
+> SA -MoE
+> MHA
+> L2
+> 1024
+> L1
+> 1024
+> L2
+> 1024
+> L1
+> 1024
+> L2
+> 1024
+> L3
+> 1024
+> L1
+> 1024
+> L2
+> 1024
+> L3
+> 1024
+> L1
+> 1024
+> Stage 1 Stage 2 Stage 3
+> L1
+> 1024
+> L1
+> 1024
+> LayerNorm
+> Linear
+> GELU
+> Linear
+> (b) F eature Transformation
+> Linear
+> Linear
+> 3072
+> Linear
+> Linear
+> 3072
+> 768
+> 768
+
+L3
+
+> 1024
+
+L3
+
+> 768
+> 768
+
+L2
+
+> 1024
+
+L2
+
+> 768
+> 768
+
+L1
+
+> 1024
+
+L1            
+
+> 768
+> 768
+> Weight Splitting
+> Medium
+> Expert
+> (c) E xpert Splitting
+> Pre -trained
+> Shared Expert
+> Sparse Search Token
+> Medium Search Token
+> Dense Search Token
+> Template Token
+> Position Embedding
+> Addition Operation
+> L2L2L3L1L1L1
+> Tracking Result
+> Dense
+> Search
+> Dense
+> Search
+> Sparse
+> Search
+> Sparse
+> Search
+> Stage 1 Stage 2 Stage 3
+> DPS DPS
+> Fe at ure
+> Tr ansfor mation
+> Vision  Transformer Block × L 1
+> Vision  Transformer Block × L 2
+> Vision  Transformer Block × L 3
+> Sparse -Aware MoE
+> Dense
+> Expert
+> Sparse
+> Expert
+
+Fig. 4. The overall framework of the proposed Dynamic Pondering Sparsity-aware Mixture-of-Experts Transformer for event-based tracking, termed PSMTrack. According to different temporal window lengths, sparse, medium-density, and dense event representations are jointly fed into a hierarchical backbone network for progressive feature learning. Specifically, we introduce a sparsity-aware Mixture-of-Experts (MoE) module into the first block of each stage to replace the standard feed-forward network, enabling specialized modeling of feature representations with different sparsity levels. In addition, we propose a dynamic pondering strategy to adaptively determine whether to terminate inference early, thereby improving overall tracking efficiency. 
+
+the token sequence and fused via element-wise summation to aggregate complementary information across all sparsity levels. The fused representation is then fed into the tracking head to predict the target location in the current frame. 
+
+• Sparsity-aware Transformer Block As the grouped Trans-former progressively introduces search regions with different sparsity levels, the feed-forward network (FFN) in each layer needs to process tokens with heterogeneous event-density distributions. These representations emphasize different visual cues. However, a shared FFN applies an identical transfor-mation to all tokens, which may weaken sparsity-specific cues and suppress the complementary characteristics of sparse, medium-density, and dense event features, leading to subopti-mal feature adaptation. To address this issue, inspired by the MoE paradigm [30], we propose a sparsity-aware Transformer block that dynamically routes tokens to specialized experts according to their sparsity characteristics, thereby enhancing representation capacity and feature discriminability with lim-ited additional computation. We first revisit the standard FFN in a Transformer block, which performs token-wise nonlinear transformation and plays a crucial role in enhancing representation capacity. Each FFN is initialized from a pre-trained base model and consists of two linear layers, with the normalization layer omitted for simplicity. It can be parameterized as [W1, b 1, W 2, b 2], where 
+
+W1 ∈ RH×D , b1 ∈ RH×1, W2 ∈ RD×H , and b2 ∈ RD×1.Here, D denotes the token embedding dimension and H
+
+denotes the hidden dimension. The FFN is formulated as 
+
+FFN( x) = W2 (σ (W1x + b1)) + b2, (2) where x denotes the input tokens and σ(·) is the activation function. To enable sparsity-aware specialization, as shown in Fig. 4 (c), we decompose the original FFN into three sub-FFNs, each serving as a sparsity-specific expert for sparse, medium-density, or dense event representations. Meanwhile, the origi-nal full FFN is retained as a shared expert to preserve general representation capability. Together, these experts constitute the proposed sparsity-aware Mixture-of-Experts (SA-MoE) structure, as illustrated in Fig. 4 (a). Specifically, the first linear layer is partitioned along the hidden dimension into three sub-layers: 
+
+W1 = {W i 
+
+> 1
+
+∈ R(H/ 3) ×D | i = 1 , 2, 3}, (3) 
+
+b1 = {bi 
+
+> 1
+
+∈ R(H/ 3) ×1 | i = 1 , 2, 3}. (4) Similarly, the second linear layer is also partitioned along the hidden dimension: 
+
+W2 = {W i 
+
+> 2
+
+∈ RD×(H/ 3) | i = 1 , 2, 3}, (5) while the output bias is evenly shared among experts: 
+
+b∗ 
+
+> 2
+
+= b2/3. (6) Each expert Ei is therefore defined as a lightweight sub-FFN, i.e., Ei = [ W i 
+
+> 1
+
+, b i
+
+> 1
+
+, W i 
+
+> 2
+
+, b ∗
+
+> 2
+
+]. In this design, {E1, E 2, E 3}
+
+correspond to dense, medium-density, and sparse experts, respectively, while the original FFN is retained as a shared expert Es.To dynamically select the most appropriate expert, we introduce a sparsity router. Specifically, we first apply global IEEE TRANSACTIONS ON ***, 2026 6 
+
+> Fig. 5. The pipeline of the Dynamic Pondering Strategy (DPS). The upper part (a) shows that, in challenging scenarios, the model continues inference until the final layer to achieve higher accuracy before exiting. The lower part (b) illustrates that, in relatively simple scenarios, the model can perform effective tracking at intermediate layers with sufficient confidence. Under the regulation of DPS, the model adaptively terminates backbone inference at the 9-th layer.
+
+average pooling over the token dimension for both the template and all search region features, and then concatenate them along the channel dimension to obtain Rin ∈ R1×2D . This representation is fed into an MLP-based router to predict the routing scores for three search regions with different sparsity levels: 
+
+S = MLP( Rin ), (7) where S ∈ R1×3 denotes the routing logits. We then select the first K dimensions as the active logits: 
+
+Sa = S1: K , (8) where K denotes the number of sparsity-level search regions currently introduced into the Transformer stage. To enable differentiable expert selection, we apply Gumbel-Softmax sampling to obtain the routing mask: 
+
+m = GumbelSoftmax( Sa, τ ), (9) where τ denotes the sampling temperature, which is set to 1
+
+in our implementation, and m represents the resulting routing decision. According to the routing result, the selected search features are assigned to the corresponding sparsity-specific expert. For example, if the medium-density search region is selected, its feature transformation is given by 
+
+X′ 
+
+> m
+
+= E2(Xm). (10) Finally, the output of the selected sparsity-specific expert is combined with the shared expert output via element-wise addition. If their dimensions are inconsistent, the sparsity-specific expert output is first aligned, e.g., by repetition, to match the dimensionality of the shared representation. The resulting representation is then used as the final output of the SA-MoE module. In practice, we replace the standard FFN with the proposed SA-MoE only in the first block of each stage, reducing redundant computation while preserving effective sparsity-aware feature adaptation. 
+
+• Dynamic Pondering Strategy To further reduce the com-putational cost introduced by multi-sparsity search inputs, inspired by [28], [39], we propose a dynamic pondering strategy (DPS) that adaptively adjusts the inference depth of ViT layers. The overall pipeline is illustrated in Fig. 5. To ensure sufficient feature learning in early layers, DPS is applied from the second stage, i.e., starting at layer 7. We first initialize the cumulative halting probability Cp
+
+to zero. For the output feature of each Transformer block, a learnable halting predictor is employed to estimate the probability of terminating forward propagation at the current layer. Specifically, the halting predictor is implemented as a lightweight linear layer, which takes the globally average-pooled feature as input and outputs a scalar halting probability: 
+
+Hip = σ (Linear (GAP( Fi))) , (11) where Fi denotes the output feature of the i-th Transformer block, Hip represents the corresponding halting probability, 
+
+GAP( ·) denotes global average pooling, and σ(·) denotes the sigmoid activation function. At each layer, the predicted halting probability is accu-mulated into the cumulative halting probability Cp. If the updated Cp < 1, the computation proceeds to the next block; otherwise, once Cp ≥ 1, forward propagation is terminated. The final representation is obtained by aggregating features from multiple layers: 
+
+Fo =
+
+(P 11  
+
+> i=7
+
+HpiFi +
+
+
+
+1 − P11  
+
+> i=7
+
+Hpi
+
+F12 , if L = 12 ,
+
+PLi=7 HpiFi, otherwise ,
+
+(12) where Fi denotes the output feature of the i-th block, Fo
+
+represents the final aggregated feature, and L denotes the IEEE TRANSACTIONS ON ***, 2026 7
+
+halting layer. At the final layer, the halting probability is defined as the remaining probability mass after subtracting the accumulated probabilities of all preceding layers from 1,ensuring that the aggregation weights across layers sum to 1.During training, we introduce a dynamic pondering loss 
+
+Lponder to penalize the number of executed layers after DPS is activated. Since DPS starts from the second stage, i.e., the 7-th layer, the loss is defined as 
+
+Lponder = L − 6, (13) where L denotes the halting layer. This loss is incorporated into the overall tracking objective, encouraging the model to maintain robust tracking performance with fewer executed layers. During inference, DPS adaptively adjusts the inference depth according to scenario complexity and tracking difficulty, allowing computation to terminate at an appropriate layer. 
+
+D. Tracking Head and Loss Function 
+
+Following OSTrack [20], we adopt a center-based track-ing head. Specifically, the search-region features are first reshaped into a feature map and then processed by the con-volution–batch normalization–ReLU (Conv-BN-ReLU) layers to generate four key components: (1) a target classification score map that predicts the likelihood of the target at each spatial location; (2) local offsets for refining the bounding box center coordinates; (3) normalized bounding box sizes (width and height); and (4) the final predicted bounding boxes, representing the estimated target positions in the current frame. During training, we follow the loss formulation of OS-Track [20], which includes three complementary objectives: Focal Loss ( Lf ocal ) for target classification, L1 Loss ( L1) for offset regression, and GIoU Loss ( LGIoU ) for bounding box overlap optimization. In addition, to optimize the proposed dynamic pondering strategy, we introduce a pondering loss 
+
+Lponder that penalizes the number of activated ViT layers during forward propagation. The overall training objective is defined as 
+
+Ltotal = λ1Lf ocal + λ2L1 + λ3LGIoU + λ4Lponder . (14) Here, λ1, λ2, and λ3 are weighting coefficients for the tracking losses and are set to 1, 5, and 2, respectively. For λ4, we adopt a cosine-based scheduling strategy: 
+
+λ4 = α · (1 − cos ( π · R)) ,
+
+where α is a hyperparameter controlling the maximum weight of the pondering loss. The scheduling ratio R is defined as 
+
+R =
+
+
+
+0, e < e start ,e − estart 
+
+etotal − estart 
+
+, e ≥ estart , (15) where e, estart , and etotal denote the current training epoch, the activation epoch of the dynamic pondering strategy, and the total number of training epochs, respectively. This scheduling strategy gradually increases the contribution of the pondering loss, enabling stable optimization of DPS while encouraging efficient inference. IV. E XPERIMENTS 
+
+A. Datasets and Evaluation Metric 
+
+To comprehensively evaluate the effectiveness of the pro-posed PSMTrack, we conduct extensive experiments on three public event-based tracking datasets, including FE240hz [45], 
+
+COESOT [46], and EventVOT [9]. For FE240hz [45] and COESOT [46], we compare PSMTrack with other methods using only unimodal event data as input. Each tracker is retrained and evaluated on the corresponding event frames following the original parameter settings of the respective method. A brief introduction to these event-based tracking datasets is provided below. 
+
+• FE240hz dataset : FE240hz was collected using agrayscale DVS346 event camera and contains 71 training videos and 25 testing videos. It provides more than 1.13 million annotations over 143K image frames and their corre-sponding event data. The dataset covers various challenging tracking scenarios, such as motion blur and high dynamic range conditions. More details can be found on the GitHub 2.
+
+• COESOT dataset : COESOT is a large-scale, category-wide RGB-event tracking dataset covering 90 object categories and 1,354 video sequences, with a total of 478,721 event frames. To systematically evaluate tracking robustness, the dataset defines 17 challenging factors. It is split into 827 train-ing videos and 527 testing videos, providing a comprehensive benchmark for event-based tracking research. More details can be found on the GitHub 3.
+
+• EventVOT dataset : EventVOT is the first large-scale, high-resolution event-based tracking dataset captured using a Prophesee camera. It contains 841 training videos and 282 testing videos, covering 19 object categories, such as UAVs, basketball, and pedestrians. Each video is uniformly divided into 499 frames to facilitate high-quality annotation. The dataset further defines 14 challenging attributes, including fast motion and small objects, to comprehensively evaluate tracking robustness. More details can be found on the GitHub 4.For evaluation, we adopt three widely used tracking metrics: 
+
+Success Rate (SR) , Precision Rate (PR) , and Normalized Precision Rate (NPR) . Specifically, SR is defined as the proportion of frames in which the Intersection over Union (IoU) between the predicted and ground-truth bounding boxes exceeds a given threshold. PR measures the percentage of frames where the Euclidean distance between the predicted and ground-truth target centers is below a predefined threshold, which is set to 20 pixels by default. NPR further normalizes the center-location error by the diagonal length of the ground-truth bounding box to account for scale variations. In addition, we report Frames Per Second (FPS) to evaluate tracking efficiency. 
+
+B. Implementation Details 
+
+Our framework is built upon OSTrack [20], with ViT-B adopted as the backbone network. The backbone is divided     
+
+> 2https://github.com/Jee-King/ICCV2021_Event_Frame_Tracking?tab= readme-ov-file
+> 3https://github.com/Event-AHU/COESOT
+> 4https://github.com/Event-AHU/EventVOT_Benchmark IEEE TRANSACTIONS ON ***, 2026 8
+> TABLE I EXPERIMENTAL RESULTS (SR/PR) ON FE240 HZ DATASET .
+
+STNet [17] TransT [1] STARK [19] SiamFC++ [40] DiMP [41] ATOM [42] OSTrack [20] 
+
+58.5/89.6 56.7/89.0 55.4/83.7 54.5/85.3 53.4/88.2 52.8/80.0 57.1/89.3 
+
+MixFormer [43] AQATrack [44] HDETrack [9] MambaEvT [7] TSETrack [11] Ours-I Ours-II 
+
+57.1/88.6 59.9/92.6 59.8/92.2 58.1/92.0 59.5/90.9 61.9/93.5 61.3/93.0   
+
+> TABLE II OVERALL TRACKING PERFORMANCE ON THE COESOT DATASET .
+
+No. Trackers Source SR PR NPR 
+
+01 TrDiMP [49] CVPR21 50.7 59.2 58.4 02 ToMP50 [50] CVPR22 46.3 55.2 56.0 03 OSTrack [20] ECCV22 50.9 61.8 61.5 04 AiATrack [51] ECCV22 50.6 59.5 59.2 05 STARK [19] ICCV21 40.8 44.5 46.1 06 TransT [1] CVPR21 45.6 54.3 54.2 07 DiMP50 [41] ICCV19 53.8 64.8 65.1 08 PrDiMP [52] CVPR20 47.5 57.8 57.9 09 KYS [53] ECCV20 42.6 52.7 52.1 10 MixFormer [43] CVPR22 44.4 50.2 51.1 11 ATOM [42] CVPR19 42.1 50.4 51.3 12 SimTrack [54] ECCV22 48.3 55.7 56.6 13 HDETrack [9] CVPR24 53.1 64.1 64.5 14 MCITrack [55] AAAI25 56.3 67.6 67.3 15 LMTrack [23] AAAI25 56.4 69.1 67.9 26 UTPTrack [56] CVPR26 55.2 67.1 66.9 17 SpikeTrack [57] CVPR26 54.2 66.0 65.9 18 Ours-I - 56.6 69.0 68.7 
+
+19 Ours-II - 56.2 68.5 68.1 
+
+into three stages with 6, 4, and 2 layers, respectively, and is initialized with pretrained weights [20]. The template and search regions are cropped and resized to 128 × 128 and 
+
+256 × 256 , respectively. During training, grayscale conversion is applied as data augmentation with a probability of 5% .The model is trained for 50 epochs with a batch size of 32 using the AdamW optimizer [47]. The initial learning rate and weight decay are set to 4 × 10 −4 and 1 × 10 −4,respectively. A step learning rate scheduler is employed, where the learning rate is decayed by a factor of 0.1 at epoch 40. For the dynamic pondering strategy, the activation epoch is set to 10. The hyperparameter α is set to 0.04, 0.06, and 0.10 for EventVOT, COESOT, and FE240hz, respectively. Our code is implemented in Python based on PyTorch [48], and all experiments are conducted on a server equipped with an NVIDIA RTX 4090 GPU. More implementation details will be made available in our GitHub repository. 
+
+C. Comparison on Public Benchmark Datasets 
+
+• Results on FE240hz Dataset. As shown in Table I, the proposed method achieves new state-of-the-art (SOTA) perfor-mance on the FE240hz dataset. Specifically, Ours-I denotes the proposed method without DPS, achieving SR and PR scores of 61.9% and 93.5%, respectively, while Ours-II denotes the method equipped with DPS, achieving SR and PR scores of 61.3% and 93.0%, respectively. Compared with recent SOTA trackers, such as HDETrack and TSETrack, Ours-I improves SR by 1.5% and 2.4%, respectively, demonstrating the effec-tiveness and robustness of the proposed tracking framework.                                                                                                                                                                       
+
+> TABLE III OVERALL TRACKING PERFORMANCE ON EVENT VOT D ATASET .
+> No. Trackers Source SR PR NPR FPS
+> 01 DiMP50 [41] ICCV19 52.6 51.1 67.2 43 02 ATOM [58] CVPR19 44.4 44.0 57.5 30 03 PrDiMP [52] CVPR20 55.5 57.2 70.4 30 04 KYS [53] ECCV20 38.7 37.3 49.8 20 05 TrDiMP [49] CVPR21 39.9 34.8 48.7 26 06 STARK [19] ICCV21 44.5 39.6 55.7 42 07 TransT [1] CVPR21 54.3 56.5 68.8 50 08 ToMP50 [50] CVPR22 37.6 32.8 47.4 25 09 OSTrack [20] ECCV22 55.4 60.4 71.1 105 10 AiATrack [51] ECCV22 57.4 59.7 72.8 38 11 MixFormer [43] CVPR22 49.9 49.6 63.0 25 12 SimTrack [54] ECCV22 55.4 57.5 69.9 40 13 ROMTrack [59] ICCV23 56.3 60.2 71.8 62 14 ARTrack [60] CVPR23 52.0 52.0 65.6 26 15 ODTrack [61] AAAI24 56.8 62.2 72.1 32 16 EVPTrack [62] AAAI24 58.4 62.8 73.9 71 17 ARTrackV2 [63] CVPR24 55.4 56.6 70.0 94 18 AQATrack [44] CVPR24 59.2 65.0 74.3 68 19 HDETrack [9] CVPR24 57.8 62.2 73.5 105 20 MambaEvT [7] TCSVT25 56.5 56.7 65.5 28 21 MCITrack [55] AAAI25 59.9 66.1 74.6 35 22 LMTrack [23] AAAI25 57.3 63.3 71.2 56 23 UTPTrack [56] CVPR26 59.7 66.2 75.2 95 24 SpikeTrack [57] CVPR26 58.6 63.8 74.2 72 25 Ours-I -60.3 66.6 75.6 56 26 Ours-II -59.9 66.2 75.4 79
+> Fig. 6. Inference layer statistics on the EventVOT dataset.
+
+With the dynamic pondering strategy, Ours-II enables more efficient tracking while maintaining competitive accuracy. 
+
+• Results on COESOT Dataset. As shown in Table II, we further report the tracking results on the large-scale COESOT benchmark. Specifically, Ours-I denotes the proposed method without DPS, which outperforms all compared methods in IEEE TRANSACTIONS ON ***, 2026 9   
+
+> TABLE IV COMPONENT ANALYSIS RESULTS ON THE EVENT VOT DATASET .
+
+No. Baseline Multi-Sparsity Multi-Stage SA-MoE DPS SR PR NPR Params FPS 
+
+1 ✓ 58.5 63.5 73.6 92.5M 105 2 ✓ ✓ 59.2 65.3 74.2 92.5M 52 3 ✓ ✓ ✓ 59.6 65.6 74.9 93.1M 64 4 ✓ ✓ ✓ ✓ 60.3 66.6 75.6 108.5M 56 5 ✓ ✓ ✓ ✓ ✓ 59.9 66.2 75.4 108.5M 79 
+
+terms of SR and NPR, while showing only a marginal gap of 0.1% in PR compared with the best-performing tracker. These results demonstrate the effectiveness of the proposed framework in exploiting multi-sparsity event representations for robust tracking. Ours-II denotes the method equipped with DPS, which incurs only a slight average accuracy drop of 0.5% compared with Ours-I while improving tracking efficiency. 
+
+• Results on EventVOT Dataset. As shown in Table III, we report the tracking results on the high-resolution event-based tracking dataset EventVOT. Specifically, Ours-I denotes the proposed method without DPS, which outperforms all com-pared SOTA trackers and achieves SR, PR, and NPR scores of 60.3%, 66.6%, and 75.6%, respectively. Ours-II denotes the method equipped with DPS, which incurs only a slight average accuracy drop of approximately 0.3% compared with Ours-I while significantly improving the tracking speed from 56 FPS to 79 FPS. Moreover, with DPS, Ours-II still maintains a clear accuracy advantage over existing SOTA methods. For example, compared with SpikeTrack, Ours-II improves SR, PR, and NPR by 1.3%, 2.4%, and 1.2%, respectively. Compared with MCITrack, Ours-II achieves comparable tracking accuracy while being more than twice as fast. Meanwhile, we further analyze the distribution of halting layers under the dynamic pondering strategy. As shown in Fig. 6, the model terminates inference early in approximately 50% of the scenarios. These results demonstrate the superiority of the proposed method for event-based tracking and its favorable trade-off between tracking accuracy and efficiency. 
+
+D. Ablation Study 
+
+• Component Analysis. To verify the effectiveness of each proposed component, we conduct a comprehensive ablation study on the EventVOT dataset, with the results reported in Table IV. The baseline model, shown in the first row, achieves SR, PR, and NPR scores of 58.5%, 63.5%, and 73.6%, respectively, with 92.5M parameters and a running speed of 105 FPS. Based on this baseline, we progressively introduce each component to evaluate its contribution. Specifically, in the second row, we introduce multi-sparsity event representations and directly concatenate them as inputs to the backbone net-work. This strategy brings noticeable accuracy improvements, but reduces efficiency due to the increased computational cost of processing additional tokens. In the third row, we design a multi-stage backbone that progressively incorporates event representations with different sparsity levels, thereby alleviat-ing the computational burden. This design further improves tracking accuracy while enhancing efficiency. In the fourth row, we incorporate the sparsity-aware MoE module, which                                                                                                                                  
+
+> TABLE V ABLATION STUDIES ON THE EVENT VOT DATASET .
+> # Event Representation SR PR NPR
+> 1. Event Time Surface 54.9 57.9 69.8 2. Event Reconstruction Images 57.5 63.9 71.5 3. Event Voxels 12.6 18.7 21.2 4. Event Frames (Sparse) 56.9 61.1 72.3 5. Event Frames (Medium) 58.5 63.5 73.6
+> 6. Event Frames (Dense) 58.7 64.8 74.1 # Multi-sparsity Input Order SR PR NPR
+> 1. Sparse →Medium →Dense 57.5 61.9 72.8 2. Dense →Sparse →Medium 59.2 65.3 74.6 3. Medium →Sparse →Dense 59.0 64.5 74.4
+> 4. Dense →Medium →Sparse (Ours) 59.6 65.6 74.9 # Layer Allocation (Dense / Mid / Sparse) SR PR NPR
+> 1. 4 / 4 / 4 Layers 59.4 65.4 74.5 2. 6 / 3 / 3 Layers 59.6 65.2 74.6 3. 2 / 4 / 6 Layers 59.7 65.4 74.9
+> 4. 6 / 4 / 2 Layers (Ours) 59.6 65.6 74.9
+> 5. Ours w/o Feature Transformation 59.3 65.4 74.4
+> # Sparsity Experts SR PR NPR
+> 1. w/o Sparsity Experts 59.6 65.6 74.9 2. w/o Shared Experts 59.4 65.3 74.3 3. Single Sparsity Expert 59.4 66.1 74.6
+> 4. Multi-sparsity Experts (Ours) 60.3 66.6 75.6 # SA-MoE Layers SR PR NPR
+> 1. w/o SA-MoE 59.6 65.6 74.9 2. All Layers 59.7 66.1 74.9 3. Only Stage-2 Layers 59.9 66.2 75.2 4. Only Stage-3 Layers 59.4 65.8 74.5
+> 5. First Layer of Each Stage (Ours) 60.3 66.6 75.6 # Depth Compression Methods SR PR NPR
+> 1. Stochastic Layer Exit 58.0 63.2 73.6 2. CompressTracker [22] 54.6 58.3 70.1 3. Similarity-Guided Layer-Adaptive [24] 56.1 59.3 71.0
+> 4. Dynamic Pondering Strategy (Ours) 59.9 66.2 75.4
+
+encourages expert specialization across different sparsity levels and leads to additional accuracy gains. Finally, in the last row, we introduce the dynamic pondering strategy, which increases the inference speed to 79 FPS with only a marginal accuracy drop, ultimately achieving a more favorable trade-off between tracking accuracy and efficiency. 
+
+• Analysis on Different Event Representation. To investi-gate the influence of different event representations on tracking performance, we conduct an ablation study on the EventVOT dataset by comparing four representative forms: event time sur-face, event reconstructed image, event voxel, and event frame. The event frame is further categorized into sparse, medium-density, and dense representations. As shown in Table V, the choice of event representation significantly affects tracking accuracy. Among all representations, event voxel yields the worst performance, which may be attributed to information loss during voxelization that weakens its spatial modeling capability. In contrast, the dense event frame achieves the best IEEE TRANSACTIONS ON ***, 2026 10 
+
+performance, benefiting from its higher event density, which provides richer motion cues. 
+
+• Analysis on Multi-sparsity Input Order. We further analyze the effect of different input orders of sparse, medium-density, and dense representations on tracking accuracy. As shown in Table V, the Dense → Medium-density → Sparse or-der, i.e., Ours, achieves the best performance and outperforms all other strategies. Compared with the Sparse → Medium-density → Dense order, which achieves 57.5% in SR, and the Medium-density → Sparse → Dense order, which achieves 59.0% in SR, our strategy first leverages dense represen-tations to capture rich motion cues, and then progressively incorporates medium-density and sparse representations to refine structural and contour details. This progressive design facilitates effective utilization of complementary event cues and enhances overall tracking stability. 
+
+• Analysis on Layer Allocation (Dense / Medium-density / Sparse). To investigate the trade-off between tracking performance and computational complexity, we compare four layer allocation strategies for dense, medium-density, and sparse feature processing, i.e., 4/4/4, 6/3/3, 2/4/6, and 6/4/2 (Ours). As shown in Table V, the 6/4/2 configuration achieves SR and PR scores of 59.6% and 65.6%, respectively. It delivers performance comparable to the 2/4/6 setting while requiring lower computational cost, owing to a more efficient allocation of layer resources. In addition, we further ablate the feature transformation module and observe an accuracy drop after removing it, demonstrating its effectiveness in aligning deep and shallow features. 
+
+• Analysis on Sparsity Experts. We further investigate the impact of sparsity experts on model performance by com-paring four configurations: without sparsity experts, without the shared expert, with a single sparsity expert, and with the proposed multi-sparsity experts (Ours). The results show that the proposed multi-sparsity experts achieve the best overall performance, with SR, PR, and NPR scores of 60.3%, 66.6%, and 75.6%, respectively. In particular, it outperform the single-sparsity-expert configuration by 1.0% in NPR, further vali-dating that the proposed SA-MoE module explicitly models event representations with different sparsity levels through multi-sparsity experts, thereby enhancing feature extraction and discriminability for improved tracking accuracy. 
+
+• Analysis of SA-MoE Layer Placement. To determine the optimal layer placement of SA-MoE within the ViT backbone, we compare four configurations:without SA-MoE, applying SA-MoE to all layers, applying SA-MoE only to Stage-2 layers, and applying SA-MoE to the first layer of each stage (Ours). The results show that the proposed placement achieves the best overall performance. Specifically, since the first layer of each stage is responsible for adapting newly introduced sparsity-level features, applying SA-MoE only at these layers enables effective sparsity-aware feature adaptation while avoiding redundant routing across the entire backbone. 
+
+• Analysis on Depth Compression Methods. Furthermore, we compare the proposed dynamic pondering strategy (DPS) with other model depth compression approaches. Specifically, we first evaluate Stochastic Layer Exit and observe a no-ticeable accuracy degradation, mainly due to the stochastic  
+
+> Fig. 7. Tracking results (SR) under each challenging factor.
+
+nature of layer skipping, which may introduce instability during inference. In addition, CompressTracker and Similarity-Guided Layer-Adaptive, two representative depth compression methods for visual tracking, also yield substantially lower accuracy than our approach under their respective settings. These results demonstrate that DPS achieves a more favorable trade-off between tracking accuracy and efficiency. 
+
+• Results Under Each Attribute. As shown in Fig. 7, we further report the performance of the proposed method and other state-of-the-art trackers under different challenging attributes. Benefiting from the proposed multi-sparsity relation modeling strategy, our method achieves leading performance on most attributes. In particular, it shows clear advantages under SIO (similar interfering objects), NM (no motion), BC (background clutter), and FOC (full occlusion), further demonstrating the robustness of the proposed tracker against diverse real-world challenges. 
+
+E. Efficiency Analysis 
+
+In this section, we further conduct an efficiency analysis on the EventVOT dataset. As shown in Table IV, introducing SA-MoE leads to the best tracking accuracy, but also increases the model size to 108.5M parameters and reduces the track-ing speed to 56 FPS, reflecting the additional computational cost introduced by this module. With the proposed Dynamic Pondering Strategy (DPS), the model maintains comparable accuracy while significantly improving the inference speed to 79 FPS without increasing the parameter count. Meanwhile, as shown in Table III, we compare the tracking speed of our method with all benchmarked approaches. The results show that our method achieves the best overall tracking accuracy and ranks among the top-performing methods in tracking speed. These efficiency analyses demonstrate that DPS effectively IEEE TRANSACTIONS ON ***, 2026 11 OSTrack  LMTrack  MCITrack  Ours  Ground Truth ODTrack HDETrack    
+
+> Fig. 8. Visualization of the tracking results of our method and other SOTA trackers. UAV Football Cup Goose
+> Fig. 9. Attention maps predicted by our method. Basketball Ping -Pong Car Bag
+> Fig. 10. Response maps predicted by our method.
+
+reduces redundant computation by adaptively allocating infer-ence depth, thereby achieving a favorable trade-off between tracking accuracy and efficiency. 
+
+F. Visualization 
+
+In addition to the quantitative analysis presented above, we provide qualitative visualizations to offer a more intuitive understanding of the proposed tracking framework. 
+
+• Tracking Results. As illustrated in Fig. 8, we visualize the tracking results of the proposed PSMTrack and several state-of-the-art trackers, including OSTrack, HDETrack, LMTrack, MCITrack, and ODTrack. In various challenging scenarios, PSMTrack predicts bounding boxes that are more closely aligned with the ground truth than those of competing meth-ods. These visualizations further demonstrate the superior stability and robustness of the proposed method in complex real-world tracking scenarios. 
+
+• Attention Heatmaps and Response Maps. As illustrated in Fig. 9, we visualize the attention heatmaps generated by the proposed method. In these maps, redder regions indicate higher attention weights, suggesting that the model focuses more strongly on the corresponding areas. We can find that the proposed method consistently concentrates on the target object throughout the tracking process, effectively highlighting discriminative target features while suppressing background interference. Fig. 10 further presents the response maps pro-duced by the proposed method, which reflect its localization capability. In these maps, bluer regions correspond to higher response scores. As shown, the proposed method produces concentrated responses on the target, enabling precise and reliable localization. Together, these visualizations provide qualitative evidence for the robustness and effectiveness of the proposed approach. IEEE TRANSACTIONS ON ***, 2026 12 
+
+G. Limitation Analysis and Feature work 
+
+Despite achieving a favorable trade-off between tracking accuracy and efficiency, the proposed event-based tracker does not yet incorporate language guidance or exploit the contex-tual modeling capabilities of multimodal large models. Such semantic cues could provide richer target-level understanding and further improve robustness in complex scenarios. Integrat-ing language descriptions may help disambiguate targets more effectively, while leveraging multimodal models can facilitate visual-textual reasoning and improve localization precision. In future work, we plan to explore how multimodal large models can assist human experts in generating language descriptions for event-based tracking datasets, and how such textual cues can be seamlessly integrated into our framework. This direc-tion is expected to extend our method to more challenging environments with improved adaptability and accuracy. V. C ONCLUSION 
+
+In this paper, we propose PSMTrack, a dynamic pondering sparsity-aware Mixture-of-Experts Transformer for efficient event-based visual tracking. To fully exploit the intrinsic spatial sparsity and temporal density of event data, PSMTrack constructs multi-sparsity event representations from differ-ent temporal windows and progressively incorporates dense, medium-density, and sparse search tokens into a three-stage Vision Transformer backbone for hierarchical feature learning. In addition, a sparsity-aware MoE module is introduced to explicitly model event representations with different sparsity levels through expert specialization, thereby enhancing feature extraction and feature discriminability. To further improve effi-ciency, a dynamic pondering strategy is designed to adaptively adjust the inference depth according to tracking difficulty, reducing redundant computation while maintaining reliable tracking performance. Extensive experiments on the FE240hz, COESOT, and EventVOT datasets demonstrate that PSMTrack achieves competitive tracking accuracy and a favorable trade-off between tracking accuracy and computational efficiency. REFERENCES [1] X. Chen, J. Yan, Bin Zhu, D. Wang, X. Yang, and H. Lu, “Transformer tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, p. 8126–8135. [2] X. Wang, X. Shu, Z. Zhang, B. Jiang, Y. Wang, Y. Tian, and F. Wu, “Towards more flexible and accurate object tracking with natural lan-guage: Algorithms and benchmark,” in Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , 2021, pp. 13 763–13 773. [3] S. Yao, Y. Guo, Y. Yan, W. Ren, and X. Cao, “Unctrack: Reliable visual object tracking with uncertainty-aware prototype memory network,” 
+
+IEEE Transactions on Image Processing , vol. 34, pp. 3533–3546, 2025. [4] Y. Chen, Q. Yuan, H. Xie, Y. Tang, Y. Xiao, J. He, R. Guan, X. Liu, and L. Zhang, “Hyperspectral video tracking with spectral–spatial fusion and memory enhancement,” IEEE Transactions on Image Processing ,vol. 34, pp. 3547–3562, 2025. [5] H. Wang, W. Li, X.-G. Xia, Q. Du, and J. Tian, “Ssf-net: Spatial-spectral fusion network with spectral angle awareness for hyperspectral object tracking,” IEEE Transactions on Image Processing , vol. 34, pp. 3518– 3532, 2025. [6] G. Gallego, T. Delbrück, G. Orchard, C. Bartolozzi, B. Taba, A. Censi, S. Leutenegger, A. J. Davison, J. Conradt, K. Daniilidis et al. , “Event-based vision: A survey,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 1, pp. 154–180, 2020. [7] X. Wang, C. Wang, S. Wang, X. Wang, Z. Zhao, L. Zhu, and B. Jiang, “Mambaevt: Event stream based visual object tracking using state space model,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 36, pp. 278–291, 2026. [8] J. Zhang, X. Yang, Y. Fu, X. Wei, B. Yin, and B. Dong, “Object tracking by jointly exploiting frame and event domain,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021, pp. 13 043–13 052. [9] X. Wang, S. Wang, C. Tang, L. Zhu, B. Jiang, Y. Tian, and J. Tang, “Event stream-based visual object tracking: A high-resolution bench-mark dataset and a novel baseline,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 19 248–19 257. [10] Z. Zhu, J. Hou, and X. Lyu, “Learning graph-embedded key-event back-tracing for object tracking in event clouds,” Advances in Neural Information Processing Systems , vol. 35, pp. 7462–7476, 2022. [11] J. Zhang, X. Yang, H. Tang, Y. Wang, B. Yin, H. Wang, and X. Fu, “Efficient vision transformer with token sparsification for event-based object tracking,” International Journal of Computer Vision , vol. 134, no. 2, p. 75, 2026. [12] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly et al. ,“An image is worth 16x16 words: Transformers for image recognition at scale,” arXiv preprint arXiv:2010.11929 , 2020. [13] S. M. Marvasti-Zadeh, L. Cheng, H. Ghanei-Yakhdan, and S. Kasaei, “Deep learning for visual tracking: A comprehensive survey,” IEEE Transactions on Intelligent Transportation Systems , vol. 23, no. 5, pp. 3943–3968, 2021. [14] J. Huang, S. Wang, M. Guo, and S. Chen, “Event-guided structured output tracking of fast-moving objects using a celex sensor,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 28, no. 9, pp. 2413–2417, 2018. [15] H. Chen, Q. Wu, Y. Liang, X. Gao, and H. Wang, “Asynchronous tracking-by-detection on adaptive time surfaces for event-based object tracking,” in Proceedings of the 27th ACM International Conference on Multimedia , 2019, pp. 473–481. [16] D. Gehrig, H. Rebecq, G. Gallego, and D. Scaramuzza, “Eklt: Asyn-chronous photometric feature tracking using events and frames,” Inter-national Journal of Computer Vision , vol. 128, no. 3, pp. 601–618, 2020. [17] J. Zhang, B. Dong, H. Zhang, J. Ding, F. Heide, B. Yin, and X. Yang, “Spiking transformers for event-based single object tracking,” in Pro-ceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , 2022, pp. 8801–8810. [18] S. Wang, X. Wang, L. Jin, B. Jiang, L. Zhu, L. Chen, Y. Tian, and B. Luo, “Towards low-latency event stream-based visual object tracking: A slow-fast approach,” arXiv preprint arXiv:2505.12903 , 2025. [19] B. Yan, H. Peng, J. Fu, D. Wang, and H. Lu, “Learning spatio-temporal transformer for visual tracking,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021, p. 10448–10457. [20] B. Ye, H. Chang, B. Ma, S. Shan, and X. Chen, “Joint feature learning and relation modeling for tracking: A one-stream framework,” in European conference on computer vision . Springer, 2022, pp. 341– 357. [21] J. Zhu, H. Tang, X. Chen, X. Wang, D. Wang, and H. Lu, “Two-stream beats one-stream: Asymmetric siamese network for efficient visual tracking,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 10, 2025, pp. 10 959–10 967. [22] L. Hong, J. Li, X. Zhou, S. Yan, P. Guo, K. Jiang, Z. Chen, S. Gao, R. Li, X. Sheng et al. , “General compression framework for efficient transformer object tracking,” in Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision , 2025, pp. 13 427–13 437. [23] C. Xu, B. Zhong, Q. Liang, Y. Zheng, G. Li, and S. Song, “Less is more: Token context-aware learning for object tracking,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 8, 2025, pp. 8824–8832. [24] C. Xue, B. Zhong, Q. Liang, Y. Zheng, N. Li, Y. Xue, and S. Song, “Similarity-guided layer-adaptive vision transformer for uav tracking,” in Proceedings of the Computer Vision and Pattern Recognition Confer-ence , 2025, pp. 6730–6740. [25] B. Yan, H. Peng, K. Wu, D. Wang, J. Fu, and H. Lu, “Lighttrack: Finding lightweight neural networks for object tracking via one-shot architecture search,” in Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , 2021, pp. 15 180–15 189. [26] Y. Cui, T. Song, G. Wu, and L. Wang, “Mixformerv2: Efficient fully transformer tracking,” Advances in Neural Information Processing Sys-tems , vol. 36, pp. 58 736–58 751, 2023. IEEE TRANSACTIONS ON ***, 2026 13 
+
+[27] J. Zhu, X. Chen, H. Diao, S. Li, J.-Y. He, C. Li, B. Luo, D. Wang, and H. Lu, “Exploring dynamic transformer for efficient object tracking,” 
+
+IEEE Transactions on Neural Networks and Learning Systems , vol. 36, no. 8, pp. 15 502–15 514, 2025. [28] H. Yin, A. Vahdat, J. M. Alvarez, A. Mallya, J. Kautz, and P. Molchanov, “A-vit: Adaptive tokens for efficient vision transformer,” in Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recogni-tion , 2022, pp. 10 809–10 818. [29] N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. V. Le, G. E. Hinton, and J. Dean, “Outrageously large neural networks: The sparsely-gated mixture-of-experts layer,” in International Conference on Learning Representations , 2017. [30] W. Fedus, B. Zoph, and N. Shazeer, “Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity,” Journal of Machine Learning Research , vol. 23, no. 120, pp. 1–39, 2022. [31] C. Riquelme, J. Puigcerver, B. Mustafa, M. Neumann, R. Jenatton, A. Susano Pinto, D. Keysers, and N. Houlsby, “Scaling vision with sparse mixture of experts,” Advances in Neural Information Processing Systems , vol. 34, pp. 8583–8595, 2021. [32] C. Hwang, W. Cui, Y. Xiong, Z. Yang, Z. Liu, H. Hu, Z. Wang, R. Salas, J. Jose, P. Ram et al. , “Tutel: Adaptive mixture-of-experts at scale,” 
+
+Proceedings of Machine Learning and Systems , vol. 5, pp. 269–287, 2023. [33] M. Lewis, S. Bhosale, T. Dettmers, N. Goyal, and L. Zettlemoyer, “Base layers: Simplifying training of large, sparse models,” in International Conference on Machine Learning , 2021, pp. 6265–6274. [34] B. Zoph, I. Bello, S. Kumar, N. Du, Y. Huang, J. Dean, N. Shazeer, and W. Fedus, “St-moe: Designing stable and transferable sparse expert models,” in International Conference on Learning Representations ,2022. [35] S. Roller, S. Sukhbaatar, J. Weston et al. , “Hash layers for large sparse models,” Advances in Neural Information Processing Systems , vol. 34, pp. 17 555–17 566, 2021. [36] Y. Lu, M. Weng, Z. Xiao, R. Jiang, W. Su, G. Zheng, P. Lu, and X. Li, “Dynamic-dino: Fine-grained mixture of experts tuning for real-time open-vocabulary object detection,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 20 847–20 856. [37] S. Zhao, J. Liu, X. Wen, H. Tan, and X. Qi, “Equipping vision foundation model with mixture of experts for out-of-distribution detection,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 1751–1761. [38] Y. Zhu, H. Chen, Y. Deng, and W. You, “Separation for better inte-gration: Disentangling edge and motion in event-based deblurring,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 14 732–14 742. [39] A. Graves, “Adaptive computation time for recurrent neural networks,” 
+
+arXiv preprint arXiv:1603.08983 , 2016. [40] Y. Xu, Z. Wang, Z. Li, Y. Yuan, and G. Yu, “Siamfc++: Towards robust and accurate visual tracking with target estimation guidelines,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 34, no. 07, 2020, pp. 12 549–12 556. [41] G. Bhat, M. Danelljan, L. V. Gool, and R. Timofte, “Learning discrim-inative model prediction for tracking,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2019, p. 6182–6191. [42] M. Danelljan, G. Bhat, F. S. Khan, and M. Felsberg, “Atom: Accurate tracking by overlap maximization,” in Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , 2019, pp. 4660–4669. [43] Y. Cui, C. Jiang, L. Wang, and W. Gangshan, “Mixformer: End-to-end tracking with iterative mixed attention,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2022, p. 13608–13618. [44] J. Xie, B. Zhong, Z. Mo, S. Zhang, L. Shi, S. Song, and R. Ji, “Autoregressive queries for adaptive tracking with spatio-temporal trans-formers,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 19 300–19 309. [45] J. Zhang, X. Yang, Y. Fu, X. Wei, B. Yin, and B. Dong, “Object tracking by jointly exploiting frame and event domain,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021, pp. 13 043–13 052. [46] C. Tang, X. Wang, J. Huang, B. Jiang, L. Zhu, S. Chen, J. Zhang, Y. Wang, and Y. Tian, “Revisiting color-event based tracking: A unified network, dataset, and metric,” Pattern Recognition , p. 112718, 2025. [47] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,” in International Conference on Learning Representations , 2018. [48] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin, N. Gimelshein, L. Antiga et al. , “Pytorch: An imperative style, high-performance deep learning library,” Advances in Neural Information Processing Systems , vol. 32, 2019. [49] N. Wang, W. Zhou, J. Wang, and H. Li, “Transformer meets tracker: Ex-ploiting temporal context for robust visual tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2021, p. 1571–1580. [50] C. Mayer, M. Danelljan, G. Bhat, M. Paul, D. P. Paudel, F. Yu, and L. V. Gool, “Transforming model prediction for tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2022, p. 8731–8740. [51] S. Gao, C. Zhou, C. Ma, X. Wang, and J. Yuan, “Aiatrack: Attention in attention for transformer visual tracking,” in European Conference on Computer Vision , 2022, p. 146–164. [52] M. Danelljan, L. V. Gool, and R. Timofte, “Probabilistic regression for visual tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, p. 7183–7192. [53] G. Bhat, M. Danelljan, L. Van Gool, and R. Timofte, “Know your surroundings: Exploiting scene information for object tracking,” in 
+
+European Conference on Computer Vision , 2020, p. 205–221. [54] B. Chen, P. Li, L. Bai, L. Qiao, Q. Shen, B. Li, W. Gan, W. Wu, and W. Ouyang, “Backbone is all your need: A simplified architecture for visual object tracking,” in European Conference on Computer Vision ,2021, p. 375–392. [55] B. Kang, X. Chen, S. Lai, Y. Liu, Y. Liu, and D. Wang, “Exploring enhanced contextual information for video-level object tracking,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 4, 2025, pp. 4194–4202. [56] H. Wu, X. Wang, J. Zhang, J. Tong, X. Chen, J. Lin, Y. Ma, and X. Shen, “Utptrack: Towards simple and unified token pruning for visual tracking,” arXiv preprint arXiv:2602.23734 , 2026. [57] Q. Zhang, J. Cheng, Q. Mao, C. Liu, Y. Fang, Y. Li, M. Ge, and S. Gao, “Spiketrack: A spike-driven framework for efficient visual tracking,” 
+
+arXiv preprint arXiv:2602.23963 , 2026. [58] M. Danelljan, G. Bhat, F. Shahbaz Khan, and M. Felsberg, “Atom: Accurate tracking by overlap maximization,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2019, p. 4660–4669. [59] Y. Cai, J. Liu, J. Tang, and G. Wu, “Robust object modeling for visual tracking,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 9589–9600. [60] X. Wei, Y. Bai, Y. Zheng, D. Shi, and Y. Gong, “Autoregressive visual tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 9697–9706. [61] Y. Zheng, B. Zhong, Q. Liang, Z. Mo, S. Zhang, and X. Li, “Odtrack: Online dense temporal token learning for visual tracking,” in Proceed-ings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 7, 2024, pp. 7588–7596. [62] L. Shi, B. Zhong, Q. Liang, N. Li, S. Zhang, and X. Li, “Explicit visual prompts for visual object tracking,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 5, 2024, pp. 4838– 4846. [63] Y. Bai, Z. Zhao, Y. Gong, and X. Wei, “Artrackv2: Prompting autore-gressive tracker where to look and how to describe,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 19 048–19 057.

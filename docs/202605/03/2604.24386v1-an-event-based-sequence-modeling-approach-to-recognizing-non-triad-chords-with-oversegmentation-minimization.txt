@@ -1,0 +1,185 @@
+Title: An event-based sequence modeling approach to recognizing non-triad chords with oversegmentation minimization
+
+URL Source: https://arxiv.org/pdf/2604.24386v1
+
+Published Time: Tue, 28 Apr 2026 01:53:43 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+## AN EVENT-BASED SEQUENCE MODELING APPROACH TO RECOGNIZING NON-TRIAD CHORDS WITH OVERSEGMENTATION MINIMIZATION 
+
+## Leekyung Kim 1, Jonghun Park 11Department of Industrial Engineering and Institute of Industrial Systems Innovation, Seoul National University, Seoul, Republic of Korea 
+
+ABSTRACT 
+
+Automatic chord recognition (ACR) extracts time-aligned chord labels from music audio recordings. Despite recent advances, ACR still struggles with oversegmentation, data scarcity, and imbalance, especially in recognizing complex chords such as non-triads, which are unpopular in existing datasets. To address these challenges, we reformulate ACR as a segment-level sequence-to-sequence prediction task, where chord sequences are predicted auto-regressively rather than frame by frame. This design mitigates excessive segmenta-tion by detecting chord changes only at segment boundaries. We further introduce two types of token representations and an encoder pre-training method, both specifically designed for time-aligned chord modeling. Experimental results show that our model improves performance in both chord recog-nition and segmentation, with notable gains for complex and infrequent chord types. These findings demonstrate the ef-fectiveness of segment-level sequence modeling, structured tokenization, and representation learning for advancing chord recognition systems. 
+
+Index Terms — Automatic Chord Recognition, Sequence-to-Sequence, Music Information Retrieval 
+
+1. INTRODUCTION 
+
+Automatic Chord Recognition (ACR) is the task of identify-ing the sequence of chords in musical audio, where chords— a group of simultaneously played notes—form the harmonic foundation of a musical piece[1]. ACR remains an active area of research due to complex musical structures and diverse in-strumentation, which make chord annotation time-consuming and demand highly specialized musical expertise. Transformer[2]-based models have recently achieved state-of-the-art performance in ACR[3, 4, 5], leveraging their success in natural language processing[6]. BTC[3] employed an encoder-only Transformer for audio input, while Har-mony Transformer (HT)[4, 5] adopted a full encoder-decoder structure, performing segmentation with the encoder and recognition with the decoder on symbolic input. In this work, we focus on ACR from audio, which is more applicable to real-world music scenarios. Gm7 Gm Gm7 Gm Gm7 Cm Cm NN         
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+> Time (sec)
+> Quality
+> N
+> Gm7 Cm N
+
+Oversegmentation 
+
+> Chord
+> N
+> Time
+> 0.2
+> Chord
+> Gm7
+> Time
+> 0.0
+> Chord
+> Cm
+> Time
+> 0.4
+> Time
+> 0.2
+> Time
+> 0.0
+> Time
+> 0.4
+> Root
+> N
+> Root
+> C
+> Root
+> G
+> Quality
+> mi n
+> Quality
+> min7
+
+(a) Oversegmentation in Frame -level Classification 
+
+(b) MER GE Token Representation 
+
+Audio Signal 
+
+Ground -Truth Labe l
+
+(c) SPLIT Token Representation 
+
+Fig. 1 . Comparison of (a) frame-level classification and the proposed token representations: (b) MERGE and (c) SPLIT. Recent studies have expanded the target vocabulary from 25 basic chords to a broader range of chord types[7, 8], in-cluding non-triad chords. However, such complex chords are unpopular in datasets, leading to data imbalance and limited generalization. To address these issues, prior works have explored structured chord representations[8, 9], even chance training[10], curriculum learning[11], semi-supervised learn-ing [12, 13], and adaptive loss functions[12]. Despite these advances, deep learning-based ACR meth-ods still face three major challenges. (1) Oversegmentation: In traditional frame-level classification, probabilities are pre-dicted at every time frame, making them highly sensitive to small fluctuations. A single misclassified frame can split a chord segment and cause excessively fragmented and unsta-ble boundaries[8], as shown in Fig. 1(a). By contrast, our approach predicts chords at segment level, detecting chord changes only when they occur, thereby mitigating overseg-mentation. To this end, we reformulate ACR as a segment-
+
+> arXiv:2604.24386v1 [cs.SD] 27 Apr 2026
+
+level sequence-to-sequence (seq2seq) learning problem and introduce a Transformer encoder-decoder that predicts chord sequences auto-regressively. (2) Data scarcity: The difficulty of chord annotation and copyright restrictions limit the availability of large-scale la-beled datasets[14]. (3) Data imbalance: The skewed chord distribution biases models toward common chords, while underrepresenting unpopular or complex ones[15]. To ad-dress these data-related issues, we propose two types of token representations—MERGE and SPLIT—and an encoder pre-training method based on chord similarity. The contributions of this work are as follows: • We reformulate ACR as a segment-level seq2seq task and propose an auto-regressive chord prediction frame-work using a Transformer encoder-decoder architec-ture. To the best of our knowledge, this is the first study to apply this approach to ACR. • We introduce two token representations for time-aligned chord modeling and a chord similarity-based encoder pre-training strategy to address data scarcity and imbalance. • We conduct experiments demonstrating that our model 1
+
+achieves state-of-the-art performance in both chord recognition and segmentation. 
+
+2. PROPOSED METHOD 2.1. Problem Specification 
+
+Most traditional ACR models predict the probability of chords at each time frame from an input spectrogram Xspec ∈
+
+RNT ×NF , where NT is the number of time frames and NF
+
+is the number of frequency bins. This can be formulated as 
+
+ˆyi = arg max yi∈V P (yi|Xspec ) for i = 1, . . . , N T , where 
+
+V is a pre-defined chord vocabulary, and ˆyi is the predicted chord for the ith time frame, selected as the class with the highest probability among yi ∈ V .This paper models ACR as a seq2seq problem that auto-regressively predicts token sequence from audio sequence, which is formulated as ˆσj = arg max σj ∈Σ P (σj |Xspec , σ 1: j−1)
+
+for j = 2 , . . . , where σj is the jth token in a token sequence and Σ is a fixed token set. A predicted token ˆσj is the one with the highest probability, given the spectrogram and the previous token sequence σ1: j−1. The first token, σ1, is fixed as the start-of-sequence token, and the token prediction con-tinues until the end-of-sequence token is predicted or the token sequence reaches the maximum length. 
+
+2.2. Model Structure and Chord Representation 
+
+This paper adopts the Transformer encoder-decoder structure due to its improved performance and suitability for auto-regressive sequence prediction, as illustrated in Fig. 2. Audio       
+
+> 1https://github.com/KimLeekyung/ACR_seq2seq x𝑁 !"#
+> Audio Waveform
+> Spectrogram
+> Encoder Output Token Probabilities
+> Linear Layer
+> +
+> Positional
+> Encoding
+> Embedding Layer
+> +
+> Multi -Head
+> Attention
+> Positionwise
+> Feed -Forward
+> x𝑁 $!#
+> Masked Multi -Head
+> Attention
+> Multi -Head
+> Attention
+> Positionwise
+> Feed -Forward
+> Decoder
+> Embedding Layer
+> Transformer
+> Encoder Layers
+> Token sequence
+> Encoder
+> Embedding Layer
+> Transformer
+> Decoder Layers
+> Positional
+> Encoding
+> Token Toke n···
+
+Fig. 2 . Overall architecture of the Transformer encoder-decoder model. Nenc and Ndec denote the numbers of en-coder and decoder layers, respectively. segments of T seconds are first converted into waveforms and then transformed into spectrograms. To reduce excessive segmentation[16] and eliminate the need for additional mod-ules such as conditional random fields[17] often required to smooth predictions in the traditional methods[8, 18], we pro-pose two types of token representations, MERGE and SPLIT, illustrated in Fig. 1(b) and Fig. 1(c), respectively. In MERGE, each time-aligned chord is expressed using a time token indicating the chord boundary and a chord token representing the full chord from V. As V includes ‘no chord’ and ‘unknown chord’, chord durations are implicitly defined as continuing until the next chord onset. SPLIT decomposes each chord token into root and quality tokens. For instance, 
+
+C:maj is divided into the root C indicating the chord’s funda-mental note, and the quality maj , describing its interval struc-ture. This decomposition enables multiple chords, such as 
+
+C:dim and B:dim , to share the same quality token, dim . As a result, SPLIT increases the amount of training data avail-able for unpopular chord qualities and facilitates the learning of structural similarities across chords, thereby improving the robustness of learning for unpopular chord qualities. The token sets are defined as follows: ΣM = T ∪ C ∪ S
+
+for MERGE, and ΣS = T ∪ R ∪ Q ∪ S for SPLIT, where T,
+
+C, R, Q, and S denote the sets of time, chord, root, quality, and special tokens, respectively. The time token specifies ab-solute time within each segment at 0.1-second intervals. The chord token in MERGE represents each chord from V. The root token includes all 12 pitch classes and a shared token for ‘no chord’ and ‘unknown chord’. The quality token spans all chord qualities in V, with separate tokens for ‘no chord’ and ‘unknown chord’. The special tokens <SOS> , <EOS> ,and <PAD> represent the start, end, and padding of sequence, respectively. 
+
+2.3. Encoder Pre-Training 
+
+We hypothesize that an effective encoder improves ACR per-formance by producing similar embeddings for audio seg-ments with similar chord sequences. Based on this, we intro-duce an encoder pre-training method to learn meaningful em-beddings guided by chord similarity. The encoder is first pre-trained and later used to initialize the encoder weights during full model training, while the decoder is randomly initialized. We adopt the Weighted Chord Symbol Recall (WCSR), one of the most widely used metrics for evaluating chord recognition performance, to compute chord similarity. It measures the similarity between two chord sequences by computing the ratio of correctly matched time frames based on harmonic content[19]. Among various matching criteria with different levels of strictness, we select the mirex cri-terion, which considers two chords matched if they share at least three pitch classes, as it offers a balanced evaluation. During pre-training, a comparison sample X2 is ran-domly selected from the batch for each anchor spectrogram 
+
+X1, excluding the anchor itself. Chord similarity is com-puted from the corresponding chord labels Y1 and Y2. The encoder embeddings o1 and o2 are compared using cosine similarity, which shares a similar range and interpretation with WCSR. Only the encoder is trained to minimize the mean squared error (MSE) between the embedding similarity and the ground-truth chord sequence similarity. 
+
+3. EXPERIMENTS 3.1. Experimental Setups Data. We use the dataset as BTC[3], consisting of 471 pop songs with manually aligned audio and chord annotations. A 5-fold cross-validation was conducted by splitting the whole data into five subsets. In each fold, one subset was used for validation and the remaining four subsets for training, applied identically to both pre-training and full model training. 
+
+Implementation Details. Audio files were divided into 25.6-second segments, sampled at 44,100 Hz, and converted to constant-Q transform spectrograms[20] with a hop length of 4,410, spanning 6 octaves from C1 at 24 bins per octave, using log amplitude scaling. Following the previous ACR research[3, 11, 13], V includes ‘no chord’, ‘unknown chord’, and 168 chords derived from 12 pitch classes combined with 14 chord qualities: maj , min , dim , aug , min6 , maj6 , min7 ,
+
+minmaj7 , maj7 , 7, dim7 , hdim7 , sus2 , sus4 . Accordingly, there are 257 time tokens, 170 chord tokens, 13 root tokens, 16 quality tokens, and 3 special tokens, resulting in 430 to-kens for ΣM and 289 tokens for ΣS .
+
+Table 1 . Masking strategy for inference. Token Representation Previous Token Type Next Token Type Time Chord Root Quality MERGE Time O X - -Chord X O - -SPLIT Time O - X ORoot O - O XQuality X - O O
+
+Training Details. The encoder was pre-trained using MSE loss, and the full model was trained with cross-entropy loss. Both stages used the Adam[21] optimizer, with the learning rate halved if validation loss did not decrease for 3 epochs. Early stopping was applied for 10 stagnant epochs. Pitch shifting and random cropping were employed for data aug-mentation on root and time tokens, respectively. 
+
+Inference. At each step, the token with the highest prob-ability is selected, and masking is applied to enforce the pre-defined token order, such as (time token, chord token) for MERGE. As summarized in Table 1, ‘O’ and ‘X’ indi-cate whether a token type is allowed or masked, respectively, based on the previously predicted token. ‘-’ denotes that the token type is not used in the corresponding representation. 
+
+Metrics. WCSR was calculated with seven criteria (see Ta-ble 2) to assess recognition performance at varying levels of strictness. Segmentation quality (SQ) metric, measured with the directional Hamming distance (DHD)[22], was used to evaluate segmentation performance. DHD is computed by identifying the maximum overlapping segments between two sequences and summing their differences. It evaluates over-and undersegmentation, and SQ is derived from these two measures to evaluate the overall segmentation quality[19]. 
+
+3.2. Quantitative Results 
+
+The WCSR and SQ scores, averaged over 5 folds, are sum-marized in Table 2. We conducted an ablation study with four models to assess the contributions of each component: TE, an encoder-only model for frame-level classification; TE-DM, an encoder-decoder with MERGE; TE-DS, an encoder-decoder with SPLIT; and pTE-DS, TE-DS with encoder pre-training. We employed BTC[3], a state-of-the-art model for end-to-end chord recognition from audio, as a comparison model. As SQ scores for BTC were not reported, we com-puted them using its publicly available checkpoint 2.Across all WCSR criteria, chord recognition performance improved consistently as each component was added to the baseline model, TE. The final model, pTE-DS, outperformed BTC. Moreover, as the evaluation criteria became stricter (from root to tetrads ), the performance gap between pTE-DS and BTC widened, even as absolute scores de-creased. This indicates the effectiveness of our tokenization 
+
+> 2https://github.com/jayg996/BTC-ISMIR19
+
+Table 2 . WCSR and SQ scores for experiments. WCSR SQ root maj-min thirds triads sevenths tetrads mirex under over mean TE 81.5 81.0 79.6 75.5 71.8 66.1 79.6 89.5 81.4 80.3 TE-DM 85.6 84.7 83.8 79.6 75.7 70.4 83.9 88.6 92.4 87.4 TE-DS 86.5 85.6 84.9 80.6 77.1 72.0 84.9 89.3 92.3 88.0 pTE-DS 87.4 86.7 85.9 81.5 78.6 73.2 85.7 89.8 92.9 88.6 
+
+BTC 83.5 82.3 80.8 75.9 71.8 65.5 80.8 90.1 85.9 84.6 
+
+Fig. 3 . Confusion matrix of pTE-DS with respect to quality when root notes of the prediction and reference are same. The value at row i and column j represents the ratio of frames labeled as quality i but predicted as quality j.and representation learning in recognizing complex chords. For segmentation, TE-DM and TE-DS achieved higher SQ than TE, demonstrating that the encoder-decoder structure with auto-regressive prediction enhances segmentation qual-ity. pTE-DS also outperformed BTC in SQ, particularly in over-segmentation, confirming the benefits of seq2seq mod-eling for segmentation performance. 
+
+3.3. Qualitative Analysis 
+
+Fig. 3 presents the frame-wise confusion matrix for pTE-DS. While recognition of complex chords has improved, some misclassifications remain. These errors often involve simpli-fying complex chords to more common ones. For example, ‘maj6 ’ was frequently predicted as ‘ maj ’, which differs by one pitch class. This suggests not only a bias toward frequent chord qualities but also a difficulty in distinguishing chord qualities that are hierarchically related. To further analyze the encoder pre-training, we visual-ized the learned latent space using uniform manifold approx-imation and projection (UMAP)[23]. We randomly selected 10 songs not used in training and segmented them into clips where a single chord lasted for at least one second. The en-
+
+Fig. 4 . UMAP visualization of the encoder embeddings. coder embeddings for these segments were projected into a 2D space using UMAP. Fig. 4 shows the result, where each point represents a chord in an audio segment and colors in-dicate the root note of chords. The visualization reveals that the embeddings are well-clustered by the root note, indicating that the encoder successfully captures chord-related harmonic information from the input audio. 
+
+4. CONCLUSION 
+
+In this paper, we proposed a seq2seq approach to automatic chord recognition using a Transformer encoder-decoder. Our method carried out segment-level auto-regressive prediction, which alleviates oversegmentation, in contrast to traditional frame-level classification. We also introduced two types of token representations for time-aligned chords and an encoder pre-training scheme guided by chord similarity, enabling the encoder to learn musically meaningful latent embeddings. Experimental results demonstrated that our approach sig-nificantly improved both chord recognition, particularly for unpopular and complex chords, and chord segmentation per-formance. Qualitative analyses further revealed common error patterns and confirmed the encoder embeddings capture chord-related information effectively. Future work includes expanding recognition to a larger chord vocabulary and ad-dressing the inherent subjectivity of chord annotations. 5. REFERENCES 
+
+[1] Johan Pauwels, Ken O’hanlon, Emilia G´ omez Guti´ errez, and Mark Sandler, “20 years of automatic chord recognition from audio,” 2019. [2] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Lukasz Kaiser, and Illia Polosukhin, “Attention is all you need,” Ad-vances in neural information processing systems , vol. 30, 2017. [3] Jonggwon Park, Kyoyun Choi, Sungwook Jeon, Dokyun Kim, and Jonghun Park, “A bi-directional transformer for musical chord recognition,” in ISMIR , 2019, pp. 620–627. [4] Tsung-Ping Chen, Li Su, et al., “Harmony transformer: Incorporating chord segmentation into harmony recog-nition,” Neural Netw , vol. 12, pp. 15, 2019. [5] Tsung-Ping Chen and Li Su, “Attend to chords: Im-proving harmonic analysis of symbolic music using transformer-based models,” Transactions of the Inter-national Society for Music Information Retrieval , vol. 4, no. 1, pp. 1–14, 2021. [6] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova, “BERT: pre-training of deep bidi-rectional transformers for language understanding,” in 
+
+Proceedings of the 2019 Conference of the North Amer-ican Chapter of the Association for Computational Lin-guistics: Human Language Technologies . 2019, pp. 4171–4186, Association for Computational Linguistics. [7] Jun-qi Deng and Yu-Kwong Kwok, “A hybrid gaussian-hmm-deep learning approach for automatic chord esti-mation with very large vocabulary.,” in ISMIR , 2016, pp. 812–818. [8] Junyan Jiang, Ke Chen, Wei Li, and Gus Xia, “Large-vocabulary chord transcription via chord structure de-composition.,” in ISMIR , 2019, pp. 644–651. [9] Brian McFee and Juan Pablo Bello, “Structured train-ing for large-vocabulary chord recognition.,” in ISMIR ,2017, pp. 188–194. [10] Jun-qi Deng and Yu-Kwong Kwok, “Large vocabulary automatic chord estimation with an even chance training scheme.,” in ISMIR , 2017, pp. 531–536. [11] Luke O Rowe and George Tzanetakis, “Curriculum learning for imbalanced classification in large vocabu-lary automatic chord recognition.,” in ISMIR , 2021, pp. 586–593. [12] Marcelo Bortolozzo, Rodrigo Schramm, and Claudio R Jung, “Improving the classification of rare chords with unlabeled data,” in ICASSP 2021-2021 IEEE Interna-tional Conference on Acoustics, Speech and Signal Pro-cessing (ICASSP) . IEEE, 2021, pp. 3390–3394. [13] Chen Li, Yu Li, Hui Song, and Lihua Tian, “Deep semi-supervised learning with contrastive learning in large vocabulary automatic chord recognition,” in 2023 IEEE 13th Annual Computing and Communication Workshop and Conference (CCWC) . IEEE, 2023, pp. 1065–1069. [14] Matt McVicar, Yizhao Ni, Raul Santos-Rodriguez, and Tijl De Bie, “Using online chord databases to enhance chord recognition,” Journal of New Music Research ,vol. 40, no. 2, pp. 139–152, 2011. [15] Jeff Miller, Ken O’Hanlon, and Mark B Sandler, “Im-proving balance in automatic chord recognition with random forests,” in 2022 30th European Signal Process-ing Conference (EUSIPCO) . IEEE, 2022, pp. 244–248. [16] Filip Korzeniowski and Gerhard Widmer, “On the fu-tility of learning complex frame-level language models for chord recognition,” in Audio Engineering Society Conference: 2017 AES International Conference on Se-mantic Audio . Audio Engineering Society, 2017. [17] John Lafferty, Andrew McCallum, and Fernando CN Pereira, “Conditional random fields: Probabilistic mod-els for segmenting and labeling sequence data,” 2001. [18] Filip Korzeniowski and Gerhard Widmer, “A fully con-volutional deep auditory model for musical chord recog-nition,” in 2016 IEEE 26th International Workshop on Machine Learning for Signal Processing (MLSP) . IEEE, 2016, pp. 1–6. [19] Christopher Harte, Towards automatic extraction of har-mony information from music signals , Ph.D. thesis, De-partment of Electronic Engineering, Queen Mary, Uni-versity of London, 2010. [20] Judith C Brown, “Calculation of a constant q spectral transform,” The Journal of the Acoustical Society of America , vol. 89, no. 1, pp. 425–434, 1991. [21] Diederik P. Kingma and Jimmy Ba, “Adam: A method for stochastic optimization,” CoRR , vol. abs/1412.6980, 2014. [22] Matthias Mauch, Automatic Chord Transcription from Audio Using Computational Models of Musical Context ,Ph.D. thesis, Citeseer, 2010. [23] Leland McInnes, John Healy, Nathaniel Saul, and Lukas Grossberger, “Umap: Uniform manifold approximation and projection,” The Journal of Open Source Software ,vol. 3, no. 29, pp. 861, 2018.
