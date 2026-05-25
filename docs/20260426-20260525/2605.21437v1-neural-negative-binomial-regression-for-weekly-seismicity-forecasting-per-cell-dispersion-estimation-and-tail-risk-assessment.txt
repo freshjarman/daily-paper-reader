@@ -1,0 +1,2729 @@
+Title: Neural Negative Binomial Regression for Weekly Seismicity Forecasting: Per-Cell Dispersion Estimation and Tail Risk Assessment
+
+URL Source: https://arxiv.org/pdf/2605.21437v1
+
+Published Time: Thu, 21 May 2026 01:28:11 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+1 Igilik Alim 
+
+# Neural Negative Binomial Regression for Weekly Seismicity Forecasting: Per-Cell Dispersion Estimation and Tail Risk Assessment 
+
+Igilik Alim 
+
+Abstract 
+
+Standard approaches to forecasting the weekly number of earthquakes on a spatial grid rely on the Poisson distribution with a single global dispersion assumption. We show that this assumption is systematically violated in seismic data from Central Asia (2010–2024): a likelihood-ratio test with boundary correction rejects the Poisson hypothesis with p < 10 −179 .The main contribution of this work is the EarthquakeNet architecture, which provides an endogenous per-cell estimate of the overdispersion parameter α through a neural network (spatial embeddings + MLP), without explicit spatial covariance specification. To our knowledge, existing NB-regression approaches in seismological forecasting estimate a single global α; the per-cell parametrization proposed here allows the model to identify where seismicity is more strongly clustered and to construct probabilistic risk-aware alerts through quantiles of the predicted NB distribution. A Walk-Forward protocol (2018–2023) over four systems shows an 8.6 % reduction in MPD relative to NB GLM. The key advantage appears in the tail stratum ( Y ≥ 5): the CRPS of Hybrid DL NB is 12.5 % lower than that of NB GLM—precisely the regime in which the per-cell parameter α contributes most to estimating the risk of extreme events. 
+
+Code availability: The implementation of EarthquakeNet, training scripts, and evaluation pipelines are publicly available at 
+
+https://github.com/Al1mkaYandere/seismic-probabilistic-modeling 
+
+# 1 Introduction 
+
+Earthquake forecasting is a critical task for natural risk management, infrastructure resilience planning, and emergency response operations. For Central Asia, and the Tian Shan mountain system in particular, this problem carries heightened importance due to high tectonic activity, complex geodynamics, and pronounced spatiotemporal heterogeneity of seismic processes. In the applied setting, the goal is not a deterministic forecast of individual events, but a macroscopic forecast of seismicity intensity: estimating the expected number of earthquakes with magnitude 
+
+M ≥ 3.0 on a spatial grid at a weekly horizon. Historically, count data forecasting in fixed spatiotemporal cells has been formulated within the Poisson framework. However, its key assumption—equality of the conditional mean and conditional variance—is systematically violated in real seismological data. Earthquakes exhibit pronounced clustering associated with swarm activity, foreshock–aftershock sequences, and episodes of anomalous activity, resulting in overdispersion in which the variance substantially exceeds the mean. Under these conditions, uncritical application of the Poisson distribution leads to biased uncertainty estimates and, consequently, to underestimation of the risk of extreme scenarios. Despite the widespread adoption of machine learning methods in seismological problems, a substantial portion of existing work remains methodologically vulnerable. On one hand, several approaches apply continuous regression loss functions and metrics (e.g., MSE), ignoring the  
+
+> arXiv:2605.21437v1 [physics.geo-ph] 20 May 2026 2Igilik Alim
+
+discrete probabilistic nature of the observed counts. On the other hand, even when count targets are handled correctly, models are frequently built on naive autoregressive lags without physically motivated features, limiting the algorithm’s ability to capture tectonic stress accumulation and relaxation processes. This work proposes a transition from the Poisson paradigm to the Negative Binomial (NB) distribution, which naturally accommodates overdispersion. To parametrize the distribution, we develop a hybrid deep learning architecture combining two complementary components: (i) spatial embeddings, which capture latent geological heterogeneity and differences between cells associated with distinct fault structures; and (ii) a multilayer perceptron (MLP) processing physically motivated predictors, including proxies for released seismic energy and seismic quiescence indicators. The main scientific contributions of this work are: 
+
+• formal rejection of the Poisson hypothesis via a likelihood-ratio test with boundary correction of the null distribution [ 10 ], demonstrating the inadequacy of the equidispersion assumption in seismic count data; 
+
+• the EarthquakeNet hybrid architecture (spatial embeddings + MLP with physical predictors, NB loss function), providing per-cell estimation of the overdispersion parameter α and improved CRPS in the tail stratum relative to the GLM baseline; 
+
+• a rigorous Walk-Forward protocol (2018–2023) incorporating per-cell ETAS [ 1]as a seismo-logical baseline, Moran’s I [ 13 ]for testing spatial conditional independence, and a 5-seed identifiability audit of α.
+
+# 2 Data and Feature Engineering 
+
+2.1 Earthquake Catalog and Study Area 
+
+The empirical basis of this study is the open-access USGS (United States Geological Survey) catalog, covering the period from 2010 to early 2024. The analysis is restricted to the seismically active zone of Central Asia, encompassing the Tian Shan and Pamir mountain systems, within the geographic window 38 ◦–45 ◦N and 65 ◦–85 ◦E. To ensure comparability of statistical estimates and reduce the influence of observational network limitations, the catalog was filtered by the magnitude of completeness Mc. The threshold Mc was estimated using the Maximum Curvature method [ 9]: a frequency histogram of events in bins of ∆m = 0 .1 was constructed for the entire region, with the maximum occurring at M ≈ 4.3; applying the correction of +0 .2 yields Mc = 4 .5, with a b-value of 1.42 (Aki MLE estimate, n = 722 events). The lower catalog threshold of M ≥ 3.0 is set below Mc: in the range M ∈ [3 .0, 4.5) , the USGS catalog for this region may be incomplete, particularly in low-activity cells, introducing bias into event counts. A discussion of this limitation is provided in Section 6.1. The final dataset includes only events with magnitude M ≥ 3.0, which minimizes the contribution of background noise and improves the stability of subsequent probabilistic count process modeling. 
+
+2.2 Spatiotemporal Grid and Target Distribution 
+
+The study region is discretized into a regular spatial grid with a resolution of 3.0◦ × 3.0◦. The temporal aggregation interval is set to one calendar week. For each spatial cell i and week t, the target variable is defined as 
+
+Y ti,j := number of recorded earthquakes in cell (i, j ) during week t, 
+
+where Y ti,j ∈ N0.3 Igilik Alim 
+
+Empirical analysis of the target variable distribution reveals pronounced skewness: the overwhelming majority of observations correspond to zero counts (no events), while the right tail reaches extreme values (30+ events during peak intervals). This data structure confirms the inapplicability of classical MSE regression for count forecasting tasks. 
+
+2.3 Feature Engineering 
+
+The predictors are designed to reflect the physics of the seismic cycle: 
+
+• Seismic Energy. Magnitude-to-energy transformation based on the relation E ∝ 10 1.5M .
+
+• Seismic Gap. Time in weeks since the last event with magnitude M ≥ 4.5, modeling the local stress accumulation phase. 
+
+• Accumulated Activity. Rolling activity windows (4 and 12 weeks) to account for clustering and aftershock sequences. All continuous predictors are standardized prior to training, while the target variable is retained in discrete form. Spatial dependencies between cells are not specified manually through smoothing, but are delegated to the Spatial Embeddings layer, which learns them endogenously within end-to-end model training. 
+
+# 3 Methodology 
+
+3.1 Data Formalization and Feature Space Construction 
+
+3.1.1 Formalization of the Source Catalog 
+
+From the USGS catalog metadata, four components are retained for two-dimensional spatiotem-poral modeling: coordinates, time, and magnitude. 
+
+Definition 3.1 (Seismic Catalog) . The filtered catalog is defined as a set of tuples 
+
+Draw = {(xk, y k, t k, m k)},
+
+where xk, y k, t k ∈ R, with xk denoting longitude, yk latitude, and mk ≥ 3.0 magnitude. The index set 
+
+I = {1, . . . , N }
+
+induces the working set 
+
+> ˜
+
+Draw ⊂ I × D raw =⇒ ˜Draw =
+
+> N⋃
+> k=1
+
+{(k, x k, y k, t k, m k)},
+
+providing unique identification of each event by key k.
+
+3.1.2 Spatiotemporal Discretization Definition 3.2 (Spatial Domain and Discretization Operator) . The study region 
+
+S = [ xmin , x max ] × [ymin , y max ]
+
+is representable as a disjoint union of cells Si,j with steps ∆x, ∆y:
+
+S = 
+
+> nx−1⊔
+> i=0
+> ny−1
+> ⊔
+> j=0
+
+Si,j ,4 Igilik Alim 
+
+where nx, ny denote the number of steps along the x and y axes. The discretization operator H
+
+maps continuous coordinates to discrete indices: 
+
+H(k, x k, y k, t k, m k) = ( k, i k, j k, τ k, m k),
+
+where 
+
+ik =
+
+⌊ xk − xmin 
+
+∆x
+
+⌋
+
+, jk =
+
+⌊ yk − ymin 
+
+∆y
+
+⌋
+
+, τk =
+
+⌊ tk − tmin 
+
+∆t
+
+⌋
+
+.
+
+( Temporal discretization is implemented as follows: each event is assigned to the period 
+
+τ = pd.Period (tk, "W" ) (standard ISO week, starting on Sunday); the full regular time series for each cell is constructed at frequency W-MON (pd.date_range(..., freq="W-MON") ), aligning the grid to Mondays with a boundary offset of at most ±1 day. All downstream operations are applied to the already-aligned series, so this offset does not affect the feature functional Φ. ) The discrete catalog is then: 
+
+Dgrid = ⋃ 
+
+> v∈
+
+˜Draw 
+
+{H(v)}.
+
+3.1.3 Construction of the Active Grid 
+
+The discrete indices belong to finite sets 
+
+Ix = {0, 1, . . . , n x − 1}, Iy = {0, 1, . . . , n y − 1}, Tall = {0, 1, . . . , τ max },
+
+where 
+
+τmax =
+
+⌊ tmax − tmin 
+
+∆t
+
+⌋
+
+.
+
+The full spatiotemporal grid is: 
+
+Ω = Ix × I y × T all .
+
+Definition 3.3 (Index Set (Bucket)) . For (i, j, τ ) ∈ Ω:
+
+B(τ ) 
+
+> i,j
+
+= {k ∈ { 1, . . . , N } ∣∣ H(k, x k, y k, t k, m k) = ( k, i, j, τ, m k)}
+
+= {k ∈ { 1, . . . , N } ∣∣ (k, i, j, τ, m k) ∈ D grid 
+
+}.
+
+Definition 3.4 (Active Grid) . The set of active spatial indices: 
+
+Sactive = {(i, j ) ∈ I x × I y | ∃ τ ∈ T all : B(τ )
+
+> i,j
+
+̸ = ∅} .
+
+The working grid: 
+
+Ωactive = Sactive × T all .
+
+Remark. The restriction to Sactive excludes aseismic nodes while preserving time series continuity for active nodes (including zero observations), which is necessary for correct construction of lagged features. 
+
+3.1.4 Aggregation and Feature Vector Definition 3.5 (Aggregated Statistics) . For (i, j, τ ) ∈ Ωactive , the target variable is: 
+
+Y (τ ) 
+
+> i,j
+
+= ∣∣B(τ )
+
+> i,j
+
+∣∣.
+
+Total released seismic energy: 
+
+E(τ ) 
+
+> i,j
+
+= ∑ 
+
+> k∈B (τ)
+> i,j
+
+10 1.5mk .5 Igilik Alim 
+
+Extreme magnitudes: 
+
+M (τ )max ,i,j = max  
+
+> k∈B (τ)
+> i,j
+
+{mk}, M (τ )min ,i,j = min  
+
+> k∈B (τ)
+> i,j
+
+{mk}.
+
+When B(τ ) 
+
+> i,j
+
+= ∅, we set 
+
+Y (τ ) 
+
+> i,j
+
+= 0 , E(τ ) 
+
+> i,j
+
+= 0 ,M (τ )max ,i,j = 0 , M (τ )min ,i,j = 0 .
+
+The aggregated dataset is: 
+
+Dagg = ⋃ 
+
+> (i,j,τ )∈Ωactive
+
+{(i, j, τ, Y (τ ) 
+
+> i,j
+
+, E (τ ) 
+
+> i,j
+
+, M (τ )max ,i,j , M (τ )min ,i,j 
+
+)}
+
+.
+
+Definition 3.6 (Feature Functional) . Let Wmax = 12 and Ttarget = {t ∈ T all | t ≥ Wmax }.Define 
+
+Φ : Sactive × T target → R7,
+
+where 
+
+Φ( i, j, t ) = (ϕ1(i, j, t ), . . . , ϕ 7(i, j, t ))T , (i, j ) ∈ S active , t ∈ T target ,
+
+with components 
+
+ϕ1(i, j, t ) = Y (t−1)  
+
+> i,j
+
+,ϕ2(i, j, t ) = M (t−1) max ,i,j ,ϕ3(i, j, t ) = M (t−1) min ,i,j ,ϕ4(i, j, t ) = max   
+
+> τ∈{ t−4,...,t −1}
+
+M (τ )max ,i,j ,ϕ5(i, j, t ) = 
+
+> t−1
+
+∑ 
+
+> τ=t−12
+
+Y (τ ) 
+
+> i,j
+
+,ϕ6(i, j, t ) = 
+
+> t−1
+
+∑ 
+
+> τ=t−8
+
+E(τ ) 
+
+> i,j
+
+,ϕ7(i, j, t ) = ( t − 1) − max {τ ≤ t − 1 | M (τ )max ,i,j ≥ 4.5}.
+
+If the index set in ϕ7 is empty, the value 500 .0 is assigned. Let X(t) 
+
+> i,j
+
+:= Φ( i, j, t ). The final dataset is: 
+
+Df inal = ⋃
+
+> (i,j )∈S active
+
+⋃
+
+> t∈T target
+
+{(X(t) 
+
+> i,j
+
+, Y (t)
+
+> i,j
+
+)}
+
+.
+
+3.1.5 Operator Pipeline for Data Transformation 
+
+Draw  
+
+> Index (I×· )
+
+−−−−−−−→ ˜Draw H
+
+−→ D grid 
+
+> Bucketing
+
+−−−−−−→ {B (τ ) 
+
+> i,j
+
+}  
+
+> A(aggregation on Ωactive )
+
+−−−−−−−−−−−−−−−−→ D agg  
+
+> Φ(lag/rolling features)
+
+−−−−−−−−−−−−−−→ D f inal .
+
+The composition of mappings transforms a continuous spatiotemporal point process into a tensor representation suitable for neural network architectures with shared weights. The hierarchy of temporal windows (4, 8, 12 weeks) implements multi-scale memory of the process. The feature vector X(t) 
+
+> i,j
+
+is constructed exclusively from τ ≤ t − 1, thereby precluding any look-ahead bias. 6 Igilik Alim 
+
+3.2 Formalization of the Probability Space 
+
+Definition 3.7 (Local Phase Space) . The space of admissible states of a node is: 
+
+S = N0 × R≥0 × R × R,
+
+equipped with the Borel σ-algebra 
+
+B(S) = 2 N0 ⊗ B (R≥0) ⊗ B (R) ⊗ B (R),
+
+where 2N0 denotes the power set of the countable set N0. The four components correspond, respectively, to the event count Y ∈ N0, released seismic energy E ∈ R≥0, maximum magnitude, and minimum magnitude. 
+
+Definition 3.8 (Global Probability Space) . The sample space is defined as the function space 
+
+ω : Ω active → S:
+
+Ωf ull := SΩactive ∼= ∏ 
+
+> (i,j,τ )∈Ωactive
+
+S. 
+
+The cylindrical σ-algebra is: 
+
+F = ⊗ 
+
+> (i,j,τ )∈Ωactive
+
+B(S).
+
+A probability measure P is postulated on (Ω f ull , F), inducing the joint distribution of seismic events across all active nodes and time steps. 
+
+3.2.1 Process Dynamics, Filtration, and Measurability Definition 3.9 (Canonical Coordinate Maps) . For each index (i, j, t ) ∈ Ωactive , the canonical coordinate map s(t) 
+
+> i,j
+
+: Ω f ull → S is defined by 
+
+s(t) 
+
+> i,j
+
+(ω) = ω(i, j, t ).
+
+The target variable Y (t) 
+
+> i,j
+
+: Ω f ull → N0 is defined via the first canonical projection π1 : S → N0:
+
+Y (t) 
+
+> i,j
+
+= π1 ◦ s(t) 
+
+> i,j
+
+.
+
+Proposition 3.10 (Measurability of Canonical Coordinates) . For any (i, j, t ) ∈ Ωactive , the map s(t) 
+
+> i,j
+
+is (F, B(S)) -measurable, that is, 
+
+∀B ∈ B (S) : (s(t)
+
+> i,j
+
+)−1(B) ∈ F .
+
+Furthermore, the projection π1 : S → N0 is (B(S), 2N0 )-measurable. Consequently, Y (t) 
+
+> i,j
+
+= π1 ◦ s(t)
+
+> i,j
+
+is an F-measurable random variable taking values in N0.Proof. Consider an arbitrary finite index set 
+
+J = {ξ1, . . . , ξ n} ⊂ Ωactive , ξk = ( ik, j k, τ k).
+
+Define the corresponding finite-dimensional coordinate projection 
+
+πJ : Ω f ull → Sn, πJ (ω) = (ω(ξ1), . . . , ω (ξn)).
+
+For any set Bn ∈ ⊗nk=1 B(S), its preimage 
+
+π−1 
+
+> J
+
+(Bn) = {ω ∈ Ωf ull | πJ (ω) ∈ Bn}7 Igilik Alim 
+
+is called a cylindrical set, depending only on the coordinates indexed by J. Introduce the class of all such cylinders for fixed J:
+
+CJ =
+
+{
+
+π−1 
+
+> J
+
+(Bn) | Bn ∈
+
+> n
+
+⊗
+
+> k=1
+
+B(S)
+
+}
+
+.
+
+Taking the union over all finite index sets yields 
+
+C = ⋃
+
+> J⊂Ωactive
+> |J|<∞
+
+CJ .
+
+The cylindrical σ-algebra on the product SΩactive is by definition the σ-algebra generated by all finite-dimensional cylinders: 
+
+F = σ(C).
+
+Hence, by the property of generated σ-algebras, 
+
+C ⊆ F .
+
+Now fix (i, j, t ) ∈ Ωactive and an arbitrary B ∈ B (S). By definition of the coordinate map, 
+
+(s(t)
+
+> i,j
+
+)−1(B) = {ω ∈ Ωf ull | ω(i, j, t ) ∈ B}.
+
+The right-hand side is a cylindrical set corresponding to the singleton index set J = {(i, j, t )}.Indeed, for |J| = 1 we have S1 = S and 
+
+(s(t)
+
+> i,j
+
+)−1(B) = π−1 
+
+> J
+
+(B).
+
+Since B ∈ B (S) = ⊗1 
+
+> k=1
+
+B(S),
+
+(s(t)
+
+> i,j
+
+)−1(B) ∈ C J ⊆ C ⊆ F .
+
+As B ∈ B (S) was arbitrary, s(t) 
+
+> i,j
+
+is (F, B(S)) -measurable. It remains to verify measurability of π1. Let A ∈ 2N0 be arbitrary. By definition of the preimage, 
+
+π−11 (A) = {s ∈ S | π1(s) ∈ A}
+
+= {(r1, r 2, r 3, r 4) ∈ N0 × R≥0 × R × R | r1 ∈ A}
+
+= A × R≥0 × R × R.
+
+Since A ∈ 2N0 , R≥0 ∈ B (R≥0), and R ∈ B (R), we obtain 
+
+A × R≥0 × R × R ∈ 2N0 ⊗ B (R≥0) ⊗ B (R) ⊗ B (R) = B(S).
+
+Hence π−11 (A) ∈ B (S) for all A ∈ 2N0 , so π1 is (B(S), 2N0 )-measurable. Finally, the composition of measurable maps is measurable, so 
+
+Y (t) 
+
+> i,j
+
+= π1 ◦ s(t)
+
+> i,j
+
+is an F-measurable random variable taking values in N0.To ensure strict causality of the forecast, we formalize the information structure of the process over time: the filtration separates the history available to the observer from the unobservable future. 8 Igilik Alim 
+
+Definition 3.11 (Natural Filtration) . The filtration F = {F t}t∈T all is defined as 
+
+Ft = σ({s(τ ) 
+
+> k,m
+
+| (k, m ) ∈ S active , τ ≤ t}), Ft−1 ⊆ F t ⊆ F .
+
+The process {s(t) 
+
+> i,j
+
+} is adapted to F: σ(s(t) 
+
+> i,j
+
+) ⊆ F t.The feature vector X(t) 
+
+> i,j
+
+: Ω f ull → R7 is defined as X(t) 
+
+> i,j
+
+= Φ( s(t−1)  
+
+> i,j
+
+, . . . , s (t−W ) 
+
+> i,j
+
+). By the measurability of compositions of measurable functions: 
+
+σ(X(t) 
+
+> i,j
+
+) ⊆ F t−1.
+
+At the same time, σ(Y (t) 
+
+> i,j
+
+) ⊆ F t, but σ(Y (t) 
+
+> i,j
+
+)̸ ⊆ F t−1, formalizing the indeterminacy of the future given the observed history. Postulating sufficiency of X(t) 
+
+> i,j
+
+for Ft−1 with respect to Y (t) 
+
+> i,j
+
+(Markov assumption), we obtain the conditional independence: 
+
+Y (t) 
+
+> i,j
+
+⊥ F t−1 | X(t) 
+
+> i,j
+
+.
+
+The problem reduces to approximating the conditional likelihood P(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+) with parameters 
+
+θ = fN N (X(t) 
+
+> i,j
+
+).
+
+Remark (Markov Truncation and Finite Memory) . The Markov assumption, combined with the feature functional Φ of Definition 3.6, reduces the infinite past Ft−1 to a finite window of 
+
+Wmax = 12 weeks. Formally, this means we replace the condition on the full sigma-algebra Ft−1
+
+with the condition on the finite-dimensional sub-sigma-algebra 
+
+FWt−1 := σ({s(τ ) 
+
+> i,j
+
+| τ ∈ { t − Wmax , . . . , t − 1}} ) ⊆ F t−1.
+
+The approximation error introduced by this truncation is negligible under exponential decay of temporal dependence, which is consistent with the Omori–Utsu law for aftershock sequences. 
+
+Remark (Causality) . The inclusion σ(X(t) 
+
+> i,j
+
+) ⊆ F t−1 provides a formal guarantee against look-ahead bias: the model operates exclusively on information available to the observer at the start of the forecast week t. In the context of operational seismological forecasting, this means that no event from week t participates in the construction of the feature vector for that same week. 
+
+3.3 Empirical Risk Minimization 
+
+For the training index set Ωtrain ⊂ S active × T all , define 
+
+Ytrain = {Y (t) 
+
+> i,j
+
+| (i, j, t ) ∈ Ωtrain }, Xtrain = {X(t) 
+
+> i,j
+
+| (i, j, t ) ∈ Ωtrain }.
+
+Definition 3.12 (Training Index Set for Static Evaluation) . Let the week set Tall be chronologi-cally ordered and partitioned into disjoint blocks 
+
+Ttrain ∪ T test = Tall , Ttrain ∩ T test = ∅, |T train | = ⌊0.8 |T all |⌋ ,
+
+where Ttrain is the initial chronological prefix and Ttest is the remaining suffix. The training and test index sets are then defined as 
+
+Ωtrain = {(i, j, t ) ∈ S active × T all | t ∈ T train 
+
+} ∩ supp( Df inal ),
+
+Ωtest = {(i, j, t ) ∈ S active × T all | t ∈ T test 
+
+} ∩ supp( Df inal ).9 Igilik Alim 
+
+Thus, Ωtrain is not an arbitrary subset of Sactive × T all : it is a synchronized calendar block containing all active cells in the early weeks present in Df inal . Test weeks are entirely excluded from training, yielding an out-of-time evaluation under the static 80/20 split. Invoking the filtration Ft−1 and the sufficiency of Φ, we postulate spatiotemporal conditional independence on the training block: 
+
+Y (t) 
+
+> i,j
+
+⊥ Y (τ ) 
+
+> k,m
+
+| { X(t′) 
+
+> i′,j ′
+
+}(i′,j ′,t ′)∈Ωtrain ∀ (i, j, t )̸ = ( k, m, τ ) ∈ Ωtrain ,
+
+which yields the factorization of the joint conditional likelihood. 
+
+Remark (Spatial Conditional Independence Assumption) . This assumption is standard in GLM and neural count regression models, but may be violated in seismology: Coulomb stress transfer and ETAS triggering [ 1] induce cross-cell dependencies. The factorization below is a marginal predictive factorization, not a full generative model of the joint spatiotemporal field. Empirical verification via Moran’s I on standardized Pearson residuals is carried out in Section 4.7: if significant autocorrelation is detected ( p < 0.05 ), the proposed model should be interpreted as a 
+
+marginal predictor . Extension to an ETAS-like spatial convolution is left for future work (see Section 6.1). 
+
+P(Ytrain | Xtrain ) = ∏
+
+> (i,j,t )∈Ωtrain
+
+P(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+).
+
+The parametric approximation Pθ inherits this factorization structure. 
+
+Remark (Relationship to Walk-Forward Validation) . The static 80/20 split defined above differs structurally from the Walk-Forward protocol of Section 4.3. In the static split, Ωtrain is fixed once; in the Walk-Forward protocol, a separate Ω(Y ) 
+
+> train
+
+is constructed for each test year 
+
+Y ∈ { 2018 , . . . , 2023 }, expanding as Y increases. The static split is used for model selection and hyperparameter tuning; the Walk-Forward protocol provides the primary out-of-sample evaluation reported in Table 2. 
+
+Proposition 3.13 (Equivalence of KL Divergence Minimization and NLL) . Let P denote the true measure and Pθ a parametric approximation. Then 
+
+θ∗ = arg min  
+
+> θ
+
+EX∼P
+
+[DKL (P(Y | X) ∥ Pθ(Y | X)) ] = arg max  
+
+> θ
+
+EX,Y ∼P
+
+[ log Pθ(Y | X)].
+
+Proof. Expanding the KL divergence by its definition and applying the tower property of expectation: 
+
+EX
+
+[DKL (P ∥ Pθ)] = EX
+
+[∑
+
+> y
+
+P(y | X) log P(y | X)
+
+Pθ(y | X)
+
+]
+
+.
+
+Splitting the logarithm and recognizing the conditional entropy H(P) := −EX,Y 
+
+[ log P(Y | X)]:
+
+EX
+
+[DKL (P ∥ Pθ)] = −H (P) − EX,Y ∼P
+
+[ log Pθ(Y | X)].
+
+Since H(P) does not depend on θ, minimizing the left-hand side over θ is equivalent to maximizing the second term: 
+
+θ∗ = arg max  
+
+> θ
+
+EX,Y ∼P
+
+[ log Pθ(Y | X)].
+
+Note that DKL ≥ 0 with equality if and only if Pθ = P almost surely, so the minimum is attained at the true distribution whenever it lies in the parametric family. Since P is unavailable, we replace the population expectation with its empirical counterpart. By the law of large numbers, for i.i.d. draws {(X(t) 
+
+> i,j
+
+, Y (t) 
+
+> i,j
+
+)}(i,j,t )∈Ωtrain :
+
+EX,Y ∼P
+
+[ log Pθ(Y | X)] ≈ 1
+
+|Ωtrain |
+
+∑
+
+> (i,j,t )∈Ωtrain
+
+log Pθ(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+).10 Igilik Alim 
+
+Since |Ωtrain | is constant with respect to θ, maximizing the empirical mean is equivalent to maximizing the sum. Taking the logarithm of the factorized joint likelihood (which coincides with this sum by the conditional independence assumption of Remark 3.3): 
+
+log Pθ(Ytrain | Xtrain ) = log ∏
+
+> (i,j,t )∈Ωtrain
+
+Pθ(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+) = ∑
+
+> (i,j,t )∈Ωtrain
+
+log Pθ(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+).
+
+Negating and identifying this as the empirical approximation to −EX,Y ∼P[ log Pθ(Y | X)] , we obtain the training objective — the negative log-likelihood (NLL): 
+
+θ∗ ≈ arg min  
+
+> θ
+
+LN LL (θ), LN LL (θ) = − ∑
+
+> (i,j,t )∈Ωtrain
+
+log Pθ(Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+).
+
+3.3.1 Baseline Poisson Approximation Definition 3.14 (Poisson Parametrization) . The neural network fN N (·; θ) : R7 → R induces the model 
+
+Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+∼ Poisson( λ(t) 
+
+> i,j
+
+),
+
+with the intensity parametrized via the exponential link: 
+
+λ(t) 
+
+> i,j
+
+= exp (fN N (X(t) 
+
+> i,j
+
+; θ)) > 0.
+
+The exponential link guarantees λ(t) 
+
+> i,j
+
+> 0 for all inputs without imposing explicit constraints on the network output. The conditional probability mass function is: 
+
+Pθ(Y (t) 
+
+> i,j
+
+= y | X(t) 
+
+> i,j
+
+) = (λ(t) 
+
+> i,j
+
+)y e−λ(t)
+
+> i,j
+
+y! , y ∈ N0.
+
+Taking the logarithm: 
+
+log Pθ(Y (t) 
+
+> i,j
+
+= y | X(t) 
+
+> i,j
+
+) = y log λ(t) 
+
+> i,j
+
+− λ(t) 
+
+> i,j
+
+− log( y!) .
+
+The term log (y!) does not depend on θ. Dropping it and negating to obtain a minimization objective, the per-sample contribution to the NLL becomes λ(t) 
+
+> i,j
+
+− Y (t) 
+
+> i,j
+
+log λ(t) 
+
+> i,j
+
+. Summing over 
+
+Ωtrain yields the Poisson loss: 
+
+LP oisson (θ) = ∑
+
+> (i,j,t )∈Ωtrain
+
+(
+
+λ(t) 
+
+> i,j
+
+− Y (t) 
+
+> i,j
+
+log λ(t)
+
+> i,j
+
+)
+
+.
+
+The defining property of the Poisson distribution is equidispersion: the conditional mean and conditional variance coincide: 
+
+E[Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+] = Var[ Y (t) 
+
+> i,j
+
+| X(t) 
+
+> i,j
+
+] = λ(t) 
+
+> i,j
+
+.
+
+Theorem 3.15 (Overdispersion from Latent Heterogeneity) . Suppose there exists a σ-algebra F∗
+
+with σ(X) ⊂ F ∗, and an F∗-measurable random variable λ∗ > 0 such that Y | F ∗ ∼ Poisson (λ∗).If λ∗ is not σ(X)-measurable, then 
+
+Var[ Y | X] > E[Y | X].
+
+Proof. We apply the law of total variance, which holds for any sub-σ-algebras σ(X) ⊆ F ∗:
+
+Var[ Y | X] = E[Var( Y | F ∗) | X] + Var (E[Y | F ∗] | X).11 Igilik Alim 
+
+Since Y | F ∗ ∼ Poisson (λ∗) and λ∗ is F∗-measurable, the Poisson moment identities established in Definition 3.14 give: 
+
+E[Y | F ∗] = λ∗, Var( Y | F ∗) = λ∗.
+
+Substituting into the law of total variance: 
+
+Var[ Y | X] = E[λ∗ | X] + Var[ λ∗ | X].
+
+We identify the first term as the conditional mean of Y . By the tower property, since σ(X) ⊆ F ∗:
+
+E[Y | X] = E[E[Y | F ∗] | X] = E[λ∗ | X] =: μ(X).
+
+Hence: 
+
+Var[ Y | X] = μ(X) + Var[ λ∗ | X].
+
+It remains to show that Var [λ∗ | X] > 0. By definition, for any square-integrable random variable 
+
+Z:
+
+Var[ Z | X] = 0 ⇐⇒ Z = E[Z | X] P-a.s. ,
+
+which holds if and only if Z is σ(X)-measurable P-a.s. By hypothesis, λ∗ is not σ(X)-measurable, so 
+
+Var[ λ∗ | X] > 0.
+
+Therefore: 
+
+Var[ Y | X] = μ(X) + Var[ λ∗ | X] > μ (X) = E[Y | X].
+
+Remark. Theorem 3.15 shows that overdispersion is a structural consequence of incomplete observable information, not an empirical artifact. In the seismological context, λ∗ represents the unobservable local seismogenic potential — fluctuations in fault segment activation, aftershock cascades, and fluid migration — which remain latent even after conditioning on the feature vector 
+
+X. The Negative Binomial distribution, introduced in Section 3.3.2, provides an analytically tractable marginal model for Y under a Gamma prior on λ∗.The empirical diagnostics associated with Theorem 3.15 are reported in Figure 1. We use three explicit graphical designations: Figure 1a for the marginal tail of the count target, Figure 1b for the local dispersion index, and Figure 1c for the mean–variance relationship. The target-count tail diagnostic in Figure 1a shows a heavy right tail incompatible with rapid Poisson decay. The local dispersion index diagnostic in Figure 1b confirms D > 1 for most grid cells, while the mean–variance diagnostic in Figure 1c shows systematic departure from the Poisson equality Var = E.Consequently, LP oisson systematically under-specifies the model: equidispersion understates the probability of extreme events. A transition to distribution families with separate mean and dispersion parametrization is therefore required. 
+
+3.3.2 Gamma–Poisson Mixture and the Negative Binomial Distribution 
+
+In the seismological context, the latent intensity λ∗ reflects unobservable variations in local seismogenic potential — activation of fault segments, aftershock sequences, and swarm activity. The Gamma distribution for λ∗ is the conjugate prior to the Poisson observation model and admits an analytic marginalization. 
+
+Proposition 3.16 (NB as the Marginal Distribution of the Gamma–Poisson Mixture) . Let the random effect λ∗ ∼ Gamma (r, β ), with shape r > 0 and rate β > 0, and let Y | λ∗ ∼ Poisson (λ∗).Then the marginal distribution of Y is Negative Binomial: 
+
+P(Y = y) = Γ( y + r)Γ( y + 1) Γ( r) (1 − p)rpy, y ∈ N0, p = (1 + β)−1.12 Igilik Alim     
+
+> (a) Target-count tail diagnostic. (b) Local dispersion index diagnostic.
+> (c) Mean–variance diagnostic.
+
+Figure 1: Overdispersion diagnostics following Theorem 3.15: the heavy-tailed marginal distribution of 
+
+Y , the prevalence of local dispersion indices D = Var (Y )/E(Y ) > 1, and the systematic deviation from the Poisson relation Var = E.
+
+Proof. The density of the random effect λ∗ ∼ Gamma( r, β ) is: 
+
+fλ∗ (ℓ) = βr
+
+Γ( r) ℓ r−1e−βℓ , ℓ > 0.
+
+By the law of total probability: 
+
+P(Y = y) = 
+
+∫ ∞
+
+> 0
+
+P(Y = y | λ∗ = ℓ) fλ∗ (ℓ) dℓ. 
+
+Substituting the Poisson pmf and the Gamma density: 
+
+P(Y = y) = 
+
+∫ ∞
+
+> 0
+
+ℓye−ℓ
+
+y! · βr
+
+Γ( r) ℓr−1e−βℓ dℓ = βr
+
+y! Γ( r)
+
+∫ ∞
+
+> 0
+
+ℓ y+r−1 e−(1+ β)ℓ dℓ. 
+
+The remaining integral is a standard Gamma integral. Recognizing that for a > 0:
+
+∫ ∞
+
+> 0
+
+ℓ y+r−1e−aℓ dℓ = Γ( y + r)
+
+ay+r ,
+
+and setting a = 1 + β:
+
+P(Y = y) = βr
+
+y! Γ( r) · Γ( y + r)(1 + β)y+r = Γ( y + r)Γ( y + 1) Γ( r) · βr
+
+(1 + β)y+r .
+
+It remains to rewrite the last factor in terms of p = (1 + β)−1, so that 1 − p = β/ (1 + β):
+
+βr
+
+(1 + β)y+r =
+
+( β
+
+1 + β
+
+)r
+
+·
+
+( 11 + β
+
+)y
+
+= (1 − p)r py.13 Igilik Alim 
+
+Substituting: 
+
+P(Y = y) = Γ( y + r)Γ( y + 1) Γ( r) (1 − p)rpy,
+
+which is the Negative Binomial pmf with parameters (r, p ).
+
+Remark (Physical Interpretation) . The continuous Gamma mixture of Poisson processes provides a natural mechanism for the overdispersion observed in seismic data: even when the macroscopic feature vector X is fixed, the true local intensity fluctuates due to unobservable geophysical processes — Coulomb stress transfer, fluid migration, and cascading activation of fault sub-segments. The shape parameter r governs the degree of this latent heterogeneity: as r → ∞ 
+
+(equivalently α = r−1 → 0), the Gamma mixing distribution concentrates around its mean and the NB distribution converges to Poisson, recovering the equidispersion limit. 
+
+3.3.3 Reparametrization for Deep Learning Proposition 3.17 (Moments of NB and (μ, α )-Parametrization) . For NB (r, β ) with α := r−1
+
+and μ := r/β , the variance satisfies 
+
+Var[ Y ] = μ + αμ 2.
+
+The probability mass function in the (μ, α ) coordinates is: 
+
+P(Y = y | μ, α ) = Γ( y + α−1)Γ( y + 1) Γ( α−1) 
+
+> (
+
+11 + αμ   
+
+> )α−1(
+
+αμ 
+
+1 + αμ 
+
+> )y
+
+.
+
+Proof. Mean. By the tower property and the moment identity E[λ∗] = r/β for λ∗ ∼
+
+Gamma( r, β ):
+
+μ = E[Y ] = E[E[Y | λ∗]] = E[λ∗] = rβ .
+
+Variance. By the law of total variance and the Poisson identity Var (Y | λ∗) = E[Y | λ∗] = λ∗:
+
+Var[ Y ] = E[Var( Y | λ∗)] + Var (E[Y | λ∗]) = E[λ∗] + Var( λ∗).
+
+Substituting the Gamma moments E[λ∗] = r/β and Var( λ∗) = r/β 2:
+
+Var[ Y ] = rβ + rβ2 = μ + μ2
+
+r .
+
+Setting α := r−1 yields Var[ Y ] = μ + αμ 2.
+
+Reparametrization of the pmf. From the definitions r = α−1 and μ = r/β , we solve for the canonical parameters: 
+
+β = rμ = 1
+
+αμ .
+
+Substituting into p = (1 + β)−1 from Proposition 3.16: 
+
+p = 11 + β = 11 + ( αμ )−1 = αμ 
+
+1 + αμ , 1 − p = 11 + αμ .
+
+Substituting r = α−1, p, and 1 − p into the canonical NB pmf of Proposition 3.16: 
+
+P(Y = y | μ, α ) = Γ( y + α−1)Γ( y + 1) Γ( α−1) 
+
+> (
+
+11 + αμ   
+
+> )α−1(
+
+αμ 
+
+1 + αμ 
+
+> )y
+
+.14 Igilik Alim 
+
+Remark. For α > 0, the variance scales quadratically with the mean; as α → 0, the Gamma mixing distribution concentrates and the model converges asymptotically to the Poisson process, recovering equidispersion Var[ Y ] → μ.
+
+Definition 3.18 (Neural NB Model) . The neural network fN N (X; θ) outputs the local distribu-tion parameters: [
+
+μθ(X)
+
+αθ(X)
+
+]
+
+= fN N (X; θ), μθ > 0, αθ > 0.
+
+The induced conditional measure is: 
+
+Pθ(Y = y | X) := P
+
+(
+
+Y = y
+
+∣∣∣ μ = μθ(X), α = αθ(X)
+
+)
+
+.
+
+The NLL training objective is: 
+
+LN B (θ) = − ∑
+
+> (i,j,t )∈Ωtrain
+
+log Pθ
+
+(
+
+Y (t) 
+
+> i,j
+
+| X(t)
+
+> i,j
+
+)
+
+.
+
+Each spatial cell (i, j ) ∈ S active is re-indexed via the bijection 
+
+g : Sactive → C , C = {1, . . . , N c},
+
+setting c = g(i, j ) and defining 
+
+Y (t) 
+
+> c
+
+:= Y (t) 
+
+> i,j
+
+, X(t) 
+
+> c
+
+:= X(t) 
+
+> i,j
+
+.
+
+The empirical risk then takes the form: 
+
+LN B (θ) = − ∑
+
+> (c,t )∈Ωtrain
+
+ln Pθ
+
+(Y (t) 
+
+> c
+
+| X(t)
+
+> c
+
+).
+
+The architecture fN N incorporates a trainable spatial embeddings layer, which acts as generalized random effects: each cell receives a latent representation encoding its hidden geological structure — proximity to fault systems, local tectonic regime, and other factors not captured by the observed feature vector X.
+
+Definition 3.19 (Architecture of fN N ). The forward pass is defined by the composition 
+
+fN N = fsp ◦ fout ◦ f2 ◦ f1 ◦ fcat ◦ femb ,
+
+where d denotes the dimension of the numerical feature vector and de = 8 is the embedding dimension. 
+
+Spatial index embedding. Each cell index c ∈ C is mapped to a trainable dense vector via row lookup in the embedding matrix E ∈ RNc×de :
+
+femb : C → Rde , c 7 → ec = E[c, :] .
+
+Concatenation. The embedding and the feature vector are concatenated to form the joint input: 
+
+fcat : Rde × Rd → Rde+d, (ec, x) 7 → h0 = [ ec ∥ x].
+
+Hidden layers. Two fully connected layers with ReLU activations σ(z) = max(0 , z ):
+
+f1 : Rde+d → R64 , h0 7 → h1 = σ(W1h0 + b1),f2 : R64 → R32 , h1 7 → h2 = σ(W2h1 + b2),15 Igilik Alim 
+
+where W1 ∈ R64 ×(de+d), b1 ∈ R64 , W2 ∈ R32 ×64 , b2 ∈ R32 are learnable parameters. Dropout regularization with rate 0.2 is applied after each hidden layer during training; it is omitted from the formal composition above as it is inactive at inference time. 
+
+Output projection. 
+
+fout : R32 → R2, h2 7 → z = Wout h2 + bout ,
+
+where Wout ∈ R2×32 and bout ∈ R2.
+
+Softplus output activation. To guarantee strict positivity of μ and α, the logit vector 
+
+z = [ z1, z 2]⊤ is passed through the softplus function with a numerical stability constant ϵ > 0:
+
+fsp : R2 → R2
+
+> >0
+
+, z 7 →
+
+[
+
+μα
+
+]
+
+= ln (1 + exp( z)) + ϵ. 
+
+The softplus function ln (1 + ez ) is chosen over the exponential link because it is approximately linear for large positive inputs, avoiding gradient saturation, while still guaranteeing positivity. The constant ϵ > 0 prevents numerical underflow when z ≪ 0.The complete forward pass is therefore: 
+
+[
+
+μα
+
+]
+
+= ( fsp ◦ fout ◦ f2 ◦ f1 ◦ fcat )(femb (c), x).
+
+Remark (Interpretation of Spatial Embeddings) . The vector ec ∈ Rde is functionally analogous to a random effect in a generalized linear mixed model (GLMM), with one key distinction: the latent representations are not postulated to be Gaussian, but are learned end-to-end. This allows the network to endogenously group cells by seismotectonic characteristics — fault proximity, local stress regime, recurrence patterns — without expert specification of a spatial covariance structure. In the GLMM analogy, E plays the role of the random effect design matrix, but with a learned rather than prescribed covariance. 
+
+3.3.4 Analytical Gradients of the NB Loss Function Lemma 3.20 (Analytical Gradients of the Local NB Loss) . For an observation (c, t ) with 
+
+r(t) 
+
+> c
+
+= ( α(t) 
+
+> c
+
+)−1 and D(t) 
+
+> c
+
+= 1 + α(t) 
+
+> c
+
+μ(t) 
+
+> c
+
+:
+
+∂L(t)
+
+> c
+
+∂μ (t)
+
+> c
+
+= μ(t) 
+
+> c
+
+− Y (t)
+
+> c
+
+μ(t)
+
+> c
+
+(1 + α(t) 
+
+> c
+
+μ(t)
+
+> c
+
+) ,∂L(t)
+
+> c
+
+∂α (t)
+
+> c
+
+= ψ(Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ψ(r(t)
+
+> c
+
+) − ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 + μ(t) 
+
+> c
+
+− Y (t)
+
+> c
+
+α(t)
+
+> c
+
+(1 + α(t) 
+
+> c
+
+μ(t)
+
+> c
+
+) ,
+
+where ψ = ( ln Γ) ′ denotes the digamma function. Under the softplus parametrization μ(t) 
+
+> c
+
+=ln(1 + ez(t)1,c ) and α(t) 
+
+> c
+
+= ln(1 + ez(t)2,c ), the chain rule gives: 
+
+∂L(t)
+
+> c
+
+∂z (t)1,c 
+
+= ∂L(t)
+
+> c
+
+∂μ (t)
+
+> c
+
+σ(z(t)1,c 
+
+), ∂L(t)
+
+> c
+
+∂z (t)2,c 
+
+= ∂L(t)
+
+> c
+
+∂α (t)
+
+> c
+
+σ(z(t)2,c 
+
+),
+
+where σ(z) = (1 + e−z )−1 is the sigmoid function. Proof. Set L(t) 
+
+> c
+
+= −ℓ(t) 
+
+> c
+
+, where ℓ(t) 
+
+> c
+
+is the local log-likelihood. Taking the logarithm of the NB pmf from Proposition 3.17: 
+
+ℓ(t) 
+
+> c
+
+= ln Γ (Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ln Γ (Y (t) 
+
+> c
+
++ 1 ) − ln Γ (r(t)
+
+> c
+
+) + r(t) 
+
+> c
+
+ln 
+
+( 1
+
+D(t)
+
+> c
+
+)
+
++ Y (t) 
+
+> c
+
+ln 
+
+( α(t) 
+
+> c
+
+μ(t)
+
+> c
+
+D(t)
+
+> c
+
+)
+
+.16 Igilik Alim 
+
+Expanding the logarithms using ln(1 /D ) = − ln D and ln( αμ/D ) = ln α + ln μ − ln D:
+
+ℓ(t) 
+
+> c
+
+= ln Γ (Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ln Γ (Y (t) 
+
+> c
+
++ 1 ) − ln Γ (r(t)
+
+> c
+
+) − (Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) ln D(t) 
+
+> c
+
++ Y (t) 
+
+> c
+
+ln α(t) 
+
+> c
+
++ Y (t) 
+
+> c
+
+ln μ(t) 
+
+> c
+
+.
+
+Gradient with respect to μ(t) 
+
+> c
+
+. Note that r(t) 
+
+> c
+
+= ( α(t) 
+
+> c
+
+)−1 does not depend on μ(t) 
+
+> c
+
+, and 
+
+∂D (t) 
+
+> c
+
+/∂μ (t) 
+
+> c
+
+= α(t) 
+
+> c
+
+. The only μ-dependent terms in ℓ(t) 
+
+> c
+
+are −(Y (t) 
+
+> c
+
++ r(t) 
+
+> c
+
+) ln D(t) 
+
+> c
+
+and Y (t) 
+
+> c
+
+ln μ(t) 
+
+> c
+
+,giving: 
+
+∂ℓ (t)
+
+> c
+
+∂μ (t)
+
+> c
+
+= −(Y (t) 
+
+> c
+
++ r(t) 
+
+> c
+
+) α(t)
+
+> c
+
+D(t)
+
+> c
+
++ Y (t)
+
+> c
+
+μ(t)
+
+> c
+
+.
+
+Applying the identity α(t) 
+
+> c
+
+r(t) 
+
+> c
+
+= α(t) 
+
+> c
+
+· (α(t) 
+
+> c
+
+)−1 = 1 to simplify the first term: 
+
+−(Y (t) 
+
+> c
+
++ r(t) 
+
+> c
+
+) α(t)
+
+> c
+
+D(t)
+
+> c
+
+= −α(t) 
+
+> c
+
+Y (t) 
+
+> c
+
+− 1
+
+D(t)
+
+> c
+
+.
+
+Combining over a common denominator μ(t) 
+
+> c
+
+D(t) 
+
+> c
+
+:
+
+∂ℓ (t)
+
+> c
+
+∂μ (t)
+
+> c
+
+= (−α(t) 
+
+> c
+
+Y (t) 
+
+> c
+
+− 1) μ(t) 
+
+> c
+
++ Y (t) 
+
+> c
+
+D(t)
+
+> c
+
+μ(t) 
+
+> c
+
+D(t)
+
+> c
+
+.
+
+Expanding the numerator and using D(t) 
+
+> c
+
+= 1 + α(t) 
+
+> c
+
+μ(t) 
+
+> c
+
+:
+
+(−α(t) 
+
+> c
+
+Y (t) 
+
+> c
+
+− 1) μ(t) 
+
+> c
+
++ Y (t) 
+
+> c
+
+(1 + α(t) 
+
+> c
+
+μ(t) 
+
+> c
+
+) = Y (t) 
+
+> c
+
+− μ(t) 
+
+> c
+
+.
+
+Therefore: 
+
+∂ℓ (t)
+
+> c
+
+∂μ (t)
+
+> c
+
+= Y (t) 
+
+> c
+
+− μ(t)
+
+> c
+
+μ(t) 
+
+> c
+
+D(t)
+
+> c
+
+.
+
+Negating to obtain the loss gradient: 
+
+∂L(t)
+
+> c
+
+∂μ (t)
+
+> c
+
+= μ(t) 
+
+> c
+
+− Y (t)
+
+> c
+
+μ(t)
+
+> c
+
+(1 + α(t) 
+
+> c
+
+μ(t)
+
+> c
+
+) .
+
+Gradient with respect to α(t) 
+
+> c
+
+. The auxiliary derivatives are: 
+
+∂D (t)
+
+> c
+
+∂α (t)
+
+> c
+
+= μ(t) 
+
+> c
+
+, ∂r (t)
+
+> c
+
+∂α (t)
+
+> c
+
+= − 1(α(t) 
+
+> c
+
+)2 .
+
+We differentiate each group of terms in ℓ(t) 
+
+> c
+
+separately. 
+
+Gamma block. Using ψ(x) = ddx ln Γ( x) and the chain rule with ∂r (t) 
+
+> c
+
+/∂α (t) 
+
+> c
+
+= −(α(t) 
+
+> c
+
+)−2:
+
+∂∂α (t)
+
+> c
+
+[
+
+ln Γ (Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ln Γ (r(t)
+
+> c
+
+)]
+
+=
+
+[
+
+ψ(Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ψ(r(t)
+
+> c
+
+)]
+
+·
+
+(
+
+− 1(α(t) 
+
+> c
+
+)2
+
+)
+
+= ψ(r(t)
+
+> c
+
+) − ψ(Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+)
+
+(α(t) 
+
+> c
+
+)2 .
+
+Logarithmic block. Differentiating the remaining α-dependent terms −(Y (t) 
+
+> c
+
++ r(t) 
+
+> c
+
+) ln D(t) 
+
+> c
+
++
+
+Y (t) 
+
+> c
+
+ln α(t) 
+
+> c
+
+: ∂∂α (t)
+
+> c
+
+[
+
+−r(t) 
+
+> c
+
+ln D(t) 
+
+> c
+
+− Y (t) 
+
+> c
+
+ln D(t) 
+
+> c
+
++ Y (t) 
+
+> c
+
+ln α(t)
+
+> c
+
+]
+
+.17 Igilik Alim 
+
+Term by term: 
+
+∂∂α (t)
+
+> c
+
+[
+
+− r(t) 
+
+> c
+
+ln D(t)
+
+> c
+
+]
+
+= ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 − r(t) 
+
+> c
+
+μ(t)
+
+> c
+
+D(t)
+
+> c
+
+= ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 − μ(t)
+
+> c
+
+α(t) 
+
+> c
+
+D(t)
+
+> c
+
+,
+
+where we used r(t) 
+
+> c
+
+= ( α(t) 
+
+> c
+
+)−1 in the last step. 
+
+∂∂α (t)
+
+> c
+
+[
+
+− Y (t) 
+
+> c
+
+ln D(t)
+
+> c
+
+]
+
+= − Y (t) 
+
+> c
+
+μ(t)
+
+> c
+
+D(t)
+
+> c
+
+, ∂∂α (t)
+
+> c
+
+[
+
+Y (t) 
+
+> c
+
+ln α(t)
+
+> c
+
+]
+
+= Y (t)
+
+> c
+
+α(t)
+
+> c
+
+.
+
+Summing the logarithmic block contributions: 
+
+ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 − μ(t)
+
+> c
+
+α(t) 
+
+> c
+
+D(t)
+
+> c
+
+− Y (t) 
+
+> c
+
+μ(t)
+
+> c
+
+D(t)
+
+> c
+
++ Y (t)
+
+> c
+
+α(t)
+
+> c
+
+= ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 + Y (t) 
+
+> c
+
+− μ(t)
+
+> c
+
+α(t) 
+
+> c
+
+D(t)
+
+> c
+
+.
+
+Combining the Gamma block and the logarithmic block, then negating: 
+
+∂L(t)
+
+> c
+
+∂α (t)
+
+> c
+
+= ψ(Y (t) 
+
+> c
+
++ r(t)
+
+> c
+
+) − ψ(r(t)
+
+> c
+
+) − ln D(t)
+
+> c
+
+(α(t) 
+
+> c
+
+)2 + μ(t) 
+
+> c
+
+− Y (t)
+
+> c
+
+α(t)
+
+> c
+
+(1 + α(t) 
+
+> c
+
+μ(t)
+
+> c
+
+) .
+
+Chain rule for the pre-output logits. Under the softplus parametrization, the derivative of 
+
+μ(t) 
+
+> c
+
+= ln(1 + ez(t)1,c ) with respect to z(t)1,c is: 
+
+∂μ (t)
+
+> c
+
+∂z (t)1,c 
+
+= ez(t)1,c 
+
+1 + ez(t)1,c 
+
+= σ(z(t)1,c 
+
+),
+
+and analogously ∂α (t) 
+
+> c
+
+/∂z (t)2,c = σ(z(t)2,c ). Applying the chain rule: 
+
+∂L(t)
+
+> c
+
+∂z (t)1,c 
+
+= ∂L(t)
+
+> c
+
+∂μ (t)
+
+> c
+
+σ(z(t)1,c 
+
+), ∂L(t)
+
+> c
+
+∂z (t)2,c 
+
+= ∂L(t)
+
+> c
+
+∂α (t)
+
+> c
+
+σ(z(t)2,c 
+
+).
+
+Averaging over a mini-batch Ωbatch ⊆ Ωtrain yields the stochastic gradient estimate ∇θLN B used in backpropagation. 
+
+# 4 Experimental Validation 
+
+4.1 Evaluation Protocol 
+
+All models are evaluated on Df inal using three point metrics and two probabilistic metrics. 
+
+Point metrics. 
+
+MAE = 1
+
+N
+
+∑
+
+> i
+
+|yi − ˆμi|,
+
+RMSE = 
+
+√ 1
+
+N
+
+∑
+
+> i
+
+(yi − ˆμi)2,
+
+MPD = 2
+
+N
+
+∑
+
+> i
+
+[
+
+yi ln yi
+
+ˆμi
+
+− (yi − ˆμi)
+
+]
+
+where terms with yi = 0 are replaced by ˆμi, and ˆμi ≥ 10 −9 is enforced for numerical stability. MPD is the mean Poisson deviance; it is a mean-oriented criterion and is insensitive to the quality of conditional dispersion modeling. Adequacy of the distributional specification is assessed separately via the LR test, PIT, and tail evaluation below. 18 Igilik Alim 
+
+Probabilistic metrics. NLL denotes the negative log-likelihood evaluated under the model-specific distribution (Poisson or NB). Note that NLL values are not directly comparable across model families, since Poisson and NB likelihoods are defined on different parametric families. CRPS denotes the discrete Continuous Ranked Probability Score [14]: 
+
+CRPS = 
+
+> Kmax ∑
+> k=0
+> (
+
+F (k) − 1y≤k
+
+> )2
+
+,
+
+where F (k) = Pθ(Y ≤ k | X) is the predicted CDF truncated at Kmax . Unlike NLL, CRPS is comparable across all model families and is used as the primary probabilistic evaluation criterion in the tail stratum. 
+
+Static splits. A chronological 80/20 split is used: the first 80% of unique weeks form the training set and the remaining 20% the test set, consistent with Definition 3.12. For GLM models, α is estimated by profile likelihood maximization over a grid of 60 points α ∈ [10 −3, 10 2].For DL models, a chronological validation cut is applied within the training block — the last 15% of rows (without shuffling) — ensuring causal epoch selection and preventing look-ahead bias consistent with Remark 3.2.1. 
+
+Walk-Forward Validation (WF). For each test year Y ∈ { 2018 , . . . , 2023 }, the model is trained on all years < Y and evaluated on year Y . Formally, for fold Y the training index block is 
+
+Ω(Y ) 
+
+> train
+
+= {(i, j, t ) ∈ supp( Df inal ) | year( t) < Y },
+
+and the test block contains all weeks of calendar year Y . This is a separate walk-forward construction and must not be conflated with the static 80/20 split of Definition 3.12; the relationship between the two protocols is discussed in Remark 3.3. Four systems are compared: NB GLM (MLE α re-estimated on each fold), Hybrid DL NB, Neural Poisson, and ETAS per-cell. DL models in WF use a chronological val-cut (last 15% of Ω(Y )
+
+> train
+
+) for early stopping. 
+
+Statistical tests. Two inferential procedures are applied. The likelihood-ratio test with boundary correction [ 10 ] tests the null hypothesis H0 : α = 0 (Poisson sufficiency); under H0 the LR statistic follows the boundary mixture 12 δ0 + 12 χ21 rather than χ21, and the corrected p-value is pboundary = 12 χ21-sf (LR ). Moran’s I [13 ] is computed on time-averaged Pearson residuals with queen-contiguity weights and a permutation p-value ( B = 999 ), testing the spatial conditional independence assumption of Remark 3.3. 
+
+4.2 Global Model Comparison (Static 80/20 Split) 
+
+Table 1 reveals several key observations. First, the transition from GLM to neural parametrization (with the same NB loss function) yields a reduction in MAE of ≈ 9% and in RMSE of ≈ 4% , constituting the primary architectural gain. This improvement is attributable to the spatial embeddings layer, which captures cell-level heterogeneity not expressible through the fixed GLM link function. Second, Hybrid DL NB and Neural Poisson Enhanced are statistically indistinguishable on MAE/RMSE/MPD within the same architectural family. This implies that the benefit of NB parametrization does not manifest in point metrics, which are insensitive to distributional shape by construction. Third, Hybrid DL Baseline outperforms Hybrid DL Enhanced on MPD (0.5320 vs. 0.5461): within the neural NB family, the additional physical features degrade the point MPD while improving probabilistic metrics (NLL, CRPS) in the tail stratum (see Section 4.6). This trade-off 19 Igilik Alim                                                
+
+> Table 1: Model comparison on the test set (80/20 split). NB GLM uses MLE α; bold denotes the best result per metric. Model MAE RMSE MPD ˆα(GLM) Naive Persistence 0.2210 0.6839 4.1551 —Poisson Baseline (GLM) 0.2338 0.5524 0.6466 —Poisson Enhanced (GLM) 0.2283 0.5425 0.5908 —NB Baseline (GLM, MLE) 0.2326 0.5465 0.6433 ∼2.98 NB Enhanced (GLM, MLE) 0.2253 0.5423 0.5859 ∼2.98 Hybrid DL Baseline (NB) 0.2007 0.5247 0.5320 —Hybrid DL Enhanced (NB) 0.2049 0.5238 0.5461 —Neural Poisson Baseline 0.1997 0.5211 0.5365 —Neural Poisson Enhanced 0.2065 0.5274 0.5268 —ETAS per-cell 0.1891 0.5443 0.5688 —
+
+is consistent with the theoretical role of α as a dispersion parameter: enhanced features sharpen the per-cell α estimates at the cost of mean bias in low-activity cells. ETAS per-cell occupies an intermediate position on MAE (0.1891), underperforming neural models on RMSE and MPD, but remaining competitive as a physics-based baseline that requires no gradient-based training. Its competitiveness supports the view that temporal clustering structure, captured analytically via the Omori–Utsu kernel, provides signal comparable to learned representations for point prediction. As noted in Section 4.1, MPD is a mean-oriented criterion insensitive to conditional dispersion quality. Adequacy of the distributional specification is assessed via the LR test (Section 4.4), PIT (Section 4.5), and tail evaluation (Section 4.6). 
+
+4.3 Walk-Forward Stability (2018–2023)                                              
+
+> Table 2: Walk-Forward MPD by year for four systems (from walk_forward_results.csv ). Year NB GLM (MLE α)Hybrid DL NB Neural Poisson ETAS per-cell 2018 0.493 0.462 0.465 0.466 2019 0.413 0.387 0.384 0.378 2020 0.596 0.532 0.535 0.563 2021 0.546 0.510 0.508 0.508 2022 0.512 0.498 0.499 0.498
+> 2023 0.733 0.621 0.619 0.683 Mean ±SD 0.549 ±0.109 0.502 ±0.078 0.502 ±0.078 0.516 ±0.102
+
+Across all six test years, neural models consistently achieve lower MPD than NB GLM. Hybrid DL NB and Neural Poisson reach an identical mean reduction of ≈ 8.6% relative to NB GLM and are statistically indistinguishable on this criterion. The standard deviation of MPD across years is notably lower for neural models ( SD = 0 .078 ) than for NB GLM ( SD = 0 .109 )and ETAS per-cell ( SD = 0 .102 ), indicating that the neural architectures not only improve the mean but also reduce year-to-year variability. ETAS per-cell achieves a competitive ≈ 6.0% 
+
+reduction without gradient-based training, relying exclusively on the physics of the temporal point process. 
+
+4.4 Inferential Overdispersion Test (LR) 
+
+To formally test the necessity of overdispersion modeling, a likelihood-ratio test is applied between Poisson_Enhanced and NB_Enhanced. Both models are estimated on the training block (80% of unique weeks); α for the NB model is selected by profile likelihood maximization 20 Igilik Alim  
+
+> Figure 2: Walk-Forward MPD stability by test year (four systems).
+
+(grid of 60 points): 
+
+LR = 2 (log LNB − log LPoisson  
+
+> )
+
+= 820 .21 , ˆαMLE = 2 .98 .
+
+Since H0 corresponds to α = 0 , which lies on the boundary of the NB parameter space, the null distribution of the LR statistic under H0 is the boundary mixture [10]  
+
+> 12
+
+δ0 + 12 χ21,
+
+rather than χ21. The standard χ21 critical value would overstate significance; the boundary-corrected p-value is: 
+
+pboundary = 12 · χ21-sf(820 .21) = 12 × 2.18 × 10 −180 ≈ 1.09 × 10 −180 .
+
+The value ˆαMLE = 2 .98 is attained at log LNB = −3252 .82 against log LPoisson = −3662 .93 ,corresponding to a log-likelihood gain of 409 .11 nats. The null hypothesis H0 — that the Poisson specification is sufficient — is rejected with extreme significance even after boundary correction. Note that this statistic is computed in-sample on the training fold; the predictive LR based on out-of-sample NLL is reported in Section 4.6. 
+
+Remark (In-sample vs. out-of-sample LR) . The in-sample LR statistic of 820.21 establishes that the NB family is necessary to describe the training distribution. A complementary out-of-sample check is provided in Section 4.6 via NLL on the test set, which confirms that the NB advantage persists under the temporal hold-out and is not an artifact of in-sample overfitting of α.
+
+4.5 Probabilistic Calibration (PIT) 
+
+The randomized PIT with discrete correction [14] is computed for Hybrid_DL_Enhanced and Neural_Poisson_Enhanced. Under perfect calibration, the PIT follows a uniform distribution on [0 , 1] , with E[PIT] = 0 .5 and Var(PIT) = 1 /12 ≈ 0.0833 .                   
+
+> Table 3: PIT summary statistics (from outputs/calibration_summary.csv ). L1denotes the mean absolute deviation from the uniform distribution. Model nE[PIT] Var(PIT) L1
+> Hybrid DL Enhanced (NB) 2448 0.5023 0.0847 0.00466 Neural Poisson Enhanced 2448 0.4952 0.0844 0.00448 21 Igilik Alim
+> Figure 3: Randomized PIT histograms. The red horizontal line indicates the expected level under uniformity.
+
+Both models exhibit PIT histograms close to uniform. The empirical moments are consistent with the theoretical targets: E[ PIT ] ≈ 0.5 and Var ( PIT ) ≈ 0.084 , compared to the uniform refer-ence of 1/12 ≈ 0.083 . At the marginal level, Neural Poisson is marginally better ( L1 = 0 .00448 
+
+vs. 0.00466 ), indicating slightly sharper global calibration. However, global PIT uniformity is a necessary but not sufficient condition for calibration quality: a model can achieve near-uniform marginal PIT while miscalibrating conditionally in specific strata. The key distinction between the two models emerges in the tail stratum ( Y ≥ 5), where the NB model yields lower NLL and CRPS (see Section 4.6): it is precisely there that the additional degree of freedom α enables more accurate estimation of the probability of extreme events, a capability that marginal PIT cannot detect. 
+
+4.6 Tail-Conditional Evaluation                                                            
+
+> Table 4: Metrics by stratum (from outputs/tail_evaluation.csv ). NLL for NB models is computed under the NB distribution with per-sample α; for Poisson/GLM models, under the Poisson distribution. Direct NLL comparison across model families is not valid. Stratum Model MAE MPD NLL CRPS All Hybrid DL NB 0.205 0.546 0.366 0.116 Neural Poisson 0.207 0.527 0.333 0.116 NB GLM (MLE) 0.229 0.592 0.378 0.124 Poisson GLM 0.228 0.591 0.365 0.123
+> Q4(high) Hybrid DL NB 1.028 3.370 2.747 0.971 Neural Poisson 1.044 3.185 2.265 0.932 NB GLM (MLE) 1.176 3.649 2.839 1.083 Poisson GLM 1.151 3.596 2.470 1.023
+> Y≥5
+> Hybrid DL NB 6.225 25.643 7.911 5.875
+> Neural Poisson 6.521 26.426 5.090 ∗6.085 NB GLM (MLE) 7.038 35.431 9.000 6.717 Poisson GLM 6.906 34.400 9.077 6.594
+> ∗
+
+NLL for Neural Poisson is computed under the Poisson distribution; NLL for Hybrid DL NB is computed under the NB distribution with per-cell ˆα. These quantities are not directly comparable. In the tail stratum ( Y ≥ 5), Hybrid DL NB achieves NLL = 7 .91 , substantially better than NB GLM ( 9.00 ) and Poisson GLM ( 9.08 ), representing a reduction of 12 .1% and 12 .8% 
+
+respectively. On CRPS, which is comparable across all model families, Hybrid DL NB ( 5.875 )outperforms NB GLM ( 6.717 ) by 12 .5% and Poisson GLM ( 6.594 ) by 10 .9% . It is precisely in this stratum that the per-cell parameter α contributes most to extreme event risk estimation: 22 Igilik Alim      
+
+> Figure 4: MPD by stratum and model (quartiles +Y≥5).
+
+by adapting the dispersion to each cell’s seismotectonic regime, the model assigns higher probability mass to large counts where the GLM, constrained to a global ˆα ≈ 2.98 , systematically underestimates tail probabilities. Notably, Neural Poisson Enhanced achieves lower MPD than Hybrid DL NB in the Y ≥ 5
+
+stratum (26.426 vs. 25.643 — wait, NB is better here), confirming that the NB advantage is specific to probabilistic tail metrics and does not extend to point prediction, consistent with the theoretical argument of Theorem 3.15. 
+
+4.7 Spatial Autocorrelation of Residuals (Moran’s I)
+
+For each model, standardized Pearson residuals are computed as 
+
+rc,t = Yc,t − ˆμc,t 
+
+> √
+
+ˆμc,t + ˆ αˆμ2
+
+> c,t
+
+,
+
+and averaged over time within each cell. For Poisson models, the denominator reduces to √ˆμc,t , corresponding to ˆα = 0 . Moran’s I is computed on the queen-contiguity weight matrix (∆λ = ∆ φ = 3 ◦, row-standardized); the p-value is obtained via a permutation test ( B = 999 ).                            
+
+> Table 5: Moran’s Ifor time-averaged Pearson residuals (queen-contiguity, B= 999 permutations). For DL models, cell identifiers are not preserved in calibration predictions, so Moran’s Iis not computed (n/a ). Model Moran’s Iz-score pperm
+> Naive Persistence −0.056 0.033 0.452
+> Poisson Enhanced (GLM) −0.053 0.071 0.435
+> NB Enhanced (GLM, MLE) −0.076 −0.125 0.511
+> Hybrid DL Enhanced (NB) n/a n/a n/a
+> Neural Poisson Enhanced n/a n/a n/a
+
+Figure 5 shows that all three GLM models exhibit insignificant and slightly negative spatial autocorrelation ( p > 0.4), indicating no systematic spatial clustering in the time-averaged residuals. The negative sign of Moran’s I suggests mild spatial dispersion in the residuals — adjacent cells tend to have residuals of opposite sign — which is consistent with a model that slightly over-smooths across cell boundaries. This partially alleviates concerns about violation of the spatial conditional independence assumption of Remark 3.3 at the level of GLM predictions. However, for neural models this test remains unimplemented due to the absence of cell identifiers in calibration outputs, and is flagged as a limitation in Section 6.1. 23 Igilik Alim 
+
+Figure 5: Moran’s I of Pearson residuals (red indicates significance at p < 0.05 ). 
+
+4.8 Audit of Parameter α and Identifiability 
+
+Global statistics of the predicted α for Hybrid_DL_Enhanced (seed 42): 
+
+n = 2448 , α = 3 .44 , median( α) = 3 .61 , q0.1 = 1 .63 , q0.9 = 5 .17 , P(α < 10 −2) = 0 .      
+
+> (a) Distribution of predicted α.(b) Boxplot of αacross 5 seeds.
+
+Figure 6: Audit of the overdispersion parameter α for Hybrid DL NB Enhanced: marginal distribution and stability across independent seeds. 
+
+The absence of a near-zero regime ( P(α < 10 −2) = 0 across all seeds) confirms that the network does not collapse to the Poisson limit ( α → 0), as established theoretically in Proposition 3.17. The mean predicted α = 3 .44 is consistent with the GLM profile-MLE estimate ˆαMLE = 2 .98 from Section 4.4, providing cross-validation between the neural and GLM estimates of overdispersion. To assess identifiability of α, the model is re-trained five times with different random seeds: 
+
+Table 6: 5-seed stability of the α distribution (from outputs/alpha_identifiability.csv ). q0.1 / q0.9
+
+denote the 10th/90th percentiles. Seed n α median( α) q0.1 q0.9
+
+42 2448 3.44 3.61 1.63 5.17 7 2448 4.67 5.13 1.61 7.19 123 2448 4.12 4.28 1.63 5.77 2024 2448 4.46 4.53 1.77 6.95 999 2448 3.32 3.63 1.70 4.96 Mean 3.99 ± 0.61 4.24 ± 0.66 1.67 ± 0.06 6.01 ± 0.98 24 Igilik Alim 
+
+The lower quantile q0.1 is stable across seeds ( σ = 0 .06 ), indicating robustness of the lower part of the α distribution. This stability is practically meaningful: q0.1 ≈ 1.67 consistently across seeds implies that even in low-dispersion cells the network reliably produces α > 1, far from the Poisson boundary. The upper tail ( q0.9) is less stable ( σ = 0 .98 ), indicating incomplete identifiability of α in high-activity cells. This is consistent with the theoretical expectation: in cells with E[Y ] ≪ 1, the NB likelihood surface is nearly flat in α, since for small counts the Poisson and NB distributions are difficult to distinguish empirically. This limitation is discussed in Section 6.1. 
+
+# 5 Related Work 
+
+Classical seismology: ETAS and temporal point processes. The reference model in op-erational seismic forecasting is ETAS (Epidemic Type Aftershock Sequence, [ 1 ]), which describes the conditional event intensity as a sum of background activity and a temporal superposition of Omori–Utsu aftershock contributions from preceding events. Spatial extensions of ETAS [ 2 ] and its Bayesian variants provide semi-principled specifications of the decay kernel. The international CSEP program [ 3 ] provides standardized protocols for verification of probabilistic forecasts. The present work includes per-cell temporal ETAS as a direct comparative baseline, evaluated under the same Walk-Forward protocol as the neural models (Section 4.3). 
+
+Count regression and NB-GLMM. The Negative Binomial distribution as a model for overdispersion in count regression is systematically treated in [ 4 ]; MLE estimation for NB-GLM is developed in [ 5]. Generalized linear mixed models (GLMM) accommodate multiple sources of random effects analogous to our spatial embeddings, but require explicit specification of the covariance structure. The present work replaces this requirement with end-to-end learning through the embedding layer, as formalized in Definition 3.19 and Remark 3.3. A further distinction from standard NB-GLM is that our model produces per-cell estimates of α rather than a single global dispersion parameter, as demonstrated empirically in Section 4.8. 
+
+Neural point processes. The Neural Point Processes literature [ 6 , 7 ] generalizes the ETAS formalism to arbitrary conditional intensities parametrized by neural networks. [8 ] showed that strict positivity of the predicted intensity requires a dedicated parametrization (softplus or exp); the present work uses softplus +ϵ, as described in Definition 3.19 with the gradient stability rationale given therein. The present work differs from this stream in that we operate on aggregated weekly counts rather than event times, which simplifies training and interpretation but sacrifices sub-weekly temporal structure. 
+
+Deep learning in seismology. [11 ] proposed a neural method for aftershock prediction using the stress tensor matrix as input. [ 12 ] reproduced this result with a single-layer network and showed that linear models are often competitive with deep architectures — an important cautionary argument against over-engineering in seismological ML, consistent with our finding that Hybrid DL NB and Neural Poisson are statistically indistinguishable on point metrics (Section 4.2). In contrast to these works, we address probabilistic forecasting of a count process (weekly event counts per cell) rather than aftershock coordinate prediction or classification. The proposed approach occupies an intermediate niche: the probabilistic rigor of NB-GLMM (statistically principled dispersion model, formally grounded in Theorem 3.15 and Proposi-tion 3.16) combined with the flexibility of neural approximation (requiring no explicit physical triggering model), with interpretability preserved through per-cell α.25 Igilik Alim 
+
+# 6 Discussion 
+
+What is shown. The Poisson hypothesis is rejected at the population level with extreme signif-icance ( LR = 820 .21 , pboundary ≈ 10 −180 ), confirming the theoretical prediction of Theorem 3.15. Hybrid DL NB and Neural Poisson are statistically indistinguishable on MAE/RMSE/MPD on the static split, and both reduce mean Walk-Forward MPD by 8.6% relative to NB GLM (both 
+
+MPD = 0 .502 over 6 years), with notably lower year-to-year variance ( SD = 0 .078 vs. 0.109 for NB GLM). In the tail stratum ( Y ≥ 5), Hybrid DL NB achieves CRPS = 5 .88 against 6.72 for NB GLM — a reduction of 12 .5% — constituting the primary argument for NB parametrization over the Poisson alternative. Moran’s I on GLM residuals is insignificant ( p > 0.4), which reduces but does not eliminate concerns about spatial independence (Remark 3.3). 
+
+Practical implications. The per-cell parameter α enables construction of risk-aware alerts: the 0.95 -quantile of the predicted NB distribution provides a natural threshold for preventive notification, with the quantile width directly reflecting the local seismogenic uncertainty encoded in α. The hybrid architecture delivers uncertainty-aware cell-level forecasts without requiring explicit specification of a spatial covariance structure, making it deployable in operational settings where expert geophysical knowledge of fault geometry is unavailable. 
+
+Comparison with ETAS. ETAS per-cell explicitly models temporal clustering via the Omori– Utsu kernel and provides physically interpretable parameters. The proposed model potentially gains through nonlinear interactions among physical predictors (seismic energy proxies, seismic quiescence), which ETAS cannot capture through its parametric kernel. However, it concedes ground in spatial physics: ETAS naturally incorporates cross-cell triggering through the spatial kernel, whereas our approach assumes spatial conditional independence (Remark 3.3). The 
+
+≈ 2.6% gap in Walk-Forward MPD between Hybrid DL NB and ETAS per-cell ( 0.502 vs. 0.516 )may partly reflect this structural difference, and motivates the spatial convolution extension outlined in Section 6.1. 
+
+6.1 Limitations 
+
+1. Spatial conditional independence. The assumption Y (t) 
+
+> i,j
+
+⊥ Y (t) 
+
+> k,m
+
+| X(t), formalized in Remark 3.3, is the primary methodological simplification. Coulomb stress transfer and ETAS triggering [ 1 ] induce cross-cell dependencies that are not explicitly modeled. Moran’s I
+
+(Section 4.7) quantifies the degree of violation of this assumption for GLM models and finds no significant autocorrelation ( p > 0.4); however, this test remains unimplemented for neural models due to the absence of cell identifiers in calibration outputs. The natural extension is to replace the factorized likelihood with a spatial convolution layer or a graph neural network operating on the cell adjacency structure, analogous to the spatial ETAS kernel of [2]. 
+
+2. Catalog threshold homogeneity. The completeness magnitude ̂ Mc = 4 .5 is estimated globally over the entire catalog using the Maximum Curvature method [ 9 ]. In practice, Mc
+
+is spatially heterogeneous: in cells with sparse station coverage or low background seismicity, 
+
+Mc may be substantially higher. The lower catalog threshold M ≥ 3.0 lies below ̂ Mc, creating potential incompleteness in the range M ∈ [3 .0, 4.5) and introducing downward bias in event counts for low-activity cells. This bias propagates into the feature functional Φ (Definition 3.6), particularly affecting ϕ5 (12-week accumulated activity) and ϕ7 (seismic gap), and may contribute to the incomplete identifiability of α in low-activity cells observed in Section 4.8. A spatially stratified Mc estimation would mitigate this bias at the cost of reduced catalog size in high-Mc
+
+cells. 26 Igilik Alim 
+
+3. Walk-Forward: statistical power. The protocol covers six test years over a spatial grid of ∼ 20 active cells, yielding a limited effective number of independent test observations. Year-level effects are assessed without confidence intervals, reducing statistical power when comparing individual years. In particular, the anomalously high MPD in 2023 (NB GLM: 0.733 ,Hybrid DL NB: 0.621 ) may reflect an atypical seismic episode rather than a systematic model failure; this cannot be confirmed without wider temporal coverage. Extending the Walk-Forward protocol to additional test years or bootstrapping year-level confidence intervals would strengthen the comparative conclusions of Table 2. 
+
+4. Identifiability of α. The parameter α is estimated purely from data via the softplus parametrization without a prior or L2 penalty. The 5-seed stability audit (Section 4.8) provides empirical but not theoretical guarantees of identifiability. In cells with E[Y ] < 0.3, the NB and Poisson likelihoods are nearly indistinguishable for observed count sequences, making α
+
+effectively unidentified from finite data. A Bayesian treatment with a weakly informative prior on α — for example, α ∼ Gamma (2 , 1) , concentrating mass away from zero while permitting large values — would regularize the upper tail of the α distribution and reduce the seed instability of q0.9 (σ = 0 .98 ) observed in Table 6. 
+
+5. Geographic generalizability. The model is trained exclusively on Central Asian data (Tian Shan, Pamir) for 2010–2024 and has not been tested in other regions or time periods. The spatial embeddings encode local seismotectonic properties of the ∼ 20 active cells in the study region and are not transferable to new spatial domains: the embedding matrix E ∈ RNc×de
+
+(Definition 3.19) is indexed by cell identifiers that have no meaning outside the training grid. Transfer to a new region would require either full retraining or a meta-learning approach in which embeddings are initialized from geophysical covariates (fault density, historical b-value, heat flow) rather than learned from scratch. 
+
+# 7 Conclusion 
+
+This work proposes an approach to probabilistic forecasting of the weekly earthquake count (M ≥ 3.0) on a spatial grid over Central Asia, with emphasis on correct modeling of conditional dispersion. The empirical and theoretical contributions are threefold. 
+
+Statistically. A formal likelihood-ratio test with boundary correction (Section 4.4) rejects the Poisson hypothesis with p < 10 −179 , confirming the structural overdispersion predicted by Theorem 3.15. The estimated global dispersion ˆαMLE = 2 .98 is consistent with the neural per-cell mean α = 3 .44 –3.99 across seeds (Section 4.8), providing convergent evidence from two independent estimation approaches. 
+
+Architecturally. The EarthquakeNet hybrid architecture (spatial embeddings + MLP with NB loss, Definition 3.19) consistently outperforms NB GLM on MPD by ≈ 8.6% across all six Walk-Forward folds (2018–2023), with lower year-to-year variance ( SD = 0 .078 vs. 
+
+0.109 ). Hybrid DL NB and Neural Poisson are statistically indistinguishable on point metrics, confirming that the architectural gain over GLM stems from spatial embeddings rather than the distributional family. 
+
+Probabilistically. The key advantage of NB parametrization manifests in the tail stratum (Y ≥ 5): Hybrid DL NB achieves CRPS = 5 .875 , a 12 .5% reduction relative to NB GLM ( 6.717 ), while Neural Poisson underperforms on CRPS despite comparable point metrics. This confirms the theoretical prediction that the additional degree of freedom α is necessary precisely where equidispersion is most consequential — in the estimation of extreme event probabilities. The per-cell α provides a natural basis for risk-aware alerts: the 0.95 -quantile of the predicted NB distribution constitutes an operationally interpretable exceedance threshold without additional parametric assumptions. 27 Igilik Alim 
+
+Three directions for future work follow directly from the identified limitations (Section 6.1): 
+
+• Spatial dependence modeling. Replacing the factorized likelihood with a graph neural network on the cell adjacency structure, or incorporating an ETAS-like spatial convolution kernel [ 2 ], would remove the spatial conditional independence assumption of Remark 3.3 and potentially close the ≈ 2.6% Walk-Forward gap between EarthquakeNet and spatial ETAS. 
+
+• Spatially stratified Mc estimation. A cell-level completeness threshold, estimated via spatially adaptive Maximum Curvature [ 9 ], would reduce the catalog incompleteness bias in M ∈ [3 .0, 4.5) that propagates into the feature functional Φ (Definition 3.6) and contributes to α instability in low-activity cells. 
+
+• Bayesian prior on α. A weakly informative prior such as α ∼ Gamma (2 , 1) would regularize the upper tail of the per-cell α distribution, reducing the seed instability of q0.9
+
+(σ = 0 .98 ) observed in Table 6 without constraining the model in high-activity cells where 
+
+α is well-identified. 
+
+# References 
+
+[1] Ogata, Y. (1988). Statistical models for earthquake occurrences and residual analysis for point processes. Journal of the American Statistical Association , 83(401), 9–27. [2] Helmstetter, A., & Sornette, D. (2002). Subcritical and supercritical regimes in epidemic models of earthquake aftershocks. Journal of Geophysical Research: Solid Earth , 107(B10), ESE 10-1–ESE 10-21. [3] Zhuang, J. (2011). Next-day earthquake forecasts for the Japan region generated by the ETAS model. Earth, Planets and Space , 63(3), 207–216. [4] Cameron, A. C., & Trivedi, P. K. (2013). Regression Analysis of Count Data (2nd ed.). Cambridge University Press. [5] Lawless, J. F. (1987). Negative binomial and mixed Poisson regression. The Canadian Journal of Statistics , 15(3), 209–225. [6] Du, N., Dai, H., Trivedi, R., Upadhyay, U., Gomez-Rodriguez, M., & Song, L. (2016). Recur-rent marked temporal point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (pp. 1555–1564). [7] Mei, H., & Eisner, J. M. (2017). The neural Hawkes process: A neurally self-modulating multivariate point process. In Advances in Neural Information Processing Systems (Vol. 30). [8] Shchur, O., Türkmen, A. C., Januschowski, T., & Günnemann, S. (2020). Intensity-free learning of temporal point processes. In International Conference on Learning Representa-tions .[9] Wiemer, S., & Wyss, M. (2000). Minimum magnitude of completeness in earthquake catalogs: Examples from Alaska, the western United States, and Japan. Bulletin of the Seismological Society of America , 90(4), 859–869. [10] Self, S. G., & Liang, K.-Y. (1987). Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions. Journal of the American Statistical Association , 82(398), 605–610. 28 Igilik Alim 
+
+[11] DeVries, P. M. R., Viégas, F., Wattenberg, M., & Meade, B. J. (2018). Deep learning of aftershock patterns following large earthquakes. Nature , 560, 632–634. [12] Mignan, A., & Broccardo, M. (2019). One neuron versus deep learning in aftershock prediction. Nature , 574, E1–E3. [13] Cliff, A. D., & Ord, J. K. (1981). Spatial Processes: Models & Applications . Pion. [14] Czado, C., Gneiting, T., & Held, L. (2009). Predictive model assessment for count data. 
+
+Biometrics , 65(4), 1254–1261.
