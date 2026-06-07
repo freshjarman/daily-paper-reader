@@ -1,0 +1,835 @@
+Title: GLIDE: Graph-guided Leap Inference for Diffusion Estimation of Spatio-Temporal Point Processes
+
+URL Source: https://arxiv.org/pdf/2606.01273v1
+
+Published Time: Tue, 02 Jun 2026 01:33:18 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# GLIDE: Graph-guided Leap Inference for Diffusion Estimation of Spatio-Temporal Point Processes 
+
+Guanyu Zhou, Yao Liu, Yanglei Gan, Yuxiang Cai, Peng He, Run Lin, Yuxiang Liu, and Qiao Liu 
+
+University of Electronic Science and Technology of China, Chengdu, China 
+
+guanyuzhou@std.uestc.edu.cn, liuyao@uestc.edu.cn, yangleigan@std.uestc.edu.cn, yuxiangcai@std.uestc.edu.cn, hepenglk@std.uestc.edu.cn, runlin@std.uestc.edu.cn, 2023210812@std.uestc.edu.cn, qliu@uestc.edu.cn 
+
+Abstract. Spatio-temporal point processes (STPPs) provide a princi-pled framework for modeling asynchronous events in continuous time and space. Recent diffusion-based approaches offer a flexible alterna-tive to deterministic prediction by modeling complex conditional dis-tributions, but their application to STPPs remains challenging: reverse sampling from pure noise is costly, and weak structural constraints in sparse spatial domains can lead to poorly localized probability mass. We propose GLIDE (Graph-guided Leap Inference for Diffusion Esti-mation), a conditional diffusion framework for next-event modeling in STPPs. GLIDE organizes historical events into a multi-scale historical graph and encodes temporal evolution and spatial topology through a dual-stream architecture, yielding a structured conditioning context for a dual-branch diffusion denoiser. It further introduces a prior-guided leap inference mechanism, in which a lightweight mean predictor provides a deterministic anchor and the reverse process starts from an intermedi-ate diffusion step instead of from pure Gaussian noise. Experiments on multiple real-world datasets show that GLIDE improves both distribu-tion fitting and next-event prediction, with the largest gains appearing on the spatial side. The results also indicate that prior-guided leap in-ference substantially reduces reverse-sampling cost while preserving the stochastic generation capability of diffusion models. The code is available at https://github.com/AONE-NLP/GLIDE. 
+
+Keywords: Spatio-Temporal Point Processes, Diffusion Models,Graph Neural Networks, Leap Sampling 
+
+1 Introduction 
+
+Spatio-Temporal Point Processes (STPPs) provide a probabilistic framework for modeling asynchronous events in continuous time and space, and have been widely used in applications such as earthquake forecasting, epidemic modeling, 
+
+> arXiv:2606.01273v1 [cs.LG] 31 May 2026
+
+2 Authors Suppressed Due to Excessive Length X
+
+Y
+
+> Time
+
+X
+
+Y
+
+> Time
+
+X
+
+Y
+
+> Time
+
+(a) Deterministic: 
+
+Mode Collapse 
+
+(b) Standard Diffusion: 
+
+Probability Dispersion 
+
+(c) GLIDE : Prior -
+
+Informed Leap Inference 
+
+> Generated Events
+> Diffusion Trajectory
+> Prior Anchor
+> Ground Truth
+
+X
+
+Y
+
+> Time
+
+X
+
+Y
+
+> Time
+
+X
+
+Y
+
+> Time
+
+(a) Deterministic: 
+
+Mode Collapse 
+
+(b) Standard Diffusion: 
+
+Probability Dispersion 
+
+(c) GLIDE : Prior -
+
+Informed Leap Inference 
+
+> Generated Events
+> Diffusion Trajectory
+> Prior Anchor
+> Ground Truth
+
+Fig. 1: Comparison of STPP generative paradigms. Compared to (a) determin-istic mode collapse and (b) unconstrained probability dispersion in standard diffusion, (c) GLIDE leverages a prior-informed anchor for rapid and precise leap inference. urban mobility analysis, and crime prediction [5, 16]. The core goal is to estimate the conditional distribution of the next event given the observed history, i.e., when and where the next event will occur. Despite recent progress, existing deep STPP models still face a fundamental trade-off between accurate point prediction and expressive distribution modeling. Deterministic neural point process models, including recurrent and attention-based variants, can capture sequential dependence effectively, but often exhibit mean-seeking behavior when the future spatial distribution is highly multi-modal [3, 14, 35, 32]. As a result, predictions may collapse toward spatial centroids in-stead of reflecting true event hotspots. Generative modeling offers a more flexible alternative. Diffusion and score-based models are powerful tools for representing complex probability densities [6, 23], and have recently been introduced to STPP modeling [31, 11]. However, directly applying standard diffusion to sparse continuous spatio-temporal do-mains remains inefficient and weakly constrained: reverse generation from pure Gaussian noise requires many denoising steps, and the lack of explicit structural guidance may spread probability mass into invalid spatial regions. To address these issues, we propose GLIDE (Graph-guided Leap Inference for Diffusion Estimation), a unified framework that combines graph-guided con-ditioning with efficient diffusion sampling, as illustrated in Fig. 1. GLIDE con-structs a multi-scale dynamic correlation graph from historical events and en-codes temporal evolution and spatial structure using a dual-stream architecture. We further introduce a Prior-Informed Leap Inference strategy, which first GLIDE: Graph-guided Leap Inference for STPPs 3
+
+predicts a deterministic anchor for the target event and then starts reverse dif-fusion from an intermediate step around this anchor. This turns generation from a costly global search into a local refinement process, improving both efficiency and spatial fidelity. Our contributions are summarized as follows: 
+
+– A graph-guided diffusion framework for STPP modeling. We propose GLIDE, which integrates multi-scale dynamic correlation graphs with a dual-stream diffusion architecture to model complex spatio-temporal dependencies. 
+
+– Prior-informed leap inference for efficient sampling. We introduce a leap sampling strategy that anchors the diffusion trajectory with a determin-istic prior, substantially reducing inference cost while preserving stochastic generation. 
+
+– Strong empirical performance. Experiments on multiple real-world datasets show that GLIDE achieves state-of-the-art performance in distribution fitting and event prediction, while providing up to 3.1× faster inference than stan-dard diffusion baselines. 
+
+2 Related Work 
+
+Deep Spatio-Temporal Point Processes. Classical STPPs rely on hand-crafted conditional intensity functions, such as Hawkes-type self-exciting processes and earthquake-oriented statistical models [5, 16]. Notably, these explicitly parame-terized point processes have also been successfully adapted to model localized social behaviors, such as the contagion of crime and epidemic outbreaks [15]. To improve expressiveness, neural point process models parameterize event dynam-ics with recurrent or attention-based architectures, including RMTPP, Neural Hawkes Process, Transformer Hawkes Process, and SAHP [3, 14, 35, 32]. Other notable intensity-free and fully neural approaches further improve flexibility without restricting the functional form [21, 17]. For continuous spatio-temporal event modeling, Neural Spatio-Temporal Point Processes leverage Neural ODEs and continuous-time normalizing flows, while DeepSTPP introduces a latent spatio-temporal intensity with amortized variational inference [2, 34]. Although these methods improve flexibility, they still mainly rely on intensity-based like-lihood modeling and can struggle with highly multi-modal spatial distributions. 
+
+Spatio-Temporal Graph & Sequence Modeling. Beyond asynchronous point pro-cesses, the modeling of structured time-series and macroscopic traffic often re-lies on sequence and graph encoders. Since the introduction of the self-attention mechanism [27], Transformer-based architectures have dominated long-sequence forecasting [33]. Concurrently, built upon foundational Graph Convolutional Networks (GCNs) and Graph Attention Networks (GATs) [9, 28], spatial-temporal graph neural networks (STGNNs) such as DCRNN [10], ASTGCN [4], and Graph WaveNet [30], have proven highly effective in modeling complex mobility. GLIDE takes inspiration from these explicit topological and sequential priors but signifi-cantly extends them from deterministic forecasting into a generative continuous-time diffusion framework. 4 Authors Suppressed Due to Excessive Length 
+
+Generative Modeling for STPPs. Generative approaches seek to model the full conditional distribution of future events rather than only point estimates. Neu-ral ODE/CNF-based STPP models offer expressive density modeling but require solving continuous-time dynamics during training or inference [2]. Concurrently, fueled by the success of Latent Diffusion Models and robust conditioning tech-niques [20, 7], diffusion models have demonstrated remarkable success in broader spatio-temporal forecasting and time series imputation tasks [19, 26, 29]. Specif-ically for point processes, DSTPP introduces diffusion modeling for joint spatio-temporal event generation and demonstrates the benefit of diffusion for STPPs [31]. More recently, SMASH adopts a score-matching pseudolikelihood objective to avoid intractable normalization and supports uncertainty quantification [11]. 
+
+Accelerated Diffusion Inference. To overcome the high latency of generative sam-pling, non-Markovian sampling like DDIM [22] has become a standard prac-tice. Moreover, truncated diffusion and early-stopping mechanisms [13, 12] have been actively explored. However, existing trajectory truncation methods like Leapfrog Diffusion (LED) [13] often rely on continuous Gaussian Mixture Models (GMMs) for initialization, which are ill-suited for the highly sparse and discrete nature of asynchronous STPPs. In contrast, GLIDE introduces a prior-informed leap inference strategy built around a deterministic anchor derived from graph-conditioned history, improving both sampling efficiency and spatial fidelity. 
+
+3 Preliminaries 
+
+3.1 Problem Formulation 
+
+A spatio-temporal point process (STPP) is a sequence of asynchronous events 
+
+S = {ei}Ni=1 , where each event is represented as ei = ( ti, si) with t1 < t 2 < · · · <tN and si ∈ X ⊂ Rd. Given the observed history HN = {(ti, si)}Ni=1 , the goal is to model the conditional distribution of the next event. In our formulation, the temporal target is the next inter-event time ∆t N +1 =
+
+tN +1 − tN rather than the absolute timestamp. Therefore, we represent the prediction target as x0 = [ ∆t N +1 , sN +1 ] ∈ R1+ d, and aim to learn the conditional density p(x0 | H N ).
+
+3.2 Conditional Diffusion for STPPs 
+
+Following denoising diffusion probabilistic models, we model p(x0 | H N ) through a forward noising process and a learned reverse denoising process [6, 23]. Given a variance schedule {βk}Kk=1 , the forward process is defined as: 
+
+q(xk | xk−1) = N
+
+p 1 − βkxk−1, β kI
+
+
+
+, (1) with the closed-form marginal: 
+
+q(xk | x0) = N  √¯αkx0, (1 − ¯αk)I , (2) GLIDE: Graph-guided Leap Inference for STPPs 5Multi -scale Historical 
+
+> Graph
+
+t
+
+> Long -
+> term
+> Middle -
+> term
+> Short -term
+> RoPE +
+> Transformer
+> RoPE +
+> Transformer
+
+t1 ti-1t2 hti
+
+s2s1 si-1
+
+> GAT
+> Encoder Fourier
+> Embedding
+> Fourier
+> Embedding
+
+Historical 
+
+Events 
+
+hsi
+
+> Context
+
+c
+
+> Fusion MLP Fusion MLP
+> Temporal Input
+> Projection
+> Temporal Input
+> Projection
+
+Diffusion 
+
+Step  k
+
+> Context
+
+c   
+
+> DiT
+> Block
+> DiT
+> Block
+> DiT
+> Block
+> DiT
+> Block
+> Step Embedding Condition Modulation
+> Gate S
+> Gate T
+> DiT
+> Block
+> DiT
+> Block
+> Joint Mean Predictor
+
+Prior -Guided Leap 
+
+Inference 
+
+> Ground
+> Truth
+> Ground
+> Truth
+> Auxiliary
+> Loss
+
+Dual -Branch 
+
+Diffusion Denoiser 
+
+Historical Context 
+
+Encoder   
+
+> Spatial Input
+> Projection
+> Spatial Input
+> Projection
+> Interaction
+
+= 0 + 1 −
+
+> Multi -scale Historical
+> Graph
+
+t
+
+> Long -
+> term
+> Middle -
+> term
+> Short -term
+> RoPE +
+> Transformer
+> RoPE +
+> Transformer
+
+t1 ti-1t2 hti
+
+s2s1 si-1
+
+> GAT
+> Encoder Fourier
+> Embedding
+> Fourier
+> Embedding
+
+Historical 
+
+Events 
+
+hsi
+
+> Context
+
+c
+
+> Fusion MLP Fusion MLP
+> Temporal Input
+> Projection
+> Temporal Input
+> Projection
+
+Diffusion 
+
+Step  k
+
+> Context
+
+c   
+
+> DiT
+> Block
+> DiT
+> Block
+> DiT
+> Block
+> DiT
+> Block
+> Step Embedding Condition Modulation
+> Gate S
+> Gate T
+> DiT
+> Block
+> DiT
+> Block
+> Joint Mean Predictor
+
+Prior -Guided Leap 
+
+Inference 
+
+> Ground
+> Truth
+> Ground
+> Truth
+> Auxiliary
+> Loss
+
+Dual -Branch 
+
+Diffusion Denoiser 
+
+Historical Context 
+
+Encoder   
+
+> Spatial Input
+> Projection
+> Spatial Input
+> Projection
+> Interaction
+
+= 0 + 1 −
+
+Fig. 2: The overall workflow of GLIDE. where αk = 1 − βk and ¯αk = Qkj=1 αj .The reverse model is parameterized as: 
+
+pθ (xk−1 | xk, HN ) = N (μθ (xk, k, HN ), Σk) , (3) which is trained with the standard noise-prediction objective: 
+
+Ldiff = Ex0,ϵ,k 
+
+h
+
+∥ϵ − ϵθ (xk, k, HN )∥22
+
+i
+
+. (4) For sparse STPP domains, however, starting reverse generation from pure Gaussian noise is often inefficient because the valid probability mass is concen-trated in a small subset of the spatio-temporal space. This observation motivates the prior-informed leap inference strategy introduced in Section 4.4. 
+
+4 Methodology 
+
+GLIDE models the next-event distribution by coupling graph-structured histor-ical encoding with conditional diffusion. Historical events are organized into a 6 Authors Suppressed Due to Excessive Length 
+
+multi-scale historical graph. Temporal evolution and spatial topology are en-coded by two separate streams, whose fused representation conditions a dual-branch Diffusion Transformer. A lightweight mean predictor provides a deter-ministic anchor that shortens the reverse trajectory during inference. 
+
+4.1 Multi-Scale Dynamic Graph Construction 
+
+Let the observed history be HN = {(ti, s i)}Ni=1 , where ti is the timestamp and 
+
+si ∈ Rd is the spatial location. The history is represented as a directed graph 
+
+G = ( V, E) with one node per historical event. Edges are constructed under a set of historical index windows Kscales = {k1, . . . , k m}.For each target node and each scale k ∈ K scales , a small set of spatially close historical events is selected from the corresponding historical window and connected by directed edges. This preserves temporal order while retaining both recent local interactions and longer-range dependencies. For an edge from event j to event i, let ∆t ji denote the normalized time difference and ∆s ji denote the Euclidean spatial distance. The edge feature is defined as: 
+
+eji = [ ∆t ji · δt, ∆s ji · δs, w scale ], (5) where wscale identifies the scale of the corresponding window. Following the decay intuition of self-exciting point processes [5], the temporal and spatial factors are written as: 
+
+δt = σ
+
+
+
+κ · ∆t ji 
+
+Tspan 
+
+
+
+, δs = λboost · exp( −| ∆s ji |), (6) where Tspan is the global time span, σ(·) is the sigmoid function, and κ, λ boost 
+
+are hyperparameters. Node features combine normalized event attributes with multi-scale local summaries. For each event, temporal statistics are extracted as ftemp (w) = [μ∆t , σ ∆t , Trend ∆t ], and spatial statistics are computed analogously as fspat (w) = [μs, σ s, v disp ], where vdisp is the spatial drift vector. These summaries are con-catenated with normalized absolute time, inter-event time, absolute location, and location displacement to form the final node representation. 
+
+4.2 Dual-Stream Spatio-Temporal Encoder 
+
+Temporal and spatial dependencies enter the model through separate streams. The temporal stream handles historical evolution in event time, while the spatial stream operates on graph-structured neighborhoods. Treating them symmetri-cally from the start tends to blur two different sources of uncertainty: when the next event occurs and where it appears. The encoder therefore maintains distinct pathways before merging them into a shared context. For event i, the temporal embedding is written as: 
+
+e(i) 
+
+> t
+
+=
+
+ ∆t i − μ∆t 
+
+σ∆t 
+
+∥ log(1 + exp( ∆t i)) ∥ sin( ω∆t i) ∥ cos( ω∆t i)
+
+
+
+. (7) GLIDE: Graph-guided Leap Inference for STPPs 7
+
+This embedding mixes normalized scale, a smooth positive transform, and har-monic components. The first term preserves the relative magnitude of inter-event intervals; the second provides a stable monotone transform for positive temporal variation; the sinusoidal terms make periodic structure easier to express. The temporal sequence is encoded by a Transformer with Rotary Positional Embed-ding (RoPE) [24]: 
+
+Attention( Q, K, V ) = Softmax 
+
+ (QR Θ )( KR Θ )⊤
+
+√dk
+
+
+
+V. (8) RoPE is used here to strengthen relative order information without introducing a separate positional tensor, which is helpful when long-range temporal history is important. The spatial stream starts from a Fourier lifting of the coordinates, given by γ(si) = [cos(2 πBs i) ∥ sin(2 πBs i)] , where B is a sampled frequency matrix [25]. This mapping enlarges the representational space before graph propaga-tion, making localized spatial variation easier to model. The lifted features are propagated over G using stacked GATv2 layers [1]. The attention coefficient on edge (j, i ) is modulated by the edge attribute: 
+
+αij =exp 
+
+
+
+LeakyReLU 
+
+
+
+a⊤[W h (l)
+
+> i, spat
+
+∥W h (l)
+
+> j, spat
+
+∥Weeji ]
+
+ P 
+
+> k∈N i
+
+exp 
+
+
+
+LeakyReLU 
+
+
+
+a⊤[W h (l)
+
+> i, spat
+
+∥W h (l)
+
+> k, spat
+
+∥Weeki ]
+
+ , (9) and the spatial state is updated as: 
+
+h(l+1)  
+
+> i, spat
+
+= σ
+
+ X
+
+> j∈N i
+
+αij Wv h(l)
+
+> j, spat
+
+ . (10) Injecting eji into the attention coefficient keeps the aggregation graph-aware in a stronger sense: the model does not only learn which neighbors to attend to, but also how their influence should vary across temporal and spatial scales. This is particularly useful when nearby historical events act as local triggers rather than as generic context. The two streams are fused through a gated interaction layer: 
+
+Ci = σ(Wgate [hi, temp ∥hi, spat ]) ⊙ MLP fuse ([ hi, temp ∥hi, spat ]) , (11) which yields the context matrix C ∈ RL×d. A plain concatenation followed by a linear projection is possible, but the gate is useful in practice because the relative importance of temporal and spatial evidence varies across datasets and across histories. The fused context is passed to the reverse diffusion model. 
+
+4.3 DiT-Based Diffusion Estimation 
+
+The prediction target is the next-event variable x0 = [ ∆t N +1 , s N +1 ], and the objective is to learn its conditional distribution given the history. The reverse process is parameterized by a conditional Diffusion Transformer (DiT) [18]. 8 Authors Suppressed Due to Excessive Length 
+
+Conditioning is injected through Adaptive Layer Normalization. For a hidden state h in a DiT block, the context-dependent modulation parameters are: 
+
+[γ1, β 1, α 1, γ 2, β 2, α 2] = Wada econd + bada , (12) where econd = MLP( C, k ) depends on both the context and the diffusion step k.The block update takes the form: 
+
+˜h = h + α1 ⊙ SelfAttn((1 + γ1) ⊙ LayerNorm( h) + β1) , (13) 
+
+h(l+1) = ˜h + α2 ⊙ FFN 
+
+
+
+(1 + γ2) ⊙ LayerNorm( ˜h) + β2
+
+
+
+. (14) The residual gates are zero-initialized, following standard DiT practice. A single denoising stream is not used. Temporal and spatial targets are han-dled by two parallel branches, one for temporal denoising and the other for spatial denoising. This separation matters because the uncertainty over ∆t N +1 
+
+is not of the same type as the uncertainty over sN +1 . Temporal prediction is of-ten dominated by historical progression and local interval structure, while spatial prediction tends to be more explicitly multi-modal. A fully shared denoising path makes it harder to preserve these different inductive biases. Early layers keep the two branches separate. Cross-branch interaction is in-troduced only after a designated stage. For the temporal branch, the interaction gate is: 
+
+gs→t = σ
+
+
+
+Wgate [h(l)temp ∥h(l)spat ]
+
+
+
+, (15) and the updated state is: 
+
+ˆh(l)temp = h(l)temp + gs→t ⊙ h(l)spat . (16) A symmetric update is applied to the spatial branch. Delaying this interaction is deliberate. If the two branches are mixed too early, branch-specific denoising patterns become weaker and the model tends to over-share features. Restricting interaction to deeper layers keeps the early dynamics specialized while still al-lowing explicit spatio-temporal coupling when the denoising state becomes more informative. 
+
+4.4 Leap Inference with Prior Guidance 
+
+Standard reverse diffusion starts from pure Gaussian noise and traverses the full trajectory. In sparse continuous spatio-temporal domains, this global search is expensive and often poorly localized. GLIDE shortens this process by initializing the reverse chain around a deterministic anchor. GLIDE: Graph-guided Leap Inference for STPPs 9
+
+Algorithm 1 GLIDE Inference with Leap Sampling 
+
+Input : Context embeddings C, Leap step τ , Guidance scale w
+
+Output : Predicted next event x0
+
+1: ˆx0 ← JointMeanPredictor (C) {Deterministic prior anchor }2: ϵ ∼ N (0 , I )
+
+3: xτ ← √¯ατ ˆx0 + √1 − ¯ατ ϵ {Leap initialization }4: for t = τ, τ − 1, . . . , 1 do 
+
+5: xdif f t−1 ← DiT_Denoise (xt, C, t ) {Standard reverse step }6: if t > τ / 2 then 
+
+7: gt ← w · (t/τ )
+
+8: xt−1 ← (1 − gt)xdif f t−1 + gt ˆx0 {Elastic prior guidance }9: else 
+
+10: xt−1 ← xdif f t−1
+
+11: end if 
+
+12: end for 
+
+13: return x0
+
+The anchor is produced by a joint mean predictor trained alongside the dif-fusion backbone. Given the context matrix C, the predictor outputs: 
+
+(ˆ t0, ˆs0) = JMP( C), ˆx0 = [ˆ t0, ˆs0], (17) where JMP( ·) denotes a lightweight joint mean predictor operating on the con-ditioning context and producing coarse temporal and spatial estimates of the next event. It produces a coarse estimate ˆx0 of the next event, which serves as a deterministic anchor for subsequent refinement. The training objective combines diffusion loss and auxiliary regression loss: 
+
+Ltotal = ( Lt 
+
+> diff
+
++ 2 Ls 
+
+> diff
+
+) + 0 .1( Lt 
+
+> mean
+
++ 2 Ls
+
+> mean
+
+). (18) The auxiliary regression term is kept small relative to the diffusion loss, so early inaccuracies in ˆx0 do not dominate optimization. In practice, EMA further sta-bilizes the joint training dynamics. At inference time, the reverse process starts from an intermediate step τ
+
+rather than from step K. In practice, τ is controlled by a fixed start ratio with respect to the full diffusion horizon and is treated as a hyperparameter selected on the validation set: 
+
+xτ = √¯ατ ˆx0 + √1 − ¯ατ ϵ, ϵ ∼ N (0 , I ). (19) The sample is thus injected near a high-probability region implied by the history, bypassing a substantial part of the unguided early trajectory. Gaussian noise is retained, so different samples can still explore different local modes around the anchor instead of collapsing to a single deterministic point. Algorithm 1 summarizes the procedure. The remaining reverse updates are further stabilized by an elastic anchor guidance rule: 
+
+xt−1 ← (1 − gt)xdiff  
+
+> t−1
+
++ gt ˆx0, gt = w · tτ . (20) 10 Authors Suppressed Due to Excessive Length 
+
+The guidance weight decays linearly as t approaches zero, so the trajectory moves from coarse localization to fine stochastic refinement. 
+
+5 Experiments 
+
+We evaluate GLIDE on three primary real-world benchmarks: Earthquake , COVID-19 , Citibike , and include additional analysis on Crime for graph-related abla-tions. The preprocessing of Earthquake , COVID-19 , and Citibike follows DSTPP [31]: Earthquake is segmented by a 30-day sliding window with a 7-day gap, COVID-19 is segmented by a 7-day window with a 3-day gap, and Citibike is split into one-day subsequences for each bike starting from 5:00 a.m. The Crime 
+
+dataset follows the split used in SMASH [11]; unlike the original marked set-ting, we remove the category dimension and retain only temporal and spatial coordinates. 
+
+5.1 Experimental Setup 
+
+All datasets are split chronologically into training, validation, and test sets with a ratio of 8:1:1. The comparison includes classical intensity-based models and re-cent neural or generative baselines: Hawkes [5], RMTPP [3], SAHP [32], NJSDE [8], NSTPP [2], DeepSTPP [34], DSTPP [31], and SMASH [11]. These base-lines span recurrent and self-attentive neural point processes, continuous-time generative models, and recent diffusion- or score-based approaches. Distribution fitting is evaluated by per-event negative log-likelihood (NLL), reported separately for spatial and temporal components. For next-event pre-diction, spatial error is measured by Euclidean distance and temporal error by RMSE. Lower values indicate better performance for all metrics. GLIDE is trained for 1000 epochs with batch size 64. The forward diffu-sion process uses 500 steps. During sampling, we adopt DDIM-style accelerated sampling [22] and use 50 reverse steps unless otherwise stated. During eval-uation, 20 samples are drawn for each conditioning context and averaged to obtain the reported metrics. Hidden dimension, dropout, and leap-related hy-perparameters are selected on the validation set.The multi-scale window sets are fixed per dataset: {64 , 32 , 16 , 8} for Earthquake, {14 , 7} for COVID-19, temporal 
+
+{32 , 16 , 8, 4} and spatial {8, 6, 4, 2} for Citibike, and {32 , 16 , 8, 4} for Crime.For leap inference, the start ratio and guidance scale are selected on the validation set and then fixed across the three primary benchmark datasets. In the final con-figuration, we use a start ratio of 0.4 and a guidance scale of 0.1 for Earthquake, COVID-19, and Citibike. Therefore, the leap step is τ = ⌊0.4T ⌋.
+
+5.2 Main Results 
+
+Table 1 reports distribution fitting results, and Table 2 reports next-event predic-tion accuracy. Across the three primary benchmark datasets, the gain is strongest on the spatial side, while temporal accuracy remains competitive. GLIDE: Graph-guided Leap Inference for STPPs 11 
+
+Table 1: Performance evaluation for negative log-likelihood per event on test data. ↓ means lower is better. Bold denotes the best results. 
+
+Model Earthquake COVID-19 Citibike Spatial ↓ Temporal ↓ Spatial ↓ Temporal ↓ Spatial ↓ Temporal ↓
+
+CNF 1.35 ±0.000 - 2.05 ±0.014 - 2.15 ±0.000 -Hawkes - −0.514 ±0.000 - −2.06 ±0.000 - −1.06 ±0.001 
+
+RMTPP - 0.0930 ±0.051 - −1.30 ±0.022 - 1.24 ±0.001 
+
+SAHP - −0.229 ±0.007 - −1.37 ±0.118 - −1.02 ±0.067 
+
+NJSDE 1.65 ±0.012 0.0950 ±0.203 2.21 ±0.005 −1.82 ±0.002 2.63 ±0.001 −0.804 ±0.059 
+
+NSTPP 0.885 ±0.037 −0.623 ±0.004 1.90 ±0.017 −2.25 ±0.002 2.38 ±0.053 −1.09 ±0.004 
+
+DeepSTPP 4.92 ±0.007 −0.174 ±0.001 0.361 ±0.01 −1.09 ±0.01 −4.94 ±0.016 −1.13 ±0.002 
+
+DSTPP 0.452 ±0.004 −1.05 ±0.014 0.500 ±0.017 −2.44 ±0.005 0.515 ±0.013 −2.41 ±0.010 
+
+SMASH 0.376 ±0.01 −1.231 ±0.001 0.482 ±0.002 −0.02 ±0.006 0.232 ±0.001 −2.34 ±0.002 
+
+GLIDE(Ours) −0.067 ±0.03 −1.299 ±0.05 0.3739 ±0.02 −2.476 ±0.020 0.373 ±0.07 −2.44 ±0.010 
+
+Table 2: Performance evaluation for predicting both time and space of the next event. We use Euclidean distance to measure the prediction error of the spatial domain and RMSE for time prediction. 
+
+Model Earthquake COVID-19 Citibike Spatial ↓ Temporal ↓ Spatial ↓ Temporal ↓ Spatial ↓ Temporal ↓
+
+CNF 8.48 ±0.054 - 0.559 ±0.000 - 0.722 ±0.000 -Hawkes - 0.544 ±0.010 - 0.672 ±0.088 - 0.534 ±0.011 
+
+RMTPP - 0.424 ±0.009 - 1.32 ±0.024 - 2.07 ±0.015 
+
+SAHP - 0.409 ±0.002 - 0.184 ±0.024 - 0.203 ±0.010 
+
+NJSDE 9.98 ±0.024 0.465 ±0.009 0.641 ±0.009 0.137 ±0.001 0.707 ±0.001 0.264 ±0.005 
+
+NSTPP 8.11 ±0.000 0.547 ±0.010 0.560 ±0.000 0.145 ±0.002 0.705 ±0.000 0.355 ±0.013 
+
+DeepSTPP 9.20 ±0.000 0.341 ±0.000 0.687 ±0.000 0.197 ±0.000 0.044 ±0.000 0.234 ±0.000 
+
+DSTPP 7.13 ±0.112 0.379 ±0.001 0.432 ±0.001 0.096 ±0.001 0.032 ±0.000 0.207 ±0.001 
+
+SMASH 8.04 ±0.221 0.380 ±0.005 0.563 ±0.001 0.100 ±0.007 0.031 ±0.001 0.204 ±0.002 
+
+GLIDE(Ours) 6.61 ±0.150 0.378 ±0.001 0.394 ±0.005 0.095 ±0.000 0.031 ±0.001 0.207 ±0.002 
+
+The NLL improvement is most pronounced on Earthquake , where the spa-tial NLL drops from 0.452 for DSTPP to −0.067 . This margin is notable be-cause Earthquake is also the sparsest dataset in the benchmark. In such settings, standard diffusion is more likely to disperse probability mass across implausible regions before the reverse chain contracts to a meaningful support. The graph-conditioned context and prior-guided initialization in GLIDE reduce exactly this effect. The same trend appears on COVID-19 and Citibike , where the spatial NLL decreases from 0.500 to 0.3739 and from 0.515 to 0.373 , respectively. The improvement therefore does not depend on one particular type of spatio-temporal dynamics. 12 Authors Suppressed Due to Excessive Length 
+
+The temporal NLL results are more moderate, which is expected. Compared with spatial generation, the temporal component is typically lower-dimensional and less explicitly multi-modal, so strong gains are harder to obtain. What mat-ters here is that the spatial improvement does not come with a temporal penalty. GLIDE maintains competitive temporal likelihood while substantially improving spatial density estimation, which is precisely the regime where deterministic or weakly-structured models tend to struggle most. The next-event prediction results show a similar advantage. GLIDE attains the lowest spatial error on Earthquake and COVID-19 , and matches the best result on Citibike . On Earthquake , the spatial error falls to 6.61 km, compared with 9.20 km for DeepSTPP and 8.04 km for SMASH. Temporal RMSE remains competitive across all three datasets. The spatial gains are therefore not obtained by sacrificing the temporal side. A more plausible interpretation is that the de-terministic anchor gives the model a better starting region, after which diffusion is still free to perform stochastic refinement around plausible modes. This is also consistent with the improvement in spatial NLL: the model is not only predict-ing better points, but also assigning probability mass more coherently around the true support. 
+
+5.3 Ablation and Mechanism Analysis 
+
+Three ablations isolate the main components of GLIDE: w/o Leap , which re-moves prior-guided leap initialization and falls back to standard DDIM sampling [22] from pure noise; w/o Interaction , which removes cross-stream gating; and 
+
+w/o Graph , which removes spatial message passing. 
+
+Cross-stream interaction. Figure 3 shows that removing the interaction module affects spatial learning more than temporal learning. On COVID-19 , the spatial NLL becomes less stable once the temporal branch no longer informs the spatial branch. This is consistent with the role of temporal phase information in spa-tial generation: without it, the spatial branch has more difficulty concentrating probability mass on the appropriate regions. If the two branches were largely interchangeable, removing cross-stream gat-ing would have only a minor impact. Instead, the degradation is systematic on the spatial side, suggesting that temporal information is not easily recoverable from spatial context alone. 
+
+Leap initialization. Figure 4 compares prior-guided leap sampling with standard DDIM sampling. In the baseline setting, reverse generation starts from pure noise. In GLIDE, sampling starts from a prior-guided intermediate state and uses 50 reverse steps. The wall-clock speedup reaches 2.5×, 3.1×, and 2.7×
+
+on Earthquake , COVID-19 , and Citibike , respectively. The shorter and better-initialized reverse process does not reduce prediction quality; spatial error is reduced by 6.0% , 7.9% , and 3.1% on the same datasets. The result suggests that a substantial part of standard diffusion sampling is spent on an early search phase in which the reverse chain is still far from the GLIDE: Graph-guided Leap Inference for STPPs 13 0 50 100 150    
+
+> Training Steps
+> 0.390
+> 0.395
+> 0.400
+> 0.405
+> 0.410
+> 0.415
+> 0.420
+> 0.425
+> Mean Euclidean Distance
+> (a) Spatial Prediction Error (Distance)
+> w/o Interaction
+> GLIDE (Ours)
+> 050 100 150
+> Training Steps
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> Negative Log-Likelihood
+> (b) Spatial Distribution Fit (NLL)
+> w/o Interaction
+> GLIDE (Ours)
+
+Fig. 3: Ablation on Spatio-Temporal Interaction. Inference       
+
+> Time Spatial
+> Distance
+> 0
+> 10
+> 20
+> 30
+> 40
+> Inference Time (ms)
+> 2.5x
+> Earthquake
+> Inference
+> Time Spatial
+> Distance
+> 0
+> 10
+> 20
+> 30
+> 40
+> 3.1x
+> COVID-19
+> Inference
+> Time Spatial
+> Distance
+> 0
+> 20
+> 40
+> 60
+> 80
+> 2.7x
+> Citibike
+> 6.00
+> 6.25
+> 6.50
+> 6.75
+> 7.00
+> 7.25
+> 7.50
+> -4.2%
+> 0.38
+> 0.39
+> 0.40
+> 0.41
+> 0.42
+> 0.43
+> 0.44
+> 0.45
+> -7.9%
+> 0.0300
+> 0.0305
+> 0.0310
+> 0.0315
+> 0.0320
+> 0.0325
+> 0.0330
+> Spatial Distance (Zoomed)
+> -3.1%
+> Standard Baseline Leap Strategy (Ours) Metric: Time Metric: Spatial Dist.
+
+Fig. 4: Ablation study on sampling strategy. 0 50 100 150 200 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+> Mean Euclidean Distance
+
+(a) COVID-19: Spatial Distance 
+
+0 50 100 150 200 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+> Negative Log-Likelihood
+
+(b) COVID-19: Spatial NLL 
+
+0 200 400 600 
+
+Training Steps 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+> Negative Log-Likelihood
+
+(c) Crime: Spatial NLL 
+
+0 200 400 600 
+
+Training Steps 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Negative Log-Likelihood
+
+(d) Crime: Temporal NLL 
+
+0.42 
+
+0.43 
+
+0.500 
+
+0.525 
+
+0.51 
+
+0.52 
+
+0.05 
+
+0.00 
+
+w/o Graph GLIDE (Ours) 
+
+Fig. 5: Ablation of graph structure on the COVID-19 and Crime datasets. Re-moving graph guidance leads to worse NLL in contagion-driven settings. relevant support. Leap initialization removes much of this phase by placing the sample near a plausible high-density region before refinement begins. The gain is therefore not only a matter of using fewer effective reverse updates, but also of avoiding the least informative part of the trajectory. 
+
+Graph guidance. Figure 5 clarifies the effect of the graph module. The gain is strongest on COVID-19 and Crime , where local propagation and neighborhood structure are central to the dynamics. Removing the graph in these settings leads to clear degradation in NLL. The effect is smaller on Earthquake and Citibike ,suggesting that graph guidance is most effective when nearby historical events provide direct structural information about the next event. The graph is therefore not a uniformly strong prior across all tasks. Its benefit is largest when local interaction is part of the underlying process. 
+
+5.4 Qualitative Analysis of Generative Trajectories 
+
+Figure 6 visualizes the reverse trajectories on Earthquake and Citibike . Standard diffusion remains spatially diffuse for a large portion of the reverse chain and only gradually contracts toward plausible modes. GLIDE enters high-density regions 14 Authors Suppressed Due to Excessive Length     
+
+> (a) Generative trajectories on the Earthquake dataset.
+> (b) Generative trajectories on the Citibike dataset.
+
+Fig. 6: Generative trajectories (KDE). Standard diffusion (top) remains spatially diffuse for longer, whereas leap inference (bottom) starts from a prior-guided state and reaches high-density regions earlier. much earlier because the trajectory starts from a prior-guided intermediate state rather than from pure isotropic noise. The later denoising steps are then used mainly for local refinement instead of global search. The contrast is particularly informative because it appears in both sparse and dense regimes. On Earthquake , the difference is visible in how quickly the samples stop exploring empty regions. On Citibike , the gap is less about empty space and more about how early the trajectory begins to concentrate around realistic mobility hubs. The visual pattern therefore matches the quantitative results from two angles at once: lower NLL reflects better concentration of probability mass, and lower inference time reflects the removal of an extended coarse-search phase. 
+
+5.5 Efficiency Analysis 
+
+Table 3 highlights the parameter efficiency of the leap mechanism. In both DSTPP and GLIDE, the additional parameters introduced by Leap are very small compared with the full backbone. For example, DSTPP+Leap adds only 0.0257M parameters on top of 1.5844M, and GLIDE adds 0.1685M leap-related parameters on top of 2.6920M. Despite this small overhead, Leap consistently improves efficiency, reducing the average generation time per event from 0.045 ms to 0.023 ms in DSTPP and from 0.275 ms to 0.109 ms in GLIDE. This sug-GLIDE: Graph-guided Leap Inference for STPPs 15 
+
+gests that the gain brought by Leap is highly cost-effective: a lightweight module is sufficient to produce a clear improvement in inference efficiency. Table 3: Efficiency analysis of Leap. Time denotes the average latency per gen-erated event.                   
+
+> Model Params Leap Params Time (M) (M) (ms) ↓
+> DSTPP 1.5844 -0.045 DSTPP + Leap 1.6101 0.0257 0.023 GLIDE (w/o Leap) 2.6920 -0.275 GLIDE (Ours) 2.8605 0.1685 0.109
+
+6 Conclusion 
+
+GLIDE combines graph-structured historical encoding with conditional diffusion for spatio-temporal point process modeling. A multi-scale historical graph cap-tures local historical structure, a dual-stream encoder separates temporal evo-lution from spatial topology, and a dual-branch Diffusion Transformer models the next-event distribution. Leap inference further shortens the reverse trajec-tory by starting from a prior-guided intermediate state rather than from pure noise. Experiments on multiple real-world datasets show consistent gains in both distribution fitting and next-event prediction, with the clearest improvements appearing on the spatial side. The results suggest that GLIDE improves not only point accuracy but also the allocation of probability mass in space, while reducing reverse-sampling cost. The current formulation is limited to continuous temporal and spatial coordinates and does not explicitly model event marks or categorical types, and the graph component is most effective when local inter-action is part of the underlying process. Extending GLIDE to marked STPPs, dynamically evolving graph structures, and adaptive leap-step selection would be natural directions for future work. 
+
+References 
+
+1. Brody, S., Alon, U., Yahav, E.: How attentive are graph attention networks? In: International Conference on Learning Representations (2022) 2. Chen, R.T.Q., Amos, B., Nickel, M.: Neural spatio-temporal point processes. In: International Conference on Learning Representations (2021) 3. Du, N., Dai, H., Trivedi, R., Upadhyay, U., Gomez-Rodriguez, M., Song, L.: Re-current marked temporal point processes: Embedding event history to vector. In: Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining. pp. 1555–1564 (2016) 4. Guo, S., Lin, Y., Feng, N., Song, C., Wan, H.: Attention based spatial-temporal graph convolutional networks for traffic flow forecasting. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 33, pp. 922–929 (2019) 16 Authors Suppressed Due to Excessive Length 5. Hawkes, A.G.: Spectra of some self-exciting and mutually exciting point processes. Biometrika 58 (1), 83–90 (1971) 6. Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. In: Advances in Neural Information Processing Systems. vol. 33, pp. 6840–6851 (2020) 7. Ho, J., Salimans, T.: Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 (2022) 8. Jia, J., Benson, A.R.: Neural jump stochastic differential equations. In: Advances in Neural Information Processing Systems. vol. 32, pp. 9843–9854 (2019) 9. Kipf, T.N., Welling, M.: Semi-supervised classification with graph convolutional networks. In: International Conference on Learning Representations (2017) 10. Li, Y., Yu, R., Shahabi, C., Liu, Y.: Diffusion convolutional recurrent neural net-work: Data-driven traffic forecasting. In: International Conference on Learning Representations (2018) 11. Li, Z., Xu, Q., Xu, Z., Mei, Y., Zhao, T., Zha, H.: Beyond point prediction: Score matching-based pseudolikelihood estimation of neural marked spatio-temporal point process. In: Proceedings of the 41st International Conference on Machine Learning. vol. 235, pp. 29096–29111 (2024) 12. Lyu, Z., Xu, X., Yang, C., Lin, D., Dai, B.: Accelerating diffusion models via early stop of the diffusion process. arXiv preprint arXiv:2205.12524 (2022) 13. Mao, W., Xu, C., Zhu, Q., Chen, S., Wang, Y.: Leapfrog diffusion model for stochas-tic trajectory prediction. In: Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition. pp. 5517–5526 (2023) 14. Mei, H., Eisner, J.: The neural hawkes process: A neurally self-modulating mul-tivariate point process. In: Advances in Neural Information Processing Systems. vol. 30, pp. 6754–6764 (2017) 15. Mohler, G.O., Short, M.B., Brantingham, P.J., Schoenberg, F.P., Tita, G.E.: Self-exciting point process modeling of crime. Journal of the American Statistical As-sociation 106 (493), 100–108 (2011) 16. Ogata, Y.: Statistical models for earthquake occurrences and residual analysis for point processes. Journal of the American Statistical Association 83 (401), 9–27 (1988) 17. Omi, T., Ueda, N., Aihara, K.: Fully neural network based model for general tem-poral point processes. In: Advances in Neural Information Processing Systems. vol. 32, pp. 2120–2129 (2019) 18. Peebles, W., Xie, S.: Scalable diffusion models with transformers. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 4172–4182 (2023) 19. Rasul, K., Seward, C., Schuster, I., Vollgraf, R.: Autoregressive denoising diffusion models for multivariate probabilistic time series forecasting. In: Proceedings of the 38th International Conference on Machine Learning. vol. 139, pp. 8857–8868 (2021) 20. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., Ommer, B.: High-resolution image synthesis with latent diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 10684–10695 (2022) 21. Shchur, O., Biloš, M., G"unnemann, S.: Intensity-free learning of temporal point processes. In: International Conference on Learning Representations (2020) 22. Song, J., Meng, C., Ermon, S.: Denoising diffusion implicit models. In: International Conference on Learning Representations (2021) 23. Song, Y., Sohl-Dickstein, J., Kingma, D.P., Kumar, A., Ermon, S., Poole, B.: Score-based generative modeling through stochastic differential equations. In: Interna-tional Conference on Learning Representations (2021) GLIDE: Graph-guided Leap Inference for STPPs 17 24. Su, J., Lu, Y., Pan, S., Murtadha, A., Wen, B., Liu, Y.: Roformer: Enhanced trans-former with rotary position embedding. arXiv preprint arXiv:2104.09864 (2021) 25. Tancik, M., Srinivasan, P.P., Mildenhall, B., Fridovich-Keil, S., Raghavan, N., Sing-hal, U., Ramamoorthi, R., Barron, J.T., Ng, R.: Fourier features let networks learn high frequency functions in low dimensional domains. In: Advances in Neural In-formation Processing Systems. vol. 33, pp. 7537–7547 (2020) 26. Tashiro, Y., Song, J., Song, Y., Ermon, S.: Csdi: Conditional score-based diffusion models for probabilistic time series imputation. In: Advances in Neural Information Processing Systems. vol. 34, pp. 24804–24816 (2021) 27. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., Polosukhin, I.: Attention is all you need. In: Advances in Neural Information Processing Systems. vol. 30, pp. 5998–6008 (2017) 28. Veličkovi’c, P., Cucurull, G., Casanova, A., Romero, A., Li‘o, P., Bengio, Y.: Graph attention networks. In: International Conference on Learning Represen-tations (2018) 29. Wen, H., Lin, Y., Xia, Y., Wan, H., Wen, Q., Zimmermann, R., Liang, Y.: Diffstg: Probabilistic spatio-temporal graph forecasting with denoising diffusion models. In: Proceedings of the 31st ACM International Conference on Advances in Geographic Information Systems (2023) 30. Wu, Z., Pan, S., Long, G., Jiang, J., Zhang, C.: Graph wavenet for deep spatial-temporal graph modeling. In: Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence. pp. 1907–1913 (2019) 31. Yuan, Y., Ding, J., Shao, C., Jin, D., Li, Y.: Spatio-temporal diffusion point pro-cesses. In: Proceedings of the 29th ACM SIGKDD Conference on Knowledge Dis-covery and Data Mining. pp. 3173–3184 (2023) 32. Zhang, Q., Lipani, A., Kirnap, O., Yilmaz, E.: Self-attentive hawkes process. In: Proceedings of the 37th International Conference on Machine Learning. vol. 119, pp. 11183–11193 (2020) 33. Zhou, H., Zhang, S., Peng, J., Zhang, S., Li, J., Xiong, H., Zhang, W.: Informer: Beyond efficient transformer for long sequence time-series forecasting. In: Proceed-ings of the AAAI Conference on Artificial Intelligence. vol. 35, pp. 11106–11115 (2021) 34. Zhou, Z., Yang, X., Rossi, R.A., Zhao, H., Yu, R.: Neural point process for learning spatiotemporal event dynamics. In: Proceedings of the 4th Annual Learning for Dynamics and Control Conference. Proceedings of Machine Learning Research, vol. 168, pp. 777–789 (2022) 35. Zuo, S., Jiang, H., Li, Z., Zhao, T., Zha, H.: Transformer hawkes process. In: Proceedings of the 37th International Conference on Machine Learning. vol. 119, pp. 11692–11702 (2020)

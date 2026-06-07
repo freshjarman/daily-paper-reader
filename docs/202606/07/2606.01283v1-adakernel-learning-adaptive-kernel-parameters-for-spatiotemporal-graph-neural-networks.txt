@@ -1,0 +1,1660 @@
+Title: AdaKernel: Learning Adaptive Kernel Parameters for Spatiotemporal Graph Neural Networks
+
+URL Source: https://arxiv.org/pdf/2606.01283v1
+
+Published Time: Tue, 02 Jun 2026 01:34:42 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# AdaKernel: Learning Adaptive Kernel Parameters for Spatiotemporal Graph Neural Networks 
+
+Zhongyue Zhang 1 , Guangyin Jin 2 , Yuxuan Liang 3 , Suwan Yin 1 , Yuankai Wu 11Sichuan University 2PLA Academy of Military Science 3The Hong Kong University of Science and Technology (Guangzhou) zzy080968@gmail.com, jinguangyin96@gmail.com, yuxliang@outlook.com, syin@scu.edu.cn, kaimaogege@gmail.com 
+
+Abstract 
+
+Modeling spatial dependencies is central to spa-tiotemporal data analysis using Graph Neural Net-works (GNNs). Traditional methods rely on distance-based kernels with predefined parameters, which restricts model capacity. Although generic adaptive mechanisms (e.g., Graph Attention Net-works) offer flexibility, they often fail to capture the underlying geometric structure, performing worse than distance-based models in data-sparse scenar-ios. Addressing this, we revisit the kernel pa-rameterization problem and theoretically prove that 
+
+misspecified kernel parameters introduce un-avoidable approximation errors in GNNs. To overcome this, we propose AdaKernel , a sim-ple yet effective approach that learns adaptive ker-nel parameters within the neural network. Unlike methods that learn graph structures from scratch, AdaKernel adopts a structure-preserving strat-egy that optimizes the scale of physical interac-tions rather than discarding them. Extensive ex-periments on Kriging, Imputation, and Forecast-ing demonstrate that AdaKernel consistently im-proves various GNN architectures and outper-forms model-agnostic adaptive baselines, validat-ing that accurately learned kernel parameters are superior to both fixed priors and fully latent graph structures. 
+
+1 Introduction 
+
+Spatiotemporal data mining has emerged as a critical tool for understanding and predicting complex phenomena across diverse domains, from environmental monitoring to urban planning and public health [Atluri et al. , 2018]. The abil-ity to effectively analyze and model spatiotemporal data is particularly crucial in three fundamental tasks: Kriging, which enables accurate spatial interpolation of missing mea-surements [Cressie, 2015]; Imputation, which recovers in-complete spatiotemporal data [Yi et al. , 2016]; and Fore-casting, which predicts future evolutionary patterns [Yu et al. , 2018]. These capabilities have profound real-world implications—Kriging helps meteorologists construct high-resolution weather maps from sparse sensor networks [Daley, 𝐴 𝑖𝑗 = 𝑒𝑥𝑝 − 𝐷 𝑖𝑗       
+
+> 2
+> 2𝜎 2
+> 𝜎 =1
+> 𝜎 =2
+> 𝒢 1
+> 𝒢 2
+> 𝐺𝑁𝑁 (𝑋 ,𝒢 1)
+> 𝐺𝑁𝑁 (𝑋 ,𝒢 2)
+> Kriging Result
+> time
+
+Figure 1: Impact of kernel parameter selection on GNN-based krig-ing. The figure illustrates how different kernel parameters in the Gaussian kernel function affect the performance of GNN-based krig-ing results. Top row shows the case with σ = 1 , producing a sparser graph ( G1), while bottom row with σ = 2 yields a denser graph (G2). The rightmost plot demonstrates that the GNN with σ = 1 
+
+significantly outperforms σ = 2 .
+
+1993], Imputation allows climate scientists to reconstruct his-torical temperature records from partial observations [Mann 
+
+et al. , 1998], and Forecasting enables urban planners to an-ticipate traffic patterns and optimize infrastructure develop-ment [Ben-Akiva et al. , 1998]. By representing spatial relationships as graphs and lever-aging message passing mechanisms, GNNs [Gilmer et al. ,2017; Wu et al. , 2019] have become the de facto backbone for many state-of-the-art spatiotemporal models [Jin et al. ,2023]. Their success stems from their ability to integrate spatial structure with temporal dynamics, enabling effective learning of both local and global patterns in spatiotempo-ral data. However, a critical limitation exists in current GNN-based approaches: they typically rely on predefined kernel parameters to construct the adjacency matrix, which determines the strength of spatial connections. These fixed parameters, often based on simple distance metrics or do-main heuristics. For instance, pioneering models such as DCRNN [Li et al. , 2018] and STGCN [Yu et al. , 2018] con-struct the adjacency matrix using a Gaussian kernel based on spatial distances. Specifically, the edge weight between nodes 
+
+i and j is computed as: Aij = exp 
+
+
+
+− D2
+
+> ij
+> 2σ2
+
+
+
+, where Dij rep-resents the spatial distance between nodes i and j, and the 
+
+> arXiv:2606.01283v1 [cs.LG] 31 May 2026
+
+fixed σ2 is the variance of all pairwise distances in the graph. While subsequent research has produced numerous im-proved models, recognizing the limitations of fixed ker-nel parameterization, the proposed solutions have largely focused on enhancing flexibility through data-driven ap-proaches. These include learning latent graph structures from scratch [Wu et al. , 2019; Bai et al. , 2020; Shang and Chen, 2021], employing attention mechanisms to dynamically com-pute edge weights [Zheng et al. , 2020], or even abandoning graph-based approaches entirely to use MLP-based architec-tures [Shao et al. , 2022]. However, although these generic adaptive mechanisms offer flexibility, they often fail to cap-ture the underlying geometric structure and lack the necessary inductive bias, performing worse than distance-based mod-els in data-sparse scenarios [Battaglia et al. , 2018]. More-over, unconstrained attention mechanisms often succumb to 
+
+structural myopia ; they are prone to capturing spurious em-pirical correlations—statistical artifacts that satisfy the objec-tive function—without manifesting the true causal dependen-cies [Jain and Wallace, 2019]. To the best of our knowledge, no study has systematically investigated whether the suboptimal performance of GNN-based models stems from inappropriate kernel parameter specifications rather than inherent limitations of the distance-based approach itself (see Figure 1). This question is particu-larly relevant given the rich history of kernel parameter esti-mation in geostatistics, where accurate parameter estimation is crucial for spatial prediction [Cressie, 1988; Stein, 1988; Zimmerman and Zimmerman, 1991]. In this paper, we made the first attempt to theoretically demonstrate that incorrectly specified kernel parameters in-troduce unavoidable approximation errors in GNN-based spa-tiotemporal modeling. To address this limitation, we pro-pose AdaKernel , a straightforward end-to-end kernel param-eter learning approach for GNNs. Our method is remarkably simple: given a distance-based kernel function κα(Dij ), we treat α as a learnable parameter within the GNN framework. For non-inductive tasks (excluding Kriging), we can assign unique learnable parameters to each pair of nodes. This edge-specific parameterization enables the model to capture het-erogeneous spatial relationships, acknowledging that spatial dependencies may vary significantly across different regions and geographical contexts. Through comprehensive experi-ments across Kriging, Imputation, and Forecasting tasks, we demonstrate that AdaKernel consistently enhances the perfor-mance of various GNN architectures. The contribution of this paper can be summarized as the following: • We theoretically analyze how misspecified kernel pa-rameters lead to unavoidable approximation errors in GNN-based spatiotemporal modeling, providing explicit error bounds that scale with the magnitude of parameter misspecification. • We propose AdaKernel, a simple yet effective approach that transforms fixed kernel parameters into learnable components of the neural network. • We demonstrate that AdaKernel consistently enhances the performance of diverse GNN-based models, espe-cially in imputation and kriging tasks, which are more sensitive to the accurate modeling of spatial dependen-cies. 
+
+2 Related Works 
+
+2.1 Kernel Parameter Estimation in Spatial Modeling 
+
+The importance of kernel parameter estimation in spatial modeling has been established across multiple disciplines. In geostatistics, Matheron [Matheron, 1963] showed that vari-ogram parameters fundamentally determine spatial prediction characteristics, while Zimmerman and Zimmerman [Zimmer-man and Zimmerman, 1991] demonstrated how parameter misspecification significantly impacts kriging performance. Cressie [Cressie, 2015; Cressie, 1988] formalized the rela-tionship between parameter estimation and prediction accu-racy. In parallel, the Gaussian Process literature has empha-sized similar insights. Williams and Rasmussen [Williams and Rasmussen, 2006] showed how length-scale parameters influence spatial predictions, while MacKay et al. [MacKay and others, 1998] analyzed their impact on uncertainty quan-tification. Wilson and Adams [Wilson and Adams, 2013] later demonstrated the benefits of adaptive kernel param-eterization. Theoretical work by Stein [Stein, 1988] and Zhang [Zhang, 2004] unified these perspectives, establishing formal guarantees for parameter estimation in spatial statis-tics. However, unlike geostatistics or Gaussian Process liter-ature where kernel parameter tuning is standard practice, deep GNN models rarely revisit kernel choice, instead relying on fixed Gaussian kernels without adaptation. AdaKernel closes this gap by enabling learnable kernel parameters within the GNN framework. 
+
+2.2 GNN-based Approaches in Spatiotemporal Tasks 
+
+Kriging. Several GNN methods have been proposed for “in-ductive Kriging”. KCN [Appleby et al. , 2020] employs graph convolutional networks to perform kriging by learning spa-tial correlations from observed data. IGNNK [Wu et al. ,2021a] constructs random subgraphs and reconstructs their adjacency matrices to learn spatial message-passing mech-anisms. LSJSTN [Hu et al. , 2023] decouples the learning of short-term and long-term temporal patterns for improv-ing kriging performance. Zhang et al. [Zhang et al. , 2022] introduced SpecKriging, which leverages spectral graph the-ory to perform kriging. SATCN [Wu et al. , 2021b] combines spatial aggregation with temporal convolutional networks to model spatiotemporal dependencies. Zheng et al. [Zheng et al. , 2023] developed INCREASE, an inductive spatiotempo-ral kriging method that aligns each node with its K-nearest observed nodes. Xu et al. [Xu et al. , 2023] proposed KITS, which addresses the graph gap issue in inductive kriging by introducing an increment training strategy. 
+
+Imputation. In the context of spatiotemporal imputation, several GNN architectures have been developed. NET³ [Jing 
+
+et al. , 2021] pioneered the use of tensor graph neural net-works to model high-order relationships among time series. GRIN [Cini et al. , 2022] introduced a bidirectional message passing RNN with a spatial decoder, while SPIN [Marisca 
+
+et al. , 2022] presented a sparse spatiotemporal graph neu-ral network specifically designed for imputation tasks. More recently, PoGeVon [Wang et al. , 2023] proposed a position-aware graph neural network-based variational auto-encoder. While these methods effectively leverage spatial relation-ships for imputation, they typically treat the underlying spa-tial structure as fixed rather than learnable. Recent work by Deng et al. [Deng et al. , 2024] introduced the OPCR model, which enhances spatiotemporal imputation by using sparse attention and confidence-based refinement to improve accu-racy in highly sparse data. 
+
+Forecasting. In the context of time series processing, the evolution of STGNNs started with recurrent architectures [Li 
+
+et al. , 2018], followed by convolutional approaches [Yu et al. ,2018; Wu et al. , 2019] and attention-based methods [Zheng 
+
+et al. , 2020; Wu et al. , 2022]. To capture node-specific dynamics, different strategies have been proposed: Bai et al. [Bai et al. , 2020] introduced matrix factorization in re-current STGNNs, while Chen et al. [Chen et al. , 2021] com-bined global GNN with local modeling inspired by [Wang et al. , 2019]. Node embeddings have primarily served two pur-poses: optimizing structure learning [Wu et al. , 2019; Shang and Chen, 2021; Deng and Hooi, 2021] and providing posi-tional encoding in attention mechanisms [Zheng et al. , 2020; Satorras et al. , 2022]. Recent advancements include spa-tiotemporal identification mechanisms [Shao et al. , 2022] and cluster-based regularization [Yin et al. , 2022] for model adap-tation. All the aforementioned works overlook a crucial middle ground: the possibility of learning optimal kernel parameters while maintaining the physically meaningful distance-based structure. This gap is particularly noteworthy given the estab-lished importance of kernel parameter estimation in both geo-statistics and Gaussian Process literature, as discussed earlier. 
+
+3 Preliminaries 
+
+Consider a set of sensors {s1, s 2, . . . , s n} deployed in a geo-graphical space. The pairwise distance matrix D ∈ Rn×n is defined as: 
+
+Dij = ∥si − sj ∥d, ∀i, j ∈ { 1, 2, . . . , n }, (1) where ∥ · ∥ d denotes a distance measure(e.g., Euclidean dis-tance) between sensors si and sj .At each sensor i, we collected signals xi ∈ RT over time steps 1 to T. By aggregating signals from all sensors, we ob-tain the observation matrix X = [ x1, x2, · · · , xn] ∈ Rn×T .Generally, we utilize X for the following three tasks: 1. Kriging : During time steps t-h to t, we aim to estimate values Y(t−h:t) ∈ Rm×h at m unobserved locations based on the observations X(t−h:t) ∈ Rn×h from n ex-isting sensors. 2. Forecasting : Given historical observations up to time 
+
+t, X(t−h:t) ∈ Rn×h, we aim to predict future values 
+
+X(t+1: t+τ ) ∈ Rn×τ for the next τ time steps. 3. Imputation : Given a partially observed matrix XΩ with missing values set, we aim to reconstruct the complete matrix by estimating values at the missing entries Ω.These tasks can generally be addressed through a combi-nation of GNN and temporal structures, where the mapping relationship can be expressed as: STGNN (X, A). Here A is a predefined adjacency matrix and STGNN denotes a com-bination of GNN and some temporal modules. According to Tobler’s First Law of Geography [Tobler, 1970], ”Every-thing is related to everything else, but near things are more related than distant things.” To formalize this, Gaussian ker-nel functions are frequently utilized to transform the distance matrix. Leveraging the Gaussian kernel, the adjacency matrix 
+
+A ∈ Rn×n is constructed as: 
+
+Aij = exp − D2
+
+> ij
+
+2σ2
+
+!
+
+, ∀i, j ∈ 1, 2, . . . , n, (2) where σ > 0 is the bandwidth parameter that controls the influence of distance on the adjacency weight. A substantial issue in existing research is that the Gaussian kernel param-eter σ is often fixed or selected through heuristic methods without a thorough theoretical understanding of its impact on the STGNN’s performance. 
+
+4 Theoretical Analysis 
+
+In this section, we will theoretically establish that misspeci-fying the Gaussian kernel parameter used to construct the ad-jacency matrix introduces an intrinsic approximation error in GNNs. Specifically, we first prove that even for simple iden-tity features and a single-layer GCN, different kernel pa-rameters lead to fundamentally different results that can-not be aligned through weight learning alone. Furthermore, we derive an upper bound for the approximation error, show-ing that it grows proportionally with the difference in kernel parameters and accumulates over GCN depth. These results highlight the necessity of learning kernel parameters rather than fixing them a priori. Given the input identity feature matrix I ∈ Rn×d, there exists an adjacency matrix Aa constructed using a Gaussian kernel function with parameter σa such that a single-layer lin-ear GCN can perfectly fit the target function f (I). We assume that we have incorrectly set a Gaussian kernel function with 
+
+σb̸ = σa. In this case, we have the following theorem: 
+
+Theorem 1. Consider two distinct Gaussian kernel parame-ters σa and σb, with σa̸ = σb. Let Aa and Ab be the cor-responding adjacency matrices constructed using these pa-rameters, and let ˆAa and ˆAb be their symmetrically normal-ized forms. Assume Wa ∈ Rd×k is a fixed non-zero weight matrix. Then, there does not exist a non-zero weight matrix 
+
+Wb ∈ Rd×k such that: ˆAaWa = ˆAbWb.
+
+Proof. We prove the theorem by contradiction. We first set the number of nodes n to 2, the feature dimension d = 1 , the distance as a constant c. Assume Wa = [ w] is a 1 × 1 scalar matrix. We seek Wb = [ wb] such that: 
+
+ˆAaWa = ˆAbWb.
+
+Assuming w̸ = 0 :
+
+e− c22σ2 
+
+> a
+
+= e− c22σ2 
+
+> b
+
+.Taking the natural logarithm of both sides: 
+
+− c2
+
+2σ2
+
+> a
+
+= − c2
+
+2σ2
+
+> b
+
+⇒ 1
+
+σ2
+
+> a
+
+= 1
+
+σ2
+
+> b
+
+⇒ σa = σb.
+
+Therefore, the equality ˆAaWa = ˆAbWb always holds if and only if σa = σb.
+
+Remark 1. The proof highlights that the graph structure in-duced by the kernel width σ dictates the information propa-gation path in a way that is invariant to feature projections. While W transforms the node features within a given sub-space, σ determines the subspace itself by defining the ad-jacency relationships. Therefore, distinct values of σ pro-duce representations that cannot be aligned via linear trans-formation, confirming that adaptive kernel designs provide a strictly richer hypothesis space than a fixed-kernel model. 
+
+Further, we can analyze the upper bound of the approxima-tion error caused by misspecified kernel parameter settings. Through derivation, we find that this upper bound is a func-tion of the error of kernel parameter. 
+
+Theorem 2. Let X ∈ Rn×d be the input feature matrix, and let ˆAa and ˆAb be the normalized adjacency matrices de-fined by Gaussian kernel parameters σa and σb, respectively. Given a weight matrix Wa ∈ Rd×k, the minimum error 
+
+ϵ = min 
+
+> Wb
+
+ˆAbXW b − ˆAaXW a F
+
+satisfies 
+
+ϵ ≤ C ∥X∥F |σa − σb| ∥ Wa∥F ,
+
+where C is a positive constant that depends on the input ma-trix X and the parameter σa.
+
+Full proof is provided in the appendix. 
+
+Remark 2. The upper bound of the error is directly related to the absolute difference between the kernel parameters σa and 
+
+σb. Therefore, it is essential to incorporate a mechanism that minimizes this discrepancy in order to reduce the approxima-tion error. 
+
+We can further extend the single-layer adjacency-mismatch bound (Theorem 2) to an L-layer GCN. Concretely, we have the following error bound on multiple-layer cases: 
+
+Proposition 1 (Multi-Layer Adjacency Mismatch Bound) .
+
+Let X ∈ Rn×d be the input feature matrix, and let bAa, bAb be normalized adjacency matrices coming from Gaussian ker-nels with parameters σa, σ b, respectively. Consider the L-layer GCNs defined above, with fixed weights W(ℓ) 
+
+> a
+
+. Then there exists a constant C > 0 such that 
+
+min  
+
+> {W(ℓ)
+> b}
+
+H(L) 
+
+> b
+
+−H(L)  
+
+> aF
+
+≤ C X F σa−σb
+
+> L
+
+Y
+
+> ℓ=1
+
+W(ℓ)  
+
+> aF
+
+.
+
+The detailed proof is provided in the appendix. 
+
+5 Methodology 
+
+To address the approximation errors caused by misspecified kernel parameters discussed earlier, we propose AdaKernel. Taking the Gaussian kernel as an example, we introduce an adaptive parameter α into the kernel function: 
+
+Aij =
+
+(
+
+exp 
+
+
+
+− D2
+
+> ij
+> scale 2
+> ij
+
+
+
+if exp 
+
+
+
+− D2
+
+> ij
+> scale 2
+> ij
+
+
+
+> θ 
+
+0 otherwise scale ij = ReLU (αij σ) + ϵ
+
+(3) where αij is a learnable parameter initialized to 1 to maintain consistency with conventional approaches, and the threshold 
+
+θ is initialized to 0.1 as a moderate sparsification level. The ReLU activation function and a small constant ϵ (e.g., 10 −8)are introduced as numerical safeguards, preventing potential instabilities during training when α approaches zero. While we primarily focus on Gaussian kernels in our theoretical analysis, our framework generalizes to other kernel functions. We provide experimental results using Mat´ ern and Rational Quadratic (RQ) kernels in our experimental section. The sen-sitivity of the initialization of the learnable parameter α and the threshold θ is discussed in the appendix. We propose two distinct implementation strategies to ac-commodate different spatiotemporal tasks: 
+
+Edge-specific Parameterization. For tasks with given graph structures, such as forecasting and imputation, we im-plement α as a learnable parameter matrix: 
+
+α ∈ Rn×n, αinit = 1n×n, (4) where n is the number of nodes and αij represents an indi-vidual kernel parameter for each edge. 
+
+Global Parameter Learning. For kriging tasks that require generalization to unseen spatial locations, we adopt a global kernel scaling approach: 
+
+α ∈ R, αinit = 1 , (5) where a single scalar parameter α uniformly modulates all spatial dependencies. This design choice is motivated by the inductive nature of the kriging task—since the test locations are not known during training, it is infeasible to assign or learn location-specific parameters for their pairwise interac-tions with training locations. A global parameter therefore offers a simple yet effective mechanism to adapt the overall sensitivity of the spatial kernel without overfitting to specific location pairs. 
+
+Computational Complexity. Let n be the number of nodes. In both edge-specific and global variants, building the adja-cency matrix still requires computing all pairwise distances, which is O(n2). Likewise, the subsequent neural-network forward pass on this (sparse or dense) adjacency incurs the same cost as in a non-adaptive kernel model. The only extra overhead lies in the number of learnable parameters: • Edge-specific: adds O(n2) scalar parameters {αij }
+
+(and their gradients), but does not change the asymptotic cost of adjacency computation or the forward pass. • Global: adds a single scalar parameter α, introducing negligible overhead. Thus, adaptation via AdaKernel affects parameter count but preserves the original O(n2) complexity of graph construc-tion and neural-network evaluation. The actual runtime and parameter overhead introduced by AdaKernel in different tasks is reported in the appendix. These results further val-idate that AdaKernel provides enhanced adaptability with minimal computational cost. 
+
+6 Experiments 
+
+In this section, we evaluate the performance of our pro-posed AdaKernel across three spatiotemporal tasks, imputa-tion, kriging, and forecasting, using eight real-world datasets with eight STGNN baselines. For each task, we conduct sep-arate experiments to assess the impact of AdaKernel on the performance of baseline models. 
+
+6.1 Experiment Setup 
+
+Datasets To evaluate our proposed AdaKernel, we use eight widely adopted real-world spatiotemporal datasets. These datasets are commonly used in the literature and are described as follows: (1) METR-LA . (2) PEMS-BAY . (3) AQI . (4) AQI-36 . (5) PEMS03 . (6) PEMS04 . (7) PEMS07 . (8) PEMS08 .Details of the dataset statistics, missingness configurations, and hyperparameter settings can be found in the appendix. 
+
+Baselines To validate the effectiveness of our proposed method, we apply it to various spatiotemporal deep learning models. For imputation tasks, we consider: (1) GRIN [Cini 
+
+et al. , 2022], and (2) MPGRU [Li et al. , 2018; Cini 
+
+et al. , 2022]. For kriging tasks, we experiment with: (3) IGNNK [Wu et al. , 2021a], and (4) KITS [Xu et al. ,2023]. For forecasting tasks, we apply our method to: (5) 
+
+DCRNN [Li et al. , 2018], (6) STGCN [Yu et al. , 2018], (7) 
+
+GWNet [Wu et al. , 2019], and (8) DGCRN [Li et al. , 2023]. See the appendix for details of the baseline models. In the imputation task, we adopt the GRIN frame-work [Cini et al. , 2022] 1 and evaluate on METR-LA, PEMS-BAY, AQI (including AQI-36) and PEMS03/04/07/08 under standard Block and Point missingness protocols. For spatiotemporal kriging, we follow the inductive evaluation setting of prior work [Wu et al. , 2021a; Xu et al. , 2023; Zheng et al. , 2023], randomly masking nodes with an input length of 16. For forecasting, we use the BasicTS toolkit 2 as our benchmark. Since our focus is on comparing the performance of the baseline models before and after incorporating AdaKernel, rather than achieving state-of-the-art results, we conduct ex-periments using nearly all baseline models with the param-eters provided in the respective open-source frameworks or baseline papers. All experiments are conducted with five ran-dom seeds to ensure the robustness of the results. 
+
+6.2 Main Results 
+
+Imputation Results. Table 1 reports MAE and RMSE for GRIN and MPGRU with and without AdaKernel under block missing, point missing, and simulated failure settings. 
+
+> 1https://github.com/Graph-Machine-Learning-Group/grin
+> 2https://github.com/GestaltCogTeam/BasicTS
+
+AdaKernel yields consistent improvements—most notably in block missing and failure scenarios, where spatially corre-lated gaps make accurate modeling of spatial dependencies critical—while gains are smaller for isolated point missing. In Figure 2, we show that AdaKernel adaptively prunes re-dundant edges (e.g., between sensors on different highway directions) and preserves only the most informative spatial connections, aligning with real traffic patterns. Additional vi-sualizations are provided in the appendix. 
+
+Kriging Results. Table 2 presents a comprehensive com-parison of the performance of IGNNK and KITS models, with and without the proposed AdaKernel enhancement, across six benchmark datasets. The evaluation metrics are Mean Absolute Error (MAE) and Root Mean Square Error (RMSE). Across most datasets and both base models, the inclusion of AdaKernel generally reduces MAE and RMSE values, demonstrating its generalizability and effectiveness in enhancing existing kriging frameworks. It is worth high-lighting that, due to the inductive nature of the kriging task, we introduce only a single global learnable kernel parame-ter in AdaKernel. Despite this seemingly minimal addition, it brings substantial improvements in performance. This is largely because the kriging task relies almost entirely on spa-tial dependencies, rather than temporal correlations. As a result, even a lightweight adaptive mechanism focused on spatial relationships can effectively capture the underlying data structure and enhance prediction accuracy. While KITS generally achieves stronger baseline results—particularly in terms of RMSE—owing to its incremental training strategy, the addition of AdaKernel significantly boosts the perfor-mance of both models. In several cases, IGNNK combined with AdaKernel even surpasses KITS without AdaKernel, narrowing the performance gap. Notably, although KITS represents the current state-of-the-art for kriging by leverag-ing an incremental training strategy, IGNNK adopts a decre-mental training strategy and is generally less competitive. However, with the integration of AdaKernel, IGNNK shows marked improvements, indicating that its previously weaker performance may not solely stem from the training strategy. Instead, it suggests that performance bottlenecks may also arise from misspecified or fixed kernel parameters, and that adaptively learning these parameters is critical for kriging tasks. In Figure 3, we also observe that AdaKernel yields more accurate interpolations in complex traffic regions, and that the learned σ converges below 1, resulting in a sparser graph structure compared to the original fixed-kernel baseline. This behavior is consistent with the phenomenon observed in the imputation tasks. 
+
+Forecasting Results. As shown in Table 3, AdaKernel generally improves forecasting performance on models that rely on predefined graph structures, although its impact varies across models and datasets. This aligns with find-ings that temporal modeling often dominates forecasting performance [Shao et al. , 2024], while AdaKernel specif-ically enhances spatial dependency modeling via adaptive kernel-based graphs. Consequently, models with adap-tive graph learning modules (e.g., GWNet, DGCRN) see Table 1: Imputation performance (MAE, RMSE) of GRIN and MPGRU with/without AdaKernel across all missingness types. Method GRIN + AdaKernel MPGRU + AdaKernel 
+
+Metric MAE RMSE MAE RMSE MAE RMSE MAE RMSE Block missing METR-LA 2.044 ±0.047 3.599 ±0.083 1.849 ±0.013 3.274 ±0.032 2.307 ±0.100 4.058 ±0.185 2.172 ±0.055 3.839 ±0.096 
+
+PEMS-BAY 1.157 ±0.045 2.577 ±0.124 1.007 ±0.028 2.288 ±0.098 1.367 ±0.073 3.189 ±0.169 1.353 ±0.065 3.086 ±0.096 
+
+PEMS-03 10.850 ±0.299 19.157 ±1.029 10.142 ±0.354 18.856 ±1.341 13.540 ±0.229 21.599 ±0.640 12.525 ±0.279 20.631 ±0.944 
+
+PEMS-04 18.353 ±0.552 30.640 ±0.849 17.550 ±0.418 29.835 ±0.700 19.449 ±0.594 31.842 ±0.811 18.487 ±0.383 30.546 ±0.817 
+
+PEMS-07 15.276 ±0.442 28.477 ±1.631 14.185 ±0.507 27.088 ±0.731 19.394 ±0.131 31.903 ±0.742 18.600 ±0.018 31.142 ±0.535 
+
+PEMS-08 14.143 ±0.291 22.717 ±0.621 13.430 ±0.423 22.359 ±1.015 16.028 ±1.108 25.598 ±1.848 15.477 ±0.439 25.201 ±0.998 
+
+Point missing METR-LA 1.898 ±0.031 3.176 ±0.045 1.761 ±0.011 2.972 ±0.021 1.990 ±0.031 3.297 ±0.048 1.934 ±0.027 3.214 ±0.043 
+
+PEMS-BAY 0.663 ±0.010 1.238 ±0.050 0.615 ±0.004 1.145 ±0.014 0.703 ±0.009 1.338 ±0.037 0.700 ±0.008 1.327 ±0.037 
+
+Simulated failures AQI 16.344 ±1.220 29.840 ±2.158 13.573 ±0.343 25.057 ±0.468 16.398 ±0.646 29.786 ±0.927 15.185 ±0.443 27.484 ±0.633 
+
+AQI36 12.448 ±0.553 22.831 ±1.211 11.566 ±0.247 20.714 ±0.116 11.543 ±0.195 20.277 ±0.465 11.313 ±0.267 20.245 ±1.038 Center Node 
+
+> Neighbor Nodes
+
+(a) Fixed graph structure Center Node  
+
+> Neighbor Nodes
+
+(b) Learned graph structure 0 5 10 15 20 25 30              
+
+> 54
+> 56
+> 58
+> 60
+> 62
+> 64
+> 66
+> Speed
+> Block Missing
+> Block Missing
+> 0510 15 20 25 30
+> Time Steps
+> Static Kernel
+> GroundTruth
+> Imputation
+> 0510 15 20 25 30
+> AdaKernel
+> GroundTruth
+> Imputation
+
+(c) Imputation results of GRIN 
+
+Figure 2: Visualization of graph structures and imputation performance. (a) The original graph structure with static kernel parameter where the red node represents the imputation target. (b) The learned adjacency matrix of AdaKernel. (c) Block missing patterns (left), imputation results of GRIN using static kernel (middle) and AdaKernel (right). Table 2: Performance comparison of IGNNK and KITS with/without AdaKernel.                                                                                                                                                       
+
+> Method IGNNK +AdaKernel KITS +AdaKernel
+> Metric MAE RMSE MAE RMSE MAE RMSE MAE RMSE METR-LA 6.236 9.105 6.200 9.020 6.006 9.125 5.910 8.990
+> ±0.213 ±0.400 ±0.370 ±0.560 ±0.253 ±0.310 ±0.310 ±0.370 PEMS-BAY 3.807 6.245 3.770 6.220 3.893 6.349 3.800 6.360
+> ±0.152 ±0.331 ±0.120 ±0.340 ±0.142 ±0.272 ±0.140 ±0.250 AQI 17.192 29.984 16.720 29.200 17.608 30.639 17.440 30.450
+> ±0.684 ±1.290 ±0.790 ±1.450 ±0.654 ±1.170 ±0.690 ±1.220 PEMS-03 75.364 101.289 66.983 94.074 68.725 95.298 67.846 93.394
+> ±3.412 ±5.821 ±6.615 ±10.110 ±1.813 ±2.231 ±3.309 ±3.247 PEMS-04 73.763 102.522 70.188 97.497 74.384 103.458 73.891 102.143
+> ±6.818 ±8.100 ±1.856 ±2.674 ±4.514 ±5.490 ±5.432 ±5.865 PEMS-08 98.320 129.451 91.767 119.661 89.553 117.810 88.835 116.865
+> ±6.993 ±5.604 ±0.813 ±2.349 ±9.759 ±11.266 ±10.989 ±12.827
+
+smaller gains, whereas DCRNN—which uses a fixed Gaus-sian kernel—benefits consistently from AdaKernel’s adaptiv-ity. These results confirm that adaptive spatial representations can further improve spatiotemporal forecasting, particularly in architectures relying on predefined graph structures. 
+
+6.3 Model Analysis and Discussion 
+
+Comparison with Model-Agnostic Adaptive Graphs. 
+
+Recent spatiotemporal GNNs often incorporate adaptive graph learning or attention mechanisms to enhance model-ing flexibility. A natural question is whether such generic, model-agnostic adaptations are already sufficient to mitigate the limitations of fixed distance-based kernels, making ex-plicit kernel parameter learning unnecessary. To investigate this, we compare AdaKernel with several representative model-agnostic graph adaptation strategies on the imputation task using the GRIN framework. Specifically, we consider: (i) GWNet-style adaptive adjacency, which learns a fully latent graph from node embeddings without dis-tance priors [Wu et al. , 2019]; (ii) a static–adaptive fusion that linearly combines distance-based graphs with learned structures; (iii) a self-attention-based dynamic adjacency con-structed from feature correlations; and (iv) a GAT backbone that introduces adaptivity within message passing via atten-tion [Veliˇ ckovi´ c et al. , 2018]. Together, these baselines rep-resent commonly used model-agnostic strategies for adaptive graph learning. Details are provided in the appendix. Remarkably, Table 4 reveals that generic adaptive strate-gies (e.g., self-attention or latent graph learning) consistently underperform the static distance-based baseline. This indi-cates that physical proximity serves as a critical inductive bias for spatiotemporal imputation; discarding it for purely data-driven structures leads to overfitting on sparse signals. AdaKernel achieves the best performance because it adopts a structure-preserving strategy: instead of learning a graph from scratch, it calibrates the effective kernel scale σ, thereby balancing geometric priors with data-dependent flexibility. 
+
+Impact of Kernel Functions. Beyond the Gaussian kernel used in our main experiments, other kernel families have also been widely adopted to model spatial dependencies. To as-sess the robustness of the proposed adaptive kernel frame-work, we evaluate several representative kernel instantia-tions using GRIN as an example. Specifically, we compare four variants: a fixed Gaussian kernel as the baseline, and three adaptive kernels, including adaptive Gaussian, adaptive Mat´ ern ( ν = 3 /2), and adaptive Rational Quadratic (RQ). All variants are implemented under the same adaptive learn-(a) Ground Truth (b) Fixed Kernel (c) AdaKernel  
+
+> 5.12
+> 22.62
+> 45.88
+> 60.38
+> 65.45
+> 69.88
+> Known Nodes Missing Nodes
+
+Figure 3: Visualization of kriging results on the METR-LA dataset with 30% missing nodes. From left to right: ground truth, fixed-kernel results, and AdaKernel results. Nodes are colored by discretized traffic speed levels, with observed nodes shown as circles and missing nodes as diamonds. Edge width reflects the relative kernel strength. Table 3: Forecasting performance (MAE and RMSE) of DCRNN, STGCN, GWNet, and DGCRN with and without AdaKernel on METR-LA, PEMS-BAY, PEMS03, and PEMS08 datasets. The best results on each dataset are underlined. Dataset METR-LA PEMS-BAY PEMS03 PEMS08 Metric MAE RMSE MAE RMSE MAE RMSE MAE RMSE DCRNN 3.045 ±0.010 6.279 ±0.026 1.591 ±0.002 3.69 ±0.012 15.556 ±0.126 26.783 ±0.362 17.094 ±0.382 26.524 ±0.635 
+
++ AdaKernel 3.007 ±0.009 6.218 ±0.022 1.587 ±0.003 3.702 ±0.010 15.354 ±0.255 26.528 ±0.660 16.028 ±0.457 25.187 ±0.567 
+
+STGCN 3.171 ±0.015 6.405 ±0.038 1.711 ±0.018 3.829 ±0.049 16.062 ±0.206 27.091 ±1.243 16.862 ±0.304 26.160 ±0.349 
+
++ AdaKernel 3.166 ±0.027 6.393 ±0.069 1.695 ±0.028 3.803 ±0.051 16.196 ±0.184 28.500 ±1.464 16.780 ±0.286 26.073 ±0.342 
+
+GWNet 3.078 ±0.017 6.214 ±0.061 1.578 ±0.015 3.610 ±0.026 14.559 ±0.093 25.537 ±0.161 14.659 ±0.056 23.559 ±0.142 
+
++ AdaKernel 3.049 ±0.002 6.158 ±0.035 1.605 ±0.007 3.689 ±0.033 14.619 ±0.129 25.342 ±0.252 14.599 ±0.082 23.557 ±0.072 
+
+DGCRN 3.087 ±0.051 6.376 ±0.058 1.576 ±0.003 3.652 ±0.037 14.799 ±0.155 25.821 ±0.458 15.138 ±0.031 24.167 ±0.089 
+
++ AdaKernel 3.074 ±0.079 6.355 ±0.201 1.648 ±0.064 3.894 ±0.224 14.663 ±0.121 25.740 ±0.185 15.275 ±0.236 24.268 ±0.356 Table 4: Comparison with model-agnostic adaptive graph baselines on the imputation task. METR-LA PEMS-BAY Method MAE MSE MRE MAE MSE MRE GRIN (static) 2.064 13.148 0.036 1.191 6.953 0.019 Static–adaptive fusion 2.283 17.267 0.039 1.196 7.066 0.019 GWNet adaptive adj 2.322 18.173 0.040 1.328 8.942 0.021 Self-attention adj 3.638 50.116 0.116 1.811 19.558 0.029 GAT backbone 2.453 19.899 0.043 1.919 17.760 0.031 
+
+AdaKernel (ours) 1.897 11.235 0.033 1.094 5.823 0.018 
+
+ing framework described in Section 5, with detailed settings provided in the appendix. The adaptive Gaussian kernel serves as the most basic instantiation, while the Mat´ ern kernel relaxes the strong smoothness assumption of Gaussian kernels and allows more flexible spatial modeling. The RQ kernel can be viewed as a multi-scale generalization of Gaussian kernels, offering in-creased flexibility for heterogeneous spatial dependencies. As shown in Figure 4, all adaptive kernels outperform the fixed Gaussian baseline on METR-LA, with adaptive Gaussian and adaptive Mat´ ern achieving stable improvements (MAE reductions of 6.4% and 6.6%). Similar trends are ob-served on PEMS-BAY, where these two kernels yield gains of 4.8% and 5.2%. In contrast, the adaptive RQ kernel ex-hibits unstable behavior on PEMS-BAY, suggesting that ex-cessive multi-scale flexibility may hinder robust learning in some settings. MAE 
+
+> +6.4% +6.6% +6.0%
+> METR-LA
+> Fixed
+> Gaussian
+> Matern
+> RQ
+> +4.8% +5.2%
+> -31.0%
+> PEMS-BAY
+> Fixed
+> Gaussian
+> Matern
+> RQ
+> +10.8%
+> +13.1%
+> +10.7%
+> MSE
+> +4.5% +9.5%
+> -81.4%
+
+Figure 4: Performance comparison of different kernel functions. 
+
+7 Conclusion 
+
+In this paper, we pinpointed a core drawback of GNN-based spatiotemporal models: fixed kernel parameters induce approximation errors proportional to their misspecifica-tion. We introduced AdaKernel, which replaces these fixed scales with learnable parameters. Across kriging, imputa-tion, and forecasting benchmarks, AdaKernel consistently boosts performance—most notably in imputation—by learn-ing edge-specific kernels that produce sparser, more focused graphs. These findings highlight the benefits of learning adaptive kernel parameters and suggest new GNN enhance-ments by capturing spatial relationships that respect the un-derlying distance structure. However, this work only briefly explores alternative ker-nel functions. In future work, we plan to incorporate a wider range of kernels to further enhance spatial modeling flexibil-ity. Ethical Statement 
+
+This research does not involve human subjects, sensitive per-sonal data, or interventions in real-world decision-making systems. All datasets used in this work are publicly avail-able and comply with their original licenses. The proposed method is intended for general spatiotemporal modeling and does not pose foreseeable ethical or societal risks. 
+
+References 
+
+[Appleby et al. , 2020] Gabriel Appleby, Linfeng Liu, and Li-Ping Liu. Kriging convolutional networks. In Proceed-ings of the AAAI Conference on Artificial Intelligence , vol-ume 34, pages 3187–3194, 2020. [Atluri et al. , 2018] Gowtham Atluri, Anuj Karpatne, and Vipin Kumar. Spatio-temporal data mining: A survey of problems and methods. ACM Computing Surveys ,51(4):1–41, 2018. [Bai et al. , 2020] Lei Bai, Lina Yao, Can Li, Xianzhi Wang, and Can Wang. Adaptive graph convolutional recurrent network for traffic forecasting. In Advances in Neural In-formation Processing Systems , volume 33, pages 17804– 17815, 2020. [Battaglia et al. , 2018] Peter W Battaglia, Jessica B Ham-rick, Victor Bapst, Alvaro Sanchez-Gonzalez, Vinicius Zambaldi, Mateusz Malinowski, Andrea Tacchetti, David Raposo, Adam Santoro, Ryan Faulkner, et al. Relational inductive biases, deep learning, and graph networks. arXiv preprint arXiv:1806.01261 , 2018. [Ben-Akiva et al. , 1998] Moshe Ben-Akiva, Michel Bier-laire, Haris Koutsopoulos, and Rabi Mishalani. Dynamit: a simulation-based system for traffic prediction. In DAC-CORD short term forecasting workshop , volume 12. Delft The Netherlands, 1998. [Cao et al. , 2018] Wei Cao, Dong Wang, Jian Li, Hao Zhou, Lei Li, and Yitan Li. Brits: Bidirectional recurrent im-putation for time series. Advances in neural information processing systems , 31, 2018. [Chen et al. , 2021] Hongjie Chen, Ryan A. Rossi, Kanak Mahadik, Sungchul Kim, and Hoda Eldardiry. Graph deep factors for forecasting with applications to cloud resource allocation. In Proceedings of the 27th ACM SIGKDD Con-ference on Knowledge Discovery and Data Mining , KDD ’21, pages 106–116, New York, NY, USA, 2021. Associa-tion for Computing Machinery. [Cini et al. , 2022] Andrea Cini, Ivan Marisca, and Cesare Alippi. Filling the Gaps: Multivariate time series impu-tation by graph neural networks. In International Confer-ence on Learning Representations , 2022. [Cressie, 1988] Noel Cressie. Spatial prediction and ordi-nary kriging. Mathematical geology , 20:405–421, 1988. [Cressie, 2015] Noel Cressie. Statistics for spatial data . John Wiley & Sons, 2015. [Daley, 1993] Roger Daley. Atmospheric data analysis .Number 2. Cambridge university press, 1993. [Deng and Hooi, 2021] Ailin Deng and Bryan Hooi. Graph neural network-based anomaly detection in multivariate time series. In Proceedings of the AAAI Conference on Ar-tificial Intelligence , volume 35, pages 4027–4035, 2021. [Deng et al. , 2024] Leyan Deng, Chenwang Wu, Defu Lian, and Enhong Chen. Learning from highly sparse spatio-temporal data. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. [Gilmer et al. , 2017] Justin Gilmer, Samuel S Schoenholz, Patrick F Riley, Oriol Vinyals, and George E Dahl. Neu-ral message passing for quantum chemistry. In Inter-national Conference on Machine Learning , pages 1263– 1272. Pmlr, 2017. [Hu et al. , 2023] Junfeng Hu, Yuxuan Liang, Zhencheng Fan, Li Liu, Yifang Yin, and Roger Zimmermann. Decou-pling long-and short-term patterns in spatiotemporal infer-ence. IEEE Transactions on Neural Networks and Learn-ing Systems , 2023. [Jain and Wallace, 2019] Sarthak Jain and Byron C. Wallace. Attention is not Explanation. In Proceedings of the 2019 Conference of the North American Chapter of the Asso-ciation for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers) , pages 3543–3556, June 2019. [Jin et al. , 2023] Guangyin Jin, Yuxuan Liang, Yuchen Fang, Zezhi Shao, Jincai Huang, Junbo Zhang, and Yu Zheng. Spatio-temporal graph neural networks for predictive learning in urban computing: A survey. IEEE Transac-tions on Knowledge and Data Engineering , 2023. [Jing et al. , 2021] Baoyu Jing, Hanghang Tong, and Yada Zhu. Network of tensor time series. In Proceedings of the Web Conference 2021 , pages 2425–2437, 2021. [Li et al. , 2018] Yaguang Li, Rose Yu, Cyrus Shahabi, and Yan Liu. Diffusion convolutional recurrent neural net-work: Data-driven traffic forecasting. In International Conference on Learning Representations , 2018. [Li et al. , 2023] Fuxian Li, Jie Feng, Huan Yan, Guangyin Jin, Fan Yang, Funing Sun, Depeng Jin, and Yong Li. Dynamic graph convolutional recurrent network for traffic prediction: Benchmark and solution. ACM Transactions on Knowledge Discovery from Data , 17(1):1–21, 2023. [MacKay and others, 1998] David JC MacKay et al. Intro-duction to gaussian processes. NATO ASI series F com-puter and systems sciences , 168:133–166, 1998. [Mann et al. , 1998] Michael E Mann, Raymond S Bradley, and Malcolm K Hughes. Global-scale temperature pat-terns and climate forcing over the past six centuries. Na-ture , 392(6678):779–787, 1998. [Marisca et al. , 2022] Ivan Marisca, Andrea Cini, and Ce-sare Alippi. Learning to reconstruct missing data from spa-tiotemporal graphs with sparse observations. Advances in Neural Information Processing Systems , 35:32069–32082, 2022. [Matheron, 1963] Georges Matheron. Principles of geo-statistics. Economic geology , 58(8):1246–1266, 1963. [Satorras et al. , 2022] Victor Garcia Satorras, Syama Sun-dar Rangapuram, and Tim Januschowski. Multivariate time series forecasting with latent graph inference. arXiv preprint arXiv:2203.03423 , 2022. [Shang and Chen, 2021] Chao Shang and Jie Chen. Discrete graph structure learning for forecasting multiple time se-ries. In International Conference on Learning Represen-tations , 2021. [Shao et al. , 2022] Zezhi Shao, Zhao Zhang, Fei Wang, Wei Wei, and Yongjun Xu. Spatial-temporal identity: A simple yet effective baseline for multivariate time series forecast-ing. In Proceedings of the 31st ACM International Con-ference on Information & Knowledge Management , pages 4454–4458, 2022. [Shao et al. , 2024] Zezhi Shao, Fei Wang, Yongjun Xu, Wei Wei, Chengqing Yu, Zhao Zhang, Di Yao, Tao Sun, Guangyin Jin, Xin Cao, et al. Exploring progress in mul-tivariate time series forecasting: Comprehensive bench-marking and heterogeneity analysis. IEEE Transactions on Knowledge and Data Engineering , 2024. [Stein, 1988] Michael L Stein. Asymptotically efficient pre-diction of a random field with a misspecified covariance function. The Annals of Statistics , 16(1):55–63, 1988. [Tobler, 1970] Waldo R Tobler. A computer movie simulat-ing urban growth in the detroit region. Economic geogra-phy , 46(sup1):234–240, 1970. [Veliˇ ckovi´ c et al. , 2018] Petar Veliˇ ckovi´ c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Li` o, and Yoshua Bengio. Graph attention networks. In Interna-tional Conference on Learning Representations , 2018. [Wang et al. , 2019] Yuyang Wang, Alex Smola, Danielle Maddix, Jan Gasthaus, Dean Foster, and Tim Januschowski. Deepfactors for forecasting. In In-ternational Conference on Machine Learning , pages 6607–6617. PMLR, 2019. [Wang et al. , 2023] Dingsu Wang, Yuchen Yan, Ruizhong Qiu, Yada Zhu, Kaiyu Guan, Andrew Margenot, and Hanghang Tong. Networked time series imputation via position-aware graph enhanced variational autoencoders. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 2256– 2268, 2023. [Williams and Rasmussen, 2006] Christopher KI Williams and Carl Edward Rasmussen. Gaussian processes for ma-chine learning , volume 2. MIT press Cambridge, MA, 2006. [Wilson and Adams, 2013] Andrew Wilson and Ryan Adams. Gaussian process kernels for pattern discovery and extrapolation. In International conference on machine learning , pages 1067–1075. PMLR, 2013. [Wu et al. , 2019] Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, and Chengqi Zhang. Graph wavenet for deep spatial-temporal graph modeling. In Proceedings of the 28th International Joint Conference on Artificial Intelli-gence , pages 1907–1913, 2019. [Wu et al. , 2021a] Yuankai Wu, Dingyi Zhuang, Aurelie Labbe, and Lijun Sun. Inductive graph neural networks for spatiotemporal kriging. In Proceedings of the AAAI Con-ference on Artificial Intelligence , volume 35, pages 4478– 4485, 2021. [Wu et al. , 2021b] Yuankai Wu, Dingyi Zhuang, Mengying Lei, Aurelie Labbe, and Lijun Sun. Spatial aggregation and temporal convolution networks for real-time kriging. 
+
+arXiv preprint arXiv:2109.12144 , 2021. [Wu et al. , 2022] Zonghan Wu, Da Zheng, Shirui Pan, Quan Gan, Guodong Long, and George Karypis. Traversenet: Unifying space and time in message passing for traffic forecasting. IEEE Transactions on Neural Networks and Learning Systems , 2022. [Xu et al. , 2023] Qianxiong Xu, Cheng Long, Ziyue Li, Sijie Ruan, Rui Zhao, and Zhishuai Li. Kits: Inductive spatio-temporal kriging with increment training strategy. arXiv preprint arXiv:2311.02565 , 2023. [Yi et al. , 2016] Xike Yi, Yu Zhang, and Linghe Kong. St-mvl: Filling missing values in geo-sensory time series data. In Proceedings of the International Joint Conference on Artificial Intelligence (IJCAI) , pages 2704–2710, 2016. [Yin et al. , 2022] Xueyan Yin, Feifan Li, Yanming Shen, Heng Qi, and Baocai Yin. Nodetrans: A graph transfer learning approach for traffic prediction. arXiv preprint arXiv:2207.01301 , 2022. [Yu et al. , 2018] Bing Yu, Haoteng Yin, and Zhanxing Zhu. Spatio-temporal graph convolutional networks: a deep learning framework for traffic forecasting. In Proceedings of the 27th International Joint Conference on Artificial In-telligence , pages 3634–3640, 2018. [Zhang et al. , 2022] Yan Zhang, Ang Li, Jiawei Li, Dianqi Han, Tao Li, Rui Zhang, and Yanchao Zhang. Speckriging: Gnn-based secure cooperative spectrum sensing. IEEE Transactions on Wireless Communications , 21(11):9936– 9946, 2022. [Zhang, 2004] Hao Zhang. Inconsistent estimation and asymptotically equal interpolations in model-based geo-statistics. Journal of the American Statistical Association ,99(465):250–261, 2004. [Zheng et al. , 2020] Chuanpan Zheng, Xiaoliang Fan, Cheng Wang, and Jianzhong Qi. Gman: A graph multi-attention network for traffic prediction. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 34, pages 1234–1241, 2020. [Zheng et al. , 2023] Chuanpan Zheng, Xiaoliang Fan, Cheng Wang, Jianzhong Qi, Chaochao Chen, and Long-biao Chen. Increase: Inductive graph representation learning for spatio-temporal kriging. In Proceedings of the ACM Web Conference 2023 , pages 673–683, 2023. [Zimmerman and Zimmerman, 1991] Dale L Zimmerman and M Bridget Zimmerman. A comparison of spatial semi-variogram estimators and corresponding ordinary kriging predictors. Technometrics , 33(1):77–91, 1991. A Proof for Theorem 2 
+
+Proof. Using the triangle inequality, decompose the error into two parts: 
+
+ϵ = min 
+
+> Wb
+
+ˆAbXW b − ˆAaXW a F
+
+≤ min 
+
+> Wb
+
+ˆAbX(Wb − Wa) F
+
++ ( ˆAb − ˆAa)XW a F
+
+.
+
+For the first term: 
+
+min 
+
+> Wb
+
+ˆAbX(Wb − Wa) F
+
+,
+
+if Wb = Wa:
+
+min 
+
+> Wb
+
+ˆAbX(Wb − Wa) F
+
+= 0 .
+
+Thus, the error is dominated by the second term: 
+
+ϵ ≤ ( ˆAb − ˆAa)XW a F
+
+.
+
+The second term involves the difference ˆAb − ˆAa:
+
+( ˆAb − ˆAa)XW a F
+
+≤ ˆAb − ˆAa · ∥ XW a∥F ,
+
+where ∥ · ∥ is the spectral norm (operator norm). Using the property of Frobenius norms: 
+
+∥XW a∥F ≤ ∥ X∥F · ∥ Wa∥F .
+
+Thus: 
+
+( ˆAb − ˆAa)XW a F
+
+≤ ˆAb − ˆAa · ∥ X∥F · ∥ Wa∥F .
+
+The entries of the unnormalized adjacency matrices Aa
+
+and Ab are defined as: 
+
+Aa,ij = exp − D2
+
+> ij
+
+2σ2
+
+> a
+
+!
+
+, Ab,ij = exp − D2
+
+> ij
+
+2σ2
+
+> b
+
+!
+
+,
+
+where Dij is the distance between nodes i and j, and σa, σ b
+
+are the Gaussian kernel parameters. The difference between Aa and Ab is: 
+
+Aa,ij − Ab,ij = exp − D2
+
+> ij
+
+2σ2
+
+> a
+
+!
+
+− exp − D2
+
+> ij
+
+2σ2
+
+> b
+
+!
+
+.
+
+Using the mean value theorem for exponential functions, there exists some intermediate value σ′ (depending on σa and 
+
+σb) such that: 
+
+exp − D2
+
+> ij
+
+2σ2
+
+> a
+
+!
+
+− exp − D2
+
+> ij
+
+2σ2
+
+> b
+
+!
+
+= ∂∂σ exp − D2
+
+> ij
+
+2σ2
+
+!
+
+> σ=σ′
+
+(σb − σa).
+
+The derivative is given by: 
+
+∂∂σ exp − D2
+
+> ij
+
+2σ2
+
+!
+
+= exp − D2
+
+> ij
+
+2σ2
+
+!
+
+· D2
+
+> ij
+
+σ3 .
+
+Thus: 
+
+Aa,ij − Ab,ij = exp − D2
+
+> ij
+
+2σ′2
+
+!
+
+· D2
+
+> ij
+
+σ′3 · (σb − σa).
+
+Taking the operator norm ∥Aa − Ab∥, which is bounded by the element-wise maximum: 
+
+∥Aa − Ab∥ ≤ max  
+
+> i,j
+
+|Aa,ij − Ab,ij | .
+
+Substituting the bound for Aa,ij − Ab,ij :
+
+∥Aa − Ab∥ ≤ max  
+
+> i,j
+
+exp − D2
+
+> ij
+
+2σ′2
+
+!
+
+· D2
+
+> ij
+
+σ′3 · (σb − σa) .
+
+Assuming the distances Dij are bounded (i.e., Dij ≤
+
+Dmax ), and the intermediate σ′ lies between σa and σb, we can extract the dependence on |σb − σa|:
+
+∥Aa − Ab∥ ≤ C|σb − σa|,
+
+where C depends on Dmax , σa, and σb.The normalized adjacency matrices are: 
+
+ˆAa = D− 12 
+
+> a
+
+AaD− 12 
+
+> a
+
+, ˆAb = D− 12 
+
+> b
+
+AbD− 12 
+
+> b
+
+,
+
+where Da and Db are degree matrices: 
+
+Da = diag( Aa1), Db = diag( Ab1).
+
+Now, consider the difference: 
+
+ˆAb − ˆAa = D− 12 
+
+> b
+
+AbD− 12 
+
+> b
+
+− D− 12 
+
+> a
+
+AaD− 12 
+
+> a
+
+.
+
+Using the triangle inequality: 
+
+∥ ˆAb− ˆAa∥ ≤ ∥ D− 12 
+
+> b
+
+(Ab−Aa)D− 12 
+
+> b
+
+∥+∥(D− 12 
+
+> b
+
+−D− 12 
+
+> a
+
+)AaD− 12 
+
+> a
+
+∥.
+
+∥D− 12 
+
+> b
+
+(Ab − Aa)D− 12 
+
+> b
+
+∥ ≤ ∥ D− 12 
+
+> b
+
+∥2∥Ab − Aa∥.
+
+Since ∥D− 12 
+
+> b
+
+∥ ≤ d− 12 
+
+> min
+
+(where dmin is the smallest degree in 
+
+Db), and ∥Ab − Aa∥ ≤ C|σb − σa|, we have: 
+
+∥D− 12 
+
+> b
+
+(Ab − Aa)D− 12 
+
+> b
+
+∥ ≤ C′|σb − σa|,
+
+where C′ depends on dmin and the data. The second term ∥(D− 12 
+
+> b
+
+− D− 12 
+
+> a
+
+)AaD− 12 
+
+> a
+
+∥ can be simi-larly bounded by the fact that D− 12 
+
+> b
+
+− D− 12 
+
+> a
+
+is proportional to 
+
+|σb − σa|, giving: 
+
+∥(D− 12 
+
+> b
+
+− D− 12 
+
+> a
+
+)AaD− 12 
+
+> a
+
+∥ ≤ C′′ |σb − σa|.
+
+Combining the two terms, we get: 
+
+∥ ˆAb − ˆAa∥ ≤ C|σb − σa|,
+
+where C is a constant that depends on the distances Dij , the degrees in Da and Db, and the Gaussian kernel parameters. The minimum error satisfies: 
+
+ϵ ≤ C ∥X∥F |σa − σb| ∥ Wa∥F ,
+
+where C is a positive constant. B Extension to Multiple Layers 
+
+We now extend the single-layer adjacency-mismatch bound (Theorem 2) to an L-layer GCN. Concretely, suppose we have two normalized adjacency matrices bAa and bAb, derived from Gaussian kernels with parameters σa and σb, respec-tively. Let 
+
+H(0)  
+
+> a
+
+= X, H(0)  
+
+> b
+
+= X,
+
+and define the two L-layer GCNs: 
+
+H(ℓ) 
+
+> a
+
+= σ  bAa H(ℓ−1)  
+
+> a
+
+W(ℓ)
+
+> a
+
+,
+
+H(ℓ) 
+
+> b
+
+= σ  bAb H(ℓ−1)  
+
+> b
+
+W(ℓ)
+
+> b
+
+, ℓ = 1 , . . . , L. 
+
+where W(ℓ) 
+
+> a
+
+and W(ℓ) 
+
+> b
+
+are the layer-ℓ weight matrices, and 
+
+σ(·) is a Lipschitz activation. Our goal is to bound 
+
+εL = min  
+
+> {W(ℓ)
+> b}
+
+H(L) 
+
+> b
+
+− H(L) 
+
+> aF
+
+in terms of bAb − bAa and ultimately in terms of |σb − σa|
+
+(the difference in the Gaussian kernel parameters). 
+
+Proof. By Theorem 2 (the single-layer result), we already know that for one layer, 
+
+min 
+
+> Wb
+
+bAb X W b − bAa X W a F ≤ C1 ∥X∥F σb−σa Wa F ,
+
+where C1 > 0 depends on X and σa.For the L-layer case, we compare H(ℓ) 
+
+> b
+
+to H(ℓ) 
+
+> a
+
+via a trian-gle inequality and Lipschitz argument: 
+
+H(ℓ) 
+
+> b
+
+− H(ℓ) 
+
+> aF
+
+= σ  bAb H(ℓ−1)  
+
+> b
+
+W(ℓ)
+
+> b
+
+ − σ  bAa H(ℓ−1)  
+
+> a
+
+W(ℓ)
+
+> a
+
+
+
+> F
+
+≤ σ  bAb H(ℓ−1)  
+
+> b
+
+W(ℓ)
+
+> b
+
+ − σ  bAa H(ℓ−1)  
+
+> b
+
+W(ℓ)
+
+> b
+
+
+
+> F
+
++ σ  bAa H(ℓ−1)  
+
+> b
+
+W(ℓ)
+
+> b
+
+ − σ  bAa H(ℓ−1)  
+
+> a
+
+W(ℓ)
+
+> a
+
+
+
+> F
+
+≤ Lσ bAb − bAa ∥H(ℓ−1)  
+
+> b
+
+∥ ∥ W(ℓ) 
+
+> b
+
+∥
+
++ Lσ ∥ bAa∥ H(ℓ−1)  
+
+> b
+
+W(ℓ) 
+
+> b
+
+− H(ℓ−1)  
+
+> a
+
+W(ℓ)  
+
+> aF
+
+,
+
+where Lσ is the Lipschitz constant of σ(·). We then expand 
+
+H(ℓ−1)  
+
+> b
+
+W(ℓ) 
+
+> b
+
+− H(ℓ−1)  
+
+> a
+
+W(ℓ)
+
+> a
+
+= H(ℓ−1) 
+
+> b
+
+ W(ℓ) 
+
+> b
+
+− W(ℓ)
+
+> a
+
+ +  H(ℓ−1)  
+
+> b
+
+− H(ℓ−1) 
+
+> a
+
+W(ℓ) 
+
+> a
+
+.
+
+so the error at layer ℓ depends on: (i) the adjacency differ-ence bAb − bAa, (ii) the difference W(ℓ) 
+
+> b
+
+− W(ℓ) 
+
+> a
+
+, and (iii) the preceding error ∥H(ℓ−1)  
+
+> b
+
+− H(ℓ−1)  
+
+> a
+
+∥.In order to upper bound ∥H(L) 
+
+> b
+
+− H(L) 
+
+> a
+
+∥, we take W(ℓ) 
+
+> b
+
+=
+
+W(ℓ) 
+
+> a
+
+at each layer. This nullifies all weight-difference terms. The only remaining discrepancy is from bAb − bAa. Iterating the one-layer difference through ℓ = 1 , . . . , L and bounding norms of intermediate products yields 
+
+εL = min  
+
+> {W(ℓ)
+> b}
+
+H(L) 
+
+> b
+
+− H(L) 
+
+> aF
+
+≤ C ∥X∥F σb − σa
+
+> L
+
+Y
+
+> ℓ=1
+
+∥W(ℓ) 
+
+> a
+
+∥F .
+
+for some constant C > 0 depending on X, σa, and any Lipschitz factors. This completes the proof. The key step is that we choose W(ℓ) 
+
+> b
+
+= W(ℓ) 
+
+> a
+
+for all layers, so that weight differences vanish. Hence the only source of discrepancy is the difference in adjacency matrices bAb − bAa,which we can in turn bound by σb − σa when these come from Gaussian kernels. In practice, one might further adjust 
+
+W(ℓ) 
+
+> b
+
+to reduce the error, often obtaining a bound of similar form but with additional terms that account for partial weight. 
+
+C Sensitivity Analysis 
+
+We analyze the sensitivity of our kernel-based models to two key hyperparameters: the initialization of the learnable scal-ing parameter αinit and the sparsification threshold θ. We con-duct experiments on both the imputation task (using GRIN) and the Kriging task (using IGNNK) on the METR-LA and PEMS-03 datasets. 
+
+Results and Observations. Table 5 presents the Mean Ab-solute Error (MAE) results for both tasks under different set-tings. We observe that performance is notably more sensitive to the choice of threshold θ than to the initialization value of 
+
+αinit . Specifically: • Increasing θ leads to a sharp degradation in perfor-mance, especially on PEMS-03, due to the removal of distant but informative edges. This impairs gradient flow and limits the model’s ability to capture long-range de-pendencies. • In contrast, variations αinit show relatively minor influ-ence, suggesting that the model can effectively learn ap-propriate scale parameters during training. • For Kriging with IGNNK, the best performance is con-sistently obtained when θ=0, supporting our decision to avoid enforcing regularization on α, which would sup-press useful connections. 
+
+D Computational Overhead of AdaKernel 
+
+To provide a more concrete understanding of the computa-tional overhead introduced by AdaKernel, we report the per-epoch training time (before and after integration) and the number of additional learnable parameters for three represen-tative spatiotemporal tasks: imputation, kriging, and forecast-ing. These tasks are implemented respectively using GRIN, IGNNK, and DCRNN on two benchmark datasets: METR-LA and PEMS-BAY. As shown in Table 6, the additional training time intro-duced by AdaKernel remains modest across all models and datasets. All reported training times are averaged over 10 Table 5: Sensitivity of MAE to threshold θ and scaling parameter initialization αinit in GRIN (imputation) and IGNNK (Kriging).                                              
+
+> Task Dataset θ=0 θ=0 .1θ=0 .5θ=0 .8
+> GRIN (Imputation) METR-LA 1.87 1.87 1.98 2.09 GRIN (Imputation) PEMS-03 10.14 11.89 13.63 16.84 IGNNK (Kriging) METR-LA 5.70 5.96 6.44 6.96 IGNNK (Kriging) PEMS-03 65.56 65.59 86.23 91.62
+> Task Dataset αinit =0 .1αinit =0 .5αinit =1
+> GRIN (Imputation) METR-LA 1.84 1.85 1.84 GRIN (Imputation) PEMS-03 9.64 9.43 9.65 IGNNK (Kriging) METR-LA 5.75 5.79 5.72 IGNNK (Kriging) PEMS-03 65.58 65.70 70.80
+
+Table 6: Comparison of training time (per epoch) and parameter growth after introducing AdaKernel.                   
+
+> Model Dataset Time (before — after) #Params (growth)
+> GRIN (Imputation) METR-LA 48s — 55s 43K PEMS-BAY 54s — 61s 106K IGNNK (Kriging) METR-LA 24s — 28s 1PEMS-BAY 50s — 58s 1DCRNN (Forecasting) METR-LA 102s — 108s 43K PEMS-BAY 198s — 212s 106K
+
+epochs (after a brief warm-up phase) to reduce the effect of runtime variability and ensure fair comparison. The parame-ter growth varies depending on the kernel adaptation strategy: models using edge-specific scaling (e.g., GRIN, DCRNN) in-troduce more parameters than those with global scaling (e.g., IGNNK). These results validate that AdaKernel provides en-hanced adaptability with minimal computational cost. 
+
+E Experiment Detail 
+
+In this section, we provide a detailed description of the datasets used, as well as the experimental settings for each task. 
+
+E.1 Dataset Description 
+
+The specific details of the datasets used in our experiments are summarized in Table 7. The datasets span multiple do-mains, including traffic speed, traffic flow, and air quality. These datasets were chosen to evaluate the performance of the proposed methods in different spatiotemporal tasks, such as imputation, kriging, and forecasting. 
+
+E.2 Experimental Setup for Different Tasks 
+
+For the imputation and forecasting tasks, we use a standard data split of 70% for training, 10% for validation, and 20% for testing. For the kriging task, we select 30% of the nodes as the test set and the remaining nodes as the training set. In terms of time, we split the dataset into 70% for training and 30% for testing. 
+
+Frameworks and General Settings. For the imputation task, we use the framework proposed by GRIN [Cini et al. , 2022] 3.For forecasting, we rely on the open-source spatiotemporal 
+
+> 3
+
+https://github.com/Graph-Machine-Learning-Group/grin Table 7: Description of all datasets. Dataset Nodes Size Freq. Domain Task METR-LA 207 34272 ×207 5 min Speed Imp., Krig., Fct. PEMS-BAY 325 52116 ×325 5 min Speed Imp., Krig., Fct. AQI 437 8760 ×437 1 h Air Quality Imp., Krig. AQI36 36 8579 ×36 1 h Air Quality Imp. PEMS03 358 26208 ×358 5 min Flow Imp., Krig., Fct. PEMS04 307 16992 ×307 5 min Flow Imp., Krig. PEMS07 883 28224 ×883 5 min Flow Imp. PEMS08 170 17856 ×170 5 min Flow Imp., Krig., Fct. 
+
+prediction framework BasicTS 4, which is a benchmark li-brary designed specifically for time series forecasting. We follow the unified parameters provided by these frameworks for all our experiments. We set the input window size to 24 for imputation and 16 for kriging. For forecasting, both the historical sequence length and prediction horizon are set to 12. These settings en-sure consistency and allow fair comparisons across tasks and datasets. 
+
+Imputation Task Details. We conduct experiments on sev-eral widely used datasets: METR-LA, PEMS-BAY, AQI, and PEMS03/04/07/08. For METR-LA and PEMS-BAY, we ap-ply two missing data injection policies: • Block Missing: Randomly mask 5% of the data and simulate temporal failures with a failure probability 
+
+pf ailure = 0 .15 .• Point Missing: Randomly drop 25% of the data uni-formly without spatial-temporal correlation. For the AQI dataset, which contains 25.67% missing values in the original version, we adopt the standard evaluation pro-tocol used in prior work [Yi et al. , 2016; Cini et al. , 2022; Marisca et al. , 2022; Cao et al. , 2018], utilizing the provided missing mask to simulate real-world sensor fault patterns. We also evaluate on a reduced version (AQI-36) to test scalability. For PEMS03/04/07/08, we follow the Block Missing policy used in METR-LA and PEMS-BAY. 
+
+Kriging Task Details. Following prior work [Wu et al. ,2021a; Xu et al. , 2023; Zheng et al. , 2023], we simulate spa-tially missing nodes by randomly sampling a subset of nodes as the test set. We fix the input sequence length to 16 across all datasets. 
+
+Forecasting Task Details. All forecasting experiments are conducted within the BasicTS framework. We use the same historical and horizon lengths (12 time steps) for all datasets to ensure comparability. 
+
+F Detailed Description of Baseline Models 
+
+In this section, we provide detailed descriptions of the base-line models used in our experiments. 
+
+> 4
+
+https://github.com/GestaltCogTeam/BasicTS F.1 Imputation Models 
+
+GRIN (Graph Recurrent Imputation Network) is designed for multivariate time series imputation with graph structure. It employs a bidirectional graph RNN architecture consisting of a forward and backward temporal encoder. The spatial depen-dencies are captured through message passing mechanisms, where each node aggregates information from its neighbors. The model uses a spatial decoder that combines the encoded temporal information with graph structure to generate im-puted values. The bidirectional nature allows it to utilize both past and future information for more accurate imputation. 
+
+MPGRU (Message Passing Gated Recurrent Unit) adapts the message passing mechanism for spatiotemporal model-ing. It extends the traditional GRU by incorporating graph structure into its update mechanism. At each time step, be-fore the GRU update, each node aggregates information from its neighbors through a message passing layer. This aggre-gated spatial information is then combined with the temporal features through the GRU gates, enabling the model to cap-ture both spatial and temporal patterns simultaneously. 
+
+F.2 Kriging Models 
+
+IGNNK (Inductive Graph Neural Network Kriging) is specif-ically designed for spatial interpolation tasks. Its key inno-vation lies in its inductive architecture that can handle both observed and unobserved nodes during inference. The model processes temporal features of nodes and incorporates spa-tial information through multiple graph neural network lay-ers. For each target node, it considers a local subgraph in-cluding both observed and unobserved neighbors, enabling more comprehensive spatial modeling. 
+
+KITS (Kriging with Increment Training Strategy) ad-dresses the gap between training and inference in graph-based kriging. Its main contribution is the increment training strat-egy that introduces virtual nodes during training to simulate unobserved nodes in inference. This strategy helps the model learn to handle missing nodes more effectively. The model maintains a base graph neural network architecture while im-plementing this novel training approach. 
+
+F.3 Forecasting Models 
+
+DCRNN (Diffusion Convolutional Recurrent Neural Net-work) formulates the traffic forecasting problem using a dif-fusion process on graphs. It introduces diffusion convolution operations that capture spatial dependencies through a ran-dom walk on the graph. These operations are integrated with a GRU structure in an encoder-decoder framework. The en-coder processes historical data using diffusion convolution GRU cells, while the decoder generates multi-step predic-tions. 
+
+STGCN (Spatial-Temporal Graph Convolutional Net-works) decomposes the spatiotemporal modeling into dis-tinct spatial and temporal components. The spatial compo-nent uses graph convolutions to capture dependencies be-tween nodes, while the temporal component employs 1D con-volutions to model temporal patterns. These components are stacked in alternating layers, allowing the model to capture complex spatiotemporal interactions efficiently. 
+
+GWNet (Graph WaveNet) enhances the modeling of spatial-temporal dependencies through several innovations. It introduces a self-adaptive adjacency matrix that can learn hid-den spatial dependencies beyond the predefined graph struc-ture. The model combines this adaptive graph learning with dilated casual convolutions for temporal modeling. The di-lated convolution structure allows the model to capture long-range temporal dependencies efficiently while maintaining computational efficiency. 
+
+DGCRN (Dynamic Graph Convolutional Recurrent Net-work) focuses on capturing dynamic spatial relationships in traffic networks. It employs hyper-networks to generate dy-namic filters based on node attributes at each time step. These dynamic filters are used to process node embeddings, which are then used to generate a dynamic graph structure. This dynamic graph is combined with a static predefined graph to capture both stable and time-varying spatial relationships. The model integrates this dynamic graph modeling with a re-current structure for temporal dependency modeling. 
+
+G Evaluation Metrics 
+
+In our experimental evaluation, we employ several standard metrics to assess model performance across different tasks: 
+
+G.1 Mean Absolute Error (MAE) 
+
+MAE measures the average magnitude of errors between pre-dicted and actual values: MAE = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+|yi − ˆyi| (6) where yi is the actual value and ˆyi is the predicted value. 
+
+G.2 Mean Squared Error (MSE) / Root Mean Square Error (RMSE) 
+
+RMSE is the square root of MSE, providing an error measure in the same units as the original data: RMSE =
+
+vuut 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(yi − ˆyi)2 (7) 
+
+H Details of Model-Agnostic Baseline Comparisons 
+
+This appendix provides additional details on the model-agnostic baselines used in Section 6.1 for comparison with AdaKernel. All experiments are conducted on the imputation task using the GRIN framework, where the original message-passing module is replaced or augmented with alternative graph adaptation strategies. These baselines are selected to examine whether generic adaptive mechanisms can mitigate the limitations of fixed distance-based kernels. 
+
+H.1 GWNet-Style Adaptive Adjacency 
+
+Following Graph WaveNet, we construct a purely adaptive graph using learnable node embeddings E1, E 2 ∈ RN ×d,without incorporating any distance-based prior. The adaptive adjacency matrix is computed as 
+
+Aadp = softmax  ReLU  E1E⊤
+
+> 2
+
+ . (8) This baseline evaluates whether node-embedding-based dy-namic graphs alone can match the performance of kernel-based graph construction. 
+
+H.2 Static–Adaptive Graph Fusion 
+
+To examine whether combining fixed spatial priors with learned structures can alleviate kernel misspecification, we adopt a static–adaptive fusion strategy. Specifically, the final adjacency matrix is defined as 
+
+A = αA static + (1 − α)Aadp , (9) where α ∈ (0 , 1) is a learnable mixing coefficient. This for-mulation allows the model to balance distance-based induc-tive bias and adaptive graph learning within a unified frame-work. 
+
+H.3 Self-Attention-Based Dynamic Adjacency 
+
+We further consider a self-attention-based adjacency con-struction, where temporal node features Xt are projected into query and key representations to form feature-driven dynamic graphs: 
+
+At = softmax 
+
+ QtK⊤
+
+> t
+
+√dk
+
+
+
+, A = 1
+
+T
+
+X
+
+> t
+
+At. (10) This baseline allows time-varying feature correlations to drive edge adaptation and represents a commonly used attention-based alternative to distance-based graphs. 
+
+H.4 GAT Backbone 
+
+As a strong attention-based baseline, we replace the original GNN layer in GRIN with a Graph Attention Network (GAT). In this setting, attention coefficients are computed between nodes and used to perform weighted aggregation of neighbor features. Unlike the previous baselines, this approach inte-grates adaptivity directly into the message-passing operation rather than modifying the adjacency matrix externally. 
+
+H.5 Discussion 
+
+Across all baselines, adaptivity is introduced through node embeddings, attention mechanisms, or their combinations with static graphs. However, these approaches do not ex-plicitly address the kernel parameterization stage of graph construction. In contrast, AdaKernel introduces adaptivity at the level of kernel parameters while preserving distance-based structural priors, enabling more targeted correction of kernel-induced structural bias. 
+
+I Kernel Functions 
+
+In addition to the Gaussian kernel used in our main experi-ments, we explored two other kernel functions: 
+
+I.1 Mat´ ern Kernel 
+
+We employ the Mat´ ern ν = 3 /2 kernel, which provides a balance between smoothness and flexibility, allowing for the modeling of rougher spatial dependencies compared to the Gaussian kernel. The adjacency matrix A ∈ Rn×n is defined as: 
+
+Aij = σ2 21−ν
+
+Γ( ν)
+
+√2ν Dij 
+
+l
+
+ν
+
+Kν
+
+√2ν Dij 
+
+l
+
+
+
+, (11) 
+
+∀ i, j ∈ { 1, 2, . . . , n }.
+
+where Dij denotes the distance between nodes i and j,
+
+ν > 0 is the smoothness parameter controlling the differ-entiability of the kernel, l > 0 represents the length-scale parameter, Γ( ν) is the gamma function, and Kν is the mod-ified Bessel function. The Mat´ ern kernel generalizes various kernel functions, including the exponential kernel ( ν = 1 /2)and the Gaussian kernel ( ν → ∞ ). To enhance adaptability, we incorporate a learnable length scale l = α × std, where α is a trainable parameter and std is the standard deviation of the data. This enables dynamic adjustment during training. The initial value of σ is set to 1. 
+
+I.2 Rational Quadratic (RQ) Kernel 
+
+Similarly, we construct the adjacency matrix A ∈ Rn×n for the Rational Quadratic (RQ) kernel as: 
+
+Aij = σ2 1 + D2
+
+> ij
+
+2αl 2
+
+!−α
+
+, ∀i, j ∈ { 1, 2, . . . , n } (12) where α > 0 is the scale mixture parameter that governs the relative weighting of different length scales, and l > 0 is the length-scale parameter. The RQ kernel can be interpreted as an infinite mixture of Gaussian kernels with varying length scales, making it well-suited for capturing spatial dependen-cies exhibiting multiple characteristic scales. Consistent with the Mat´ ern kernel, we employ a learnable length scale l = α × std, where α is a trainable parameter and std represents the data’s standard deviation. This approach ensures adaptability during training. The initial value of α is set to 1. 
+
+J Node Degree Comparison Before and After AdaKernel 
+
+To better understand how AdaKernel modifies graph struc-tures, we compare the node degrees of the final adjacency matrices with and without AdaKernel in the DCRNN model. The results for the METR-LA and PEMS-BAY datasets are shown in Figure 5. On the METR-LA dataset, the two curves appear to almost overlap, indicating that the fixed α = 1 already provides a near-optimal degree distribution. However, AdaKernel still brings improvement by introducing edge-specific parameter-ization: instead of applying global changes, it selectively ad-justs a small subset of informative edges. These fine-grained modifications may seem negligible at the global graph level but are sufficient to enhance the structure and ultimately im-prove model performance. 0 50 100 150 200   
+
+> Node Index
+> 20
+> 40
+> 60
+> 80
+> 100
+> Node Degree
+> Node Degree Comparison: Fixed vs AdaKernel(DCRNN on METR-LA)
+> Fixed =1
+> Learned
+
+(a) METR-LA 0 50 100 150 200 250 300   
+
+> Node Index
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> Node Degree
+> Node Degree Comparison: Fixed vs AdaKernel(DCRNN on PEMS-BAY)
+> Fixed =1
+> Learned
+
+(b) PEMS-BAY Figure 5: Node degree comparison of adjacency matrices with fixed 
+
+α = 1 (blue) and AdaKernel (orange) in DCRNN. 
+
+In contrast, on the PEMS-BAY dataset, some nodes show increased degrees while others decrease. Overall, the original graph with fixed α (blue) generally exhibits higher degrees. This indicates that AdaKernel performs **selective sparsifi-cation and enhancement**, refining graph connectivity in a data-driven manner, particularly to capture long-range depen-dencies critical to prediction accuracy. 
+
+K More Visualizations Known Nodes  
+
+> Missing Nodes
+> Known Nodes
+> Missing Nodes
+> Known Nodes
+> Missing Nodes 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> 70
+
+Figure 6: Visualization of kriging results on PeMS-Bay dataset with 30% missing nodes. Right → left: Ground Truth, results using a fixed kernel parameter and results with AdaKernel (IGNNK). Known Nodes  
+
+> Missing Nodes
+> Known Nodes
+> Missing Nodes
+> Known Nodes
+> Missing Nodes 52.5
+> 55.0
+> 57.5
+> 60.0
+> 62.5
+> 65.0
+> 67.5
+> 70.0
+> 72.5
+
+Figure 7: Visualization of kriging results on PeMS-Bay dataset with 30% missing nodes. Right → left: Ground Truth, results using a fixed kernel parameter and results with AdaKernel (KITS). Center Node 
+
+Neighbor Nodes (a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 10 20 30 40 
+
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> 70
+> Speed
+
+Complete Missing 
+
+Missing Value     
+
+> 010 20 30 40
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation     
+
+> 010 20 30 40
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Kriging results Figure 8: IGNNK for kriging task on METR-LA. Center Node 
+
+Neighbor Nodes 
+
+(a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 5 10 15 20 25 30 35 40 
+
+> 61.0
+> 61.5
+> 62.0
+> 62.5
+> 63.0
+> 63.5
+> 64.0
+> 64.5
+> 65.0
+> Speed
+
+Complete Missing 
+
+Missing Value         
+
+> 0510 15 20 25 30 35 40
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation         
+
+> 0510 15 20 25 30 35 40
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Kriging results Figure 9: KITS for kriging task on PeMS-BAY. Center Node 
+
+Neighbor Nodes 
+
+(a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 10 20 30 40 
+
+> 66
+> 67
+> 68
+> 69
+> 70
+> 71
+> Speed
+
+Complete Missing 
+
+Missing Value     
+
+> 010 20 30 40
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation     
+
+> 010 20 30 40
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Kriging results Figure 10: IGNNK for kriging task on PeMS-BAY. Center Node 
+
+Neighbor Nodes 
+
+(a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 5 10 15 20 25 30 
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Speed
+
+Block Missing 
+
+Missing Value       
+
+> 0510 15 20 25 30
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation       
+
+> 0510 15 20 25 30
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Imputation results Figure 11: GRIN for imputation task on PeMS-BAY (block missing). Center Node 
+
+Neighbor Nodes (a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 5 10 15 20 25 30 
+
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> PM2.5
+
+Simulated Failures 
+
+Missing Value       
+
+> 0510 15 20 25 30
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation       
+
+> 0510 15 20 25 30
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Imputation results Figure 12: GRIN for imputation task on AQI36. Center Node 
+
+Neighbor Nodes 
+
+(a) Fixed graph structure Center Node 
+
+Neighbor Nodes (b) Learned graph structure 0 5 10 15 20 
+
+> 20
+> 30
+> 40
+> 50
+> 60
+> Speed
+
+Target 
+
+Target     
+
+> 0510 15 20
+
+Time Steps 
+
+Static Kernel 
+
+GroundTruth 
+
+Imputation     
+
+> 0510 15 20
+
+AdaKernel 
+
+GroundTruth 
+
+Imputation (c) Forecasting results Figure 13: DCRNN for forecasting task on METR-LA. Center Node 
+
+Neighbor Nodes 
+
+(a) Fixed Mat´ ern kernel Center Node 
+
+Neighbor Nodes (b) Learned Mat´ ern kernel Center Node 
+
+Neighbor Nodes (c) Fixed RQ kernel Center Node 
+
+Neighbor Nodes (d) Learned RQ kernel Figure 14: Relationship between error improvement and nodes’ average distances to their neighbors for both kriging and imputation tasks. 0 50 100 150 200 
+
+Node Index 
+
+> 20
+> 40
+> 60
+> 80
+> 100
+> Node Degree
+
+Node Degree Comparison: Fixed vs AdaKernel(GRIN on METR-LA) 
+
+Fixed =1 
+
+Learned 
+
+(a) METR-LA 0 50 100 150 200 250 300 
+
+Node Index 
+
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> Node Degree
+
+Node Degree Comparison: Fixed vs AdaKernel(GRIN on PEMS-BAY) 
+
+Fixed =1 
+
+Learned (b) PEMS-BAY Figure 15: Node degree comparison of adjacency matrices with fixed α = 1 (blue) and AdaKernel (orange) in GRIN.
