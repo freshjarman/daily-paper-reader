@@ -6,44 +6,43 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-07
-- 运行时间：2026-06-07 21:08:14 UTC
+- 最新运行日期：2026-06-14
+- 运行时间：2026-06-14 21:26:47 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：5
+- 本次总论文数：7
+- 精读区：4
 - 速读区：3
 
 ### 今日简报（AI）
-今日精读5篇、速读3篇，聚焦时空点过程扩散估计与连续时间动态图的长程表示学习。最值得看的是两篇9.0分论文：《GLIDE》提出图引导的跳跃推断方法，《Learning Long Range》利用状态空间模型捕获超长时序依赖。建议优先精读这两篇，掌握时空建模与图神经网络的前沿融合思路。
-- 详情：[/202606/07/README](/202606/07/README)
+今日精读7篇论文，重点聚焦LLM位置预测中的意图引导推理与分层激励事件建模。  
+最值得看两篇：利用意图引导增强LLM位置预测推理，以及分层激励过程处理事件时间数据。  
+建议优先精读这两篇9分论文，其方法可迁移至时空预测与因果推理场景。
+- 详情：[/202606/14/README](/202606/14/README)
 
 ### 精读区论文标签
-1. [GLIDE: Graph-guided Leap Inference for Diffusion Estimation of Spatio-Temporal Point Processes](/202606/07/2606.01273v1-glide-graph-guided-leap-inference-for-diffusion-estimation-of-spatio-temporal-point-processes)  
+1. [Think Before You Act: Intention-Guided Reasoning for LLM-Based Location Prediction](/202606/14/2606.08122v1-think-before-you-act-intention-guided-reasoning-for-llm-based-location-prediction)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：时空点过程建模与预测，使用扩散方法
-2. [Learning Long Range Spatio-Temporal Representations over Continuous Time Dynamic Graphs with State Space Models](/202606/07/2606.04672v1-learning-long-range-spatio-temporal-representations-over-continuous-time-dynamic-graphs-with-state-space-models)  
+   evidence：基于签到序列的兴趣点预测，属于时空点过程任务
+2. [Hierarchical excitatory processes for modelling event-time data in the presence of exogenous stimuli](/202606/14/2606.11768v1-hierarchical-excitatory-processes-for-modelling-event-time-data-in-the-presence-of-exogenous-stimuli)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：连续时间动态图上的时空表示学习
-3. [Learning Long Range Spatio-Temporal Representations over Continuous Time Dynamic Graphs with State Space Models](/202606/07/2606.04672v2-learning-long-range-spatio-temporal-representations-over-continuous-time-dynamic-graphs-with-state-space-models)  
+   evidence：用于事件时间数据的激发性点过程模型
+3. [Continuous partitioning of neuronal variability](/202606/14/biorxiv-10-1101-2025-07-23-666404-v3-continuous-partitioning-of-neuronal-variability)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：连续时间动态图上的时空表示学习
-4. [Non-Negative Matrix Factorization for Event Data](/202606/07/2606.06205v1-non-negative-matrix-factorization-for-event-data)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：连续时间事件数据建模为泊松过程并采用非负矩阵分解
-5. [Estimating Mutual Information between Time Series and Temporal Event Sequences Across Diverse Analysis Tasks](/202606/07/2606.01602v1-estimating-mutual-information-between-time-series-and-temporal-event-sequences-across-diverse-analysis-tasks)  
+   evidence：针对尖峰序列的连续双重随机模型，属于事件序列分析
+4. [Time-Series Foundation Model Embeddings for Remaining Useful Life Estimation](/202606/14/2606.11990v1-time-series-foundation-model-embeddings-for-remaining-useful-life-estimation)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：时间序列与时间事件序列之间的互信息估计
+   evidence：利用时间序列基础模型嵌入进行神经时间点过程事件预测
 
 ### 速读区论文标签
-1. [Temporal Motif Signatures for Temporal Graph Neural Networks](/202606/07/2606.01176v1-temporal-motif-signatures-for-temporal-graph-neural-networks)  
+1. [A Hierarchical Bayesian Agent Based Model for Binary Spatio-Temporal Spread: Theory, PDE Scaling Limit, and an Application to Predator Prey Cycles](/202606/14/biorxiv-10-64898-2026-06-03-729943-v1-a-hierarchical-bayesian-agent-based-model-for-binary-spatio-temporal-spread-theory-pde-scaling-limit-and-an-application-to-predator-prey-cycles)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：时序交互预测，用于事件序列的motif特征
-2. [Analyzing spatial point processes degraded by displacement and imperfect detection](/202606/07/2606.05374v1-analyzing-spatial-point-processes-degraded-by-displacement-and-imperfect-detection)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：空间点过程，考虑位移和检测不完美，可推广到时空场景
-3. [AdaKernel: Learning Adaptive Kernel Parameters for Spatiotemporal Graph Neural Networks](/202606/07/2606.01283v1-adakernel-learning-adaptive-kernel-parameters-for-spatiotemporal-graph-neural-networks)  
+   evidence：时空扩散的统计模型
+2. [Prime Event Languages: An Information-Theoretic Investigation of Twin-Prime Event Structure](/202606/14/2606.08395v1-prime-event-languages-an-information-theoretic-investigation-of-twin-prime-event-structure)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：时空图神经网络的适应性核参数学习
+   evidence：素数间隙的事件序列分析
+3. [Multi-Rate Mixture of Experts for Accelerating Liquid Neural Network Training](/202606/14/2606.12240v1-multi-rate-mixture-of-experts-for-accelerating-liquid-neural-network-training)  
+   标签：评分：6.0/10、query:tpp-es
+   evidence：用于不规则时间序列的连续时间动力学
 
 
 <div class="dpr-home-promo-card">
