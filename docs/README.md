@@ -6,43 +6,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-14
-- 运行时间：2026-06-14 21:26:47 UTC
+- 最新运行日期：2026-06-21
+- 运行时间：2026-06-21 21:09:15 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：4
+- 本次总论文数：8
+- 精读区：5
 - 速读区：3
 
 ### 今日简报（AI）
-今日精读7篇论文，重点聚焦LLM位置预测中的意图引导推理与分层激励事件建模。  
-最值得看两篇：利用意图引导增强LLM位置预测推理，以及分层激励过程处理事件时间数据。  
-建议优先精读这两篇9分论文，其方法可迁移至时空预测与因果推理场景。
-- 详情：[/202606/14/README](/202606/14/README)
+1) 今日精读5篇、速读3篇，聚焦振荡动力学联合推断与活动预测模型对比，高分论文亮点突出。  
+2) 最值得精读的两篇：Bayesian SSM 实现振荡与点过程耦合推断（9.0分），以及简单 Argmax 在下一活动预测中竟能挑战 LSTM/Transformer（8.0分）。  
+3) 建议优先吃透精读论文的核心方法，并可速览《Anomaly Detection for Sparse and Irregular Multivariate Time Series with Latent SDEs》以拓展异常检测思路。
+- 详情：[/202606/21/README](/202606/21/README)
 
 ### 精读区论文标签
-1. [Think Before You Act: Intention-Guided Reasoning for LLM-Based Location Prediction](/202606/14/2606.08122v1-think-before-you-act-intention-guided-reasoning-for-llm-based-location-prediction)  
+1. [BAYESIAN STATE-SPACE MODEL FOR JOINT INFERENCE OF OSCILLATORY DYNAMICS AND POINT-PROCESS COUPLING](/202606/21/biorxiv-10-64898-2026-06-15-732402-v1-bayesian-state-space-model-for-joint-inference-of-oscillatory-dynamics-and-point-process-coupling)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：基于签到序列的兴趣点预测，属于时空点过程任务
-2. [Hierarchical excitatory processes for modelling event-time data in the presence of exogenous stimuli](/202606/14/2606.11768v1-hierarchical-excitatory-processes-for-modelling-event-time-data-in-the-presence-of-exogenous-stimuli)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：用于事件时间数据的激发性点过程模型
-3. [Continuous partitioning of neuronal variability](/202606/14/biorxiv-10-1101-2025-07-23-666404-v3-continuous-partitioning-of-neuronal-variability)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：针对尖峰序列的连续双重随机模型，属于事件序列分析
-4. [Time-Series Foundation Model Embeddings for Remaining Useful Life Estimation](/202606/14/2606.11990v1-time-series-foundation-model-embeddings-for-remaining-useful-life-estimation)  
+   evidence：通过连续时间点过程模型联合推断尖峰-场耦合
+2. [David vs. Goliath in Next Activity Prediction: Argmax vs. LSTM, Transformer, and LLM](/202606/21/2606.15868v1-david-vs-goliath-in-next-activity-prediction-argmax-vs-lstm-transformer-and-llm)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：利用时间序列基础模型嵌入进行神经时间点过程事件预测
+   evidence：使用神经网络模型在事件日志上进行下一活动预测
+3. [Double zero-inflated spatio-temporal modeling of daily precipitation under detection thresholds](/202606/21/2606.17717v1-double-zero-inflated-spatio-temporal-modeling-of-daily-precipitation-under-detection-thresholds)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：对日降水量的双零膨胀时空建模
+4. [Graph Grounded Cross Attention Transformer Neural Network for Structurally Constrained Full Event Sequence Generation in Predictive Process Monitoring](/202606/21/2606.18726v1-graph-grounded-cross-attention-transformer-neural-network-for-structurally-constrained-full-event-sequence-generation-in-predictive-process-monitoring)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：用于事件序列生成的神经网络，匹配连续时间事件序列建模
+5. [Continuous partitioning of neuronal variability](/202606/21/biorxiv-10-1101-2025-07-23-666404-v4-continuous-partitioning-of-neuronal-variability)  
+   标签：评分：8.0/10、query:tpp-es
+   evidence：针对脉冲序列变异性的连续双随机模型
 
 ### 速读区论文标签
-1. [A Hierarchical Bayesian Agent Based Model for Binary Spatio-Temporal Spread: Theory, PDE Scaling Limit, and an Application to Predator Prey Cycles](/202606/14/biorxiv-10-64898-2026-06-03-729943-v1-a-hierarchical-bayesian-agent-based-model-for-binary-spatio-temporal-spread-theory-pde-scaling-limit-and-an-application-to-predator-prey-cycles)  
+1. [DYNA-PRUNER: Input-Adaptive Data-Model Co-Pruning for Efficient and Scalable Spatio-Temporal Media Prediction](/202606/21/2606.15346v1-dyna-pruner-input-adaptive-data-model-co-pruning-for-efficient-and-scalable-spatio-temporal-media-prediction)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：时空扩散的统计模型
-2. [Prime Event Languages: An Information-Theoretic Investigation of Twin-Prime Event Structure](/202606/14/2606.08395v1-prime-event-languages-an-information-theoretic-investigation-of-twin-prime-event-structure)  
+   evidence：时空媒体预测中的输入自适应剪枝
+2. [EventConnector: Mining Social Event Relations through Temporal Graphs](/202606/21/2606.15448v1-eventconnector-mining-social-event-relations-through-temporal-graphs)  
+   标签：评分：7.0/10、query:tpp-es
+   evidence：从时间事件图中挖掘社交事件关系
+3. [Anomaly Detection for Sparse and Irregular Multivariate Time Series with Latent SDEs](/202606/21/2606.18898v1-anomaly-detection-for-sparse-and-irregular-multivariate-time-series-with-latent-sdes)  
    标签：评分：6.0/10、query:tpp-es
-   evidence：素数间隙的事件序列分析
-3. [Multi-Rate Mixture of Experts for Accelerating Liquid Neural Network Training](/202606/14/2606.12240v1-multi-rate-mixture-of-experts-for-accelerating-liquid-neural-network-training)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：用于不规则时间序列的连续时间动力学
+   evidence：基于连续时间潜变量随机微分方程的不规则多变量时间序列建模
 
 
 <div class="dpr-home-promo-card">

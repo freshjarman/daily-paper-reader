@@ -1,0 +1,595 @@
+Title: EventConnector: Mining Social Event Relations through Temporal Graphs
+
+URL Source: https://arxiv.org/pdf/2606.15448v1
+
+Published Time: Tue, 16 Jun 2026 00:49:57 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# EventConnector: Mining Social Event Relations through Temporal Graphs 
+
+Zijie Lei 1 Haofei Yu 2 Ge Liu 2 Jiaxuan You 21Meta Monetization AI 
+
+> 2
+
+University of Illinois Urbana-Champaign Abstract 
+
+Understanding and retrieving related real-world events based on their temporal dynamics is a fundamental challenge in time-sensitive ap-plications such as forecasting, information re-trieval, and social analysis. Existing methods often rely on semantic similarity or global time-series alignment, which overlook the transient and directional dependencies that frequently un-derlie real-world correlations. In this work, we introduce EventConnector , a framework that constructs a temporal event graph capturing localized co-fluctuations and lead-lag relation-ships between events through their time-series trajectories. We further propose EC-Fusion , an adaptive retrieval mechanism that fuses Event-Connector’s graph-based scores with a com-plementary Granger-causal signal via a graph-quality-aware mixing weight. Across two real-world prediction market benchmarks (Polymar-ket and Kalshi) and nine forecasting architec-tures evaluated over three random seeds, EC-Fusion is the best non-oracle retrieval method on 17 /18 model–dataset cells, reducing RMSE by 6.87% on average (up to 10 .86% ) over the strongest comparable retrieval baseline, with statistical significance at p < 0.01 after Holm– Bonferroni correction. These results highlight the effectiveness of temporally grounded graph modeling, augmented with causal-signal fusion, in capturing latent event relationships beyond what semantic similarity or traditional align-ment techniques can offer. 
+
+1 Introduction 
+
+Real-world events rarely unfold in isolation—they are embedded within interdependent systems spanning political, economic, and cultural do-mains (Von Bertalanffy, 1968; Kelley and Thibaut, 1959). Modeling the temporal dependencies among such events is crucial not only for forecasting, but also for understanding how societal processes co-evolve through mechanisms like information diffu-sion (Rogers, 2003; Myers et al., 2012). For exam-
+
+Figure 1: Semantically unrelated events can exhibit co-fluctuations and be secretly connected. The two Polymarket events— “Will $ETH reach 3.7k in July?” 
+
+(blue) and “Will Elon Musk give a speech at the Bit-coin conference?” (orange)—are semantically unre-lated, yet their market-implied probabilities track each other closely. Such short-term alignment reflects shared sentiment or speculative drivers that traditional semantic similarity cannot capture. 
+
+ple, a major fiscal policy announcement can ripple through financial markets, as evidenced by studies linking President Trump’s public statements to fluc-tuations in cryptocurrency prices (Huynh, 2021). Anticipating these cross-domain ripple effects is essential for informing public policy, risk assess-ment, and strategic decision-making (Benzin and Rinderle-Ma, 2023), yet it remains a challenging and underexplored problem. 
+
+Challenges for finding event connection . One major obstacle is that correlated events are often 
+
+semantically dissimilar : a shift in trade policy may temporally align with cryptocurrency-price movements without any lexical or ontological sim-ilarity to suggest a connection (Figure 1). Tradi-tional tools—Granger causality (Granger, 1969) or Hawkes processes (Hawkes, 1971)—assume linear-ity or low-noise environments and struggle on non-stationary event-driven signals (Shojaie and Fox, 2022; Jaisson and Rosenbaum, 2015). Modern al-1
+
+> arXiv:2606.15448v1 [cs.IR] 13 Jun 2026
+
+ternatives are no better fit: deep forecasting models assume a shared latent space or predefined rela-tional structure (well-suited to homogeneous sys-tems like traffic networks (Li et al., 2018), less so for heterogeneous events (Lim and Zohren, 2021)), while temporal knowledge graph methods (Goel et al., 2020; Han et al., 2021; Cai et al., 2023) em-bed all entities into a unified space, risk collapsing structurally distinct signals, and typically assume stable dynamics (Kazemi et al., 2020; Trivedi et al., 2019). 
+
+Connecting events with a social temporal graph and causal fusion . In this work, we present Event-Connector , a temporal graph framework for discov-ering and modeling dynamic dependencies between social events based on their evolving time series. Our method constructs a data-driven social tem-poral graph in which nodes represent individual events and edges encode localized, statistically sig-nificant relationships derived from short-term co-fluctuation and lead-lag inference. To exploit com-plementary causal structure that pure co-fluctuation may miss, we additionally introduce EC-Fusion :a parallel directed graph GGC built from pairwise Granger-causality tests is combined with the EC graph through an adaptive, graph-quality-aware mixing weight. Together, the two graphs form a structurally and causally aware retriever that sur-faces non-obvious cross-domain associations, sup-ports multi-hop reasoning over indirect chains of dependency, and provides inductive bias to any downstream forecasting architecture without modi-fying its training procedure. 
+
+Key contributions . We make four contributions. (i) We formalize the social temporal graph and an inductive retrieval pipeline (anchor selection 
+
+→ multi-hop BFS expansion → training-window augmentation) that decouples retrieval from the forecasting model. (ii) We propose EC-Fusion , an adaptive fusion of the co-fluctuation graph with a Granger-causal graph, parameterized by a graph-quality-aware mixing weight α that requires no per-query tuning at inference. (iii) We introduce a hybrid anchor that combines price- and text-based similarity and quantitatively dominates either modality alone. (iv) We evaluate on two datasets (Polymarket and Kalshi) and nine forecasting archi-tectures across three random seeds, demonstrating that EC-Fusion is the best non-oracle method on 
+
+17 /18 model–dataset pairs and that its retrievals are almost entirely disjoint from those of text-similarity baselines (mean Jaccard 0.016 ; 70% of queries have zero question overlap), evidencing comple-mentary signal that text retrieval cannot recover. 
+
+2 Related Works 
+
+Time-series event modeling . Classical techniques like Dynamic Time Warping (DTW) (Berndt and Clifford, 1994), local correlation tracking (Pa-padimitriou et al., 2006), and BRAID (Sakurai et al., 2005) align or group time series based on transient or lagged patterns. Matrix profile meth-ods (Yeh et al., 2016) efficiently detect similar or anomalous subsequences. Directional depen-dencies are modeled through high-dimensional Granger causality (Arnold et al., 2007) and lead-lag networks (Bennett et al., 2022). Point-process models like multidimensional Hawkes processes capture self-/cross-exciting dynamics (Zhou et al., 2013). Deep forecasting models (e.g., LSTNet (Lai et al., 2018)) leverage convolutional and recur-rent layers for multiscale temporal dependencies. These approaches inform EventConnector’s use of co-fluctuation and causality for graph construction. 
+
+Society system modeling and social event fore-casting . Foundational models—DeGroot averag-ing (DeGroot, 1974), threshold-based diffusion (Granovetter, 1978), and bounded-confidence dy-namics (Hegselmann and Krause, 2002)—explain macro patterns from individual behavior. Data-driven systems such as EMBERS (et al., 2014), spatio-temporal forecasting (Zhao et al., 2015), and nested MIL (Ning et al., 2016) infer emergent trends from open signals. Evolving event-context graphs (Deng et al., 2019) further capture event interplay. Earlier social event forecasting methods used social media and statistical signals (e.g., scan statistics (Chen and Neill, 2014), cascade models (Cadena et al., 2015)) to forecast unrest. Temporal event chains (Radinsky et al., 2012) and entity-centric graph models (Deng et al., 2019, 2020; Li et al., 2021) incorporate cause-effect and multi-modal dynamics. EventConnector builds on these ideas, defining a temporal event graph grounded in co-fluctuation and lead-lag signals for structure-aware forecasting. 
+
+Temporal graphs . Temporal GNNs like TGAT (Xu et al., 2020), DySAT (Sankar et al., 2020), Know-Evolve (Trivedi et al., 2017), and DyRep (Trivedi et al., 2019) embed evolving node rela-tions via time-aware attention or event-driven dy-2namics. Message-passing models like TeMP (Wu et al., 2020) propagate over time-stamped knowl-edge graphs. EventConnector differs by defining temporal edges from time-series co-fluctuation and directional influence, enabling both inductive re-trieval and forecasting. 
+
+Retrieval augmentation and score fusion . Re-trieval augmentation grounds parametric mod-els in non-parametric memory, with origins in open-domain QA (DPR, ColBERT (Karpukhin et al., 2020; Khattab and Zaharia, 2020)) and retrieval-augmented generation (Lewis et al., 2020), and recent extensions to time-series forecast-ing (Woo et al., 2024) and temporal knowledge-graph QA (Qian et al., 2024). A parallel line of work on hybrid sparse–dense retrieval has shown that combining a dense encoder (e.g., SBERT (Reimers and Gurevych, 2019)) with a classical lexical retriever (BM25 (Robertson and Zaragoza, 2009)) via Reciprocal Rank Fusion (Cor-mack et al., 2009) outperforms either signal alone. EC-Fusion is an analogue of this design pattern in the temporal domain: the EC graph captures lo-cal co-fluctuation (analogous to dense match) and the Granger graph captures asymmetric predictive structure (analogous to a complementary causal signal). Unlike RRF, our mixing weight α is com-puted from structural diagnostics of the retriever, so the fusion adapts to dataset characteristics without requiring a held-out tuning set. 
+
+3 Background 
+
+Prediction markets as a data source . Predic-tion markets aggregate dispersed information into collective forecasts about uncertain future out-comes (Wolfers and Zitzewitz, 2004), with market-implied prices interpretable as consensus probabil-ities that have outperformed traditional polling in U.S. election forecasting (Rothschild, 2009). We use two complementary platforms: Polymarket , a cryptocurrency-funded market dominated by pol-itics, elections, and crypto questions, and Kalshi ,a CFTC-regulated U.S. exchange with a more di-verse mix of economic, policy, and entertainment outcomes. The two differ in scale and market struc-ture, making a method that succeeds on both more credibly capturing event dynamics than platform-specific behavior. 
+
+Social events . We denote by E = {e1, e 2, . . . , e N }
+
+a collection of real-world social events , where each event ei corresponds to a temporally evolving ques-tion or proposition about the world (e.g., “Will a political candidate win the election?” or “Will Bit-coin reach $40,000 by next month?”). Formally, we define a social event as a tuple 
+
+e = ( q, O), (1) where q is a future-uncertain question and O =
+
+{o1, . . . , o K } is a set of K mutually exclusive outcomes. Each outcome ok ∈ O is associated with a probability time series {pk(t)}Tt=1 , with 
+
+pk(t) ∈ [0 , 1] denoting the market-implied proba-bility of ok at time step t. Outcome probabilities are normalized at each timestamp: PKk=1 pk(t) = 1 
+
+for all t ∈ { 1, . . . , T }. The trajectory {pk(t)} thus serves as an indirect, behaviorally grounded obser-vation of the event itself: it encodes how public belief about ok shifts over time in response to cam-paign events, polling results, media coverage, price action, or macroeconomic signals. 
+
+Connections between social events . Two events 
+
+ei and ej are connected when their belief trajecto-ries exhibit statistically meaningful co-evolution— synchronized fluctuations, lead–lag alignment, or recurring directional response—irrespective of top-ical or lexical similarity between qi and qj . Discov-ering and exploiting these belief-dynamics-based connections is the task this paper addresses. 
+
+4 Problem Formulation 
+
+Forecasting objective . Given the historical be-lief trajectories {pk(1) , . . . , p k(T )} for each out-come k ∈ { 1, . . . , K } of a query event eq, the forecasting objective is to predict the next H val-ues {pk(T + 1) , . . . , p k(T + H)}. This is a multi-horizon time-series prediction problem: anticipate the evolution of collective belief under ongoing information flow. The formulation is platform-agnostic: any prediction market that records belief-evolving probabilities for mutually exclusive out-comes admits the same definition. We instantiate it on two platforms (Polymarket and Kalshi) with disjoint event sets, building one social temporal graph per dataset; no cross-platform information is shared between graphs. 
+
+Temporal graph . A temporal graph is a tuple 
+
+GT = (V, ET ) where V is a set of nodes and 
+
+ET ⊆ V × V × R+ is a set of time-stamped edges. Each edge (u, v, t ) ∈ E T indicates an interaction between nodes u and v active at time t (or over an interval). Unlike static graphs, GT encodes when 
+
+connections occur, supporting analysis of causality, 3Table 1: Social Temporal Graph statistics (built from a                          
+
+> NSTG =500 subsample, τcorr =0 .7, max 5 edges/node).
+> Metric Polymarket Kalshi
+> Canonical nodes (post-merge) 155 190 Edges 612 684 Density 0.051 0.038 Avg. degree 7.90 7.20 Max degree 24 18 Connected components 11Co-fluctuation edges 597 (97.5%) 684 (100.0%) DTW enrichment edges 15 (2.5%) 0 (0.0%) Mean edge weight 0.971 0.968 Synchronous edges (lag = 0 )28.1% 27.0%
+
+influence propagation, and dynamic neighborhood evolution. 
+
+Social temporal graph . We specialize GT to the social domain: each node vi ∈ V represents a unique social event ei = ( qi, Oi) with its belief-trajectory time series, and each edge (vi, v j , t ) ∈ET encodes a time-specific correlation or influence between two events, inferred from their respective trajectories. This is the formal object on which the EventConnector retriever (Sec. 5) operates. 
+
+Key properties of the social temporal graph .Three properties distinguish GT from semantic or static-graph alternatives. (i) Non-semantic edges: 
+
+edges are induced exclusively from observed co-fluctuation in belief trajectories—synchronous surges, lead–lag alignment, or recurring directional response—rather than from textual similarity be-tween the questions qi, q j . (ii) Cross-domain reach: 
+
+because the edge criterion is behavioral, GT sur-faces latent dependencies that span semantically distant topics (e.g., linking a fiscal-policy event with a cryptocurrency-price event when both re-spond to a common macro shock). (iii) Inductive grounding for downstream tasks: GT provides a relational substrate that supports inductive query handling for unseen events, structured retrieval of training context, and forecast augmentation under sparse supervision. Empirical statistics of the in-stantiated graph on each dataset are summarized in Table 1. 
+
+5 EventConnector: Connecting Events with Social Temporal Graphs 
+
+Our framework operates in three stages: (1) Con-struct the social temporal graph from training events, (2) Retrieve relevant events for a new query via inductive graph search, and (3) Predict by train-ing a forecasting model on the retrieved neighbor-hood. The complete procedure is given in Algo-rithm 1; we describe each stage below. 
+
+5.1 Stage 1: Graph Construction 
+
+Given a pool of N training events, each with a price time series {p(t)}Tt=1 , we construct the Social Tem-poral Graph G = ( V, E) through three sequential steps. 
+
+Step 1: Node Construction via Event Merging .To prevent near-duplicate events (e.g., rephrasings of the same question) from inflating neighborhoods and reducing retrieval diversity, we consolidate them via union-find: for every pair whose full price series exhibit Pearson correlation |r| > τ merge 
+
+(τmerge = 0 .95 ), we merge them into a single canon-ical node that inherits the representative member’s price series. This reduces N raw events to |V| 
+
+canonical nodes. 
+
+Step 2: Co-Fluctuation Edge Construction . For each pair of canonical nodes (vi, v j ), we compute sliding-window Pearson correlation over their price series using a window of size w (default w = 7 for daily data). Let ρ(s) 
+
+> ij
+
+denote the correlation in the window starting at position s. If max s |ρ(s) 
+
+> ij
+
+| >τcorr (we use τcorr = 0 .7), we create a temporal edge (vi, v j ) with weight equal to the maximum observed correlation. We additionally store the lag 
+
+ℓ∗ = arg max ℓ∈[−L,L ] |rxy (ℓ)| (L = 3 ) as edge metadata for downstream lead-lag analyses. 
+
+Step 3: Multi-Hop Enrichment via DTW . Direct co-fluctuation edges may miss events that exhibit similar temporal shapes but with different timing or amplitude. For pairs of canonical nodes not connected by a co-fluctuation edge, we compute the Dynamic Time Warping (DTW) distance be-tween their min-max normalized price series, using a Sakoe-Chiba band constraint for efficiency. If 
+
+dDTW (vi, v j ) < τ DTW (default τDTW = 1 .5), we add a second-order enrichment edge with weight 
+
+1 − dDTW /τ DTW . This step captures transitive tem-poral dependencies that complement the direct co-fluctuation structure. 
+
+Subsampling for Tractability . Edge construction is O(N 2), so we build the STG on a uniformly subsampled set of NSTG = 500 records per dataset; retrieval at inference time expands BFS over the re-sulting canonical-node graph, and retrieved indices are mapped back to all merged member records before forecasting. 45.2 Stage 2: Inductive Retrieval 
+
+Given a new query event eq with input prices 
+
+{pq(t)}Tin 
+
+> t=1
+
+, the retrieval stage maps it onto the graph and collects relevant training events. Cru-cially, only the input portion of the query’s price series is used for anchor selection, preventing data leakage from the prediction target. 
+
+Anchor Selection . The anchor node v∗ is selected by maximizing a hybrid score that combines a price-correlation term with an SBERT (Reimers and Gurevych, 2019) textual similarity: score (v) = (1 − β) · | r(pq, p v)| + β · cos( ϕ(qq), ϕ (qv)) , where 
+
+ϕ(·) is the SBERT all-MiniLM-L6-v2 encoder. We use β = 0 .3 (70% price, 30% text) throughout, which empirically dominates either modality alone. 
+
+BFS Neighborhood Expansion . Starting from the anchor v∗, we perform breadth-first search up to n
+
+hops (default n = 2 ) on G. Each visited node is scored by the minimum edge weight along the path from the anchor (bottleneck path weight), ensuring that weakly connected nodes receive lower scores even if they are nearby in hop distance. 
+
+Candidate Ranking . All training records mapped to the visited canonical nodes (including merged records) are ranked by their canonical node’s BFS score. The top-k records are returned as the re-trieved training set. 
+
+5.3 Stage 2b: EC-Fusion — Adaptive Granger-Causal Fusion 
+
+The co-fluctuation graph captures synchronous and lagged correlations, but may miss purely causal 
+
+relationships where one event’s past values pre-dict another’s future without exhibiting similar price shapes. To address this, we introduce EC-Fusion , which adaptively combines EventConnec-tor’s graph-based retrieval with a complementary Granger-causal retrieval signal. The full procedure is given in Algorithm 1. 
+
+Granger Causality Graph . We construct a sepa-rate directed graph GGC where an edge (vi → vj )
+
+exists if vi Granger-causes vj at significance level 
+
+p < 0.05 , tested via an F-test over lags {1, . . . , L }
+
+(L = 3 ). The graph is built over event-level ag-gregated price series (concatenating all training windows per unique event) for sufficient statistical power, and we cap the Granger graph at the first 
+
+NGC = 100 event-aggregated series to keep the 
+
+O(N 2) pairwise testing tractable; the EC graph G
+
+is unaffected and spans all canonical nodes. 
+
+Algorithm 1 EC-Fusion retrieval                                                        
+
+> Require: query eq, training events E, budget k
+> One-time, before all queries:
+> 1: Build STG GTfrom E(merge, co-fluctuation edges, DTW enrichment) 2: Build Granger graph GGC from E(F-test, p < 0.05 )3: Compute graph quality qand set α=σ(8( q−0.55))
+> within [αmin , α max ]
+> Per query:
+> 4: Hybrid anchor v∗←arg max v(1 −β)|r(pq, p v)|+
+> βcos( ϕ(qq), ϕ (qv))
+> 5: EC scores sEC via bottleneck BFS from v∗on GT
+> 6: Granger scores sGC via reciprocal rank on GGC
+> 7: Fuse s=αˆsEC + (1 −α) ˆ sGC (min-max normalized) 8: return top-krecords by s
+
+Adaptive α Selection . The mixing weight α is derived from a graph-quality score q ∈ [0 , 1] com-puted from four diagnostics of G: dead-series ratio 
+
+(fraction of nodes with near-zero variance), density 
+
+(over-connected ⇒ noisy), merge rate (high ⇒ re-dundant; the most heavily weighted signal), and 
+
+average degree ; the exact weighted combination is given in Appendix A.4. We then map q to α via a sigmoid: 
+
+α = αmin + ( αmax − αmin ) · σ(8( q − 0.55)) (2) with αmin = 0 .2, αmax = 0 .8. Clean graphs re-ceive higher α (trusting EC); noisier graphs receive lower α (leaning on Granger). 
+
+5.4 Stage 3: Forecasting with Retrieved Context 
+
+For each of the top-k retrieved events ei, we ex-tract non-overlapping sliding windows (x, y ) from its price series (with x the input segment and y
+
+the prediction target) and add them to the training set. The base forecasting model is then trained on these augmented samples with early stopping on a held-out validation split. Because retrieval is fully decoupled from the architecture, EventConnector plugs into any time-series forecaster. 
+
+6 Experimental Settings 
+
+Datasets . We evaluate on two real-world predic-tion market datasets from SWM-Bench (Yu et al., 2026): Polymarket , a cryptocurrency-based plat-form spanning politics, elections, cryptocurrency, and other topics; and Kalshi , a CFTC-regulated U.S. exchange covering economics, politics, enter-tainment, and other topics. Both datasets provide event-level probability time series at daily resolu-tion. We use a non-overlapping sliding window strategy with Tin = 10 input timesteps and H = 7 
+
+5Table 2: Dataset statistics. Unique events count distinct market questions. Polymarket spans 2022-11 to 2026-01; Kalshi spans 2024-05 to 2025-12.                
+
+> Statistic Polymarket Kalshi
+> Training windows 9,803 2,779 Test windows 3,692 1,120 Unique training events 973 627 Unique test events 515 360 Top categories Politics, Politics, (# train windows) Election, Entertainment, Crypto Economics
+
+prediction horizon (i.e., 10 days of history → 7days of forecast). Per-dataset statistics are summa-rized in Table 2. 
+
+Forecasting Models . We evaluate nine represen-tative architectures spanning linear, MLP, Trans-former, and CNN families: DLinear (Zeng et al., 2023), N-BEATS (Oreshkin et al., 2019), Times-Net (Wu et al., 2023), PatchTST (Nie et al., 2023), 
+
+iTransformer (Liu et al., 2024), Informer (Zhou et al., 2021), Autoformer (Wu et al., 2021), 
+
+TSMixer (Chen et al., 2023), and TiDE (Das et al., 2023). All models use publicly available implemen-tations with hyperparameters tuned on a held-out validation set. Detailed model descriptions appear in Appendix A. 
+
+Retrieval Baselines . We compare EC-Fusion against five retrieval strategies: (1) Few-Shot :
+
+k randomly sampled training events (minimal context); (2) TimeSeries : k-nearest neighbors by DTW distance over full price trajectories; (3) Semantic : k-nearest by SBERT (Reimers and Gurevych, 2019) cosine similarity on event ques-tion text; (4) BM25 (Robertson and Zaragoza, 2009): k-nearest by BM25 lexical overlap on ques-tions; (5) Category : k events from the same do-main/category. We additionally include EventCon-nector (price-only anchor, no Granger fusion) and 
+
+EC-Hybrid (hybrid anchor and output scoring, no Granger) as design-ablation baselines; Full-Shot 
+
+trains on all available in-domain data and serves as an oracle upper bound. 
+
+Evaluation Protocol . All experiments are re-peated over 3 random seeds (42, 123, 7). We re-port mean ±std RMSE and MAE. For EC-Fusion, we select the best fusion weight α per seed from 
+
+{0.0, 0.3, 0.5, 0.7, 1.0, adaptive } based on valida-tion RMSE, then report the test-set performance at that α. The main results, including the new mean ±std Table 3, are presented in Section 7. 
+
+7 Experimental Results 
+
+Table 3 presents the main results across 9 forecast-ing models and 2 datasets, averaged over 3 random seeds. We highlight three key findings. 
+
+EC-Fusion consistently achieves the best retrieval-based performance . On Polymarket, EC-Fusion achieves the lowest RMSE on all 9 models, with particularly strong improvements on iTransformer (0.0660 vs. second-best EventCon-nector at 0.0740, a 10.9% reduction) and Auto-former (0.0765 vs. TimeSeries at 0.0811, 5.6%). On Kalshi, EC-Fusion wins on 8 of 9 models by RMSE, losing only to EC-Hybrid on Autoformer by a narrow margin. Across both datasets and all 18 model–dataset pairs, EC-Fusion achieves the lowest non-oracle RMSE in 17 out of 18 cases (94.4%) . Statistical significance via paired t-tests (Holm–Bonferroni corrected across the 8 compara-ble baselines, n=18 paired observations) shows that EC-Fusion’s improvement is significant at 
+
+p < 0.01 over every comparable baseline. 
+
+EC-Fusion narrows the gap to Full-Shot train-ing . Despite using only retrieved subsets of the training data, EC-Fusion nearly matches the oracle Full-Shot baseline ( −3.27% mean RMSE gap). On Polymarket, EC-Fusion closes 98 .8% of the Few-Shot-to-Full-Shot gap using only 14 .4% of the full training pool (1,203 vs. 8,333 samples). On Kalshi, it closes 97 .9% using 29 .1% of the data (687 vs. 2,363 samples). This demonstrates that targeted, graph-guided retrieval is substantially more data-efficient than exhaustive training. 
+
+8 Discussion 
+
+We organize the discussion around four questions that probe the design choices behind EC-Fusion. Each is grounded in the multi-seed evaluation in-troduced above; numbers cited below are means across 18 (dataset, model) cells with three seeds per cell unless noted otherwise. 
+
+RQ1: Why do text-based retrieval baselines underperform despite finding “similar” events? 
+
+The aggregate numbers in Table 3 understate why 
+
+text-based retrieval fails: even when its top-k
+
+events look textually relevant, the retrieved set is dominated by near-duplicate rephrasings rather than predictively informative neighbors. On 200 sampled Polymarket queries at k=20 , Semantic retrieval surfaces only 4.8 unique questions per 6Table 3: Forecasting performance (RMSE ±std , lower is better). Mean over 3 seeds (42, 123, 7). Bold = best non-oracle retrieval method by mean RMSE; underline = second best. EC-Fusion attains the lowest mean RMSE on all 18 (model, dataset) cells; the improvement is statistically significant at p < 0.01 (Holm–Bonferroni) on 17 /18 
+
+cells. 
+
+Baselines Ours Oracle 
+
+Model Few-Shot TimeSeries Semantic BM25 Category EC-Fusion Full-Shot POLYMARKET 
+
+DLinear .193 ±.032 .068 ±.001 .085 ±.005 .078 ±.001 .191 ±.013 .064 ±.000 .064 ±.000 
+
+N-BEATS .121 ±.012 .070 ±.001 .072 ±.002 .067 ±.000 .134 ±.026 .065 ±.000 .065 ±.000 
+
+TimesNet .082 ±.009 .070 ±.001 .072 ±.001 .072 ±.003 .082 ±.004 .066 ±.001 .063 ±.000 
+
+PatchTST .127 ±.018 .079 ±.002 .084 ±.004 .082 ±.005 .166 ±.014 .072 ±.001 .071 ±.001 
+
+iTransformer .130 ±.060 .078 ±.004 .081 ±.003 .074 ±.001 .156 ±.032 .066 ±.001 .065 ±.001 
+
+Informer .152 ±.077 .069 ±.002 .064 ±.000 .066 ±.001 .117 ±.026 .064 ±.001 .064 ±.000 
+
+Autoformer .534 ±.395 .081 ±.002 .092 ±.004 .083 ±.002 .397 ±.175 .076 ±.002 .065 ±.000 
+
+TSMixer .092 ±.009 .069 ±.002 .069 ±.001 .069 ±.001 .080 ±.002 .065 ±.000 .063 ±.000 
+
+TiDE .101 ±.013 .075 ±.007 .080 ±.003 .071 ±.001 .097 ±.013 .066 ±.000 .063 ±.000 
+
+KALSHI 
+
+DLinear .211 ±.034 .092 ±.002 .100 ±.001 .095 ±.002 .141 ±.001 .088 ±.000 .087 ±.000 
+
+N-BEATS .123 ±.007 .092 ±.001 .089 ±.000 .090 ±.001 .094 ±.001 .088 ±.001 .088 ±.000 
+
+TimesNet .108 ±.003 .095 ±.002 .092 ±.001 .096 ±.001 .098 ±.002 .090 ±.001 .089 ±.000 
+
+PatchTST .156 ±.032 .105 ±.004 .101 ±.000 .103 ±.002 .121 ±.017 .098 ±.001 .098 ±.002 
+
+iTransformer .133 ±.004 .101 ±.001 .097 ±.003 .100 ±.004 .114 ±.006 .092 ±.001 .091 ±.003 
+
+Informer .118 ±.012 .092 ±.001 .090 ±.001 .091 ±.003 .120 ±.023 .088 ±.001 .088 ±.000 
+
+Autoformer .453 ±.209 .113 ±.004 .115 ±.003 .125 ±.008 .157 ±.014 .109 ±.003 .096 ±.007 
+
+TSMixer .110 ±.002 .092 ±.000 .089 ±.001 .092 ±.002 .093 ±.001 .089 ±.001 .088 ±.000 
+
+TiDE .114 ±.001 .096 ±.003 .093 ±.000 .097 ±.001 .098 ±.004 .091 ±.001 .089 ±.000 
+
+query while EC-Fusion surfaces 17 .6 (a 3.7× di-versity gain), and the two retrieved sets are al-most entirely disjoint (mean Jaccard 0.016 ; 70% 
+
+zero overlap). Appendix A.6 (Figure 4) gives the per-query enumeration on a representative Crypto query. The other text-based baselines fail for adja-cent reasons: BM25 inherits Semantic’s lexical bias without the embedding-space generalization; Cat-egory collapses retrieval to topic-matched events with no temporal grounding; Few-Shot ignores the query entirely. Time-series retrieval avoids the tex-tual echo chamber but, by relying on full-trajectory DTW alignment, dilutes localized lead-lag depen-dencies that the social temporal graph preserves. 
+
+RQ2: How much does each design component contribute? 
+
+EC-Fusion combines three design ingredients ab-sent from the original EventConnector formulation: a (i) hybrid anchor that mixes price- and text-based query mapping ( β=0 .3), (ii) hybrid out-put scoring that ranks BFS-retrieved candidates by a graph +text score, and (iii) Granger fusion 
+
+that combines the EC graph with a complementary Granger-causal graph. To attribute the headline improvement to each, we use a cumulative abla-tion already present in Table 3: EventConnector 
+
+(price-only anchor, no text scoring, no Granger) →
+
+EC-Hybrid (hybrid anchor and output scoring, no Granger) → EC-Fusion (full method). The bulk of EC-Fusion’s improvement over 
+
+EventConnector comes from the hybrid anchor and output scoring: at k=10 , EventConnector 
+
+attains a mean RMSE of 0.0942 across the 18 cells, EC-Hybrid reduces this to 0.0859 (−8.8% ), and EC-Fusion reaches 0.0824 (−4.1% on top of 
+
+EC-Hybrid , −12 .5% overall). The hybrid compo-nents dominate the lift, with Granger fusion pro-viding a smaller but consistent additional reduc-tion. Examining the Granger contribution in isola-tion reinforces this: comparing pure-EC ( α=1 .0)against pure-Granger ( α=0 .0) and the adaptive Fu-sion across the 18 main-table cells, pure-EC wins 
+
+8/18 cells, Fusion wins 7/18 , and pure-Granger wins 3/18 . On Polymarket Fusion ties pure-EC (0.0686 vs. 0.0686 , within seed noise); on Kalshi Fusion improves over pure-EC by 0.23% and over pure-Granger by 1.0% . The takeaway is design-economical: the hybrid anchor and output scoring are the load-bearing additions, while Granger fu-sion functions as a complementary safety net that rarely hurts and consistently helps on the noisier of 7EventConnector EC-Hybrid EC-Fusion 
+
+> 0.080
+> 0.084
+> 0.088
+> 0.092
+> 0.096
+> Mean RMSE ( k = 10)  0.0942
+> 0.0859
+> 0.0824
+
+Figure 2: RQ2: cumulative ablation. Mean RMSE at 
+
+k=10 across 18 (dataset, model) cells. Adding the hy-brid anchor and output scoring (EventConnector → EC-Hybrid) accounts for the bulk of the gain ( −8.8% ); Granger fusion (EC-Hybrid → EC-Fusion) contributes a smaller but consistent additional reduction ( −4.1% ), for a total improvement of −12 .5% .
+
+the two datasets. 
+
+RQ3: How does the retrieval set size k affect EC-Fusion’s advantage? 
+
+We sweep the retrieval budget k ∈ { 5, 10 , 50 }
+
+over all 18 cells and compare EC-Fusion against the strongest comparable baseline at each setting. EC-Fusion’s advantage is largest in the small-k
+
+regime where retrieval quality matters most and converges to other methods as k grows: at k=5 
+
+it reduces mean RMSE by 7.78% over the next-best baseline (TimeSeries, 0.0836 vs. 0.0906 ); at 
+
+k=10 the gap shrinks to 4.06% (vs. EC-Hybrid, 
+
+0.0824 vs. 0.0859 ); at k=50 it collapses to 0.16% 
+
+(vs. EventConnector, 0.0816 vs. 0.0818 ). The im-plication for practice is that EC-Fusion is most valu-able in the budget-constrained regime—few-shot or low-compute deployments—which is precisely the regime where retrieval-augmented forecasting matters most. 
+
+RQ4: Can the fusion weight α be set automatically without a hyperparameter sweep? 
+
+Sweeping a fixed α ∈ { 0.0, 0.3, 0.5, 0.7, 1.0} on a held-out validation set imposes a 5× compute multiplier per dataset, and the resulting choice may not transfer. Our adaptive scheme derives α deter-ministically from four structural diagnostics of the EC graph (§5.3), so α becomes a function of the constructed graph rather than a tuned hyperparam-eter. Across all 18 cells, the best fixed α is α=1 .05 10 50   
+
+> Retrieval budget k(log scale)
+> 0.080
+> 0.084
+> 0.088
+> 0.092
+> Mean RMSE
+> EC-Fusion
+> Strongest baseline
+
+Figure 3: RQ3: retrieval budget sweep. Mean RMSE of EC-Fusion vs. the strongest comparable baseline at each k (TimeSeries at k=5 , EC-Hybrid at k=10 , Event-Connector at k=50 ). EC-Fusion’s relative advantage shrinks from −7.78% at k=5 to −4.06% at k=10 and 
+
+−0.16% at k=50 : the method is most valuable in the budget-constrained regime where retrieval quality mat-ters most. 
+
+(mean RMSE 0.0812 ); the adaptive scheme at-tains 0.0811 , matching the best post-sweep choice while skipping the sweep entirely, and is within 
+
+1.22% of an oracle that tunes α per (dataset, model, seed) cell. The per-cell-optimal α is genuinely heterogeneous and dataset-dependent: on Kalshi the optimum concentrates at α=1 .0 (13 /27 cells), while on Polymarket it shifts toward α=0 .0/0.3
+
+(15 /27 cells combined), and the adaptive scheme tracks this shift through the graph-quality score (Polymarket q ≈ 0.50 ⇒ α ≈ 0.35 ; Kalshi 
+
+q ≈ 0.67 ⇒ α ≈ 0.62 ) without any per-dataset re-tuning. Adaptive α is therefore best framed as an operational contribution: it converts a hyper-parameter that must otherwise be swept on every new dataset into a quantity computable from the constructed graph alone, with negligible accuracy loss. This automatic cross-platform adaptation also indicates that the framework’s inductive bias is not Polymarket-specific. 
+
+9 Conclusion 
+
+We introduce EventConnector and its adaptive ex-tension EC-Fusion for forecasting public opinion via retrieval over a social temporal graph. Across two prediction-market benchmarks (Polymarket, Kalshi), nine forecasting architectures, and three random seeds, EC-Fusion is the best non-oracle method on 17 /18 model–dataset pairs. 8Limitations 
+
+Our framework is evaluated on two English-language prediction-market benchmarks (Polymar-ket and Kalshi) at daily resolution, and the re-sults should be interpreted within that scope; ex-tension to non-English markets, higher-frequency settings, or alternative collective-belief platforms (e.g., regulated futures or social-media sentiment indices) would require additional validation. Graph construction and pairwise Granger testing have quadratic time complexity in the number of events, which we address by subsampling; scaling to sub-stantially larger event pools would benefit from ap-proximate or learned neighborhood selection. As with other retrieval-augmented forecasters, perfor-mance during abrupt regime shifts (e.g., breaking news or market interventions) is bounded by the temporal coverage of the underlying training graph. Finally, the framework operates over aggregate mar-ket signals and is not intended to model individual trader behavior or to provide actionable financial advice. 
+
+Ethics Statement 
+
+Data . Our experiments use only aggregate, market-implied probability time series from two publicly accessible prediction markets, Polymarket and Kalshi. The data contain no personally identifi-able information; no private accounts, private order books, or individual user behavior were accessed. 
+
+Intended use . EC-Fusion forecasts the trajectory of collective belief about future events; it is not designed to predict or generate content about indi-viduals. While improved forecasting can support policy planning and risk assessment, we discourage deployments that would violate platform terms of service or applicable financial regulations. 
+
+References 
+
+Andrew Arnold, Yan Liu, and Naoki Abe. 2007. Tem-poral causal modeling with graphical granger meth-ods. In ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 66– 75. Stefanos Bennett, Mihai Cucuringu, and Gesine Rein-ert. 2022. Lead–lag detection and network cluster-ing for multivariate time series. Machine Learning ,111(8):4497–4538. Janik-Vasily Benzin and Stefanie Rinderle-Ma. 2023. A survey on event prediction methods from a systems perspective: Bringing together disparate research ar-eas. ACM Computing Surveys .David J. Berndt and James Clifford. 1994. Using dy-namic time warping to find patterns in time series. In AAAI-94 Workshop on Knowledge Discovery in Databases (KDD) , pages 359–370. Jose Cadena, Gizem Korkmaz, Chris J. Kuhlman, Achla Marathe, Naren Ramakrishnan, and Anil Vullikanti. 2015. Forecasting social unrest using activity cas-cades. PLOS ONE , 10(6):e0128879. Borui Cai, Yong Xiang, Longxiang Gao, He Zhang, Yunfeng Li, and Jianxin Li. 2023. Temporal knowl-edge graph completion: A survey. Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence , pages 6545–6553. Fanglan Chen and Daniel B. Neill. 2014. Non-parametric scan statistics for event detection and fore-casting in heterogeneous social media graphs. In 
+
+ACM SIGKDD .Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, and Tomas Pfister. 2023. TSMixer: An all-MLP architecture for time series forecasting. Trans-actions on Machine Learning Research .Gordon V. Cormack, Charles L. A. Clarke, and Stefan Büttcher. 2009. Reciprocal rank fusion outperforms Condorcet and individual rank learning methods. In 
+
+Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Infor-mation Retrieval (SIGIR) , pages 758–759. Abhimanyu Das, Weihao Kong, Andrew Leach, Shaan K. Mathur, Rajat Sen, and Rose Yu. 2023. Long-term forecasting with TiDE: Time-series dense encoder. Transactions on Machine Learning Re-search .Morris H. DeGroot. 1974. Reaching a consensus. 
+
+Journal of the American Statistical Association ,69(345):118–121. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2019. Learning dynamic context graphs for predict-ing social events. In Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , pages 1007–1016. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2020. Dynamic knowledge graph based multi-event forecasting. In Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , pages 1585–1595. Naren Ramakrishnan et al. 2014. ’beating the news’ with embers: Forecasting civil unrest using open source indicators. In ACM SIGKDD International Conference on Knowledge Discovery and Data Min-ing , pages 1799–1808. 
+
+9Rishab Goel, Seyed Mehran Kazemi, Marcus Brubaker, and Pascal Poupart. 2020. Diachronic embedding for temporal knowledge graph completion. In Proceed-ings of the AAAI Conference on Artificial Intelligence ,volume 34, pages 3988–3995. Clive W. J. Granger. 1969. Investigating causal relations by econometric models and cross-spectral methods. 
+
+Econometrica , 37(3):424–438. Mark Granovetter. 1978. Threshold models of col-lective behavior. American Journal of Sociology ,83(6):1420–1443. Zhen Han, Peng Chen, Yunpu Ma, and Volker Tresp. 2021. Explainable subgraph reasoning for forecast-ing on temporal knowledge graphs. In International Conference on Learning Representations (ICLR) .Alan G. Hawkes. 1971. Spectra of some self-exciting and mutually exciting point processes. Biometrika ,58(1):83–90. Rainer Hegselmann and Ulrich Krause. 2002. Opinion dynamics and bounded confidence: Models, analysis and simulation. Journal of Artificial Societies and Social Simulation , 5(3):2. Toan Luu Duc Huynh. 2021. Does bitcoin react to trump’s tweets? Journal of Behavioral and Experi-mental Finance , 31:100546. Thibault Jaisson and Mathieu Rosenbaum. 2015. Limit theorems for nearly unstable Hawkes processes. The Annals of Applied Probability , 25(2):600–631. Vladimir Karpukhin, Barlas O˘ guz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih. 2020. Dense passage retrieval for open-domain question answering. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 6769–6781. Seyed Mehran Kazemi, Rishab Goel, Kshitij Jain, Ivan Kobyzev, Akshay Sethi, Pascal Poupart, and Marcus Brubaker. 2020. Representation learning for dynamic graphs: A survey. In Journal of Machine Learning Research , volume 21, pages 1–73. Harold H Kelley and John W Thibaut. 1959. The social psychology of groups. In The social psychology of groups . John Wiley & Sons. Omar Khattab and Matei Zaharia. 2020. ColBERT: Efficient and effective passage search via contextu-alized late interaction over BERT. In Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR) , pages 39–48. Guokun Lai, Wei-Cheng Chang, Yiming Yang, and Hanxiao Liu. 2018. Modeling long- and short-term temporal patterns with deep neural networks. In In-ternational ACM SIGIR Conference on Research and Development in Information Retrieval , pages 95–104. Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Hein-rich Küttler, Mike Lewis, Wen-tau Yih, Tim Rock-täschel, Sebastian Riedel, and Douwe Kiela. 2020. Retrieval-augmented generation for knowledge-intensive NLP tasks. In Advances in Neural Informa-tion Processing Systems (NeurIPS) .Yaguang Li, Rose Yu, Cyrus Shahabi, and Yan Liu. 2018. Diffusion convolutional recurrent neural net-work: Data-driven traffic forecasting. In Proceedings of the 6th International Conference on Learning Rep-resentations (ICLR) .Zixuan Li, Xiaolong Jin, Wei Li, Saiping Guan, Jiafeng Guo, Huawei Shen, Yuanzhuo Wang, and Xueqi Cheng. 2021. Temporal knowledge graph reason-ing based on evolutional representation learning. In 
+
+Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Infor-mation Retrieval , pages 408–417. Bryan Lim and Stefan Zohren. 2021. Time-series fore-casting with deep learning: A survey. Philosophical Transactions of the Royal Society A , 379(2194). Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, and Mingsheng Long. 2024. iTransformer: Inverted transformers are effective for time series forecasting. In International Conference on Learning Representations (ICLR) .Scott A Myers, Chen Zhu, and Jure Leskovec. 2012. Information diffusion and external influence in net-works. In Proceedings of the 18th ACM SIGKDD international conference on Knowledge discovery and data mining , pages 33–41. Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. 2023. A time series is worth 64 words: Long-term forecasting with transformers. In 
+
+International Conference on Learning Representa-tions (ICLR) .Yue Ning, Sathappan Muthiah, Huzefa Rangwala, and Naren Ramakrishnan. 2016. Modeling precursors for event forecasting via nested multi-instance learn-ing. In ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 1415– 1424. Boris N Oreshkin, Dmitri Carpov, Nicolas Chapados, and Yoshua Bengio. 2019. N-beats: Neural basis expansion analysis for interpretable time series fore-casting. arXiv preprint arXiv:1905.10437 .Spiros Papadimitriou, Jimeng Sun, and Philip S. Yu. 2006. Local correlation tracking in time series. In IEEE International Conference on Data Mining (ICDM) , pages 456–465. Xinying Qian, Ying Zhang, Yu Zhao, Baohang Zhou, Xuhui Sui, Li Zhang, and Kehui Song. 2024. TimeR 4: Time-aware retrieval-augmented large lan-guage models for temporal knowledge graph question answering. In Proceedings of the 2024 Conference 
+
+10 on Empirical Methods in Natural Language Process-ing (EMNLP) .Kira Radinsky, Krysta Svore, Susan Dumais, Jaime Tee-van, Alex Bocharov, and Eric Horvitz. 2012. Model-ing and predicting behavioral dynamics on the web. In Proceedings of the 21st International Conference on World Wide Web (WWW) , pages 599–608. Nils Reimers and Iryna Gurevych. 2019. Sentence-BERT: Sentence embeddings using Siamese BERT-networks. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 3982–3992. Stephen Robertson and Hugo Zaragoza. 2009. The probabilistic relevance framework: BM25 and be-yond. Foundations and Trends in Information Re-trieval , 3(4):333–389. Everett M Rogers. 2003. Diffusion of innovations . Si-mon and Schuster. David Rothschild. 2009. Forecasting elections: Com-paring prediction markets, polls, and their biases. 
+
+Public Opinion Quarterly , 73(5):895–916. Yasushi Sakurai, Spiros Papadimitriou, and Christos Faloutsos. 2005. Braid: Stream mining through group lag correlations. In ACM SIGMOD Interna-tional Conference on Management of Data , pages 599–610. Aravind Sankar, Yanhong Wu, Liang Gou, Wei Zhang, and Hao Yang. 2020. DySAT: Deep neural rep-resentation learning on dynamic graphs via self-attention networks. In Proceedings of the 13th Inter-national Conference on Web Search and Data Mining (WSDM) , pages 519–527. Ali Shojaie and Emily B. Fox. 2022. Granger causality: A review and recent advances. Annual Review of Statistics and Its Application , 9:289–319. Rakshit Trivedi, Hanjun Dai, Yichen Wang, and Le Song. 2017. Know-evolve: Deep temporal reason-ing for dynamic knowledge graphs. In Proceedings of the 34th International Conference on Machine Learning (ICML) , pages 3462–3471. Rakshit Trivedi, Mehrdad Farajtabar, Prasenjeet Biswal, and Hongyuan Zha. 2019. DyRep: Learning rep-resentations over dynamic graphs. In International Conference on Learning Representations (ICLR) .Ludwig Von Bertalanffy. 1968. General system theory: Foundations, development, applications . George Braziller. Justin Wolfers and Eric Zitzewitz. 2004. Prediction mar-kets. Journal of Economic Perspectives , 18(2):107– 126. Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, and Doyen Sahoo. 2024. Uni-fied training of universal time series forecasting trans-formers. In Proceedings of the 41st International Conference on Machine Learning (ICML) . PMLR. Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng Long. 2023. TimeNet: Tem-poral 2D-variation modeling for general time series analysis. In International Conference on Learning Representations (ICLR) .Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. 2021. Autoformer: Decomposition transform-ers with auto-correlation for long-term series fore-casting. Advances in neural information processing systems , 34:22419–22430. Jiapeng Wu, Meng Cao, Jackie Chi Kit Cheung, and William L. Hamilton. 2020. TeMP: Temporal mes-sage passing for temporal knowledge graph com-pletion. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 5730–5746. Da Xu, Chuanwei Ruan, Evren Korpeoglu, Sushant Ku-mar, and Kannan Achan. 2020. Inductive represen-tation learning on temporal graphs. In International Conference on Learning Representations (ICLR) .Chin-Chia Michael Yeh, Yan Zhu, Liudmila Ulanova, Nurjahan Begum, Yifei Ding, Hoang Anh Dau, Diego F. Silva, Abdullah Mueen, and Eamonn Keogh. 2016. Matrix profile i: All pairs similarity joins for time series. In IEEE International Conference on Data Mining (ICDM) , pages 1317–1322. Haofei Yu, Yining Zhao, Guanyu Lin, and Jiaxuan You. 2026. Building social world models with large lan-guage models. arXiv preprint arXiv:2606.11482 .Ailing Zeng, Muxi Chen, Lei Zhang, and Qiang Xu. 2023. Are transformers effective for time series fore-casting? In Proceedings of the AAAI conference on artificial intelligence , volume 37, pages 11121– 11128. Liang Zhao, Qiuhong Sun, Jieping Ye, Feng Chen, Chang-Tien Lu, and Naren Ramakrishnan. 2015. Multi-task learning for spatio-temporal event fore-casting. In ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 1503–1512. Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang. 2021. Informer: Beyond efficient transformer for long sequence time-series forecasting. In Proceed-ings of the AAAI conference on artificial intelligence ,volume 35, pages 11106–11115. Ke Zhou, Hongyuan Zha, and Le Song. 2013. Learn-ing social infectivity in sparse low-rank networks using multi-dimensional hawkes processes. In In-ternational Conference on Artificial Intelligence and Statistics (AISTATS) , pages 641–649. 
+
+11 A Experiment Details 
+
+A.1 Forecasting Models 
+
+We evaluate nine representative time-series fore-casting architectures. For all models, we use pub-licly available implementations, adhering to the hyperparameter settings recommended in their re-spective publications and tuning on a held-out vali-dation set to ensure a fair comparison. • DLinear (Zeng et al., 2023) is a lightweight and interpretable model based on a seasonal-trend decomposition of the time series. It assumes a linear mapping from the decomposed compo-nents to future values, making it highly efficient and robust, particularly on shorter sequences. • Autoformer (Wu et al., 2021) is a Transformer-based model designed for long-term forecasting. It innovates with an auto-correlation mechanism that replaces traditional self-attention, allowing it to efficiently discover and utilize period-based dependencies in time-series data. • Informer (Zhou et al., 2021) improves the effi-ciency of long-sequence prediction by introduc-ing a ProbSparse self-attention mechanism. This innovation reduces the quadratic complexity of standard Transformers, enabling the fast model-ing of long-range temporal dependencies. • N-BEATS (Oreshkin et al., 2019) is a deep resid-ual forecasting architecture that uses backward and forward fully connected blocks to model tem-poral signals. Its block-based design allows it to learn trend and seasonality patterns in an in-terpretable, non-recurrent fashion with minimal assumptions. • TimesNet (Wu et al., 2023) achieves strong per-formance by integrating frequency-domain and temporal-domain representations. It uses tem-poral 2D variation blocks to capture multi-scale dependencies effectively across a wide range of forecasting tasks. • PatchTST (Nie et al., 2023) treats a univari-ate time series as a sequence of fixed-length patches and applies a vanilla Transformer en-coder over the patch tokens. The patching re-duces sequence length, exposes local temporal structure to self-attention, and supports channel-independent training; it is a strong general-purpose long-horizon baseline. • iTransformer (Liu et al., 2024) inverts the canon-ical Transformer layout for time series: instead of attending across time steps, attention is applied across variates while feed-forward layers oper-ate within each variate’s temporal sequence. This lets the model capture cross-variate dependencies explicitly, which is useful when the prediction-market signal is intrinsically multi-variate (e.g., yes/no probability pairs). • TSMixer (Chen et al., 2023) replaces self-attention entirely with stacked MLPs that alter-nate between time-mixing and feature-mixing layers, yielding a lightweight architecture that of-ten matches or exceeds Transformer-based fore-casters on benchmark tasks at a fraction of the parameter count. • TiDE (Das et al., 2023) is a dense-encoder model that linearly projects the input window plus ex-ogenous covariates into a residual MLP backbone for direct multi-step prediction. It is competitive with recent Transformer-based forecasters while remaining simple to train. 
+
+A.2 Retrieval-based Baselines 
+
+To assess the impact of different retrieval strategies, we benchmark EC-Fusion against the following methods: • Few-Shot Forecasting uses a limited number of training samples from randomly selected, unre-lated events. This baseline represents a minimal-context scenario where the model has little rele-vant historical data. • Semantic Retrieval uses SBERT (all-MiniLM-L6-v2 ) (Reimers and Gurevych, 2019) to embed event question text and ranks training events by cosine similarity to the query embedding. • Time-Series Retrieval identifies nearest-neighbor events by computing the Dynamic Time Warping (DTW) distance over their full time-series trajectories. This method focuses purely on global temporal pattern similarity, ignoring semantic context or localized correlations. • BM25 Retrieval is a classical sparse lexical retriever (Robertson and Zaragoza, 2009) that scores training-event questions against the query question via the standard BM25 formula. We use default parameters ( k1 = 1 .5, b = 0 .75 )12 over a whitespace-tokenized lower-cased cor-pus. BM25 represents a strong, embedding-free text-similarity baseline and is commonly paired with dense retrievers in hybrid systems (Cormack et al., 2009). • Category Retrieval returns the top-k training events that share at least one categorical tag (e.g., 
+
+Politics , Crypto ) with the query event. This baseline tests whether coarse domain matching alone is sufficient, without any text similarity or temporal structure. • EC-Hybrid Retrieval is an ablation of EC-Fusion that uses the hybrid (price + text) anchor and hybrid output scoring of EventConnector 
+
+without the Granger-causal fusion stage. Com-paring EC-Hybrid to EventConnector isolates the contribution of the hybrid components; compar-ing EC-Fusion to EC-Hybrid isolates the con-tribution of the Granger fusion (see Discussion, RQ2). • Full-Shot Forecasting is trained on all available data from the entire domain of the query event. This serves as a practical upper bound or ora-cle, representing an ideal scenario with extensive, high-quality in-domain data. 
+
+Model Size and Computational Budget. 
+
+Adding the four additional forecasting models above and a second dataset (Kalshi) brings the total experimental compute to approximately 700 GPU-hours on a single NVIDIA A6000 (48GB), inclusive of graph construction, hy-perparameter selection, model training, and the 
+
+α-sweep ( α ∈ { 0.0, 0.3, 0.5, 0.7, 1.0}) underlying EC-Fusion’s adaptive selection. All multi-seed experiments (seeds 42, 123, 7) ran without manual intervention or failed cells. 
+
+Experimental Setup and Hyperparameters. 
+
+We adopt a consistent forecasting pipeline using a daily-resolution sliding window with Tin = 10 
+
+input timesteps and H = 7 prediction horizon. For each forecasting model, we perform a grid search over learning rates, batch sizes, and other related hyperparameters. The best-performing configura-tion is selected based on validation RMSE. 
+
+Graph Construction and Visualization Tooling. 
+
+Graph generation, storage, and visualization are implemented using networkx , numpy , and scipy .The Granger graph relies on the statsmodels F-test implementation. The event graph is serialized in JSON format and serves as a backbone for both retrieval and inductive forecasting tasks. 
+
+A.3 Additional Tables A.4 Hyperparameter Summary 
+
+Table 8 consolidates every hyperparameter intro-duced in the methods section. Values were either left at the defaults of the released implementations (for forecasting models) or set once during initial development and kept fixed throughout the multi-seed evaluation. 
+
+Graph-quality score weighting . The adaptive α
+
+in Section 5.3 is computed from the graph-quality score 
+
+q = 0 .15 (1 − ddead ) + 0 .15 (1 − min(2 density , 1)) + 0 .50 (1 − rmerge ) + 0 .20 min( ¯d/ 20 , 1) 
+
+where ddead is the dead-series ratio, rmerge is the merge rate, and ¯d is the average degree. The merge-rate weight (0.50) dominates because the merging step has the largest impact on retrieval diversity. 
+
+A.5 Reproducibility Code and data release . We commit to releas-ing the full source code (graph construction, re-trieval, all baselines, and the multi-seed eval-uation harness), the pre-processed Polymarket and Kalshi window-level datasets, and the per-seed result files used to produce every table and figure in this paper upon acceptance. The re-lease will include the exact shell scripts used to reproduce Table 3 ( run_multiseed_groupA.sh ,
+
+run_multiseed_groupB.sh ) and the analysis scripts that compute the discussion-section num-bers from raw result files. 
+
+Determinism . All experiments fix random seeds for Python ( random ), NumPy, and PyTorch. We report mean ±std across three random seeds (42, 123, 7) for every cell in Table 3. The graph-construction stage is deterministic given a fixed subsampling seed. 
+
+Hyperparameter selection . All forecasting-model hyperparameters were tuned once on a held-out validation split per (model, dataset) combination and frozen for the multi-seed evaluation. The EC-Fusion mixing weight α is either derived from graph diagnostics (adaptive) or selected from a fixed grid (Section 5.3); we do not perform ad-ditional per-query tuning at inference time. 
+
+Computational environment . All experiments were run on a single NVIDIA A6000 GPU (48GB), 13 Table 4: Fusion Component Analysis (Polymarket). We analyze the contribution of each retrieval signal by varying the fusion weight α in score = α · sEC + (1 −α) · sGranger . α=0 uses only Granger-causal scoring; α=1           
+
+> uses only EventConnector graph-based scoring; intermediate values blend both signals. Adaptive selects αfrom graph quality metrics. Neither pure component consistently dominates, motivating the fusion approach. Bold = best among variants. † = fusion beats both pure components ( α=0 and α=1 ). Results on Kalshi appear in Table 5.
+
+## Pure Components Fusion Data-Driven 
+
+## Model Metric α=0 α=1 α=0 .3 α=0 .5 α=0 .7 Adaptive DLinear RMSE 0.0645 0.0646 0.0643 † 0.0643 † 0.0643 † 0.0648 MAE 0.0345 0.0348 0.0340 0.0348 0.0339 † 0.0353 N-BEATS RMSE 0.0682 0.0667 0.0644 † 0.0667 0.0666 0.0704 MAE 0.0437 0.0353 0.0337 † 0.0392 0.0403 0.0480 TimesNet RMSE 0.0655 0.0680 0.0651 † 0.0658 0.0669 0.0672 MAE 0.0299 0.0319 0.0295 † 0.0303 0.0301 0.0307 PatchTST RMSE 0.0731 0.0785 0.0741 0.0727 † 0.0736 0.0733 MAE 0.0442 0.0508 0.0424 0.0395 † 0.0445 0.0446 iTransformer RMSE 0.0740 0.0647 0.0758 0.0760 0.0753 0.0720 MAE 0.0499 0.0343 0.0506 0.0540 0.0477 0.0440 Informer RMSE 0.0634 0.0635 0.0636 0.0659 0.0645 0.0655 MAE 0.0283 0.0279 0.0290 0.0303 0.0294 0.0305 Autoformer RMSE 0.0877 0.0775 0.0799 0.0834 0.0876 0.0841 MAE 0.0609 0.0498 0.0541 0.0525 0.0605 0.0602 TSMixer RMSE 0.0649 0.0653 0.0656 0.0651 0.0648 0.0647 †MAE 0.0292 0.0294 0.0296 0.0293 0.0293 0.0293 TiDE RMSE 0.0687 0.0666 0.0669 0.0672 0.0685 0.0663 †MAE 0.0321 0.0301 0.0310 0.0313 0.0314 0.0302 
+
+Python 3.10, PyTorch 2.5.1+cu124. Total compute is approximately 700 GPU-hours for the full multi-seed sweep. 
+
+A.6 Detailed Case Study: Tempo Token-Launch Query 
+
+This appendix expands the qualitative example ref-erenced in Section 8. The query event is “ Will Tempo launch a token by December 31, 2026? ”(Polymarket Crypto, Tin =10 ). 
+
+What Semantic retrieves . Semantic retrieval re-turns eight near-duplicate questions about other crypto token launches: six near-rephrasings of “Will Berachain launch a token in December?”, “Will Hyperliquid launch a token in December?”, and the query itself — all in the Crypto category. The mean absolute Pearson correlation between the query’s price trajectory and these retrieved events is only 0.486 , indicating that surface-level textual similarity does not translate into useful predictive signal. 
+
+What EC-Fusion retrieves . EC-Fusion retrieves 
+
+zero crypto events. All eight retrievals are U.S. Politics/Election questions (e.g., “Will a Democrat win Nevada US Senate Election?”, “Trump gets more black voters than in 2020?”, “Biden wins the Popular Vote?”), drawn from late-2024 election markets that share a common volatility regime with the query. The mean |r| rises to 0.567 , and several retrievals are strongly anti-correlated ( r= − 0.71 ,
+
+r= − 0.90 ) — equally informative for the down-stream forecasting model. 
+
+Component complementarity within EC-Fusion .The Granger and EC components of EC-Fusion 14 Table 5: Fusion Component Analysis (Kalshi). Same design as Table 4: we vary α in score = α · sEC + (1 −α) ·
+
+sGranger . Adaptive selects α from graph quality metrics. Bold = best among variants. † = fusion beats both pure components ( α=0 and α=1 ). 
+
+## Pure Components Fusion Data-Driven 
+
+## Model Metric α=0 α=1 α=0 .3 α=0 .5 α=0 .7 Adaptive DLinear RMSE 0.0882 0.0888 0.0880 0.0880 0.0883 0.0878 †MAE 0.0478 0.0481 0.0479 0.0477 0.0478 0.0476 †N-BEATS RMSE 0.0882 0.0873 0.0882 0.0886 0.0891 0.0890 MAE 0.0492 0.0478 0.0501 0.0487 0.0492 0.0500 TimesNet RMSE 0.0907 0.0896 0.0918 0.0894 † 0.0898 0.0897 MAE 0.0493 0.0479 0.0500 0.0481 0.0485 0.0482 PatchTST RMSE 0.0989 0.1008 0.0998 0.1030 0.0978 † 0.0995 MAE 0.0584 0.0613 0.0612 0.0637 0.0584 0.0618 iTransformer RMSE 0.0953 0.0906 0.0944 0.0915 0.0976 0.0943 MAE 0.0616 0.0524 0.0592 0.0557 0.0644 0.0611 Informer RMSE 0.0879 0.0892 0.0874 † 0.0881 0.0887 0.0885 MAE 0.0469 0.0483 0.0463 † 0.0468 0.0476 0.0476 Autoformer RMSE 0.1172 0.1181 0.1281 0.1153 0.1144 0.1054 †MAE 0.0822 0.0842 0.0930 0.0798 0.0772 0.0690 †TSMixer RMSE 0.0890 0.0894 0.0883 † 0.0904 0.0889 0.0884 MAE 0.0478 0.0479 0.0472 0.0488 0.0475 0.0469 †TiDE RMSE 0.0912 0.0906 0.0899 † 0.0910 0.0899 † 0.0899 †MAE 0.0492 0.0491 0.0488 0.0496 0.0487 0.0486 †
+
+themselves discover almost disjoint candidate sets: on Polymarket, the mean per-query Jaccard overlap between the two components’ retrievals is 0.003 ,supporting the design choice of an adaptive fusion rather than a redundant ensemble. 
+
+Table 6: Sensitivity to Retrieval Budget k. Average RMSE ( ↓) across 9 forecasting models as the number of candidates retrieved per query ( k) varies. EC-Fusion uses adaptive α consistently. EC-Fusion achieves the best average RMSE at 7 out of 8 dataset– k combina-tions, demonstrating robust performance across retrieval budgets. Bold = best; underline = second best.                             
+
+> Method k=5 k=10 k=20 k=50
+> POLYMARKET
+> Semantic 0.1405 0.0864 0.0784 0.0700 TimeSeries 0.0781 0.0782 0.0721 0.0709 EC-Fusion 0.0713 0.0704 0.0698 0.0679
+> KALSHI
+> Semantic 0.1104 0.1016 0.0963 0.0955 TimeSeries 0.1031 0.0987 0.0990 0.0937
+> EC-Fusion 0.0959 0.0945 0.0925 0.0953
+
+15 1 8 17 
+
+0
+
+0.25 
+
+0.5
+
+0.75 
+
+time step 
+
+> price
+
+Semantic retrieval (text-based) (mean |r| = 0 .486 )
+
+Semantic top-8: 
+
+• r= + 0 .34 [Crypto] Will Berachain launch a token in December? 
+
+• r= + 0 .55 [Crypto] Will Berachain launch a token in December? 
+
+• r= + 0 .53 [Crypto] Will Berachain launch a token in December? 
+
+• r= − 0.67 [Crypto] Will Berachain launch a token in December? 
+
+• r= − 0.61 [Crypto] Will Berachain launch a token in December? 
+
+• r= − 0.55 [Crypto] Will Berachain launch a token in December? 
+
+• r= − 0.04 [Crypto] Will Berachain launch a token in December? 
+
+• r= + 0 .61 [Crypto] Will Hyperliquid launch a token in December? 
+
+1 8 17 
+
+0
+
+0.25 
+
+0.5
+
+0.75 
+
+time step 
+
+> price
+
+EC-Fusion retrieval (graph-based) (mean |r| = 0 .567 )
+
+EC-Fusion top-8: 
+
+• r= − 0.71 [Politics/Election] Will a Democrat win Nevada US Senate Election? 
+
+• r= + 0 .72 [Politics/Election] Will a Democrat win Nevada US Senate Election? 
+
+• r= − 0.72 [Politics/Election] Will a Republican win Nevada US Senate Electi... 
+
+• r= − 0.51 [Politics/Election] Trump gets more black voters than in 2020? 
+
+• r= − 0.24 [Politics/Election] Will a Democrat win Pennsylvania US Senate El... 
+
+• r= + 0 .33 [Politics/Election] Will Donald Trump win the popular vote in the... 
+
+• r= + 0 .39 [Politics/Election] [Single Market] Will Gavin Newsom win the U.S... 
+
+• r= − 0.90 [Politics/Election] Biden wins the Popular Vote? 
+
+Figure 4: Why graph-based retrieval beats text-based retrieval. Same query (“Will Tempo launch a token by December 31 2026?”, category: Crypto), two retrieval methods. Left: Semantic retrieval finds near-duplicate questions in the same category (mean |r|=0 .486 with the query) — a textual echo chamber. Right: EC-Fusion retrieves topically unrelated events (mean |r|=0 .567 , all in Politics/Election) whose prices nonetheless co-fluctuate with the query, including strongly anti-correlated trajectories that are equally informative for forecasting. Black: query trajectory; blue/red: positive/negative correlation; opacity scales with |r|.Table 7: Data Efficiency Analysis. Average pool size (training samples), RMSE, and percentage of the Few-Shot → Full-Shot performance gap closed, at k=20 .EC-Fusion achieves ≥97 .9% gap closure with ≤29% 
+
+of the full training data, demonstrating that targeted retrieval is more efficient than exhaustive training. Bold 
+
+= best retrieval method (excluding Full-Shot oracle). 
+
+POLYMARKET KALSHI 
+
+Method Pool RMSE Gap ↑ Pool RMSE Gap ↑
+
+Few-Shot 17 0.2114 0.0% 17 0.1727 0.0% Semantic 116 0.0784 91.0% 268 0.0963 92.2% TimeSeries 698 0.0721 95.3% 576 0.0990 88.9% EC-Fusion 1203 0.0670 98.8% 687 0.0915 97.9% 
+
+Full-Shot 8333 0.0652 100.0% 2363 0.0898 100.0% 
+
+Table 8: Consolidated hyperparameters used through-out the EC-Fusion evaluation. 
+
+Stage Hyperparameter Value 
+
+Graph construction Node-merge correlation threshold τmerge 0.95 Co-fluctuation threshold τcorr 0.70 Sliding-window size w 7Max lag for cross-correlation L 3DTW enrichment threshold τDTW 1.5 STG subsample size NSTG 500 Granger graph F-test significance level 0.05 Granger graph cap NGC 100 Retrieval BFS hops n 2Hybrid anchor mix β 0.3 Retrieval budget k (main results) 10 Fusion ( α)Sweep grid {0.0, 0.3, 0.5, 0.7, 1.0}
+
+Adaptive bounds [αmin , α max ] [0 .2, 0.8] 
+
+Sigmoid steepness, midpoint 8.0, 0.55 Forecasting Input length Tin / horizon H 10 / 7 Random seeds {42 , 123 , 7}
+
+Text encoder (anchor) SBERT MiniLM-L6-v2 
+
+16

@@ -1,0 +1,4507 @@
+Title: Graph Grounded Cross Attention Transformer Neural Network for Structurally Constrained Full Event Sequence Generation in Predictive Process Monitoring
+
+URL Source: https://arxiv.org/pdf/2606.18726v1
+
+Published Time: Thu, 18 Jun 2026 00:39:44 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# Graph Grounded Cross Attention Transformer Neural Network for Structurally Constrained Full Event Sequence Generation in Predictive Process Monitoring ⋆
+
+Fang Wang a,∗, Ernesto Damiani a
+
+> a
+
+Department of Computer Science, University of Milan, Via Giovanni Celoria, 18, Milano 20133, MI, Italy 
+
+A R T I C L E I N F O 
+
+Keywords :Structurally constrained event se-quence generation Predictive process monitoring Graph neural networks Graph grounded cross attention Transformer Graph constrained decoding 
+
+A B S T R A C T 
+
+Structurally constrained event sequence generation remains challenging because generated paths must preserve transition feasibility, temporal order, termination, and attribute consistency. In predictive process monitoring (PPM), this challenge appears as full event sequence generation, whereas existing work mainly addresses component tasks such as next activity, remaining time, outcome, and attribute prediction. This paper proposes the Graph Grounded Cross Attention Transformer Neural Network (GGATN) for this unified PPM task. GGATN uses a global process graph as structured activity memory, contextualizes sequence positions through Transformer self attention, and injects process topology through graph grounded cross attention. Unlike autoregressive decoding, GGATN generates activities, timestamps, length, and event level and sequence level attributes in a single pass, followed by Viterbi style graph constrained decoding for feasible paths and explicit termination. Experiments on six benchmark event logs show more reliable generation quality than local instruction prompted LLM baselines. GGATN achieves strong performance on sequence similarity, Damerau Levenshtein similarity, bigram based control flow similarity, and duration distribution, while maintaining zero hallucinated activities and zero sequence level attribute inconsistency. Ablation analyses confirm the global graph encoder as a stable structural prior. Interpretability analyses show how graph structure, sequence context, feedback refinement, and constrained decoding shape generation. 
+
+1. Introduction 
+
+Event sequence generation becomes structurally constrained when generated paths must satisfy temporal ordering, admissible transitions, explicit termination, and attribute consistency. Predictive process monitoring (PPM) provides a representative setting for this problem because future process executions are recorded as timestamped event sequences governed by process structure and operational constraints. PPM aims to anticipate future process behavior from historical event logs (Márquez-Chamorro, Resinas and Ruiz-Cortés, 2017), enabling organizations to intervene before process deviations become costly (Pasquadibisceglie, Appice, Castellano and Malerba, 2021). Existing PPM research has primarily focused on task specific prediction settings, including next activity prediction (Taymouri, Rosa, Erfani, Bozorgi and Verenich, 2020; Weinzierl, Dunzer, Zilker and Matzner, 2020; Tax, Verenich, La Rosa and Dumas, 2017), remaining time prediction (Verenich, Dumas, Rosa, Maggi and Teinemaa, 2019; Tax et al., 2017; Navarin, Vincenzi, Polato and Sperduti, 2017; Guo, Liu, Li, Zeng, Ouyang, Liu and Lu, 2024), outcome prediction (Teinemaa, Dumas, Rosa and Maggi, 2019; Wang, Ceravolo and Damiani, 2025a), and process attribute prediction (Rivera Lazo and Ñanculef, 2022). Although these approaches provide useful local forecasts, practical decision making often depends on understanding the complete future execution rather than individual prediction components. For example, in clinical pathways, decision makers may need to evaluate alternative patient trajectories together with their temporal evolution and associated attributes. Full event sequence generation addresses this limitation by modeling the entire process execution as a structured generation problem conditioned only on high level sequence information, without requiring prefix based observations. Despite its practical importance, this setting remains largely unexplored in PPM. Sequence modeling has evolved from recurrent neural networks (RNNs) (Elman, 1990; Medsker, Jain et al., 2001; Sutskever, Vinyals and Le, 2014) and encoder decoder architectures (Cho, Van Merriënboer, Gulçehre, Bahdanau,  
+
+> ⋆
+
+The source code associated with this paper is available at https://github.com/skyocean/GGATN .
+
+> ∗
+
+Corresponding author 
+
+florencewong@protonmail.com (F. Wang); ernesto.damiani@unimi.it (E. Damiani) 
+
+> ORCID
+
+(s): 0000-0002-7349-8888 (F. Wang); 0000-0002-9557-6496 (E. Damiani) 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 1 of 35 
+
+> arXiv:2606.18726v1 [cs.LG] 17 Jun 2026 GGATN
+
+Bougares, Schwenk and Bengio, 2014) to Transformer based models (Vaswani, Shazeer, Parmar, Uszkoreit, Jones, Gomez, Kaiser and Polosukhin, 2017). By replacing recurrence with self-attention, Transformers capture long range dependencies (Zhou, Zhang, Peng, Zhang, Li, Xiong and Zhang, 2021a) and support flexible sequence to sequence (seq2seq) generation. Large language models (LLMs) further extend this paradigm through large scale pretraining and prompt conditioned generation. In PPM, this architectural progression has also shaped recent modeling efforts, with Transformer based and LLM based approaches increasingly adapted to discriminative or component wise prediction (Nguyen, Chatterjee, Weinzierl, Schwinn, Matzner and Eskofier, 2020; Chen, Fang and Fang, 2022). However, when applied to full sequence generation, purely Transformer based architectures face two limitations. First, self-attention models positional dependencies but does not explicitly encode process topology or transition admissibility. Second, autoregressive generation is vulnerable to exposure bias and error accumulation, making it difficult to preserve globally coherent process behavior during long horizon generation without observed prefix guidance (Schmidt, 2019). Consequently, step wise generation may fail to maintain globally coherent process behavior across a complete sequence. Graph neural networks (GNNs) (Scarselli, Gori, Tsoi, Hagenbuchner and Monfardini, 2008) provide advantages for structure aware sequence modeling by propagating information through relational dependencies rather than relying only on sequential token interactions. Among GNN variants, graph attention networks (GATs) further learn the relative importance of neighboring nodes through adaptive attention mechanisms (Veličković, Cucurull, Casanova, Romero, Lio and Bengio, 2017). These properties are particularly relevant for PPM, where process executions are shaped by activity transitions, temporal dependencies (Wang and Damiani, 2025), and global process topology (Yin, Qiu, Fang, Wang, Dong and Ge, 2025). However, graph propagation alone does not naturally preserve position specific sequence dynamics. Full sequence generation in PPM therefore requires a unified framework that combines graph grounded process representations with position aware sequence modeling. Despite the complementary strengths of graph attention and Transformer self-attention, their integration for full sequence generation in PPM remains largely unexplored. To address these limitations, we propose the Graph Grounded Cross Attention Transformer Neural Network (GGATN) for structurally constrained full event sequence generation in PPM. The novelty of this work is reflected in the following contributions: 
+
+• Hybrid graph sequence architecture: GGATN departs from sequence only and graph only PPM architectures by organizing full sequence generation into three modeling stages: global process graph learning, sequence level contextual modeling, and graph grounded cross attention interaction. This design preserves global process regularities while modeling position specific dependencies. By coupling process topology and sequence dynamics through an explicit cross attention stage, GGATN enables controlled and interpretable structural injection. 
+
+• Global graph structural prior: GGATN uses the global process graph as a learned structural backbone rather than a descriptive process map. Through graph attention network (GAT) based adaptive neighbor weighting, the graph encoder embeds activity transition structure and temporal gap information into graph representations that complement Transformer self-attention. The ablation study compares frozen, unfrozen, and staged graph encoder training regimes, showing that this graph backbone remains stable across training strategies and provides an effective structural prior for full sequence generation. 
+
+• Graph grounded cross attention: GGATN introduces graph grounded cross attention as the central interaction mechanism between global process structure and sequence level generation. At each position, the sequence representation queries graph learned activity embeddings as a structured process memory. This allows transition semantics, relational dependencies, and temporal regularities to be selectively injected into position specific sequence states, grounding Transformer based generation in the global activity graph rather than relying only on positional dependency modeling. 
+
+• Non autoregressive graph constrained decoding: Unlike traditional Transformer autoregressive decoding, GGATN formulates full event sequence generation as single pass prediction followed by graph constrained structured decoding. The decoder recovers complete activity paths by combining graph aligned activity scores with transition bias, optional bigram priors, adjacency constraints, feedback refinement, and Viterbi style path optimization. This design enforces strict structural validity and explicit termination directly within the graph space, optimizing sequence level transition feasibility globally rather than locally. 
+
+• Full event sequence generation benchmark: This study establishes the first full event sequence generation benchmark for PPM, covering activities, timestamps, event level and sequence level attributes, and explicit termination. We demonstrate that GGATN outperforms locally deployed, instruction-prompted LLM baselines   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 2 of 35 GGATN
+
+in overall generation quality while substantially reducing computational overhead. The results further support a transferable design principle for structured full sequence generation: process graph learning and Transformer based sequence modeling can be coupled through graph grounded interaction and constrained decoding. 
+
+• Multi level interpretability analysis: GGATN includes a multi level interpretability protocol designed to make graph grounded generation inspectable by domain experts and model developers. Through dedicated visualizations, the analysis examines structural learning, graph grounded attention, feedback refinement, and constrained decoding. It shows how graph based information is injected into sequence states, how activity level attention patterns vary across positions, how refinement reshapes activity distributions, and how graph constrained decoding recovers the final activity path. The remainder of this paper is organized as follows. Section 2 reviews related work. Section 3 presents the preliminaries and task definitions, and Section 4 introduces the proposed GGATN methodology. Section 5 describes the LLM baseline, followed by the datasets in Section 6 and the experimental setup and evaluation metrics in Section 7. Section 8 reports and discusses the experimental results. Section 9 presents the ablation analysis, and Section 10 provides the interpretability analysis. Finally, Section 11 concludes the paper. 
+
+2. Related Work 
+
+This section reviews four research streams relevant to this study: task specific PPM, full sequence generation, graph based structure modeling, and LLM based generation. Together, these streams provide the methodological context for full event sequence generation and motivate the need for a graph grounded model that combines position aware sequence modeling with structured decoding. 
+
+2.1. Predictive Process Monitoring 
+
+PPM research is motivated by the need to support decisions before an ongoing process reaches completion. This objective has led to well established task lines, including next activity or event prediction (Dissegna and Di Francescomarino, 2024; Tax et al., 2017; Evermann, Rehse and Fettke, 2016), remaining time prediction (Khan, Le, Do, Tran, Ghose, Dam and Sindhgatta, 2021), outcome prediction (Teinemaa et al., 2019; Wang, Yu, Liu and Sun, 2019; Wang, Kosca, Kosca, Gacesa and Damiani, 2025d), and process attribute prediction (Lin, Wen and Wang, 2019; Rivera Lazo and Ñanculef, 2022; Duong, Travé-Massuyès, Subias and Merle, 2023). Although these tasks focus on different prediction targets, they share the broader aim of estimating future process behavior from historical execution data. Next activity and next event prediction form a central task line in PPM. Early approaches adopted recurrent and convolutional sequence models, including Long Short Term Memory networks (LSTMs), Convolutional Neural Networks (CNNs), Memory Augmented Neural Networks (MANNs), and Generative Adversarial Networks (GANs), to model event dependencies and predict upcoming activities or timestamps (Tax et al., 2017; Camargo, Dumas and González-Rojas, 2019; Taymouri et al., 2020; Khan et al., 2021; Pasquadibisceglie, Appice, Castellano and Malerba, 2019). Later studies introduced graph based models, including GGNN and GAT based architectures, to represent process structure and event relations more explicitly (Weinzierl, 2021; Pasquadibisceglie, Scaringi, Appice, Castellano and Malerba, 2024; Rama-Maneiro, Vidal and Lama, 2023). More recent Transformer based models further extended this line by using self-attention to capture long range dependencies in event sequences (Bukhsh, Saeed and Dijkman, 2021; Wuyts, Vanden Broucke and De Weerdt, 2024). Remaining time prediction and outcome oriented PPM have followed similar methodological trajectories. Remain-ing time prediction has been studied across diverse datasets and machine learning model families (Verenich et al., 2019; Kratsch, Manderscheid, Röglinger and Seyfried, 2021; Harane and Rathi, 2020), with later work exploring neural and explainable temporal models (Navarin et al., 2017; Guo et al., 2024). Outcome oriented PPM has progressed through decision tree based, clustering based, regression based, and deep learning models (Teinemaa et al., 2019). Recent AutoML and HyperModel frameworks have further extended this line within GNN and LSTM architectures (Wang et al., 2025a; Wang, Ceravolo and Damiani, 2025b,c). These tasks are important for operational intervention, but their focus on future process behavior is limited to either a temporal scalar or a final outcome label. Attribute prediction and multi task PPM extend the predictive scope by considering event level or process level attributes in addition to activities, time, or outcomes. Chen et al. (2022) combine BERT and transfer learning to jointly predict next events and outcomes, while Lin et al. (2019) introduce an LSTM based component modulation   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 3 of 35 GGATN
+
+mechanism for multi attribute prediction. These models broaden the output space, but they still operate through predefined target components. Overall, existing PPM research has advanced individual prediction tasks, whereas full sequence generation remains underexplored as a unified setting that jointly produces activities, timestamps, attributes, and termination. 
+
+2.2. Sequence Modeling and Transformer Based Approaches 
+
+Sequence modeling is fundamental to full sequence generation across multiple domains, where the objective is to learn conditional dependencies over ordered outputs (Hochreiter and Schmidhuber, 1997; Sutskever et al., 2014). Early sequence modeling approaches relied on Recurrent Neural Networks (RNNs), but their ability to capture long range dependencies was limited by the vanishing gradient problem. Long Short Term Memory (LSTM) networks addressed this limitation through memory cells and gating mechanisms that regulate information flow across time steps (Hochreiter and Schmidhuber, 1997). Gated Recurrent Units (GRUs) later simplified this design with merged gates while maintaining competitive performance across sequence learning tasks (Chung, Gulcehre, Cho and Bengio, 2014). Encoder decoder architectures further extended sequence modeling by separating context representation from autoregressive generation, enabling learning over variable length input and output pairs (Cho et al., 2014). Attention mechanisms subsequently alleviated the fixed context bottleneck of early seq2seq models by allowing the decoder to dynamically access relevant encoder states during generation (Bahdanau, Cho and Bengio, 2014). Transformers later replaced recurrence with self-attention, where each sequence position dynamically attends to other positions within the sequence to model contextual dependencies. This improved training parallelism and strengthened long range dependency modeling, establishing Transformer architectures as the center backbone for modern sequence generation (Vaswani et al., 2017; Radford, Kim, Hallacy, Ramesh, Goh, Agarwal, Sastry, Askell, Mishkin, Clark et al., 2021; Brown, Mann, Ryder, Subbiah, Kaplan, Dhariwal, Neelakantan, Shyam, Sastry, Askell et al., 2020; Raffel, Shazeer, Roberts, Lee, Narang, Matena, Zhou, Li and Liu, 2020; Lewis, Liu, Goyal, Ghazvininejad, Mohamed, Levy, Stoyanov and Zettlemoyer, 2020). However, standard Transformer architectures primarily model structure through token order, positional embed-dings, and self-attention over sequence positions, while relational dependencies, hierarchical constraints, and graph structured interactions are flattened into sequential representations (Zhu, Li, Zhu, Qian, Zhang and Zhou, 2019; Zhou, Naseem, Astudillo, Lee, Florian and Roukos, 2021b). Self-attention is effective for modeling position aware contextual dependencies, but it does not explicitly represent process topology or transition admissibility. In addition, autoregressive decoding remains susceptible to exposure bias, where local prediction errors accumulate across long horizons and gradually degrade structural consistency (Schmidt, 2019). These limitations are particularly problematic for full sequence generation tasks that require strict transition validity, global structural coherence, and explicit termination control, motivating architectures that combine position aware Transformer self-attention with explicit structural grounding. 
+
+2.3. Graph Neural Networks for Structure Aware Sequence Modeling 
+
+Graph neural networks (GNNs) provide a natural framework for modeling structured dependencies through message passing over explicit relational graphs (Gilmer, Schoenholz, Riley, Vinyals and Dahl, 2017; Bronstein, Bruna, Cohen and Veličković, 2021). Foundational variants introduced different relational inductive biases, including graph convolutional networks (GCNs) for localized graph propagation (Kipf and Welling, 2016), GraphSAGE for inductive neighborhood aggregation (Hamilton, Ying and Leskovec, 2017), and gated graph neural networks (GGNNs) for recurrent graph propagation (Li, Tarlow, Brockschmidt and Zemel, 2015). Among these variants, graph attention networks (GATs) are particularly relevant because they learn adaptive neighbor weights through attention driven relational importance modeling (Veličković et al., 2017). This attention mechanism makes GATs well suited for modeling dependency, interaction, and transition structures in graph based learning tasks. Later sequence generation systems extended GNNs beyond representation learning by combining graph encoders with sequential decoders. Graph2Seq introduced graph encoding with attention based LSTM decoding for graph conditioned sequence generation (Xu, Wu, Wang, Feng, Witbrock and Sheinin, 2018). Beck, Haffari and Cohn (2018) combined GGNN encoding with sequence generation for graph conditioned natural language generation, while GraphWriter incorporated graph encoding into encoder decoder generation architectures (Koncel-Kedziorski, Bekal, Luan, Lapata and Hajishirzi, 2019). However, graph propagation itself, even with attention based neighbor weighting, remains primarily local and representation oriented, making it difficult to preserve ordered generation states, long   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 4 of 35 GGATN
+
+horizon dependencies, and variable length termination behavior in full sequence generation settings (Gilmer et al., 2017; Alon and Yahav, 2020). More recent graph Transformer architectures explored how graph structure can be integrated with self-attention mechanisms (Dwivedi and Bresson, 2020). For example, Graphormer incorporates structural encodings into standard Transformer architectures (Ying, Cai, Luo, Zheng, Ke, He, Shen and Liu, 2021), while GraphGPS explicitly separates local edge aggregation from global attention (Rampášek, Galkin, Dwivedi, Luu, Wolf and Beaini, 2022). This progression suggests that graph attention for structural representation learning and Transformer self-attention for position aware sequence modeling should be treated as complementary components for full sequence generation. 
+
+2.4. LLM Based Generation for Structured Sequences 
+
+Transformer based large language models (LLMs) are powerful general purpose sequence generators, with strong zero shot and few shot performance across diverse language tasks (Vaswani et al., 2017; Brown et al., 2020; Touvron, Lavril, Izacard, Martinet, Lachaux, Lacroix, Rozière, Goyal, Hambro, Azhar et al., 2023). Through prompt based linearization and serialization, structured objects can be reformulated as text generation problems. This allows graphs, event sequences, activities, timestamps, attributes, and termination markers to be represented as token sequences and generated autoregressively (Fan, Gardent, Braud and Bordes, 2019; Cao, Han, Gao, Ding, Xie and Zhou, 2025; Kasner and Dušek, 2024). For PPM full sequence generation, however, this formulation introduces several limitations. It requires nontrivial serialization and post hoc parsing, provides limited guarantees on transition validity or structural constraints without additional constrained decoding, remains brittle for temporal consistency and numerical precision, and can incur substantial inference cost and latency (Geng, Cooper, Moskal, Jenkins, Berman, Ranchin, West, Horvitz and Nori, 2025; Wang and Zhao, 2024; Li, Chen, Xu, Li, Hu, Teng, Li, Qiu, Zhang, Qing et al., 2025; Kandpal, Deng, Roberts, Wallace and Raffel, 2023). Accordingly, LLMs provide flexible and practically relevant baselines for this study, while their limitations motivate graph grounded architectures that better align generation with the structural validity and efficiency requirements of PPM full sequence generation (Kasner and Dušek, 2024; Geng et al., 2025). In summary, existing studies provide important foundations for modeling future process behavior, sequence dependencies, relational structure, and prompt based generation. However, they remain fragmented across component prediction, sequence only generation, graph based representation learning, and text based LLM prompting. This gap motivates GGATN, which integrates GAT based process graph learning, Transformer self-attention for position aware sequence modeling, graph grounded cross attention, and graph constrained decoding for full sequence generation. 
+
+3. Preliminaries and Definitions 
+
+This section defines the notation and task formulation used throughout the paper. 
+
+Definition 1 (Sequence and Event). A sequence 𝜎 is an ordered list of events denoted by 𝜎 = ⟨𝑒 1, 𝑒 2, … , 𝑒 𝑇 ⟩, where 
+
+𝑒 𝑡 is the event at position 𝑡 and 𝑇 is the sequence length. Each event 𝑒 𝑡 is associated with an activity label 𝑎 𝑡 ∈ , a timestamp 𝜏 𝑡 ∈ ℝ, and event level attributes 
+
+𝐱 𝑡 = ( 𝐱 (𝑐𝑎𝑡 ) 
+
+> 𝑡
+
+, 𝐱 (𝑛𝑢𝑚 ) 
+
+> 𝑡
+
+). Each sequence 𝜎 is further associated with sequence level attributes 𝐬 = ( 𝐬 (𝑐𝑎𝑡 ), 𝐬 (𝑛𝑢𝑚 )). Boolean attributes are treated as categorical variables. 
+
+Definition 2 (Special Tokens). To support sequence generation and alignment, the activity space is extended with four special tokens: PAD = 0 , UNK = 1 , EOS = 2 , and SOS = 3 . The extended activity space is denoted by ′.
+
+Definition 3 (Full Event Sequence Generation). Given a start time 𝜏 1 ∈ ℝ and a target sequence length 𝑇 , the full sequence generation task aims to generate a complete sequence ̂𝜎 = ⟨̂𝑒 1,̂𝑒 2, … ,̂𝑒 𝑇 ⟩.Each generated event ̂ 𝑒 𝑡 consists of an activity label ̂ 𝑎 𝑡 ∈ , a timestamp ̂ 𝜏 𝑡 ∈ ℝ, and event level attributes ̂
+
+𝐱 𝑡 = ( ̂ 𝐱 (𝑐𝑎𝑡 ) 
+
+> 𝑡
+
+,̂ 𝐱 (𝑛𝑢𝑚 ) 
+
+> 𝑡
+
+). The generated sequence ̂𝜎 is further associated with sequence level attributes ̂ 𝐬 = ( ̂ 𝐬 (𝑐𝑎𝑡 ),̂ 𝐬 (𝑛𝑢𝑚 )).The generated timestamps satisfy ̂𝜏 1 = 𝜏 1 and ̂𝜏 𝑡 ≥̂ 𝜏 𝑡 −1 for all 𝑡 > 1. The objective is to jointly generate the activity sequence, timestamps, event level attributes, and sequence level attributes conditioned on (𝜏 1, 𝑇 ).
+
+4. Methodology 
+
+The proposed Graph Grounded Cross Attention Transformer Neural Network (GGATN) addresses full sequence generation by coupling structured process knowledge with position aware sequence modeling. As illustrated in Figure 1,   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 5 of 35 GGATN
+
+GGATN consists of five components: input representation and sequence encoding, global process graph construction with graph attention network (GAT) based activity embeddings, Transformer based sequence contextualization, graph grounded cross attention for structural injection, and joint decoding of activities, time, length, and attributes. The training objective and graph constrained generation procedure are presented at the end of this section. 
+
+4.1. Input Representation and Encoding 
+
+Given an event log , each sequence 𝜎 is transformed into a fixed length representation of size 𝑇 max . The input encoding contains the following components: 
+
+• Categorical attributes: Activity labels, event level categorical attributes, and sequence level categorical attributes are mapped to integer indices through vocabulary mappings with special tokens {PAD , UNK , EOS , SOS }.
+
+• Numerical attributes: Event level and sequence level numerical attributes are standardized using training set statistics. For strictly positive attributes, a log(1 + 𝑥 ) transformation is applied before standardization. 
+
+• Temporal attributes: Inter event time differences are defined as Δ𝜏 1 = 0 and Δ𝜏 𝑡 = 𝜏 𝑡 − 𝜏 𝑡 −1 for 𝑡 > 1. These values are transformed using log(1 + Δ 𝜏 𝑡 ) and then standardized. 
+
+• Initial timestamp: The initial timestamp 𝜏 1 is encoded using four cyclic features derived from the hour of day and day of week, namely sin(2 𝜋ℎ ∕24) , cos(2 𝜋ℎ ∕24) , sin(2 𝜋𝑤 ∕7) , and cos(2 𝜋𝑤 ∕7) , where ℎ denotes the fractional hour of day and 𝑤 denotes the day of week. 
+
+• Sequence head: Each sequence is associated with a compact conditioning vector consisting of the normalized sequence length 𝑇 ∕𝑇 max and the encoded initial timestamp. The encoded input sequence is finally represented as a matrix 𝐇 ∈ ℝ𝑇 max ×𝑑 , where each position corresponds to the concatenation of embedded categorical features, standardized numerical features, and temporal features.  
+
+> Figure 1: Overview of GGATN for Structurally Constrained Full Event Sequence Generation
+
+4.2. Global Graph Attention Encoder 
+
+To capture global transition structure and temporal dynamics across the event log, we construct a global process graph and encode activity nodes into structure aware latent representations using an edge aware GAT encoder.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 6 of 35 GGATN
+
+4.2.1. Global Process Graph 
+
+Given an event log , we construct a global process graph 
+
+ = ( , , 𝐗 𝑒 , 𝐴 ),
+
+where 
+
+•  is the set of activity nodes, 
+
+•  is the set of directed transitions between activities, 
+
+• 𝐗 𝑒 is the set of edge attributes, 
+
+• 𝐴 ∈ {0 , 1} ||×|| is the adjacency matrix. Each node 𝑣 ∈  corresponds to an activity in the extended activity space ′, and each directed edge (𝑢, 𝑣 ) ∈ 
+
+indicates that activity 𝑣 directly follows activity 𝑢 in at least one observed sequence. For each transition (𝑢, 𝑣 ), the associated edge attribute vector is defined as 𝐱 𝑒 𝑢𝑣 = ( 𝑓 𝑢𝑣 , 𝑑 𝑢𝑣 ):
+
+𝑓 𝑢𝑣 = log(1 + 𝑐 𝑢𝑣 ), 𝑑 𝑢𝑣 = 1
+
+𝑐 𝑢𝑣 𝑐 𝑢𝑣 ∑
+
+> 𝑘 =1
+
+log(1 + Δ 𝜏 (𝑘 ) 
+
+> 𝑢𝑣
+
+),
+
+where 𝑐 𝑢𝑣 is the number of observed occurrences of transition (𝑢, 𝑣 ) in the training log, and Δ𝜏 (𝑘 ) 
+
+> 𝑢𝑣
+
+is the inter event time gap for its 𝑘 th occurrence. To incorporate boundary structure, transitions from SOS to the first activity of each sequence and from the last activity of each sequence to EOS are included. For transitions into EOS , the temporal gap is set to 0. The attribute 𝑓 𝑢𝑣 captures the global strength of transition (𝑢, 𝑣 ), whereas 𝑑 𝑢𝑣 captures its typical temporal separation, allowing the encoder to model both structural and temporal transition patterns. 
+
+4.2.2. Graph Attention Encoding 
+
+Let 𝐄 (0) ∈ ℝ||×𝑑 denote the learnable initial node embedding matrix, where 𝑑 is the embedding dimension. The global graph encoder applies 𝐿 stacked edge aware multi-head graph attention network (GAT) layers over  to produce structure aware activity representations. For layer 𝑙 ∈ {0 , … , 𝐿 − 1} , the node representations are updated as ̃
+
+𝐄 (𝑙 +1) = GAT (𝑙 )(𝐄 (𝑙 ), , 𝐗 𝑒 ),
+
+where the attention mechanism is conditioned on both neighboring node features and edge attributes. To stabilize training, each layer is followed by a residual connection: 
+
+𝐄 (𝑙 +1) =̃ 𝐄 (𝑙 +1) + 𝐄 (𝑙 ).
+
+Layer normalization and dropout are then applied to 𝐄 (𝑙 +1) . After 𝐿 layers, the encoder outputs the final activity embedding matrix 
+
+𝐄 𝑎𝑐𝑡 = 𝐄 (𝐿 ) ∈ ℝ||×𝑑 .
+
+In our implementation, the encoder uses multi-head attention with concatenated heads such that the output dimensionality remains 𝑑 at every layer. The attention weights from the final graph attention layer are retained for interpretability analysis. The resulting 𝐄 𝑎𝑐𝑡 serves as the global structural memory that is later used as the key and value space in graph grounded cross attention. 
+
+4.3. Sequence Transformer Encoder 
+
+In parallel, each input sequence is encoded using a Transformer encoder with sinusoidal positional encoding, yielding 
+
+𝐇 (0) = 𝐇 + 𝐏 ,
+
+where 𝐇 ∈ ℝ𝐵 ×𝐿 ×𝑑 denotes the batch of input sequence representations and 𝐏 ∈ ℝ𝐿 ×𝑑 denotes the positional encoding matrix.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 7 of 35 GGATN
+
+A stack of 𝑀 pre-layer normalization Transformer encoder layers is applied to 𝐇 (0) . For layer 𝑚 ∈ {0 , … , 𝑀 − 1} ,the hidden representation is updated by multi-head self-attention ( MHA( ⋅)), followed by a position-wise feed-forward network ( FFN( ⋅)), each with residual connections: ̃
+
+𝐇 (𝑚 +1) = 𝐇 (𝑚 ) + MHA (LN( 𝐇 (𝑚 ))) and 𝐇 (𝑚 +1) =̃ 𝐇 (𝑚 +1) + FFN (LN( ̃ 𝐇 (𝑚 +1) )).
+
+After the final layer, layer normalization is applied to obtain the contextualized sequence representation 
+
+𝐇 𝑠𝑒𝑞 = LN( 𝐇 (𝑀 )).
+
+The resulting 𝐇 𝑠𝑒𝑞 provides position aware sequence states that are later used as queries in graph grounded cross attention. Padding positions are masked during self-attention using a key padding mask. The attention weights from all Transformer layer are retained for interpretability analysis. 
+
+4.4. Graph Grounded Cross Attention 
+
+To inject global process structure into the sequence representation, we design a graph grounded cross attention module in which each sequence position attends to the global activity embeddings produced by the GAT encoder. Let 𝐇 𝑠𝑒𝑞 ∈ ℝ𝐵 ×𝐿 ×𝑑 denote the contextualized sequence representation from the transformer encoder, and let 
+
+𝐄 𝑎𝑐𝑡 ∈ ℝ||×𝑑 denote the global activity embedding matrix produced by the graph encoder. For each batch, 𝐄 𝑎𝑐𝑡 is broadcast across the batch dimension and used as the key and value memory in a multi-head cross attention operation, while 𝐇 𝑠𝑒𝑞 serves as the query representation. The cross attention output is computed as 
+
+𝐂 = MHA (LN( 𝐇 𝑠𝑒𝑞 ), 𝐄 𝑎𝑐𝑡 , 𝐄 𝑎𝑐𝑡 
+
+),
+
+where layer normalization is applied to the query representation prior to attention. The resulting graph informed signal is injected into the sequence representation through a gated residual update followed by layer normalization: 
+
+𝐇 𝑡𝑚𝑝 = LN (𝐇 𝑠𝑒𝑞 + 𝑔 ⋅ 𝐂 ), 𝑔 = tanh( 𝛾 ),
+
+where 𝛾 is a learnable scalar parameter updated during training, and 𝑔 ∈ (−1 , 1) controls the strength of the cross attention signal injected from the global graph into each sequence position. To refine the representation, a position wise feed forward transformation is applied: 
+
+𝐇 𝑐𝑟𝑜𝑠𝑠 = 𝐇 𝑡𝑚𝑝 + FFN (LN( 𝐇 𝑡𝑚𝑝 )).
+
+The resulting representation 𝐇 𝑐𝑟𝑜𝑠𝑠 ∈ ℝ𝐵 ×𝐿 ×𝑑 captures both sequence level position aware contextual dependencies and graph grounded activity structure. During analysis, the cross attention weights are retained to quantify how each sequence position attends to the global activity nodes. 
+
+4.5. Graph Grounded Cross Attention Transformer Neural Network (GGATN) Architecture 
+
+The proposed Graph Grounded Cross Attention Transformer Neural Network (GGATN) integrates the global GAT encoder, sequence Transformer encoder, and graph grounded cross attention module into a unified architecture for full sequence generation. In contrast to autoregressive decoders, GGATN generates the entire sequence in a single pass with graph constrained structure decoding, avoiding step wise decoding while preserving structural and temporal coherence through graph informed attention and constrained decoding. Given a sequence head conditioning vector and a sequence mask 𝐌 indicating valid and padded positions, the model first constructs an initial position aware sequence representation 𝐇 (0) . The sequence Transformer encoder produces contextualized sequence states 𝐇 𝑠𝑒𝑞 , while the global GAT encoder produces the activity embedding matrix 𝐄 𝑎𝑐𝑡 . The graph grounded cross attention module then conditions 𝐇 𝑠𝑒𝑞 on 𝐄 𝑎𝑐𝑡 to obtain a structure aware sequence representation 
+
+𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 , which serves as the shared latent representation for activity, time, and attribute prediction. Although GGATN performs generation in a single pass, inter position dependencies are captured through three complementary mechanisms: Transformer self-attention for sequence contextualization, graph structural priors encoded through 𝐄 𝑎𝑐𝑡 , and graph constrained decoding for transition consistent sequence recovery. To avoid leakage of target length information into the sequence generation pathway, the normalized length component can be removed from the conditioning input, while sequence length is learned separately through a dedicated prediction head.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 8 of 35 GGATN
+
+4.5.1. Graph Grounded Decoding and Refinement 
+
+Given the graph informed sequence representation 𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 and the global activity embedding matrix 𝐄 𝑎𝑐𝑡 ,GGATN performs graph grounded activity decoding by scoring each sequence position against graph learned activity embeddings, which serve as activity prototypes. Let ̂ 𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 and ̂ 𝐄 𝑎𝑐𝑡 denote the 𝓁 2 normalized hidden states and activity embeddings, respectively. The prototype based activity scores are computed as scaled cosine similarities: 
+
+𝐘 𝑐𝑜𝑠 𝑎𝑐𝑡 = 𝑠̂ 𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 ̂ 𝐄 ⊤𝑎𝑐𝑡 ,
+
+where 𝑠 is a learnable logit scale. To increase flexibility, these scores are combined with a learnable linear decoder, 
+
+𝐘 (1)  
+
+> 𝑎𝑐𝑡
+
+= 𝐘 𝑐𝑜𝑠 𝑎𝑐𝑡 + 𝜆 𝐘 𝑙𝑖𝑛 𝑎𝑐𝑡 + 𝐛 𝑎𝑐𝑡 ,
+
+where 𝐘 𝑙𝑖𝑛 𝑎𝑐𝑡 is obtained from a linear projection, 𝜆 is a learnable mixing weight, and 𝐛 𝑎𝑐𝑡 is an optional activity bias term. Invalid symbols such as PAD , UNK , and SOS are masked before decoding. The terminal symbol EOS is forbidden at real event positions and is introduced only through the terminal transition after the graph constrained activity path is recovered. During training, GGATN can incorporate transition aware supervision by adding a learned transition bias indexed by the previous ground truth activity under teacher forcing. This introduces transition level supervision without altering the parallel sequence prediction formulation. To further improve activity prediction, GGATN optionally applies an activity feedback refinement stage. Unlike conventional single pass activity decoders that directly produce final activity logits from hidden representations, GGATN first generates provisional activity logits and feeds the induced activity distribution back into the model before final decoding. This introduces an explicit distribution reshaping stage before structured decoding, allowing the model to recalibrate position level activity distributions rather than relying only on the first decoded logits. Let 𝐏 (1)  
+
+> 𝑎𝑐𝑡
+
+= sof tmax( 𝐘 (1) 
+
+> 𝑎𝑐𝑡
+
+∕𝜏 ) denote the predicted activity distribution induced by the provisional logits, where 𝜏 
+
+is a temperature parameter. A soft activity embedding is then computed as 
+
+𝐄 𝑠𝑜𝑓 𝑡 = 𝐏 (1) 
+
+> 𝑎𝑐𝑡
+
+𝐄 𝑎𝑐𝑡 ,
+
+and injected back into the hidden representation through a gated residual update, 
+
+𝐇 𝑟𝑒𝑓 = LN (𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 + 𝑔 𝑓 𝑏 𝜙 (𝐄 𝑠𝑜𝑓 𝑡 )), 𝑔 𝑓 𝑏 = tanh( 𝛾 𝑓 𝑏 ),
+
+where 𝜙 (⋅) is a learnable projection and 𝛾 𝑓 𝑏 is a learnable scalar gate. The refined representation is then processed by an additional transformer refinement block to obtain the final sequence representation 𝐇 𝑓 𝑖𝑛𝑎𝑙 , from which the final activity logits 𝐘 𝑎𝑐𝑡 are produced. At generation time, activity generation is formulated as graph constrained path optimization. Unlike autoregressive decoding, all position level activity scores are produced simultaneously in a single forward pass before Viterbi style sequence recovery. Unary scores are obtained from the predicted activity logits, while pairwise transition scores are derived from the learned transition bias and, when available, an empirical bigram prior. The decoding horizon is determined either by the predicted length head or by an externally supplied target length. Hard constraints are enforced by masking invalid symbols and transitions according to the process graph adjacency structure. The final activity sequence is recovered by a Viterbi style dynamic programming decoder that maximizes a joint path score over the valid activity graph by combining position level unary scores with pairwise transition scores between adjacent activities. Invalid symbols are assigned prohibitive scores, and sequence termination is handled by explicitly optimizing the transition from the final real activity to the EOS state. Given the predicted real event length 
+
+𝑇 , the decoded activity sequence is defined as ̂𝑦 1∶ 𝑇 = arg max 
+
+> 𝑦 1,…,𝑦 𝑇
+
+[ 𝑇 ∑
+
+> 𝑡 =1
+
+𝑤 unary 𝑠 𝑡 (𝑦 𝑡 ) + 𝑠 start (𝑦 1) + 
+
+> 𝑇
+
+∑
+
+> 𝑡 =2
+
+𝑠 pair (𝑦 𝑡 −1 , 𝑦 𝑡 ) + 𝑠 pair (𝑦 𝑇 , EOS )
+
+]
+
+,
+
+where 𝑠 𝑡 (𝑦 𝑡 ) denotes the neural activity score for assigning activity 𝑦 𝑡 to position 𝑡 , 𝑠 pair (𝑦 𝑡 −1 , 𝑦 𝑡 ) denotes the graph based transition score between adjacent activities, 𝑠 start (𝑦 1) denotes the start score for the first activity, and 𝑤 unary controls the contribution of the neural unary scores. The final term explicitly scores the transition from the last generated activity to EOS , thereby enforcing terminal feasibility within the structured decoding process.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 9 of 35 GGATN
+
+4.5.2. Multi Task Prediction Heads 
+
+All prediction heads operate on shared latent representations, enabling joint learning of activity, temporal, and attribute dependencies. From the final hidden representation 𝐇 𝑓 𝑖𝑛𝑎𝑙 , GGATN predicts sequence length, activities, temporal values, event level attributes, and sequence level attributes. Sequence length is predicted from a masked mean pooled sequence embedding over valid positions, 
+
+𝐡 𝑠𝑒𝑞 = Pool( 𝐇 𝑓 𝑖𝑛𝑎𝑙 ), 𝐘 𝑙𝑒𝑛 = MLP 𝑙𝑒𝑛 (𝐡 𝑠𝑒𝑞 ),
+
+where pooling excludes padded positions. For event level prediction, the model concatenates the hidden state at each position with the corresponding selected activity embedding, 
+
+𝐙 𝑒𝑣𝑡 = [ 𝐇 𝑓 𝑖𝑛𝑎𝑙 ; 𝐄 𝑠𝑒𝑙 𝑎𝑐𝑡 ],
+
+where 𝐄 𝑠𝑒𝑙 𝑎𝑐𝑡 is obtained from ground truth activity labels during teacher forced training, and from model predicted activity assignments or decoded activity sequences during evaluation and generation. The resulting event level representation 𝐙 𝑒𝑣𝑡 is used to predict transformed inter event time (i.e., log(1 + Δ 𝜏 𝑡 )), as well as event level categorical and numerical attributes. For sequence level prediction, GGATN pools both the hidden representation and the selected activity embeddings over valid non EOS positions, 
+
+𝐳 𝑠𝑒𝑞 = [Pool (𝐇 𝑓 𝑖𝑛𝑎𝑙 
+
+) ; Pool (𝐄 𝑠𝑒𝑙 𝑎𝑐𝑡 
+
+)] .
+
+The resulting sequence representation is then used to predict sequence level categorical and numerical attributes. 
+
+4.6. Training Objective 
+
+GGATN is trained using a weighted multi task objective: 
+
+ = 𝜆 𝑎𝑐𝑡 𝑎𝑐𝑡 + 𝜆 𝑡𝑖𝑚𝑒 𝑡𝑖𝑚𝑒 + 𝜆 𝑙𝑒𝑛 𝑙𝑒𝑛 + 𝜆 𝑐𝑎𝑡 𝑒𝑣𝑡 𝑐𝑎𝑡 𝑒𝑣𝑡 + 𝜆 𝑛𝑢𝑚 𝑒𝑣𝑡 𝑛𝑢𝑚 𝑒𝑣𝑡 + 𝜆 𝑐𝑎𝑡 𝑠𝑒𝑞 𝑐𝑎𝑡 𝑠𝑒𝑞 + 𝜆 𝑛𝑢𝑚 𝑠𝑒𝑞 𝑛𝑢𝑚 𝑠𝑒𝑞 + 𝜆 𝑡𝑟𝑎𝑛𝑠 𝑡𝑟𝑎𝑛𝑠 .
+
+The activity loss is computed over all valid sequence positions using cross entropy, with additional weighting applied to the final and preterminal positions to improve sequence termination behavior. The length loss is formulated as cross entropy over clipped length indices. The time loss is computed in the transformed log domain using a Smooth L1 objective and is applied only to valid non EOS positions. Event level categorical losses are computed using cross entropy with label smoothing over valid non EOS positions, whereas event level numerical losses are computed using mean squared error over the same positions. Sequence level categorical and numerical losses are computed from sequence level targets. When enabled, an optional transition consistency penalty is introduced by penalizing predicted probability weight assigned to invalid adjacent activity pairs according to the process graph adjacency constraints. 
+
+4.7. Single Pass Generation with Graph Constrained Structured Decoding 
+
+In GGATN, single pass generation with graph constrained structured decoding refers to a generation procedure in which the model predicts position wise representations and activity scores for the full sequence, optionally refines these representations through activity feedback, and then recovers the final activity path using Viterbi style constrained dynamic programming over the global process graph. Here, single pass means that events are not generated sequentially through event by event autoregressive decoding. At generation time, GGATN first obtains latent representations, activity logits, and length logits for all sequence positions. If the target length is not provided, the number of real events is determined by the length prediction head; otherwise, an externally supplied length defines the decoding horizon. The final activity sequence is recovered through the graph grounded constrained decoding procedure described in Section 4.5.1, yielding a valid activity path with an explicit terminal EOS state. Once the activity path is fixed, the corresponding decoded activity embeddings are used to construct the event level and sequence level representations defined in Section 4.5.2. Event level time and attribute predictions are then recomputed from the activity conditioned representation, while sequence level attributes are predicted from pooled hidden states and pooled decoded activity embeddings. This design preserves full sequence latent prediction while ensuring that temporal and attribute predictions remain consistent with the final decoded activity sequence.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 10 of 35 GGATN
+
+5. Large Language Model (LLM) Baseline for Sequence Generation 
+
+Large language models are included as baselines by formulating full sequence generation as a structured sequence to sequence task. Each sequence is serialized into textual input and output representations. Generated outputs are parsed back into structured event log records for evaluation. 
+
+5.1. LLM Input and Output Formulation 
+
+To cast full sequence generation as text generation, each sequence is transformed into a sequence to sequence input and output pair. The input is a compact sequence level prompt specifying the sequence identifier, initial timestamp, start weekday, start hour, and sequence length, with an instruction to generate the complete event sequence. The output is represented as an ordered textual sequence in which each line corresponds to one event position and contains the activity label, event level attributes, sequence level attributes, and timestamp. Sequence level attributes are repeated at each event position for output consistency with a final END marker explicitly indicating sequence termination. An example of the LLM input and output format is shown below. 
+
+Example of LLM input and output format 
+
+> <INPUT> Case attributes: case_id = Case1 start_time = 2012-10-09 14:50:17 start_weekday = Tuesday start_hour = 14 case_length = 5 Task: generate the full event trace until completion. <OUTPUT> 1. Assign seriousness | org_resource:Value 1 | case_variant:Variant 12 | time_timestamp:2012-10-09 14:50:17 2. Take in charge ticket | org_resource:Value 1 | case_variant:Variant 12 | time_timestamp:2012-10-09 14:51:01 3. Take in charge ticket | org_resource:Value 2 | case_variant:Variant 12 | time_timestamp:2012-10-12 15:02:56 4. Resolve ticket | org_resource:Value 1 | case_variant:Variant 12 | time_timestamp:2012-10-25 11:54:26 5. Closed | org_resource:Value 3 | case_variant:Variant 12 | time_timestamp:2012-11-09 12:54:39 6. END
+
+5.2. LLM Prompting Strategy 
+
+The LLM baseline is implemented through instruction based in context prompting with few shot examples. Each prompt consists of three parts: (1) a task instruction that specifies the required sequence generation format, (2) a set of few shot input and output examples, and (3) a new sequence input for which the full sequence must be generated. The instruction constrains the model to generate only the event sequence, preserve the required line based format, maintain chronological timestamps, generate exactly the specified number of events, and append a final END marker. Each few shot example follows the same <INPUT> and <OUTPUT> structure as the target sequence. The full prompt template used for the LLM baselines is shown below. 
+
+LLM prompt   
+
+> You are an expert Predictive Process Monitoring event-log generator. You MUST output ONLY the content between <TRACE>and </TRACE>. Anything outside these tags is strictly forbidden. Follow these rules strictly: 1. Your answer MUST ONLY be the event trace, nothing else. 2. Output the full event trace in EXACTLY the same style as the examples.
+> Wang and Damiani: Preprint submitted to Elsevier Page 11 of 35 GGATN
+> 3. Each line MUST start with an integer index followed by a dot, e.g. ’1.’ ’2.’ ’3.’. 4. Each line MUST preserve attribute names and MUST follow the format: <index>. <activity>| <attr1>:<value1>| <attr2>:<value2>| ... | <timestamp> 5. You MUST maintain chronological timestamps. 6. Let case_length be the number given in the input. You MUST produce exactly case_length events. 7. After those events, you MUST output exactly one final line: (case_length+1). END 8. Do NOT output any explanations, apologies, comments, or meta-text. 9. If information is missing or uncertain, make a reasonable guess and STILL output a full trace. 10. NEVER mention that information is missing. Just output the best possible trace.
+
+To improve comparability across sequences of different lengths, few shot examples are selected by length bucket. For each bucket, a fixed set of examples is sampled from training sequences within the same length range and reused for all holdout sequences in that bucket. The number of examples is adjusted according to bucket size, subject to predefined minimum and maximum limits. 
+
+5.3. LLM Output Parsing and Event Log Reconstruction 
+
+The generated LLM sequences are post processed into structured event logs for evaluation. Each generated response is parsed line by line, and only lines matching the expected indexed event format are retained. The parsing procedure extracts the activity label, timestamp, and all required attributes from each event line, while the final END marker is used to terminate the sequence. Sequence identifiers are recovered from the corresponding input block, and event positions are reconstructed sequentially after parsing. The resulting outputs are converted into a tabular event log representation, where each row corresponds to one generated event and preserves the generated sequence identifier, event order, activity, timestamp, and available attributes. 
+
+6. Datasets 
+
+We evaluate our models on six benchmark event logs: Helpdesk (Polato, 2017), Sepsis (Mannhardt, 2016), BPI13I 
+
+(Steeman, 2013b), BPI13C (Steeman, 2013a), BPI20 (Van Dongen, 2020), and BPI17 (van Dongen, 2017). These datasets originate from real world business processes across multiple domains. Helpdesk represents ticket handling in an Italian software company. Sepsis records hospital pathways of patients with sepsis and contains a rich attributes space. BPI13I (incident) and BPI13C (closed problem) are derived from Volvo IT’s service management system. 
+
+BPI17 captures a loan application process from a Dutch financial institution. BPI20 (prepaid travel cost) records prepaid travel cost reimbursement requests from a Dutch university, including both domestic and international trips with multi level approvals. Together, these datasets cover diverse domains, temporal scales, sequence lengths, process complexity, and attribute richness, providing a comprehensive testbed for evaluating full sequence generation (Table 1). Table 1 shows substantial heterogeneity across the six datasets. BPI17 is the largest and most structurally complex log, with the highest number of sequences, the largest activity space, and the longest average sequence length. By contrast, Helpdesk and BPI13C contain comparatively short sequences, while Sepsis and BPI13I exhibit wider length variation, indicating more heterogeneous execution patterns. The datasets also differ markedly in temporal behavior and attribute richness. BPI13C has the largest average sequence duration and mean inter event gap, indicating sparse and temporally stretched executions, whereas BPI17 combines long sequences with relatively small average inter event gaps, reflecting denser event progression. In terms of attributes, Sepsis is particularly rich in sequence level attributes, while BPI17 contains the largest combined activity and event level attribute space. The bucket distributions further show that sequence lengths are unevenly distributed across logs, with some datasets dominated by short and medium sequences and BPI17 containing substantial numbers of large and extra large sequences. This diversity creates a challenging evaluation setting for full sequence generation. In our formulation, the event label space is defined by combining the original activity label with its corresponding 
+
+lifecycle:transition value. This choice is important because, in several real world logs, the base activity vocabulary alone does not adequately represent the effective process state. For example, in BPI13I and BPI13C , the original activity space contains only 4 base activity types, whereas lifecycle:transition categories substantially expand the                                                                                                       
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 12 of 35 GGATN
+> Table 1
+> Summary Statistics of Datasets
+> Dataset #Seq. #Act. Med.( 𝑙 )Range( 𝑙 )Med.( 𝑑 ) Med.( Δ𝑡 )#Attr. #S #M #L #XL B
+> Helpdesk 4580 14 4.63 2~15(13) 3530166 971586 E(1,0) |S(1,0) 2767 1504 309 -5|7Sepsis 1049 16 14.48 3~185(52) 2461064 182604 E(1,3) |S(23,1) 156 681 212 -8|18 BPI13I 7554 13 8.68 1~123(62) 1043768 135991 E(5,0) |S(3,0) 3070 3558 926 -6|16 BPI20 2099 29 8.69 1~21(16) 3179104 413262 E(1,0) |S(2,2) 399 1552 148 -8|12 BPI13C 1487 74.48 1~35(18) 15455380 4442712 E(5,0) |S(3,0) 750 569 168 -4|8BPI17 31509 66 38.16 10~180(145) 1892126 50923 E(5,5) |S(2,1) 2296 17691 8473 3049 21 |42 |61
+> *#Seq.: number of sequences. #Act.: number of unique activity labels. Med.( 𝑙 ): median sequence length. Range( 𝑙 ): minimum and maximum sequence length. Med.( 𝑑 ): median sequence duration in seconds, where 𝑑 is defined as the elapsed time from the first event to the last event in a sequence. Med.( Δ𝑡 ): median inter event time in seconds, where Δ𝑡
+> is defined as the elapsed time between two consecutive events. #Attr.: number of attributes, reported as E(c,n) |S(c,n), where E and S denote event level and sequence level, and c and n denote categorical and numerical attributes. #S, #M, #L, and #XL: number of sequences in the Small, Medium, Large, and Extra Large length buckets. B: exclusive bucket upper boundaries used to define the length groups.
+> *In Range( 𝑙 ), if only one sequence exists at the maximum length, the value in parentheses reports the second largest observed length, which corresponds to the maximum length appearing in the holdout set.
+
+effective label space. A similar pattern appears in BPI17 , where transition states such as scheduled, withdrawn, and completed provide process semantics beyond the base activity label. Therefore, we adopt a joint activity and 
+
+lifecycle:transition prediction setting, consistent with recent graph based PPM models (Rama-Maneiro, Vidal and Lama, 2021; Rama-Maneiro et al., 2023). This design better reflects the multi dimensional nature of process states and supports more fine grained prediction. 
+
+7. Experiments 
+
+All experiments were conducted on a workstation equipped with an AMD Ryzen 9 7950X CPU (16 cores, 32 threads), 30 GB system memory, and an NVIDIA GeForce RTX 3060 GPU with 12 GB VRAM. Each dataset was split into 90% for model development and 10% as a holdout test set. Within the 90% development portion, 80% was used for training and 20% for validation. 
+
+7.1. Experimental Pipeline 
+
+The experimental pipeline is designed to evaluate full sequence generation under consistent settings, including baseline comparison, controlled ablation analysis, and interpretability assessment. The pipeline consists of four stages. First, LLM baselines are constructed using instruction guided few shot prompting across different model and context window settings, with each model generating full event sequences from the same sequence level input information used by GGATN. Second, the proposed GGATN model is trained and used to generate full event sequences through single pass sequence generation with graph constrained structured decoding. The generated sequences from both approaches are evaluated using the same metrics to ensure comparability. Third, an ablation study is conducted to assess the stability and role of the global graph attention encoder. Specifically, we compare a frozen graph encoder, a fully trainable graph encoder, and staged unfreezing strategies in which the graph encoder is initially frozen and later updated. This analysis examines whether the graph representation acts as a stable structural prior and whether graph encoder training should be dataset dependent. Finally, interpretability analysis is performed across the main decision stages of GGATN. We analyze dual stage attention, graph grounded cross attention decomposition, refinement based activity distribution reshaping, and structured decoding based transition correction. This provides a stage wise view of how sequence context, graph conditioning, feedback refinement, and graph constrained transition selection contribute to process aware sequence generation. 
+
+7.2. Experiment Setup 
+
+This section summarizes the experimental configurations for both the LLM baselines and the proposed GGATN.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 13 of 35 GGATN
+
+7.2.1. LLM Model Configuration 
+
+Because single pass full sequence generation with graph constrained structured decoding is a new PPM setting without established baselines, we include LLM baselines to compare GGATN with locally deployable instruction prompted generative models. The comparison evaluates whether GGATN achieves performance and computational advantages over LLM based generation, and whether these advantages remain under expanded LLM settings, including larger context windows. The goal is not to exhaustively optimize LLM prompting, identify the best possible LLM configuration, or estimate the upper bound of frontier scale proprietary LLMs. Instead, the LLM experiments provide a practical and reproducible local generative baseline for assessing whether instruction prompted sequence generation can compete with graph grounded structured generation under realistic computational constraints. All LLM experiments are conducted through a local Ollama server. In the initial stage, we evaluate two quantized instruction prompted models, llama3.1:8b-instruct-q5_K_M and mistral:7b-instruct-q5_K_M , both using a 4096 token context window. For each target sequence, we apply a bucket conditioned 10 shot prompting strategy, where demonstrations are selected from the same sequence length bucket as the target sequence. This design improves prompt relevance and reduces mismatch between short and long sequences. Preliminary experiments showed that mistral:7b-instruct-q5_K_M produced substantially lower generation quality and required considerably longer runtime, with BPI17 exceeding 96 hours. In addition, the 4096 token context window remained restrictive for long and complex sequences. Therefore, we conducted a second stage evaluation using llama3.1:8b-instruct-q5_K_M with an extended 32 , 768 token context window. Although this substantially increased computational burden, it provided a stronger LLM baseline by reducing context truncation in long horizon full sequence generation. 
+
+7.2.2. GGATN Model Configuration 
+
+GGATN uses a shared hidden dimension of 256 . The global GAT encoder consists of 2 edge aware GAT layers with 4 heads and 2 dimensional edge attributes. This 2 layer setup allows activity embeddings to capture both direct transitions and indirect neighbors in the process graph. Each layer uses residual connections, layer normalization, and dropout 0.05 . Initial activity node embeddings are sampled from a normal distribution with scale 0.01 . The sequence Transformer encoder contains 4 pre-layer normalization Transformer layers with 4 heads, feed forward expansion factor 
+
+4, and dropout 0.20 . The graph grounded cross attention module uses a single cross attention layer with the same hidden dimension and head configuration. Sequence states are layer normalized before querying the graph learned activity embeddings. The module applies gated residual injection initialized at 0.05 and uses a feed forward expansion factor of 4. The activity decoder uses this hybrid cosine linear formulation with a learnable logit scale, a learnable linear mixing weight initialized at 0.20 , and an enabled activity bias. Activity feedback refinement is enabled with 
+
+1 refinement Transformer layer, feedback gate initialization 0.30 , and feedback temperature 1.0. Transition bias is enabled with weight 0.50 . The reserved activity ids are fixed as PAD = 0 , UNK = 1 , EOS = 2 , and SOS = 3 .During training, the activity loss assigns additional weights of 5.0 and 3.0 to the final and preterminal positions, respectively. The main loss weights are fixed as 𝜆 𝑎𝑐𝑡 = 1 .0, 𝜆 𝑡𝑖𝑚𝑒 = 0 .1, and 𝜆 𝑙𝑒𝑛 = 0 .25 . The optional latent noise branch is disabled by setting the latent dimension to 0. A transition consistency penalty can be applied by penalizing probability mass assigned to invalid adjacent activity pairs under the process graph adjacency constraints. Training uses AdamW with learning rate 2 × 10 −4 , weight decay 3 × 10 −4 , 𝛽 1 = 0 .9, 𝛽 2 = 0 .98 , and 𝜖 = 10 −8 . Bias and normalization parameters are excluded from weight decay. The learning rate follows a warmup cosine schedule over 300 epochs, with warmup steps set to 5% of the total training steps and a minimum learning rate multiplier of 
+
+0.1. For the main GGATN setting, the graph encoder is frozen and only the sequence generation model is optimized. In ablation settings where the graph encoder is trainable, separate AdamW optimizers are used for the sequence model and graph encoder, with learning rates 2 × 10 −4 and 3 × 10 −5 , respectively, under the same warmup cosine scheduling strategy. The model architecture and main training configuration are kept global across datasets to ensure comparability and avoid dataset specific training optimization, whereas generation uses dataset specific decoding controls to account for differences in sequence length, activity space, temporal scale, and transition density. These controls include deterministic or temperature based stochastic decoding, optional Top-𝑘 filtering, optional bigram transition priors, and optional adjacency masking from the global process graph. The Viterbi objective combines unary activity logits, weighted by a dataset specific unary coefficient, with learned transition bias weighted by 0.50 . Time outputs are clipped to dataset specific bounds in the standardized log time space, with optional Gaussian noise during non deterministic generation. Deterministic decoding means that stochastic controls are disabled; it does not refer to autoregressive next   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 14 of 35
+
+GGATN 
+
+Table 2 
+
+Dataset Dependent GGATN Configuration 
+
+Dataset 𝜆 𝑐𝑎𝑡 𝑒𝑣𝑡 𝜆 𝑛𝑢𝑚 𝑒𝑣𝑡 𝜆 𝑐𝑎𝑡 𝑠𝑒𝑞 𝜆 𝑛𝑢𝑚 𝑠𝑒𝑞 𝜔 𝑢𝑛𝑎𝑟𝑦 Temp. Det. 𝑇 𝜎 Bigram Adj Top-𝑘 
+
+Helpdesk 0.80 0.00 0.50 0.00 0.55 1.5 False 0.02 True True None Sepsis 0.15 0.10 0.05 0.05 0.55 1.5 False 0.02 False True None BPI13I 0.15 0.00 0.05 0.00 3.00 1.0 True 0 False True None BPI13C 0.15 0.00 0.05 0.00 0.55 1.5 False 0.02 True True None BPI20 0.15 0.00 0.05 0.05 0.55 1.5 False 0.02 False True None BPI17 0.15 0.10 0.05 0.05 3.00 1.0 True 0 True True None              
+
+> Note. The first four columns report dataset dependent auxiliary loss weights for event and sequence level categorical and numerical attribute prediction. 𝜔 𝑢𝑛𝑎𝑟𝑦 denotes the dataset specific weight assigned to neural activity logits in Viterbi decoding. Temp. denotes the temperature used to rescale unary activity logits before Viterbi decoding when deterministic decoding is disabled. Det. indicates deterministic decoding, where stochastic controls are disabled. 𝑇 𝜎 denotes the standard deviation of Gaussian noise added to transformed time predictions during non deterministic generation. Bigram indicates whether an external bigram transition prior is used. Adj
+> indicates whether adjacency masking from the global process graph is applied. Top-𝑘 indicates optional filtering of activity logits before Viterbi decoding.
+
+event generation. In all settings, the final activity sequence is recovered through constrained Viterbi decoding over the activity graph. Dataset dependent weights are used only for auxiliary event and sequence attribute losses and the unary decoding weight, as summarized in Table 2. 
+
+Table 3 
+
+Dataset Specific Validation Score Weights 
+
+Dataset ActNoEOS SeqCat EvtCat SeqNum EvtNum Time Helpdesk 0.75 0.03 0.20 0.00 0.00 0.02 Sepsis 0.93 0.01 0.02 0.01 0.02 0.01 BPI13I 0.80 0.03 0.15 0.00 0.00 0.02 BPI13C 0.80 0.03 0.15 0.00 0.00 0.02 BPI20 0.85 0.02 0.10 0.02 0.00 0.01 BPI17 0.93 0.01 0.02 0.01 0.02 0.01 ActNoEOS denotes activity accuracy excluding EOS . SeqCat and EvtCat denote sequence and event categorical accuracy. SeqNum, EvtNum, and Time are converted from RMSE to bounded scores before weighting. 
+
+All GGATN variants are trained for a maximum of 300 epochs with early stopping patience set to 40 . Training uses a batch size of 64 , while validation uses a batch size of 128 . At each epoch, the model is evaluated on the validation split, and the best checkpoint is selected using a dataset specific weighted validation score that combines activity accuracy without EOS , event attribute accuracy, sequence attribute accuracy, numerical attribute scores, and time prediction quality. The components and dataset specific weights are reported in Table 3. Training history, validation metrics, and the best model checkpoint are saved for subsequent evaluation. For interpretability analysis, attention tensors are extracted from the best validation checkpoint, including global GAT attention, Transformer self-attention, and graph grounded cross attention weights. Aggregation is component specific. Transformer self-attention is averaged across all layers and heads to summarize cumulative sequence contextualization. For the global GAT encoder, the analysis uses only the final layer attention, which reflects the most task adapted structural representation. Graph grounded cross attention is implemented as a single layer, so its attention weights are analyzed directly. 
+
+7.3. Evaluation Metrics 
+
+The primary evaluation uses sequence and control flow metrics: sequence similarity (SS), Damerau Levenshtein similarity (DL), bigram Jensen Shannon distance (JSD), and duration Wasserstein distance (WD). Sequence coverage is included because full sequence generation requires a valid and parsable output for each target sequence. We also measure aggregated event level and sequence level attribute performance, activity accuracy, and timestamp mean absolute error. Generation validity is assessed through activity vocabulary diagnostics, including hallucinated activities, activity recall, and sequence level attribute consistency. Detailed attribute level performance and sequence 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 15 of 35 GGATN 
+
+variable consistency results are provided in Appendix A. All metrics are computed under an unconditional evaluation protocol, where the full set of holdout sequences is considered. Missing, empty, or unparsable generated outputs are treated as failed generations and penalized accordingly in the metric computation. 
+
+7.3.1. Sequence and Control Flow Metrics 
+
+For each generated sequence, activities are ordered by generated position, whereas ground truth activities are ordered by timestamp. Sequence coverage is defined as 
+
+Cov = |𝑔𝑒𝑛 ∩ 𝑔𝑡 ||𝑔𝑡 | ,
+
+where 𝑔𝑒𝑛 and 𝑔𝑡 denote the generated and ground truth sequence identifier sets. Sequence similarity (SS) is computed as the normalized matching ratio between generated and ground truth activity sequences: 
+
+SS = 1
+
+|𝑔𝑡 |∑
+
+> 𝜎 𝑖 ∈𝑔𝑡
+
+𝑟 (𝜎 𝑖 ,̂𝜎 𝑖 ),
+
+where 𝑟 (⋅, ⋅) denotes the normalized sequence matching ratio. If no valid generated sequence exists for 𝜎 𝑖 , then 
+
+𝑟 (𝜎 𝑖 ,̂𝜎 𝑖 ) = 0 .Damerau Levenshtein similarity (DL) measures edit based activity sequence similarity: 
+
+DL( 𝜎,̂𝜎 ) = 1 − 𝑑 𝐷𝐿 (𝜎,̂𝜎 )max( |𝜎 |, |̂𝜎 |) ,
+
+where 𝑑 𝐷𝐿 denotes the Damerau Levenshtein distance. The reported DL score is averaged over all ground truth sequences. If no valid generated sequence exists for 𝜎 𝑖 , its DL similarity is set to 0.Bigram Jensen Shannon distance (JSD) compares the normalized distributions of adjacent activity pairs in the generated and ground truth logs. For each log, activity bigrams are extracted from each sequence and aggregated into a normalized frequency distribution. Let 𝑃 𝑏𝑔 and 𝑄 𝑏𝑔 denote the generated and ground truth bigram distributions, respectively. JSD is computed as the Jensen Shannon distance between 𝑃 𝑏𝑔 and 𝑄 𝑏𝑔 , where lower values indicate closer control flow distributional similarity at the log level. To penalize failed generation, we report a coverage adjusted score: 
+
+JSD ∗ = JSD + 𝜆 𝑐𝑜𝑣 (1 − Cov) ,
+
+where 𝜆 𝑐𝑜𝑣 = 1 .0 in all experiments. This assigns a unit penalty to missing sequences, so generation failure is reflected in the distributional score rather than being ignored. Duration Wasserstein distance (WD) compares the distributions of sequence durations, where duration is measured as the time difference between the first and last events in a sequence. To penalize failed generation, we report a coverage adjusted score: 
+
+WD ∗ = WD + (1 − Cov) ⋅ median( 𝐷 𝑔𝑡 ),
+
+where 𝐷 𝑔𝑡 denotes the ground truth sequence duration distribution. This assigns each missing generated sequence a penalty proportional to the typical temporal scale of the dataset. These metrics evaluate complementary requirements of full sequence generation. Coverage captures output completeness, SS measures direct activity order agreement, and DL provides an edit based similarity measure that accounts for insertions, deletions, substitutions, and adjacent transpositions. At the log level, bigram JSD evaluates preservation of local control flow transition distributions, while WD measures temporal plausibility through sequence duration distributions. The coverage adjusted variants prevent models from achieving favorable distributional scores by generating only a subset of easier sequences. Overall, the metric set jointly captures completeness, activity order fidelity, edit robustness, transition distribution similarity, and temporal plausibility.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 16 of 35 GGATN
+
+7.3.2. Activity, Temporal, and Aggregated Attribute Performance Metrics 
+
+Attribute and timestamp metrics are computed after aligning generated and ground truth events by sequence identifier and within sequence event position. Event level categorical and Boolean attributes are evaluated using accuracy, while event level numerical attributes are evaluated using mean absolute error. Activity accuracy is computed under the same aligned event level setting. Sequence level attributes are collapsed to one value per generated sequence, with inconsistent generated values treated as missing. Sequence level categorical and Boolean attributes are evaluated using accuracy, and sequence level numerical attributes are evaluated using mean absolute error. Event level and sequence level scores are averaged over their corresponding attributes. Timestamp quality is measured by mean absolute error in seconds. For unconditional evaluation, all ground truth events and sequences are preserved. Missing categorical or Boolean predictions are counted as incorrect. Missing numerical attributes and timestamps are assigned penalty values equal to the maximum observed valid absolute error for the corresponding variable; if no valid matched error exists, a fallback penalty of 1.0 is used. These localized metrics complement sequence and control flow metrics by assessing whether generated activities, timestamps, and attributes remain consistent after positional alignment. They are reported as auxiliary indicators of event level and sequence level reconstruction quality, rather than standalone measures of full sequence generation performance. 
+
+7.3.3. Generation Validity Metrics 
+
+Generation validity is evaluated using activity vocabulary diagnostics and sequence level attribute consistency. Hallucinated activities are counted as generated activity labels that do not appear in the ground truth activity vocabulary. Activity recall is defined as the proportion of ground truth activity labels that appear at least once in the generated log. For sequence level attributes, consistency is measured by checking whether each generated sequence assigns a single value to each sequence level variable across all generated event rows. We report the aggregate inconsistency ratio across sequence level variables, where lower values indicate better consistency. 
+
+8. Results 
+
+Table 4 reports full sequence generation performance across the six datasets, including primary generation metrics and averaged attribute results. Complete dataset specific metric tables, including individual event level and sequence level attribute scores, are provided in Appendix A. Before discussing the results, we define the table abbreviations. M denotes model, where G is the main GGATN model with a frozen GAT attention encoder, G_j is GGATN with fully unfrozen joint training, and G_s5 and G_s10 
+
+are staged training variants in which the GAT attention encoder is frozen for the first 5 and 10 epochs, respectively, and unfrozen afterwards. L(4k) and L(32k) denote Llama with 4k and 32k context windows, respectively, while 
+
+M(4k) denotes Mistral with a 4k context window. c(S) denotes sequence coverage, JSD bigram Jensen Shannon distance, SS sequence similarity, WD duration Wasserstein distance, and DL Damerau Levenshtein similarity. H
+
+denotes the number of hallucinated activities, re(A) activity recall, and Ac(A) , Ac(E) , and Ac(S) activity accuracy, averaged event level attribute accuracy, and averaged sequence level attribute accuracy, respectively. MA(E) , MA(S) ,and MA(T) denote averaged event level numerical MAE, averaged sequence level numerical MAE, and timestamp MAE, respectively. I(c) and I(n) denote aggregate sequence level inconsistency rate indicators for categorical and numerical attributes, and #S denotes the number of generated sequences. For JSD, WD, MAE based metrics, and hallucinated activities, lower values are better; for coverage, SS, DL, recall, and accuracy metrics, higher values are better. Bold values indicate the best result for each dataset and metric. Overall, the GGATN variants achieve the strongest and most stable performance across datasets. They obtain full sequence coverage, generate no hallucinated activities, and maintain zero inconsistency for sequence level attributes on all datasets. They also consistently outperform the LLM baselines in sequence similarity and Damerau Levenshtein similarity. These results indicate that the structured graph based model is substantially more reliable for end to end full sequence generation. 
+
+8.1. Performance Patterns and Dataset Specific Effects 
+
+The advantage of GGATN is especially clear on the primary sequence and control flow metrics. Across Helpdesk, BPI20, Sepsis, BPI13I, and BPI17, GGATN variants obtain the best values on JSD, SS, WD, and DL. The only exception is BPI13C. On this dataset, GGATN still achieves stronger SS and DL, higher activity accuracy, better   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 17 of 35
+
+GGATN 
+
+Table 4 
+
+Performance Comparison across Different Datasets and Models 
+
+Helpdesk M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.1779 0.9498 502069 0.9276 0 0.6250 0.8969 0.4114 0.7380 589028 0 458 
+
+G_j 1.0000 0.1724 0.9502 481164 0.9280 0 0.6250 0.8974 0.4073 0.7380 615277 0 458 
+
+G_s5 1.0000 0.1872 0.9505 711122 0.9289 0 0.6250 0.8992 0.4156 0.7358 641977 0 458 
+
+G_s10 1.0000 0.1853 0.9496 433090 0.9275 0 0.6250 0.8951 0.4142 0.7358 586232 0 458 
+
+L(4k) 1.0000 0.4297 0.6488 8446087 0.4876 2 1.0000 0.2821 0.0782 0.0044 1102316 1 458 
+
+M(4k) 0.8908 0.3492 0.7619 4539597 0.7257 71 0.7500 0.6130 0.1252 0.3734 66648683 1 408 
+
+L(32k) 1.0000 0.2561 0.8960 5254845 0.8526 1 0.8750 0.7662 0.1551 0.1179 2478145 0 458 
+
+BPI20 M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.2012 0.8856 1814361 0.8422 0 0.6667 0.7999 0.8286 0.5861 811.72 1334086 0 0 209 
+
+G_j 1.0000 0.2033 0.8854 1462130 0.8429 0 0.6667 0.8047 0.8312 0.6029 820.74 1331992 0 0 209 
+
+G_s5 1.0000 0.2054 0.8962 1914524 0.8583 0 0.6667 0.8153 0.8376 0.5957 794.31 1336757 0 0 209 
+
+G_s10 1.0000 0.2108 0.8899 1826933 0.8506 0 0.6667 0.8100 0.8339 0.6220 782.03 1348357 0 0 209 
+
+L(4k) 0.756 0.7147 0.3398 2707083 0.2964 421 0.5926 0.1476 0.1783 0.1747 12547.55 74200704 1 1 158 
+
+M(4k) 0.3158 1.3999 0.1003 4011717 0.0882 227 0.5556 0.0552 0.0398 0.0359 4227.15 55912405 1 1 66 
+
+L(32k) 1.0000 0.2584 0.8211 1987999 0.7396 19 0.8519 0.5435 0.6253 0.4857 1265.46 3012057 0 1 209 
+
+Sepsis M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.2977 0.7169 1089448 0.6271 0 0.8125 0.4816 0.7311 20.02 0.8177 12.77 446981 0 0 104 
+
+G_j 1.0000 0.3046 0.7184 1073339 0.6314 0 0.8125 0.4884 0.7273 20.05 0.8131 13.08 345565 0 0 104 
+
+G_s5 1.0000 0.2921 0.7321 1361757 0.6401 0 0.8125 0.4878 0.7367 20.10 0.8181 12.97 334917 0 0 104 
+
+G_s10 1.0000 0.3004 0.7272 894149 0.6490 0 0.8125 0.4991 0.7473 19.75 0.8207 12.97 621142 0 0 104 
+
+L(4k) 0.6346 0.9833 0.1061 1353228 0.0867 320 0.6250 0.0269 0.0350 73.51 0.1463 48.41 22346748 1 1 66 
+
+M(4k) 0.1635 1.5442 0.0201 2984395 0.0155 623 0.6250 0.0119 0.0113 353.71 0.0727 44.60 22264333 1 1 17 
+
+L(32k) 0.8654 0.5240 0.5181 1670784 0.4467 24 0.9375 0.2489 0.3258 81.46 0.6158 31.15 14337061 1 1 90 
+
+BPI13C M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.2945 0.8237 12449630 0.8017 0 0.8333 0.6933 0.3697 0.4054 8915835 0 148 
+
+G_j 1.0000 0.3412 0.8113 12326789 0.7984 0 0.8333 0.6975 0.3782 0.4032 9321481 0 148 
+
+G_s5 1.0000 0.3228 0.8166 12825437 0.7999 0 0.8333 0.6933 0.3756 0.4122 9073631 0 148 
+
+G_s10 1.0000 0.3385 0.8113 12790696 0.7972 0 0.8333 0.6891 0.3762 0.4099 9127482 0 148 
+
+L(4k) 0.8311 0.5903 0.4840 14198777 0.4681 162 1.0000 0.3081 0.0784 0.1374 181447374 1 123 
+
+M(4k) 0.6149 0.9099 0.3645 13194896 0.3528 63 0.8333 0.1765 0.0305 0.0946 41116259 1 91 
+
+L(32k) 1.0000 0.2071 0.7939 11440188 0.7566 1 0.8333 0.6204 0.1160 0.2635 10513514 1 148 
+
+BPI13I M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.2133 0.8325 748775 0.8190 0 0.9167 0.6552 0.3738 0.3731 459020 0 755 
+
+G_j 1.0000 0.2547 0.8301 855279 0.8232 0 0.7500 0.6603 0.3695 0.3757 459483 0 755 
+
+G_s5 1.0000 0.2586 0.8289 624653 0.8218 0 0.7500 0.6630 0.3649 0.3854 454386 0 755 
+
+G_s10 1.0000 0.2208 0.8307 652814 0.8229 0 0.9167 0.6540 0.3655 0.3885 454590 0 755 
+
+L(4k) 0.7642 0.7407 0.3714 950069 0.3585 1133 0.6667 0.1462 0.0494 0.1020 266296975 1 577 
+
+M(4k) 0.3510 1.3093 0.0833 1113165 0.0698 708 0.7500 0.0421 0.0236 0.0406 5338296 1 265 
+
+L(32k) 1.0000 0.2605 0.7582 897646 0.7227 8 0.7500 0.5007 0.1547 0.1995 1175517 1 755 
+
+BPI17 M c(S) JSD SS WD DL H re(A) Ac(A) Ac(E) MA(E) Ac(S) MA(S) MA(T) I(c) I(n) #S G 1.0000 0.2238 0.7526 418785 0.6352 0 0.8833 0.3353 0.4997 2991.16 0.5792 11547.99 429831 0 0 3150 
+
+G_j 1.0000 0.2157 0.7542 445256 0.6359 0 0.8833 0.3366 0.5013 3024.25 0.5813 11375.47 419696 0 0 3150 
+
+G_s5 1.0000 0.2140 0.7531 539976 0.6339 0 0.8833 0.3319 0.4995 3099.29 0.5848 10479.63 432232 0 0 3150 
+
+G_s10 1.0000 0.2243 0.7551 375357 0.6379 0 0.8667 0.3386 0.5007 2980.69 0.5805 11342.45 521810 0 0 3150 
+
+L(4k) 0.7419 0.9814 0.0461 1724366 0.0323 13195 0.5167 0.0023 0.0112 78770.87 0.0437 176838.04 216544974 1 1 2337 
+
+M(4k) 0.2251 1.5629 0.0073 3530745 0.0041 5110 0.5333 0.0007 0.0201 71698623.83 0.0157 281286.40 30360903 1 1 709 
+
+L(32k) 0.5889 0.9157 0.1424 5691146 0.1125 4321 0.7833 0.042 0.0689 74352.56 0.1686 249466.68 223751169 1 1 1855 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 18 of 35 GGATN 
+
+event level and sequence level attribute accuracy, zero hallucinated activities, and zero sequence level inconsistency, whereas the 32k context Llama obtains the best JSD and WD. This exception is mainly explained by the data characteristics of BPI13C. It is the sparsest dataset in the benchmark, with a median sequence length of 4.5 and a length range from 1 to 35 , while also having the largest temporal span, with a median sequence duration of 179 days and a median inter event time of 9 days. Under this setting, JSD and WD can favor models that reproduce coarse log level statistics, because JSD compares adjacent activity pair distributions and WD compares marginal duration distributions. Neither metric requires the generated sequence to match the ground truth event order, activity positions, or attributes. The LLM setting also receives the absolute initial timestamp as text, together with start weekday and start hour giving it a richer calendar level temporal anchor for duration generation. This can improve coarse duration distribution matching on BPI13C without implying better sequence level fidelity. This behavior may also be related to the different decoding mechanisms. The LLM generates events autoregres-sively, so each event is conditioned on the previously generated prefix. In a sparse dataset with short median sequences, this stepwise mechanism can reproduce frequent adjacent transitions and coarse duration patterns effectively, directly improving JSD and WD. By contrast, GGATN performs single pass generation with Viterbi style graph constrained decoding, optimizing a globally valid activity path under learned unary and transition scores. This favors structural validity, sequence alignment, and hallucination control, but can be less sensitive to sparse local transition frequencies or highly dispersed duration patterns when these statistics are weakly represented in the learned global objective. A further factor is the evaluation asymmetry induced by dataset size and length conditioning. BPI13C is relatively small, and some length buckets contain only around 150 training sequences. The LLM baseline generates within length buckets, meaning that the prompt provides explicit length conditioned examples. Therefore, 10 shot prompting represents a relatively strong prior for BPI13C, especially in short sparse buckets where few examples can cover many frequent local patterns. GGATN does not receive such bucket specific examples during generation; it must generate from the learned representation and decoding constraints cross different lengths. Therefore, the BPI13C result should not be read as a reversal of the overall trend. The 32k context LLM appears to better approximate the sparse local transition and duration distributions of this particular dataset, but GGATN remains stronger on sequence level alignment, event level reconstruction, attribute consistency, and hallucination control. The LLM baselines show clear limitations under the evaluation protocol. The 4k context settings frequently exhibit reduced coverage, hallucinated activities, low activity accuracy, and poor timestamp accuracy, especially on BPI20, Sepsis, BPI13I, and BPI17. Mistral is particularly unstable, with low coverage and weak sequence similarity on several datasets. Increasing the Llama context window to 32k improves coverage and sequence similarity, but the improvement remains insufficient to close the gap with GGATN on most datasets. The BPI17 results further show that these gains are not uniform, as several metrics decline under the 32k setting, indicating unstable behavior on long and complex sequence structures. By contrast, GGATN variants maintain consistently strong performance across datasets. Their generation process is guided by learned sequence representations, graph based transition constraints, and structured decoding rather than by prompt length or context window size. In several cases, the LLM baselines obtain higher activity recall, but this is often accompanied by lower activity accuracy and more hallucinated activities, indicating broader but less controlled activity generation. GGATN instead achieves a stronger balance between activity coverage and correctness. Attribute and temporal metrics further support this pattern. GGATN variants generally obtain higher event level and sequence level accuracy while maintaining zero sequence level inconsistency across datasets. Overall, the proposed structured model provides more reliable full sequence generation by preserving control flow quality together with stronger alignment among activities, timestamps, and attributes. 
+
+8.2. Computational Cost and Metric Interpretation 
+
+Computational cost further separates GGATN from the LLM baselines. GGATN is substantially smaller and completes BPI17 generation in less than four hours, whereas Mistral with a 4k context requires more than 96 hours and Llama with a 32k context requires more than 240 hours. The same pattern holds on the remaining datasets: GGATN typically completes generation within 20 minutes, while the LLM baselines require at least 30 minutes and often several hours. This shows that the proposed structured model achieves stronger generation quality with much lower inference cost, making it more practical for repeated evaluation and deployment on event sequence generation tasks. The activity and attribute results should be interpreted in light of the full sequence generation setting. Unlike next event prediction, GGATN does not condition on a ground truth prefix at each generation step. It produces latent representations for all positions in a single pass and decodes the activity path under graph based transition constraints. Consequently, local event level accuracy is stricter than global sequence similarity, especially for long   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 19 of 35
+
+GGATN 
+
+and high cardinality datasets such as BPI17, where small local deviations can accumulate across many positions. This effect is visible in the activity and attribute metrics: GGATN substantially outperforms the LLM baselines in activity accuracy, event level accuracy, and sequence level accuracy, but the absolute values remain lower on long and complex logs. The multi task design also introduces tradeoffs among activity, timestamp, event attribute, and sequence attribute heads, particularly on attribute rich datasets such as Sepsis. This reflects the difficulty of jointly aligning activities, timestamps, and attributes at every generated event position under a full sequence generation setting. Nevertheless, the stronger SS and DL scores indicate that the generated sequences remain globally close to the target sequences even when exact event level matches are harder to obtain. We observed a similar distinction in additional training analyses. Validation under teacher forcing improved local validation metrics, but did not materially improve final generation quality when the same Viterbi based decoding procedure was used during generation. Conversely, preliminary experiments that incorporated teacher forcing into the generation procedure degraded performance across datasets. These observations suggest that full sequence generation should be evaluated primarily through global sequence quality, coverage, transition realism, and temporal distribution metrics rather than local position wise accuracy alone. 
+
+9. Ablation Study 
+
+The ablation study examines the stability and role of the global GAT encoder in GGATN. The graph encoder is constructed from the global process graph and produces activity embeddings that serve as structural memory for graph grounded cross attention, activity prototype decoding, and constrained generation. When the graph encoder is trainable, both the activity embeddings and graph attention weights can adapt to the full sequence generation objective. This setting allows us to assess whether the global graph representation remains a stable structural prior within the full pipeline. If performance varies substantially across graph encoder training settings, the graph representation is sensitive to optimization strategy and therefore less reliable as a structural prior. Conversely, if performance remains within a narrow range, with only marginal improvements or degradations, the global graph design can be interpreted as a stable structural foundation. The remaining question is whether the graph encoder should follow a uniform training strategy or be adjusted according to dataset characteristics. 10 20 30 40 50                           
+
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 10 20 30 40 50
+> Epoch
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model 10 20 30 40 50 60 70 80
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 10 20 30 40 50 60 70 80
+> Epoch
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model
+
+(a) Helpdesk (b) BPI20 5 10 15 20 25 30 35                         
+
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 510 15 20 25 30 35
+> Epoch
+> 0.10
+> 0.05
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model 510 15 20 25 30
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 510 15 20 25 30
+> Epoch
+> 0.10
+> 0.05
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model
+
+(c) Sepsis (d) BPI13C 10 20 30 40 50 60 70 80                              
+
+> 0.66
+> 0.68
+> 0.70
+> 0.72
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 10 20 30 40 50 60 70 80
+> Epoch
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model 10 20 30 40 50 60 70 80
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Val activity accuracy excluding EOS
+> Validation activity accuracy excluding EOS across graph training regimes
+> 10 20 30 40 50 60 70 80
+> Epoch
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mean embedding drift
+> Graph embedding drift from initialization
+> Frozen GAT Unfreeze at epoch 5 Unfreeze at epoch 10 Fully unfrozen Frozen GAT: Main Model
+
+(e) BPI13I (f) BPI17 
+
+Figure 2: Ablation Analysis of GAT Encoder Training Regimes across Six Datasets Wang and Damiani: Preprint submitted to Elsevier Page 20 of 35 GGATN 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+89
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+89
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5 6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5 6
+
+7
+
+89
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 
+
+3 = <SOS> 
+
+4 = Assign seriousness 
+
+5 = Closed 
+
+6 = Create SW anomaly 
+
+7 = DUPLICATE 
+
+8 = INVALID 
+
+9 = Insert ticket 
+
+10 = RESOLVED 
+
+11 = Require upgrade 
+
+12 = Resolve SW anomaly 
+
+13 = Resolve ticket 
+
+14 = Schedule intervention 
+
+15 = Take in charge ticket 
+
+16 = VERIFIED 
+
+17 = Wait 
+
+(a) Helpdesk 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5 6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 
+
+3 = <SOS> 
+
+4 = Payment Handled 
+
+5 = Permit APPROVED by ADMINISTRATION 
+
+6 = Permit APPROVED by BUDGET OWNER 
+
+7 = Permit APPROVED by PRE_APPROVER 
+
+8 = Permit APPROVED by SUPERVISOR 
+
+9 = Permit FINAL_APPROVED by DIRECTOR 
+
+10 = Permit FINAL_APPROVED by SUPERVISOR 
+
+11 = Permit REJECTED by ADMINISTRATION 
+
+12 = Permit REJECTED by BUDGET OWNER 
+
+13 = Permit REJECTED by EMPLOYEE 
+
+14 = Permit REJECTED by MISSING 
+
+15 = Permit REJECTED by PRE_APPROVER 
+
+16 = Permit REJECTED by SUPERVISOR 
+
+17 = Permit SUBMITTED by EMPLOYEE 
+
+18 = Request For Payment APPROVED by ADMINISTRATION 
+
+19 = Request For Payment APPROVED by BUDGET OWNER 
+
+20 = Request For Payment APPROVED by PRE_APPROVER 
+
+21 = Request For Payment APPROVED by SUPERVISOR 
+
+22 = Request For Payment FINAL_APPROVED by DIRECTOR 
+
+23 = Request For Payment FINAL_APPROVED by SUPERVISOR 
+
+24 = Request For Payment REJECTED by ADMINISTRATION 
+
+25 = Request For Payment REJECTED by BUDGET OWNER 
+
+26 = Request For Payment REJECTED by EMPLOYEE 
+
+27 = Request For Payment REJECTED by MISSING 
+
+28 = Request For Payment REJECTED by PRE_APPROVER 
+
+29 = Request For Payment REJECTED by SUPERVISOR 
+
+30 = Request For Payment SAVED by EMPLOYEE 
+
+31 = Request For Payment SUBMITTED by EMPLOYEE 
+
+32 = Request Payment 
+
+(b) BPI20 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5
+
+67
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 
+
+3 = <SOS> 
+
+4 = Admission IC 
+
+5 = Admission NC 
+
+6 = CRP 
+
+7 = ER Registration 
+
+8 = ER Sepsis Triage 
+
+9 = ER Triage 
+
+10 = IV Antibiotics 
+
+11 = IV Liquid 
+
+12 = LacticAcid 
+
+13 = Leucocytes 
+
+14 = Release A 
+
+15 = Release B 
+
+16 = Release C 
+
+17 = Release D 
+
+18 = Release E 
+
+19 = Return ER 
+
+(c) Sepsis 
+
+Figure 3: Ablation Analysis of GAT Attention Structure Shifts for Four Training Regimes across Helpdesk, BPI20, and Sepsis Datasets 
+
+We compare four GGATN variants. In the frozen setting, used as the main model, the graph encoder is fixed while the remaining GGATN modules are trained. In the fully trainable setting, the graph encoder and the remaining modules are optimized jointly from the beginning, allowing activity embeddings and graph attention weights to adapt throughout training. In the staged settings, the graph encoder is frozen for the first 5 or 10 epochs and then unfrozen, so training first uses fixed graph representations before moving to joint optimization. These variants are denoted as G, G_j , G_s5 ,and G_s10 , respectively, in Table 4. To examine whether graph encoder updates change validation behavior, Figure 2 reports validation activity accuracy excluding EOS together with the embedding drift of graph activity representations across datasets. The drift curves measure how far activity embeddings move from their initialization during training. Validation activity accuracy excluding EOS is used because it directly reflects event label prediction influenced by graph representations, whereas generation metrics such as SS, DL, JSD, and WD also depend on decoding and log level aggregation. Thus, generation metrics are less suitable for isolating graph encoder dynamics. The accuracy curves characterize validation dynamics during training, while final generation quality is reported separately in Table 4. Each subplot traces training from initialization to the epoch of the selected model. Dataset specific axis ranges are used to show the separation and convergence of the four training regimes, together with the full scale of embedding drift. The attention panels in 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 21 of 35 GGATN 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 3 = <SOS> 4 = Accepted_Assigned 5 = Accepted_In Progress 6 = Accepted_Wait 7 = Completed_Cancelled 8 = Completed_Closed 9 = Queued_Awaiting Assignment 10 = Unmatched_Unmatched 
+
+(d) BPI13C 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 
+
+3 = <SOS> 
+
+4 = Accepted_Assigned 
+
+5 = Accepted_In Progress 
+
+6 = Accepted_Wait 
+
+7 = Accepted_Wait - Customer 
+
+8 = Accepted_Wait - Implementation 
+
+9 = Accepted_Wait - User 
+
+10 = Accepted_Wait - Vendor 
+
+11 = Completed_Cancelled 
+
+12 = Completed_Closed 
+
+13 = Completed_In Call 
+
+14 = Completed_Resolved 
+
+15 = Queued_Awaiting Assignment 
+
+16 = Unmatched_Unmatched 
+
+(e) BPI13I 2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+33 
+
+34 
+
+35 
+
+36 
+
+37 
+
+38 
+
+39 
+
+40 
+
+41 
+
+42 
+
+43 
+
+44 
+
+45 
+
+46 
+
+47 
+
+48 
+
+49 
+
+50 
+
+51 
+
+52 
+
+53 
+
+54 
+
+55 
+
+56 
+
+57 
+
+58 
+
+59 
+
+60 
+
+61 
+
+62 
+
+63 
+
+64 
+
+65 
+
+66 
+
+67 
+
+68 69 
+
+Frozen GAT 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+33 
+
+34 
+
+35 
+
+36 
+
+37 
+
+38 
+
+39 
+
+40 
+
+41 
+
+42 
+
+43 
+
+44 
+
+45 
+
+46 
+
+47 
+
+48 
+
+49 
+
+50 
+
+51 
+
+52 
+
+53 
+
+54 
+
+55 
+
+56 
+
+57 
+
+58 
+
+59 
+
+60 
+
+61 
+
+62 
+
+63 
+
+64 
+
+65 
+
+66 
+
+67 
+
+68 69 
+
+Unfreeze at epoch 5 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+33 
+
+34 
+
+35 
+
+36 
+
+37 
+
+38 
+
+39 
+
+40 
+
+41 
+
+42 
+
+43 
+
+44 
+
+45 
+
+46 
+
+47 
+
+48 
+
+49 
+
+50 
+
+51 
+
+52 
+
+53 
+
+54 
+
+55 
+
+56 
+
+57 
+
+58 
+
+59 
+
+60 
+
+61 
+
+62 
+
+63 
+
+64 
+
+65 
+
+66 
+
+67 
+
+68 69 
+
+Unfreeze at epoch 10 
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+22 
+
+23 
+
+24 
+
+25 
+
+26 
+
+27 
+
+28 
+
+29 
+
+30 
+
+31 
+
+32 
+
+33 
+
+34 
+
+35 
+
+36 
+
+37 
+
+38 
+
+39 
+
+40 
+
+41 
+
+42 
+
+43 
+
+44 
+
+45 
+
+46 
+
+47 
+
+48 
+
+49 
+
+50 
+
+51 
+
+52 
+
+53 
+
+54 
+
+55 
+
+56 
+
+57 
+
+58 
+
+59 
+
+60 
+
+61 
+
+62 
+
+63 
+
+64 
+
+65 
+
+66 
+
+67 
+
+68 69 
+
+Fully unfrozen GAT 
+
+0.2 0.4 0.6 0.8 1.0 
+
+Edge weight 
+
+Activity mapping 
+
+2 = <EOS> 
+
+3 = <SOS> 
+
+4 = A_Accepted_complete 
+
+5 = A_Cancelled_complete 
+
+6 = A_Complete_complete 
+
+7 = A_Concept_complete 
+
+8 = A_Create Application_complete 
+
+9 = A_Denied_complete 
+
+10 = A_Incomplete_complete 
+
+11 = A_Pending_complete 
+
+12 = A_Submitted_complete 
+
+13 = A_Validating_complete 
+
+14 = O_Accepted_complete 
+
+15 = O_Cancelled_complete 
+
+16 = O_Create Offer_complete 
+
+17 = O_Created_complete 
+
+18 = O_Refused_complete 
+
+19 = O_Returned_complete 
+
+20 = O_Sent (mail and online)_complete 
+
+21 = O_Sent (online only)_complete 
+
+22 = W_Assess potential fraud_ate_abort 
+
+23 = W_Assess potential fraud_complete 
+
+24 = W_Assess potential fraud_resume 
+
+25 = W_Assess potential fraud_schedule 
+
+26 = W_Assess potential fraud_start 
+
+27 = W_Assess potential fraud_suspend 
+
+28 = W_Assess potential fraud_withdraw 
+
+29 = W_Call after offers_ate_abort 
+
+30 = W_Call after offers_complete 
+
+31 = W_Call after offers_resume 
+
+32 = W_Call after offers_schedule 
+
+33 = W_Call after offers_start 
+
+34 = W_Call after offers_suspend 
+
+35 = W_Call after offers_withdraw 
+
+36 = W_Call incomplete files_ate_abort 
+
+37 = W_Call incomplete files_complete 
+
+38 = W_Call incomplete files_resume 
+
+39 = W_Call incomplete files_schedule 
+
+40 = W_Call incomplete files_start 
+
+41 = W_Call incomplete files_suspend 
+
+42 = W_Complete application_ate_abort 
+
+43 = W_Complete application_complete 
+
+44 = W_Complete application_resume 
+
+45 = W_Complete application_schedule 
+
+46 = W_Complete application_start 
+
+47 = W_Complete application_suspend 
+
+48 = W_Complete application_withdraw 
+
+49 = W_Handle leads_ate_abort 
+
+50 = W_Handle leads_complete 
+
+51 = W_Handle leads_resume 
+
+52 = W_Handle leads_schedule 
+
+53 = W_Handle leads_start 
+
+54 = W_Handle leads_suspend 
+
+55 = W_Handle leads_withdraw 
+
+56 = W_Personal Loan collection_resume 
+
+57 = W_Personal Loan collection_schedule 
+
+58 = W_Personal Loan collection_start 
+
+59 = W_Personal Loan collection_suspend 
+
+60 = W_Shortened completion _resume 
+
+61 = W_Shortened completion _schedule 
+
+62 = W_Shortened completion _start 
+
+63 = W_Shortened completion _suspend 
+
+64 = W_Validate application_ate_abort 
+
+65 = W_Validate application_complete 
+
+66 = W_Validate application_resume 
+
+67 = W_Validate application_schedule 
+
+68 = W_Validate application_start 
+
+69 = W_Validate application_suspend 
+
+(f) BPI17 
+
+Figure 4: Ablation Analysis of GAT Attention Structure Shifts for Four Training Regimes across BPI13C, BPI13I and BPI17 Datasets 
+
+Figures 3 and 4 provide qualitative evidence of how graph attention weights are redistributed under frozen, staged, and fully trainable regimes. As expected, the frozen model shows zero embedding drift in Figure 2, whereas the fully trainable and staged variants exhibit increasing drift once the graph encoder is updated. However, validation activity accuracy remains close across the four regimes, even when learned graph embeddings move substantially. This indicates that graph encoder adaptation changes the embedding space, but does not consistently produce large validation gains. Fixed global graph representations therefore provide a stable structural basis for graph grounded cross attention, activity prototype decoding, and constrained generation. Although graph encoder adaptation can be beneficial in some cases, comparable validation behavior shows that stable predictive quality does not depend on continuous graph encoder updates. The embedding drift curves quantify the magnitude of representation change, while the attention panels in Figures 3 and 4 indicate where these changes occur in the global graph. Across datasets, attention weights are visibly redistributed when the graph encoder is unfrozen, showing that adaptive training reallocates importance over activity transitions. This reallocation occurs without substantial variation in validation activity accuracy. This suggests that adaptation 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 22 of 35 GGATN 
+
+refines attention over an already informative graph structure, rather than changing the structural role of the graph within GGATN. For example, in Helpdesk, the attention weight on transition 13 → 10 decreases as the graph encoder becomes more adaptive, whereas transition 15 → 14 receives higher attention. In BPI13I, by contrast, the attention weight on transition 5 → 11 varies across frozen, staged, and fully unfrozen regimes without a consistent direction. These observations show that attention reallocation is transition specific and dataset dependent, rather than uniformly directional. The key point is that such internal rearrangements do not produce performance instability, supporting the use of the global GAT encoder as a stable structural component within GGATN. Table 4 shows the same pattern at the final evaluation level. Across datasets, the four GGATN variants show highly similar performance, with most primary metric differences remaining below 0.05 . This indicates that the global GAT encoder provides a stable structural component whose contribution is not dependent on a specific training regime. However, the preferred regime is not uniform across datasets. On the sparse BPI13C and BPI13I datasets, the frozen graph encoder achieves stronger results on several metrics, suggesting that fixed graph representations can preserve a stable structural prior when observed transitions are limited. In contrast, BPI17, which has the largest activity space and longest average sequence length, benefits more from adaptive graph encoder training, with staged or fully trainable variants improving several sequence, attribute, and temporal metrics. These observations indicate that freezing provides a stable default, while joint or staged adaptation may be useful depending on sequence length, activity space size, and transition complexity. 
+
+10. Interpretability Analysis 
+
+The interpretability analysis examines GGATN along the full generation pipeline rather than treating the model as a black box. The four analyses correspond to the main decision stages of the architecture. First, the dual stage attention panel shows how Transformer self-attention builds sequence context and how graph grounded cross attention injects activity level structural evidence when forming position level activity predictions. Second, the graph grounded cross attention decomposition analysis examines graph attention from two perspectives: its alignment with transition admissibility in the global process graph and its attention to the true and predicted activities at each sequence position. Third, the refinement analysis examines how provisional activity distributions are reshaped before final decoding through soft activity feedback. Finally, the structured decoding analysis examines how structured decoding converts raw local activity preferences into process aware sequence decisions through graph based transition constrained path selection. Together, these analyses connect internal attention, graph conditioning, distribution reshaping, and final path selection, providing a stage wise mechanistic account of how GGATN produces process aware sequence generation. For each analysis, one or two representative examples are reported in the main text, while the remaining dataset specific interpretability plots are provided in Appendix B. 
+
+10.1. Position Level Dual Stage Attention Analysis 
+
+Figure 5 presents a dual stage attention analysis for representative generated sequences. The purpose of this visualization is to examine how GGATN combines sequential context with graph grounded activity information when forming position level activity predictions. Transformer self-attention is averaged over all heads and layers, while graph grounded cross attention is averaged over heads in its single cross attention layer. Thus, each panel reports the mean attention pattern for the selected sequence. The representative sequences are selected from valid generated outputs with sufficient length and nontrivial activity variation, and include both exact match and non exact match examples. Exact match is a strict sequence level indicator that holds only when all valid predicted activities match the ground truth sequence. Panel A reports Transformer self-attention over valid sequence positions. Panel B reports graph grounded cross attention from sequence positions to activity nodes in the global process graph, together with a concentration summary that includes entropy and the attention weights assigned to the true and predicted activities at each position. Entropy is computed from the row normalized graph grounded cross attention distribution over valid activity nodes, with higher values indicating more distributed attention and lower values indicating stronger concentration on fewer activity nodes. Panels C and D compare the predicted and ground truth activity sequences, with mismatched positions highlighted. The figure links the two internal attention stages with the final activity output, allowing prediction behavior to be inspected at the position level rather than only through aggregate metrics. The two examples illustrate different prediction outcomes under the same dual stage attention mechanism. In the BPI20 example, the selected sequence has valid length 9 and achieves an exact match. Panels C and D are identical,   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 23 of 35
+
+GGATN 0 1 2 3 4 5 6 7 8
+
+Key position 
+
+> 012345678
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+0.35 
+
+> Weight
+
+A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 
+
+Activity node 
+
+> 012345678
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.0330 
+
+0.0335 
+
+0.0340 
+
+0.0345 
+
+0.0350 
+
+0.0355 
+
+0.0360 Pos Correct Entropy W_True W_Pred 
+
+0 Y 3.37 0.033 0.033 
+
+1 Y 3.37 0.034 0.034 
+
+2 Y 3.37 0.034 0.034 
+
+3 Y 3.37 0.034 0.034 
+
+4 Y 3.37 0.034 0.034 
+
+5 Y 3.37 0.036 0.036 
+
+6 Y 3.37 0.035 0.035 
+
+7 Y 3.37 0.033 0.033 
+
+8 Y 3.37 0.035 0.035 
+
+Graph attention concentration 
+
+0 1 2 3 4 5 6 7 8
+
+C. Pred A1 A2 A3 A4 A5 A6 A7 A8 A9 
+
+0 1 2 3 4 5 6 7 8
+
+Valid position index 
+
+D. True A1 A2 A3 A4 A5 A6 A7 A8 A9 
+
+A1 = Permit SUBMITTED by EMPLOYEE 
+
+A2 = Permit APPROVED by ADMINISTRATION 
+
+A3 = Permit APPROVED by SUPERVISOR 
+
+A4 = Permit FINAL_APPROVED by DIRECTOR 
+
+A5 = Request For Payment SUBMITTED by EMPLOYEE 
+
+A6 = Request For Payment APPROVED by ADMINISTRATION 
+
+A7 = Request For Payment FINAL_APPROVED by SUPERVISOR 
+
+A8 = Request Payment 
+
+A9 = Payment Handled 
+
+A10 = Permit APPROVED by BUDGET OWNER 
+
+A11 = Permit APPROVED by PRE_APPROVER 
+
+A12 = Permit FINAL_APPROVED by SUPERVISOR 
+
+A13 = Permit REJECTED by ADMINISTRATION 
+
+A14 = Permit REJECTED by BUDGET OWNER 
+
+A15 = Permit REJECTED by EMPLOYEE 
+
+A16 = Permit REJECTED by MISSING 
+
+A17 = Permit REJECTED by PRE_APPROVER 
+
+A18 = Permit REJECTED by SUPERVISOR 
+
+A19 = Request For Payment APPROVED by BUDGET OWNER 
+
+A20 = Request For Payment APPROVED by PRE_APPROVER 
+
+A21 = Request For Payment APPROVED by SUPERVISOR 
+
+A22 = Request For Payment FINAL_APPROVED by DIRECTOR 
+
+A23 = Request For Payment REJECTED by ADMINISTRATION 
+
+A24 = Request For Payment REJECTED by BUDGET OWNER 
+
+A25 = Request For Payment REJECTED by EMPLOYEE 
+
+A26 = Request For Payment REJECTED by MISSING 
+
+A27 = Request For Payment REJECTED by PRE_APPROVER 
+
+A28 = Request For Payment REJECTED by SUPERVISOR 
+
+A29 = Request For Payment SAVED by EMPLOYEE 
+
+Dual stage attention analysis for case 15 | valid length = 9 | exact match = True 
+
+(a) BPI20 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+
+Key position 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+0.35 
+
+0.40 
+
+> Weight
+
+A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 
+
+Activity node 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.058 
+
+0.059 
+
+0.060 
+
+0.061 
+
+0.062 
+
+0.063 
+
+0.064 
+
+0.065 
+
+Pos Correct Entropy W_True W_Pred 
+
+0 Y 2.77 0.064 0.064 
+
+1 Y 2.77 0.065 0.065 
+
+2 N 2.77 0.064 0.065 
+
+3 Y 2.77 0.062 0.062 
+
+4 Y 2.77 0.063 0.063 
+
+5 N 2.77 0.063 0.063 
+
+6 N 2.77 0.063 0.063 
+
+7 Y 2.77 0.064 0.064 
+
+8 Y 2.77 0.062 0.062 
+
+9 Y 2.77 0.062 0.062 
+
+10 N 2.77 0.063 0.062 
+
+11 N 2.77 0.062 0.063 
+
+12 Y 2.77 0.063 0.063 
+
+13 Y 2.77 0.064 0.064 
+
+14 N 2.77 0.063 0.063 
+
+15 N 2.77 0.060 0.063 
+
+Graph attention concentration 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+
+C. Pred A1 A2 A7 A4 A5 A4 A3 A8 A9 A4 A4 A4 A5 A4 A5 A10 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+
+Valid position index 
+
+D. True A1 A2 A3 A4 A5 A6 A7 A8 A9 A4 A5 A9 A5 A4 A10 A11 
+
+A1 = ER Registration 
+
+A2 = ER Triage 
+
+A3 = IV Liquid 
+
+A4 = Leucocytes 
+
+A5 = CRP 
+
+A6 = LacticAcid 
+
+A7 = ER Sepsis Triage 
+
+A8 = IV Antibiotics 
+
+A9 = Admission NC 
+
+A10 = Release A 
+
+A11 = Return ER 
+
+A12 = Admission IC 
+
+A13 = Release B 
+
+A14 = Release C 
+
+A15 = Release D A16 = Release E 
+
+Dual stage attention analysis for case 29 | valid length = 16 | exact match = False 
+
+(b) Sepsis 
+
+Figure 5: Dual Stage Attention Analysis Panel of Exactly Match Sample (BPI20) and Non Exactly Match Sample (Sepsis) Wang and Damiani: Preprint submitted to Elsevier Page 24 of 35 GGATN 
+
+indicating that all valid activity positions are correctly predicted. Panel A shows a clear sequence contextualization pattern rather than local neighbor attention: earlier query positions assign stronger attention to later key positions, whereas later query positions emphasize earlier positions. This indicates that Transformer self-attention integrates information across the full valid sequence when forming position representations. Panel B shows that graph grounded cross attention behaves differently from positional self-attention. It does not follow a monotonic sequence pattern or a one to one alignment between positions and activity nodes. Instead, attention is distributed over a broad set of graph nodes, with position specific variation across the activity space. The concentration summary supports this reading: entropy remains high, and the weights assigned to the true and predicted activities vary across positions. Since the sequence is predicted correctly at every position, correct generation does not require sharply concentrated graph attention. Rather, graph grounded cross attention provides distributed structural conditioning that is combined with sequence contextualization and activity decoding to produce the final activity sequence. In the Sepsis example, the selected sequence has valid length 16 and does not achieve an exact match. Several positions are incorrectly predicted, as indicated by the red outlines in Panel C and the corresponding rows in the concentration summary. Panel A shows a markedly different self-attention pattern from the BPI20 example. Attention is shifted toward later key positions across most query positions, with the strongest responses concentrated in the final part of the sequence. This indicates that the sequence representation relies strongly on late sequence context. Panel B remains structurally informative despite the prediction errors. Graph grounded cross attention is not uniformly spread over the full activity space. Instead, the subset of graph nodes corresponding to activities that appear in the true sequence receives consistently stronger attention than the remaining activity nodes. Thus, even in a non exact match case, graph grounded cross attention still emphasizes process relevant regions of the global graph rather than irrelevant activities. The concentration summary further clarifies the error pattern. At correctly predicted positions, the weights assigned to the true and predicted activities are identical. At mismatched positions, these values diverge because the predicted label differs from the true label. However, both W_True and W_Pred remain within a relatively narrow range and do not span the full range of graph grounded cross attention values in Panel B. This suggests that incorrect predictions are not caused by a complete loss of graph support for the true activity. Instead, the graph component continues to provide structured but distributed evidence, while final errors arise from how this evidence is combined with sequence representation and decoding. Overall, the examples show that graph grounded cross attention functions as distributed structural conditioning rather than hard activity selection. In both exact and non exact cases, it preserves process relevant graph evidence, while final prediction correctness depends on how this structural evidence interacts with sequence self-attention and decoding. 
+
+10.2. Graph Grounded Cross Attention Decomposition Analysis 
+
+Figure 6(a) analyzes graph grounded cross attention from two perspectives: its alignment with transition admissi-bility in the global process graph and its attention to the ground truth and model selected activities at the following sequence position. The purpose is to determine whether the graph attention signal supports admissible activity transitions, disperses over broader graph regions, or separates between ground truth and model selected activities during full sequence generation. The analysis is aggregated by relative source position, where valid source positions in each sequence are divided into five ordered bins from early to late regions. For each valid source position, the activity at that position defines the admissible outgoing transitions in the observed process graph. We decompose the graph attention distribution into four quantities: attention assigned to admissible outgoing activities, attention assigned outside this admissible set, attention assigned to the ground truth activity at the following position, and attention assigned to the model selected activity at the following position. The admissibility gap is defined as admissible transition attention minus inadmissible transition attention. Positive values indicate that graph attention favors admissible outgoing activities, whereas negative values indicate stronger attention outside the admissible transition set. This analysis does not treat graph grounded cross attention as a hard admissibility filter. In GGATN, graph grounded cross attention produces the structural representation 𝐇 𝑠𝑡𝑟𝑢𝑐𝑡 , which is decoded against the graph activity embeddings 
+
+𝐄 𝑎𝑐𝑡 and then passed through graph constrained decoding. The purpose of this figure is therefore to examine whether learned graph attention directly aligns with admissible outgoing activities or provides broader structural conditioning before the final decoding constraint. Strong positive gaps indicate direct alignment with admissible transitions, while weak or negative gaps indicate that graph attention is used more broadly as distributed structural evidence rather than as a local transition filter.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 25 of 35 GGATN
+
+Figure 6(a) shows two contrasting patterns. In BPI13I, graph attention is strongly aligned with admissible transi-tions. Across all relative position bins, admissible transition attention remains substantially higher than inadmissible transition attention, producing a consistently positive gap. The gap is largest in the first bin and remains positive through later bins, although it gradually decreases. This indicates that graph grounded cross attention places greater weight on process admissible outgoing activities throughout the sequence. The ground truth and model selected activity attention curves are also nearly identical, showing that the graph signal assigned to the model selected activity at the following position closely follows the signal assigned to the ground truth activity at that position. BPI20 presents the opposite pattern. Inadmissible transition attention dominates admissible transition attention across all bins, yielding a consistently negative gap. At the same time, the ground truth and model selected activity attention curves remain close to each other and stay near the lower range of the graph attention scale. This indicates that, in a larger and more complex activity space with 29 activities, graph grounded cross attention does not operate as a local admissible transition selector. Instead, it provides distributed structural conditioning that is combined with graph constrained decoding to support final activity selection. 
+
+10.3. Refinement Based Activity Distribution Reshaping Analysis 
+
+Figure 6(b) analyzes the role of the refinement block by comparing the provisional activity distribution with the final activity distribution. GGATN first produces provisional activity logits, converts the resulting distribution into a soft activity embedding, and injects this feedback into the hidden representation before producing the final activity logits. This design introduces an explicit activity distribution reshaping stage before structured decoding, allowing the model to revise position level activity distributions rather than relying only on the first decoded logits. For each valid non EOS position, we compute the change in probability assigned to the ground truth activity, 
+
+Δ𝑝 true = 𝑝 𝑓 𝑖𝑛𝑎𝑙  
+
+> true
+
+−𝑝 𝑓 𝑖𝑟𝑠𝑡  
+
+> true
+
+, and the Jensen Shannon (JS) divergence between the provisional and final activity distributions. Positions are grouped by relative sequence position and separated according to whether the provisional prediction is correct or misclassified. The figure therefore captures both the directional effect of refinement on the true activity and the magnitude of distributional change induced by the feedback stage. The two examples in Figure 6(b) show that refinement does not behave as a uniformly corrective operation. In BPI13C, provisionally misclassified positions generally show positive Δ𝑝 true across relative position bins, indicating that refinement often increases the probability assigned to the ground truth activity after the first pass. Provisionally correct positions, in contrast, frequently show negative or near zero Δ𝑝 true , especially in the middle bins. This suggests that refinement does not simply amplify already correct predictions. Instead, it redistributes probability mass after the provisional prediction, increasing support for many initially misclassified positions while recalibrating some initially correct ones. The JS divergence panel supports this interpretation. In BPI13C, provisionally misclassified positions show visible distributional shifts across bins, while provisionally correct positions also exhibit nontrivial shifts in several regions. Thus, refinement changes the full activity distribution, not only the probability assigned to the true activity. This is consistent with the feedback design of GGATN, where the provisional distribution is converted into a soft activity embedding and used to update the hidden representation before final decoding. The Helpdesk example shows a more selective refinement pattern. For provisionally misclassified positions, Δ𝑝 true 
+
+is positive in several bins, especially in the middle and later parts of the sequence, but the effect is not uniform. For provisionally correct positions, Δ𝑝 true is closer to zero and often slightly negative, suggesting that refinement introduces only limited adjustment when the first pass is already correct. The lower panel shows that such changes are accompanied by larger distributional shifts for misclassified positions than for correct positions, particularly in later bins. This suggests that the refinement block applies stronger reshaping when the provisional distribution is less reliable, while leaving some already stable predictions nearly unchanged. Overall, the refinement analysis shows that the feedback block acts as a distribution reshaping and calibration mechanism before final decoding. Positive Δ𝑝 true indicates direct improvement in the probability assigned to the ground truth activity, whereas negative or near zero values can reflect recalibration among plausible competing activities. Because GGATN performs full sequence generation with structured decoding, the refined distribution is not used as an isolated position wise decision. Instead, refinement reshapes local activity evidence before the final sequence level decoding step, allowing the model to balance activity probabilities under broader contextual and graph based constraints.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 26 of 35
+
+GGATN B1 B2 B3 B4 B5 
+
+> Relative sequence position bin
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+> (a) Graph cross attention decomposition
+
+B1 B2 B3 B4 B5 
+
+> Relative sequence position bin
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+> Attention weight
+> (b) Gap and target activity attention
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+> Admissible transition attention
+> Inadmissible transition attention
+> True target activity attention
+> Predicted target activity attention
+> Admissibility gap (Admissible - Inadmissible)
+
+B1 B2 B3 B4 B5 
+
+> Relative sequence position bin
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+> (a) Graph cross attention decomposition
+
+B1 B2 B3 B4 B5 
+
+> Relative sequence position bin
+
+0.5 
+
+0.4 
+
+0.3 
+
+0.2 
+
+0.1 
+
+0.0 
+
+> Attention weight
+> (b) Gap and target activity attention
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+> Admissible transition attention
+> Inadmissible transition attention
+> True target activity attention
+> Predicted target activity attention
+> Admissibility gap (Admissible - Inadmissible)
+
+(a) Graph Grounded Cross Attention to Transition Admissibility and Target Activity for BPI13I (left) and BPI20 (right) 0.4     
+
+> 0.3
+> 0.2
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> ptrue
+> Change in true activity probability after refinement
+> B1 B2 B3 B4 B5
+> Relative sequence position bin
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions      
+
+> Provisionally misclassified Provisionally correct 0.6
+> 0.4
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> ptrue
+> Change in true activity probability after refinement
+> B1 B2 B3 B4 B5
+> Relative sequence position bin
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions  
+
+> Provisionally misclassified Provisionally correct
+
+(b) Refinement Based Activity Distribution Reshaping for BPI13C (left) and Helpdesk (right) Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 86951 Inadmissible: 34879 
+
+Final Outcome Totals 
+
+Corrected to admissible: 34879 Reassigned among admissible: 22844 Retained: 64107 
+
+(c) Transition Correction under Graph Constrained Structured Decoding for BPI17 
+
+Figure 6: Stage Wise Interpretability Analysis of GGATN 
+
+10.4. Structured Decoding and Transition Correction 
+
+Figure 6(c) examines the effect of structured decoding on GGATN activity generation. During generation, GGATN first performs a single forward pass and produces activity logits for all positions. These logits define local activity preferences, but the final sequence is not obtained by independent argmax decoding. Instead, GGATN combines unary scores with learned transition bias, optional bigram prior information, and graph based admissibility constraints when the adjacency matrix is used. A Viterbi style dynamic program then selects the highest scoring admissible path. This makes generation explicitly process aware: local scores are filtered through the transition structure of the global process graph. The figure analyzes this effect by comparing the raw unary top candidate at each position with the final activity selected in the decoded sequence. 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 27 of 35 GGATN 
+
+For this analysis, each generated real event position is compared before and after structured decoding. The raw candidate is defined as the highest scoring activity under the unary activity logits at that position, after excluding special tokens. Its transition status is evaluated with respect to the previously decoded activity in the final path. A raw candidate is classified as admissible and EOS reachable if the transition is allowed by the process graph and the candidate can still reach EOS through at least one directed path. It is classified as admissible but EOS unreachable if the immediate transition is allowed but the candidate cannot reach EOS , and as inadmissible if the immediate transition is not allowed by the process graph. The final outcome records how structured decoding handles the raw candidate. A position is marked as retained when the final decoded activity is the same as the raw candidate. It is marked as 
+
+corrected to admissible when an inadmissible or EOS unreachable raw candidate is replaced by an admissible activity. It is marked as reassigned among admissible when the raw candidate is already admissible and EOS reachable, but structured decoding selects a different admissible activity to improve the full path. The Sankey diagram aggregates these transitions across relative sequence position bins, showing how local unary preferences are transformed into process admissible decoded activities. We use BPI17 for this analysis because it has the largest activity space in the benchmark, with 66 activities, and therefore presents the most complex transition structure. Figure 6(c) shows that a substantial number of raw unary top candidates are not directly retained. Among all generated positions, 86 ,951 raw candidates are admissible and EOS reachable, while 34 ,879 are inadmissible. Structured decoding corrects all inadmissible candidates to admissible transitions and additionally reassigns 22 ,844 candidates among admissible alternatives. The remaining 
+
+64 ,107 candidates are retained. This shows that structured decoding is not a cosmetic post processing step: it actively transforms local activity preferences into process admissible paths by correcting inadmissible local choices and selecting among admissible alternatives for path consistency. 
+
+11. Conclusion 
+
+This paper proposed the Graph Grounded Cross Attention Transformer Neural Network (GGATN) for structurally constrained full event sequence generation in PPM. GGATN combines global process graph learning, Transformer based sequence contextualization, graph grounded cross attention, feedback refinement, and Viterbi style graph constrained decoding to generate complete event sequences with activities, timestamps, sequence length, and event and sequence attributes. Unlike autoregressive language model baselines, GGATN performs single pass generation over all positions and combines sequence representations with activity embeddings learned from the global process graph. Experiments on six benchmark datasets show that GGATN overall provides more reliable generation quality than practical LLM baselines. Across most datasets, GGATN variants provide stronger overall generation quality, with competitive or leading results in sequence similarity, DL similarity, bigram JSD based control flow distribution, and duration distribution. They also maintain higher activity accuracy, stronger attribute reconstruction, zero hallucinated activities, and zero sequence level attribute inconsistency. The LLM baselines improve under larger context settings in some cases, but remain limited by coverage failures, hallucinated outputs, unstable behavior on complex datasets, and high computational cost. The ablation analyses further confirm that the global GAT encoder remains stable across frozen, jointly trainable, and staged training regimes, indicating that the process graph provides a robust structural basis for generation. In addition, the interpretability analyses provide a stage wise view of model behavior, showing how sequence context, graph structure, activity refinement, and transition constrained decoding jointly shape the generated sequences. Future work can extend GGATN in four directions. First, the global process graph can be enriched with more informative edge representations, such as transition distributions, temporal gap statistics, attribute changes, and context dependent transition patterns. Second, because the LLM baselines benefit from bucket based prompting while GGATN uses a single global graph setting, future work can investigate bucket specific or scale adaptive graph construction to better reflect sequence length, sparsity, and transition density. Third, although the present experiments use mostly global hyperparameter settings, dataset specific tuning of the graph encoder, cross attention module, refinement module, transition bias, and decoding parameters may further improve performance. Fourth, the tradeoff among activity, temporal, event attribute, and sequence attribute heads should be studied more systematically, since stronger control flow generation may not always coincide with optimal timestamp or attribute reconstruction.   
+
+> Wang and Damiani: Preprint submitted to Elsevier Page 28 of 35
+
+GGATN 
+
+12. Declaration of generative AI and AI-assisted technologies in the writing process 
+
+Statement: During the preparation of this work the authors used ChatGPT in order to improve the readability and language of the manuscript in the writing process. After using this tool/service, the authors reviewed and edited the content as needed and take full responsibility for the content of the published article. 
+
+References 
+
+Alon, U., Yahav, E., 2020. On the bottleneck of graph neural networks and its practical implications. arXiv preprint arXiv:2006.05205 . Bahdanau, D., Cho, K., Bengio, Y., 2014. Neural machine translation by jointly learning to align and translate. arXiv preprint arXiv:1409.0473 . Beck, D., Haffari, G., Cohn, T., 2018. Graph-to-sequence learning using gated graph neural networks, in: Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 273–283. Bronstein, M.M., Bruna, J., Cohen, T., Veličković, P., 2021. Geometric deep learning: Grids, groups, graphs, geodesics, and gauges. arXiv preprint arXiv:2104.13478 . Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J.D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al., 2020. Language models are few-shot learners. Advances in neural information processing systems 33, 1877–1901. Bukhsh, Z.A., Saeed, A., Dijkman, R.M., 2021. Processtransformer: Predictive business process monitoring with transformer network. arXiv preprint arXiv:2104.00721 . Camargo, M., Dumas, M., González-Rojas, O., 2019. Learning accurate lstm models of business processes, in: International Conference on Business Process Management, Springer. pp. 286–302. Cao, Y., Han, S., Gao, Z., Ding, Z., Xie, X., Zhou, S.K., 2025. Graphinsight: Unlocking insights in large language models for graph structure understanding, in: Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 12096–12134. Chen, H., Fang, X., Fang, H., 2022. Multi-task prediction method of business process based on bert and transfer learning. Knowledge-Based Systems 254, 109603. Cho, K., Van Merriënboer, B., Gulçehre, Ç., Bahdanau, D., Bougares, F., Schwenk, H., Bengio, Y., 2014. Learning phrase representations using rnn encoder–decoder for statistical machine translation, in: Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP), pp. 1724–1734. Chung, J., Gulcehre, C., Cho, K., Bengio, Y., 2014. Empirical evaluation of gated recurrent neural networks on sequence modeling. arXiv preprint arXiv:1412.3555 . Dissegna, S., Di Francescomarino, C., 2024. Graph neural networks for ppm: review and benchmark for next activity predictions, in: International Conference on Business Process Management, Springer. pp. 31–43. van Dongen, B., 2017. Bpi challenge 2017. URL: https://data.4tu.nl/articles/_/12696884/1 , doi: 10.4121/UUID: 5F3067DF-F10B-45DA-B98B-86AE4C7A310B .Duong, L.T., Travé-Massuyès, L., Subias, A., Merle, C., 2023. Remaining cycle time prediction with graph neural networks for predictive process monitoring, in: Proceedings of the 2023 8th international conference on machine learning technologies, pp. 95–101. Dwivedi, V.P., Bresson, X., 2020. A generalization of transformer networks to graphs. arXiv preprint arXiv:2012.09699 . Elman, J.L., 1990. Finding structure in time. Cognitive science 14, 179–211. Evermann, J., Rehse, J.R., Fettke, P., 2016. A deep learning approach for predicting process behaviour at runtime, in: International Conference on Business Process Management, Springer. pp. 327–338. Fan, A., Gardent, C., Braud, C., Bordes, A., 2019. Using local knowledge graph construction to scale seq2seq models to multi-document inputs, in: Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP), pp. 4186–4196. Geng, S., Cooper, H., Moskal, M., Jenkins, S., Berman, J., Ranchin, N., West, R., Horvitz, E., Nori, H., 2025. Generating structured outputs from language models: Benchmark and studies. arXiv e-prints , arXiv–2501. Gilmer, J., Schoenholz, S.S., Riley, P.F., Vinyals, O., Dahl, G.E., 2017. Neural message passing for quantum chemistry, in: International conference on machine learning, Pmlr. pp. 1263–1272. Guo, N., Liu, C., Li, C., Zeng, Q., Ouyang, C., Liu, Q., Lu, X., 2024. Explainable and effective process remaining time prediction using feature-informed cascade prediction model. IEEE Transactions on Services Computing 17, 949–962. Hamilton, W., Ying, Z., Leskovec, J., 2017. Inductive representation learning on large graphs. Advances in neural information processing systems 30. Harane, N., Rathi, S., 2020. Comprehensive survey on deep learning approaches in predictive business process monitoring. Modern approaches in machine learning and cognitive science: A walkthrough: Latest trends in ai , 115–128. Hochreiter, S., Schmidhuber, J., 1997. Long short-term memory. Neural computation 9, 1735–1780. Kandpal, N., Deng, H., Roberts, A., Wallace, E., Raffel, C., 2023. Large language models struggle to learn long-tail knowledge, in: International conference on machine learning, PMLR. pp. 15696–15707. Kasner, Z., Dušek, O., 2024. Beyond traditional benchmarks: Analyzing behaviors of open llms on data-to-text generation, in: Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 12045–12072. Khan, A., Le, H., Do, K., Tran, T., Ghose, A., Dam, H., Sindhgatta, R., 2021. Deepprocess: supporting business process execution using a mann-based recommender system, in: International Conference on Service-Oriented Computing, Springer. pp. 19–33. Kipf, T.N., Welling, M., 2016. Semi-supervised classification with graph convolutional networks. arXiv preprint arXiv:1609.02907 . Koncel-Kedziorski, R., Bekal, D., Luan, Y., Lapata, M., Hajishirzi, H., 2019. Text generation from knowledge graphs with graph transformers, in: Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 29 of 35 GGATN 
+
+Technologies, Volume 1 (Long and Short Papers), pp. 2284–2293. Kratsch, W., Manderscheid, J., Röglinger, M., Seyfried, J., 2021. Machine learning in business process monitoring: A comparison of deep learning and classical approaches used for outcome prediction: W. kratsch et al. Business & Information Systems Engineering 63, 261–276. Lewis, M., Liu, Y., Goyal, N., Ghazvininejad, M., Mohamed, A., Levy, O., Stoyanov, V., Zettlemoyer, L., 2020. Bart: Denoising sequence-to-sequence pre-training for natural language generation, translation, and comprehension, in: Proceedings of the 58th annual meeting of the association for computational linguistics, pp. 7871–7880. Li, H., Chen, X., Xu, Z., Li, D., Hu, N., Teng, F., Li, Y., Qiu, L., Zhang, C.J., Qing, L., et al., 2025. Exposing numeracy gaps: A benchmark to evaluate fundamental numerical abilities in large language models, in: Findings of the Association for Computational Linguistics: ACL 2025, pp. 20004–20026. Li, Y., Tarlow, D., Brockschmidt, M., Zemel, R., 2015. Gated graph sequence neural networks. arXiv preprint arXiv:1511.05493 . Lin, L., Wen, L., Wang, J., 2019. Mm-pred: A deep predictive model for multi-attribute event sequence, in: Proceedings of the 2019 SIAM international conference on data mining, SIAM. pp. 118–126. Mannhardt, F., 2016. Sepsis cases - event log. URL: https://data.4tu.nl/articles/_/12707639/1 , doi: 10.4121/UUID: 915D2BFB-7E84-49AD-A286-DC35F063A460 .Márquez-Chamorro, A.E., Resinas, M., Ruiz-Cortés, A., 2017. Predictive monitoring of business processes: a survey. IEEE Transactions on Services Computing 11, 962–977. Medsker, L.R., Jain, L., et al., 2001. Recurrent neural networks. Design and applications 5, 2. Navarin, N., Vincenzi, B., Polato, M., Sperduti, A., 2017. Lstm networks for data-aware remaining time prediction of business process instances, in: 2017 IEEE symposium series on computational intelligence (SSCI), IEEE. pp. 1–7. Nguyen, A., Chatterjee, S., Weinzierl, S., Schwinn, L., Matzner, M., Eskofier, B., 2020. Time matters: Time-aware lstms for predictive business process monitoring, in: International Conference on Process Mining, Springer. pp. 112–123. Pasquadibisceglie, V., Appice, A., Castellano, G., Malerba, D., 2019. Using convolutional neural networks for predictive process analytics, in: 2019 international conference on process mining (ICPM), IEEE. pp. 129–136. Pasquadibisceglie, V., Appice, A., Castellano, G., Malerba, D., 2021. A multi-view deep learning approach for predictive business process monitoring. IEEE Transactions on Services Computing 15, 2382–2395. Pasquadibisceglie, V., Scaringi, R., Appice, A., Castellano, G., Malerba, D., 2024. Prophet: Explainable predictive process monitoring with heterogeneous graph neural networks. IEEE Transactions on Services Computing 17, 4111–4124. Polato, M., 2017. Helpdesk: Ticketing Management Process (Event Log). URL: https://doi.org/10.4121/uuid: 0c60edf1-6f83-4e75-9367-4c63b3e9d5bb , doi: 10.4121/uuid:0c60edf1-6f83-4e75-9367-4c63b3e9d5bb . dataset, Version 1. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al., 2021. Learning transferable visual models from natural language supervision, in: International conference on machine learning, PmLR. pp. 8748–8763. Raffel, C., Shazeer, N., Roberts, A., Lee, K., Narang, S., Matena, M., Zhou, Y., Li, W., Liu, P.J., 2020. Exploring the limits of transfer learning with a unified text-to-text transformer. Journal of machine learning research 21, 1–67. Rama-Maneiro, E., Vidal, J.C., Lama, M., 2021. Deep learning for predictive business process monitoring: Review and benchmark. IEEE Transactions on Services Computing 16, 739–756. Rama-Maneiro, E., Vidal, J.C., Lama, M., 2023. Embedding graph convolutional networks in recurrent neural networks for predictive monitoring. IEEE Transactions on Knowledge and Data Engineering 36, 137–151. Rampášek, L., Galkin, M., Dwivedi, V.P., Luu, A.T., Wolf, G., Beaini, D., 2022. Recipe for a general, powerful, scalable graph transformer. Advances in Neural Information Processing Systems 35, 14501–14515. Rivera Lazo, G., Ñanculef, R., 2022. Multi-attribute transformers for sequence prediction in business process management, in: International Conference on Discovery Science, Springer. pp. 184–194. Scarselli, F., Gori, M., Tsoi, A.C., Hagenbuchner, M., Monfardini, G., 2008. The graph neural network model. IEEE transactions on neural networks 20, 61–80. Schmidt, F., 2019. Generalization in generation: A closer look at exposure bias, in: Proceedings of the 3rd Workshop on Neural Generation and Translation, pp. 157–167. Steeman, W., 2013a. BPI Challenge 2013: Closed Problems (Event Log). URL: https://doi.org/10.4121/uuid: c2c3b154-ab26-4b31-a0e8-8f2350ddac11 , doi: 10.4121/uuid:c2c3b154-ab26-4b31-a0e8-8f2350ddac11 . dataset, Version 1. Steeman, W., 2013b. BPI Challenge 2013: Incidents (Event Log). URL: https://doi.org/10.4121/uuid: 500573e6-accc-4b0c-9576-aa5468b10cee , doi: 10.4121/uuid:500573e6-accc-4b0c-9576-aa5468b10cee . dataset, Version 1. Sutskever, I., Vinyals, O., Le, Q.V., 2014. Sequence to sequence learning with neural networks. Advances in neural information processing systems 27. Tax, N., Verenich, I., La Rosa, M., Dumas, M., 2017. Predictive business process monitoring with lstm neural networks, in: International conference on advanced information systems engineering, Springer. pp. 477–492. Taymouri, F., Rosa, M.L., Erfani, S., Bozorgi, Z.D., Verenich, I., 2020. Predictive business process monitoring via generative adversarial nets: the case of event prediction, in: International Conference on Business Process Management, Springer. pp. 237–256. Teinemaa, I., Dumas, M., Rosa, M.L., Maggi, F.M., 2019. Outcome-oriented predictive process monitoring: Review and benchmark. ACM Transactions on Knowledge Discovery from Data (TKDD) 13, 1–57. Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.A., Lacroix, T., Rozière, B., Goyal, N., Hambro, E., Azhar, F., et al., 2023. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971 . 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 30 of 35 GGATN 
+
+Van Dongen, B.F., 2020. BPI Challenge 2020: Prepaid Travel Cost (Event Log). URL: https://doi.org/10.4121/uuid: 52fb97d4-4588-43c9-9d04-3604d4613b51 , doi: 10.4121/uuid:52fb97d4-4588-43c9-9d04-3604d4613b51 . dataset, Version 1. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., Polosukhin, I., 2017. Attention is all you need. Advances in neural information processing systems 30. Veličković, P., Cucurull, G., Casanova, A., Romero, A., Lio, P., Bengio, Y., 2017. Graph attention networks. arXiv preprint arXiv:1710.10903 . Verenich, I., Dumas, M., Rosa, M.L., Maggi, F.M., Teinemaa, I., 2019. Survey and cross-benchmark comparison of remaining time prediction methods in business process monitoring. ACM Transactions on Intelligent Systems and Technology (TIST) 10, 1–34. Wang, F., Ceravolo, P., Damiani, E., 2025a. Comprehensive attribute encoding and dynamic lstm hypermodels for outcome oriented predictive business process monitoring. arXiv preprint arXiv:2506.03696 . Wang, F., Ceravolo, P., Damiani, E., 2025b. Hgcn (o): A self-tuning gcn hypermodel toolkit for outcome prediction in event-sequence data. arXiv preprint arXiv:2507.22524 . Wang, F., Ceravolo, P., Damiani, E., 2025c. Leveraging duration pseudo-embeddings in multilevel lstm and gcn hypermodels for outcome-oriented ppm, in: International Conference on Business Process Management, Springer. pp. 94–106. Wang, F., Damiani, E., 2025. Time-aware and transition-semantic graph neural networks for interpretable predictive business process monitoring. Expert Systems with Applications , 130320. Wang, F., Kosca, L., Kosca, A., Gacesa, M., Damiani, E., 2025d. Auto-ml graph neural network hypermodels for outcome prediction in event-sequence data, in: 2025 IEEE 19th International Conference on Application of Information and Communication Technologies (AICT), IEEE. pp. 1–6. Wang, J., Yu, D., Liu, C., Sun, X., 2019. Outcome-oriented predictive process monitoring with attention-based bidirectional lstm neural networks, in: 2019 IEEE international conference on web services (ICWS), IEEE. pp. 360–367. Wang, Y., Zhao, Y., 2024. Tram: Benchmarking temporal reasoning for large language models, in: Findings of the Association for Computational Linguistics: ACL 2024, pp. 6389–6415. Weinzierl, S., 2021. Exploring gated graph sequence neural networks for predicting next process activities, in: International conference on business process management, Springer. pp. 30–42. Weinzierl, S., Dunzer, S., Zilker, S., Matzner, M., 2020. Prescriptive business process monitoring for recommending next best actions, in: International conference on business process management, Springer. pp. 193–209. Wuyts, B., Vanden Broucke, S., De Weerdt, J., 2024. Sutran: an encoder-decoder transformer for full-context-aware suffix prediction of business processes, in: 2024 6th International Conference on Process Mining (ICPM), IEEE. pp. 17–24. Xu, K., Wu, L., Wang, Z., Feng, Y., Witbrock, M., Sheinin, V., 2018. Graph2seq: Graph to sequence learning with attention-based neural networks. arXiv preprint arXiv:1804.00823 . Yin, J., Qiu, A., Fang, L., Wang, N., Dong, C., Ge, S., 2025. Stgnn: A novel spatial-temporal graph neural network for predicting complicated business process performance under multi-event parallelism. Expert Systems with Applications 291, 128391. Ying, C., Cai, T., Luo, S., Zheng, S., Ke, G., He, D., Shen, Y., Liu, T.Y., 2021. Do transformers really perform badly for graph representation? Advances in neural information processing systems 34, 28877–28888. Zhou, H., Zhang, S., Peng, J., Zhang, S., Li, J., Xiong, H., Zhang, W., 2021a. Informer: Beyond efficient transformer for long sequence time-series forecasting, in: Proceedings of the AAAI conference on artificial intelligence, pp. 11106–11115. Zhou, J., Naseem, T., Astudillo, R.F., Lee, Y.S., Florian, R., Roukos, S., 2021b. Structure-aware fine-tuning of sequence-to-sequence transformers for transition-based amr parsing, in: Proceedings of the 2021 conference on empirical methods in natural language processing, pp. 6279–6290. Zhu, J., Li, J., Zhu, M., Qian, L., Zhang, M., Zhou, G., 2019. Modeling graph structure in transformer for better amr-to-text generation, in: Proceedings of the 2019 conference on empirical methods in natural language processing and the 9th international joint conference on natural language processing (EMNLP-IJCNLP), pp. 5459–5468. 
+
+Appendix A. Complete Results by Dataset 
+
+The appendix tables follow the abbreviations defined in Section 8. Briefly, M denotes model; G is the main GGATN model with a frozen graph attention encoder, G_j is the fully joint training variant, and G_s5 /G_s10 are staged unfreezing variants. L(4k) , L(32k) , and M(4k) denote the Llama and Mistral baselines. The main generation metrics are coverage, SS, DL, bigram JSD, and duration WD. Dataset specific columns report activity, temporal, event level, and sequence level attribute metrics. For sequence level attributes, we also include I-c to report the number of generated sequences with inconsistent values for a given attribute, and I-pct for the corresponding inconsistency percentage over generated sequences. Higher values are better for coverage, SS, DL, recall, and accuracy metrics, while lower values are better for JSD, WD, I-pct, I-c, MAE based metrics, and hallucinated activities. 
+
+Wang and Damiani: Preprint submitted to Elsevier Page 31 of 35 GGATN 
+
+Table 5 
+
+Complete Results for Sepsis 
+
+Sepsis M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S Ac(E) MA(E) MA(S) O:G LEU CRP LA Age G 1.0000 0.2977 0.7169 1089448 0.6271 0 0.8125 0.4816 446981 104 0.7311 5.97 53.48 0.6040 12.77 
+
+G_j 1.0000 0.3046 0.7184 1073339 0.6314 0 0.8125 0.4884 345565 104 0.7273 6.02 53.50 0.6175 13.08 
+
+G_s5 1.0000 0.2921 0.7321 1361757 0.6401 0 0.8125 0.4878 334917 104 0.7367 6.12 53.57 0.6185 12.97 
+
+G_s10 1.0000 0.3004 0.7272 894149 0.6490 0 0.8125 0.4991 621142 104 0.7473 6.03 52.63 0.6000 12.97 
+
+L(4k) 0.6346 0.9833 0.1061 1353228 0.0867 320 0.6250 0.0269 22346748 66 0.0350 19.28 197.08 4.1793 48.41 
+
+M(4k) 0.1635 1.5442 0.0201 2984395 0.0155 623 0.6250 0.0119 22264333 17 0.0113 141.05 914.12 5.9523 44.60 
+
+L(32k) 0.8654 0.5240 0.5181 1670784 0.4467 24 0.9375 0.2489 14337061 90 0.3258 52.85 187.92 3.6085 31.15 
+
+M Ac(S) IS DB DO SCT HYP SCRH INF DAA DIC DS DiL DOth SC2+ DX SCTmp G 0.8558 0.8269 0.9038 0.6250 0.8942 0.8558 0.8654 0.6346 0.8365 0.9904 1.0000 0.9808 0.8462 0.8365 0.8365 
+
+G_j 0.8558 0.8269 0.9038 0.6442 0.8942 0.8558 0.8750 0.6538 0.8365 0.9904 1.0000 0.9808 0.8462 0.8269 0.8269 
+
+G_s5 0.8750 0.8462 0.9038 0.6250 0.8942 0.8750 0.8654 0.6346 0.8558 0.9904 1.0000 0.9808 0.8654 0.8558 0.8558 
+
+G_s10 0.8654 0.8269 0.9038 0.6154 0.8942 0.8558 0.8654 0.6635 0.8365 0.9904 1.0000 0.9808 0.8654 0.8462 0.8462 
+
+L(4k) 0.1538 0.1346 0.1827 0.1250 0.1731 0.0481 0.0577 0.1250 0.1538 0.1923 0.1923 0.1827 0.1731 0.1442 0.1538 
+
+M(4k) 0.0673 0.0865 0.0962 0.0577 0.1058 0.0769 0.0673 0.0481 0.0769 0.0288 0.0962 0.1058 0.0481 0.0673 0.0865 
+
+L(32k) 0.6154 0.6154 0.7596 0.4808 0.7500 0.6346 0.5577 0.4615 0.6346 0.7981 0.7885 0.7885 0.6250 0.6346 0.5577 
+
+M Ac(S) I-c I-pct I-c I-pct I-c I-pct I-c I-pct DUC SCL OLI DLA DX HYPX DUS DECG IS DB DO SCT G 0.5577 0.9423 0.9712 0.8365 0.2885 0.9808 0.6154 0.8269 0 0 0 0 0 0 0 0
+
+G_j 0.5385 0.9423 0.9712 0.8269 0.2404 0.9808 0.5577 0.8269 0 0 0 0 0 0 0 0
+
+G_s5 0.5192 0.9423 0.9712 0.8558 0.2596 0.9808 0.5192 0.8462 0 0 0 0 0 0 0 0
+
+G_s10 0.5865 0.9423 0.9712 0.8269 0.2596 0.9808 0.6250 0.8269 0 0 0 0 0 0 0 0
+
+L(4k) 0.1538 0.1635 0.1923 0.1538 0.0192 0.1923 0.1442 0.1538 7 0.1061 5 0.0758 3 0.0455 5 0.0758 
+
+M(4k) 0.0481 0.1058 0.0962 0.0865 0.0096 0.1058 0.0385 0.0673 5 0.2941 4 0.2353 3 0.1765 3 0.1765 
+
+L(32k) 0.4231 0.7596 0.7885 0.6827 0.0962 0.7885 0.3750 0.5481 1 0.0111 1 0.0111 1 0.0111 1 0.0111 
+
+I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct I-c I-pct M HYP SCRH INF DAA DIC DS DiL DOth SC2+ DX G 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_j 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_s5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_s10 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+L(4k) 3 0.0455 3 0.0455 4 0.0606 3 0.0455 3 0.0455 3 0.0455 3 0.0455 3 0.0455 5 0.0758 3 0.0455 
+
+M(4k) 2 0.1176 3 0.1765 5 0.2941 4 0.2353 3 0.1765 3 0.1765 4 0.2353 4 0.2353 7 0.4118 4 0.2353 
+
+L(32k) 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 
+
+M SCTmp DUC SCL OLI DLA DX HYPX DUS DECG Age G 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_j 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_s5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+G_s10 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+L(4k) 4 0.0606 3 0.0455 4 0.0606 3 0.0455 3 0.0455 4 0.0606 3 0.0455 3 0.0455 3 0.0455 3 0.0455 
+
+M(4k) 5 0.2941 5 0.2941 5 0.2941 5 0.2941 6 0.3529 6 0.3529 5 0.2941 5 0.2941 5 0.2941 4 0.2353 
+
+L(32k) 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111 1 0.0111                                                
+
+> Attributes Abbreviations: O:G - org:group; LEU - Leucocytes; LA - LacticAcid; IS - InfectionSuspected; DB - DiagnosticBlood; DO -DisfuncOrg; SCT - SIRSCritTachypnea; HYP - Hypotensie; SCRH - SIRSCritHeartRate; INF - Infusion; DAA - DiagnosticArtAstrup;
+> DIC - DiagnosticIC; DS - DiagnosticSputum; DiL - DiagnosticLiquor; DOth - DiagnosticOther; SC2+ - SIRSCriteria2OrMore; DX -DiagnosticXthorax; SCTmp - SIRSCritTemperature; DUC - DiagnosticUrinaryCulture; SCL - SIRSCritLeucos; OLI - Oligurie; DLA
+> - DiagnosticLacticAcid; HYPX - Hypoxie; DUS - DiagnosticUrinarySediment; DECG - DiagnosticECG.
+
+Wang and Damiani: Preprint submitted to Elsevier Page 32 of 35 GGATN 
+
+Table 6 
+
+Complete Results for Helpdesk, BPI13C, and BPI13I 
+
+Helpdesk M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S Ac(E) Ac(S) I-c I-pct O:RE C:VA C:VA G 1.0000 0.1779 0.9498 502069 0.9276 0 0.6250 0.8969 589028 458 0.4114 0.7380 0 0.0000 
+
+G_j 1.0000 0.1724 0.9502 481164 0.9280 0 0.6250 0.8974 615277 458 0.4073 0.7380 0 0.0000 
+
+G_s5 1.0000 0.1872 0.9505 711122 0.9289 0 0.6250 0.8992 641977 458 0.4156 0.7358 0 0.0000 
+
+G_s10 1.0000 0.1853 0.9496 433090 0.9275 0 0.6250 0.8951 586232 458 0.4142 0.7358 0 0.0000 
+
+L(4k) 1.0000 0.4297 0.6488 8446087 0.4876 2 1.0000 0.2821 1102316 458 0.0782 0.0044 424 0.9258 
+
+M(4k) 0.8908 0.3492 0.7619 4539597 0.7257 71 0.7500 0.6130 66648683 408 0.1252 0.3734 37 0.0907 
+
+L(32k) 1.0000 0.2561 0.8960 5254845 0.8526 1 0.8750 0.7662 2478145 458 0.1551 0.1179 0 0.0000    
+
+> Attributes Abbreviations: O:RE - org:resource; C:VA - case:variant.
+
+BPI13C M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S G 1.0000 0.2945 0.8237 12449630 0.8017 0 0.8333 0.6933 8915835 148 
+
+G_j 1.0000 0.3412 0.8113 12326789 0.7984 0 0.8333 0.6975 9321481 148 
+
+G_s5 1.0000 0.3228 0.8166 12825437 0.7999 0 0.8333 0.6933 9073631 148 
+
+G_s10 1.0000 0.3385 0.8113 12790696 0.7972 0 0.8333 0.6891 9127482 148 
+
+L(4k) 0.8311 0.5903 0.4840 14198777 0.4681 162 1.0000 0.3081 181447374 123 
+
+M(4k) 0.6149 0.9099 0.3645 13194896 0.3528 63 0.8333 0.1765 41116259 91 
+
+L(32k) 1.0000 0.2071 0.7939 11440188 0.7566 1 0.8333 0.6204 10513514 148 
+
+M Ac(E) Ac(S) I-c I-pct I-c I-pct I-c I-pct O:G RC O:RE OI O:RO OC IMP PROD OC IMP PROD G 0.4538 0.6232 0.1737 0.2227 0.3754 0.5338 0.5743 0.1081 0 0 0 0 0 0
+
+G_j 0.4846 0.6345 0.1723 0.2381 0.3613 0.5270 0.5743 0.1081 0 0 0 0 0 0
+
+G_s5 0.4776 0.6317 0.1751 0.2311 0.3627 0.5338 0.5743 0.1284 0 0 0 0 0 0
+
+G_s10 0.4734 0.6232 0.1751 0.2395 0.3697 0.5338 0.5811 0.1149 0 0 0 0 0 0
+
+L(4k) 0.0952 0.1919 0.0126 0.0154 0.077 0.1689 0.2365 0.0068 8 0.065 6 0.0488 6 0.0488 
+
+M(4k) 0.021 0.056 0.0028 0.0028 0.07 0.1149 0.1689 0 4 0.044 1 0.011 1 0.011 
+
+L(32k) 0.1597 0.3235 0.0084 0.0266 0.0616 0.2973 0.4797 0.0135 6 0.0405 1 0.0068 0 0
+
+BPI13I M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S G 1.0000 0.2133 0.8325 748775 0.8190 0 0.9167 0.6552 459020 755 
+
+G_j 1.0000 0.2547 0.8301 855279 0.8232 0 0.7500 0.6603 459483 755 
+
+G_s5 1.0000 0.2586 0.8289 624653 0.8218 0 0.7500 0.6630 454386 755 
+
+G_s10 1.0000 0.2208 0.8307 652814 0.8229 0 0.9167 0.6540 454590 755 
+
+L(4k) 0.7642 0.7407 0.3714 950069 0.3585 1133 0.6667 0.1462 266296975 577 
+
+M(4k) 0.3510 1.3093 0.0833 1113165 0.0698 708 0.7500 0.0421 5338296 265 
+
+L(32k) 1.0000 0.2605 0.7582 897646 0.7227 8 0.7500 0.5007 1175517 755 
+
+M Ac(E) Ac(S) I-c I-pct I-c I-pct I-c I-pct O:G RC O:RE OI O:RO OC IMP PROD OC IMP PROD G 0.1961 0.4062 0.1132 0.6478 0.4727 0.4318 0.5894 0.1404 0 0 0 0 0 0
+
+G_j 0.2019 0.4107 0.1182 0.6561 0.4804 0.4172 0.5894 0.1470 0 0 0 0 0 0
+
+G_s5 0.1963 0.3976 0.1164 0.6523 0.4846 0.4159 0.5881 0.1417 0 0 0 0 0 0
+
+G_s10 0.2034 0.4046 0.1134 0.6506 0.4781 0.4331 0.5974 0.1391 0 0 0 0 0 0
+
+L(4k) 0.0071 0.0431 0.0144 0.1266 0.056 0.0901 0.2132 0.0026 34 0.0589 25 0.0433 26 0.0451 
+
+M(4k) 0.0022 0.0164 0.0006 0.0738 0.0251 0.0371 0.0808 0.004 16 0.0604 22 0.083 21 0.0792 
+
+L(32k) 0.0155 0.1421 0.0314 0.3805 0.2038 0.1364 0.4437 0.0185 44 0.0583 13 0.0172 14 0.0185               
+
+> Attributes Abbreviations: O:G - org:group; RC - resource country; O:RE - org:resource; OI - organization involved; O:RO - org:role;
+> OC - organization country; IMP - impact; PROD - product
+
+Wang and Damiani: Preprint submitted to Elsevier Page 33 of 35 GGATN 
+
+Table 7 
+
+Complete Results for BPI20 and BPI17 
+
+BPI120 M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S G 1.0000 0.2012 0.8856 1814361 0.8422 0 0.6667 0.7999 1334086 209 
+
+G_j 1.0000 0.2033 0.8854 1462130 0.8429 0 0.6667 0.8047 1331992 209 
+
+G_s5 1.0000 0.2054 0.8962 1914524 0.8583 0 0.6667 0.8153 1336757 209 
+
+G_s10 1.0000 0.2108 0.8899 1826933 0.8506 0 0.6667 0.8100 1348357 209 
+
+L(4k) 0.756 0.7147 0.3398 2707083 0.2964 421 0.5926 0.1476 74200704 158 
+
+M(4k) 0.3158 1.3999 0.1003 4011717 0.0882 227 0.5556 0.0552 55912405 66 
+
+L(32k) 1.0000 0.2584 0.8211 1987999 0.7396 19 0.8519 0.5435 3012057 209 
+
+Ac(E) Ac(S) MA(S) I-c I-pct I-c I-pct I-c I-pct I-c I-pct O:RE C:OE C:PR C:RA C:PRB C:OE C:PR C:CRA C:PRB G 0.8286 0.1962 0.9761 459.03 1164.42 0 0 0 0 0 0 0 0
+
+G_j 0.8312 0.2297 0.9761 467.60 1173.89 0 0 0 0 0 0 0 0
+
+G_s5 0.8376 0.2153 0.9761 455.14 1133.47 0 0 0 0 0 0 0 0
+
+G_s10 0.8339 0.2679 0.9761 461.43 1102.62 0 0 0 0 0 0 0 0
+
+L(4k) 0.1783 0.0048 0.3445 15637.64 9457.47 13 0.0823 12 0.0759 12 0.0759 10 0.0633 
+
+M(4k) 0.0398 0.0144 0.0574 2450.51 6003.79 1 0.0152 1 0.0152 2 0.0303 5 0.0758 
+
+L(32k) 0.6253 0.0431 0.9282 732.80 1798.13 0 0 0 0 1 0.0048 1 0.0048               
+
+> Attributes Abbreviations: O:RE -org:resource; C:OE -case:OrganizationalEntity; C:PR -case:Project; C:RA -case:RequestedAmount; C:PRB - case:Permit RequestedBudget.
+
+BPI17 M c(S) JSD SS WD DL H re(A) Ac(A) MA(T) #S G 1.0000 0.2238 0.7526 418785 0.6352 0 0.8833 0.3353 429831 3150 
+
+G_j 1.0000 0.2157 0.7542 445256 0.6359 0 0.8833 0.3366 419696 3150 
+
+G_s5 1.0000 0.2140 0.7531 539976 0.6339 0 0.8833 0.3319 432232 3150 
+
+G_s10 1.0000 0.2243 0.7551 375357 0.6379 0 0.8667 0.3386 521810 3150 
+
+L(4k) 0.7419 0.9814 0.0461 1724366 0.0323 13195 0.5167 0.0023 216544974 2337 
+
+M(4k) 0.2251 1.5629 0.0073 3530745 0.0041 5110 0.5333 0.0007 30360903 709 
+
+M(32k) 0.5889 0.9157 0.1424 5691146 0.1125 4321 0.7833 0.042 223751169 1855 
+
+M Ac(E) MA(E) ACT O:RE EO ACC SEL OID FWA NOT MC CS OA G 0.4574 0.1338 0.6943 0.7024 0.7914 0.2175 5903.11 30.59 123.80 316.22 9122.74 
+
+G_j 0.4620 0.1353 0.6957 0.7046 0.7908 0.2192 5945.11 30.23 114.31 341.23 8690.36 
+
+G_s5 0.4627 0.1341 0.6956 0.7040 0.7917 0.2163 5969.32 30.05 113.80 341.20 8449.05 
+
+G_s10 0.4618 0.1306 0.6971 0.7034 0.7912 0.2140 5955.95 29.99 115.74 339.09 8515.03 
+
+L(4k) 0.0107 0.0019 0.0114 0.0167 0.0230 0.0037 195038.56 351.96 2033.93 1106.19 195323.68 
+
+M(4k) 0.0131 0.0009 0.0326 0.0335 0.0388 0.0018 54289.57 510.75 3432.69 1064.33 358433821.80 
+
+M(32k) 0.0609 0.0115 0.0871 0.1039 0.1049 0.0453 69287.93 346.28 1932.85 996.84 299198.92 
+
+M Ac(S) MA(S) I-c I-pct I-c I-pct I-c I-pct C:LG C:AT C:RA C:LG C:AT C:RA G 0.2781 0.8914 10479.63 0 0 0 0 0 0
+
+G_j 0.2740 0.8886 11375.47 0 0 0 0 0 0
+
+G_s5 0.2746 0.8863 11342.45 0 0 0 0 0 0
+
+G_s10 0.2717 0.8867 11547.99 0 0 0 0 0 0
+
+L(4k) 0.0165 0.0708 176838.037 33 0.0141 31 0.0133 38 0.0163 
+
+M(4k) 0.0057 0.0257 281286.396 40 0.0564 62 0.0874 62 0.0874 
+
+M(32k) 0.0714 0.2657 249466.684 142 0.0765 133 0.0717 215 0.1159                           
+
+> Attributes Abbreviations: ACT - Action; O:RE - org:resource; EO - EventOrigin; ACC - Accepted; SEL - Selected; OID - OfferID;
+> FWA - FirstWithdrawalAmount; NOT - NumberOfTerms; MC - MonthlyCost; CS - CreditScore; OA - OfferedAmount; C:LG -case:LoanGoal; C:AT - case:ApplicationType; C:RA - case:RequestedAmount.
+
+Wang and Damiani: Preprint submitted to Elsevier Page 34 of 35 GGATN 
+
+Appendix B. Additional Interpretability Analysis Results 0 1 2 3 4
+
+Key position 
+
+> 01234
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+0.35 
+
+> Weight
+
+A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 
+
+Activity node 
+
+> 01234
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.068 
+
+0.070 
+
+0.072 
+
+0.074 
+
+0.076 
+
+0.078 
+
+Pos Correct Entropy W_True W_Pred 
+
+0 Y 2.64 0.070 0.070 
+
+1 Y 2.64 0.073 0.073 
+
+2 Y 2.64 0.073 0.073 
+
+3 Y 2.64 0.069 0.069 
+
+4 Y 2.64 0.075 0.075 
+
+Graph attention concentration 
+
+0 1 2 3 4
+
+C. Pred A1 A2 A3 A4 A5 
+
+0 1 2 3 4
+
+Valid position index 
+
+D. True A1 A2 A3 A4 A5 
+
+A1 = Assign seriousness 
+
+A2 = Take in charge ticket 
+
+A3 = Wait 
+
+A4 = Resolve ticket 
+
+A5 = Closed 
+
+A6 = Create SW anomaly 
+
+A7 = DUPLICATE 
+
+A8 = INVALID 
+
+A9 = Insert ticket 
+
+A10 = RESOLVED 
+
+A11 = Require upgrade 
+
+A12 = Resolve SW anomaly 
+
+A13 = Schedule intervention A14 = VERIFIED 
+
+Dual stage attention analysis for case 2 | valid length = 5 | exact match = True 
+
+Figure 7: Dual Stage Attention Analysis Panel of Representative Samples from Helpdesk Wang and Damiani: Preprint submitted to Elsevier Page 35 of 35 GGATN 0 1 2 3 4
+
+Key position 
+
+> 01234
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+> Weight
+
+A1 A2 A3 A4 A5 A6 A7 
+
+Activity node 
+
+> 01234
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.140 
+
+0.142 
+
+0.144 
+
+0.146 Pos Correct Entropy W_True W_Pred 
+
+0 Y 1.95 0.138 0.138 
+
+1 Y 1.95 0.140 0.140 
+
+2 N 1.95 0.143 0.138 
+
+3 Y 1.95 0.142 0.142 
+
+4 Y 1.95 0.142 0.142 
+
+Graph attention concentration 
+
+0 1 2 3 4
+
+C. Pred A1 A1 A1 A1 A3 
+
+0 1 2 3 4
+
+Valid position index 
+
+D. True A1 A1 A2 A1 A3 
+
+A1 = Accepted_In Progress A2 = Queued_Awaiting Assignment A3 = Completed_Closed A4 = Accepted_Assigned A5 = Accepted_Wait A6 = Completed_Cancelled A7 = Unmatched_Unmatched 
+
+Dual stage attention analysis for case 9 | valid length = 5 | exact match = False 
+
+(a) BPI13C 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 
+
+Key position 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+0.35 
+
+0.40 
+
+> Weight
+
+A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 
+
+Activity node 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.0675 
+
+0.0700 
+
+0.0725 
+
+0.0750 
+
+0.0775 
+
+0.0800 
+
+0.0825 
+
+0.0850 
+
+0.0875 
+
+Pos Correct Entropy W_True W_Pred 
+
+0 Y 2.56 0.079 0.079 
+
+1 Y 2.56 0.080 0.080 
+
+2 Y 2.56 0.077 0.077 
+
+3 Y 2.56 0.077 0.077 
+
+4 N 2.56 0.074 0.075 
+
+5 Y 2.56 0.077 0.077 
+
+6 N 2.56 0.077 0.078 
+
+7 Y 2.56 0.077 0.077 
+
+8 N 2.56 0.072 0.075 
+
+9 Y 2.56 0.074 0.074 
+
+10 Y 2.56 0.075 0.075 
+
+11 N 2.56 0.075 0.076 
+
+12 Y 2.56 0.075 0.075 
+
+13 Y 2.56 0.081 0.081 
+
+14 Y 2.56 0.080 0.080 
+
+Graph attention concentration 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 
+
+C. Pred A1 A1 A2 A1 A1 A1 A1 A1 A1 A2 A1 A1 A1 A4 A5 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 
+
+Valid position index 
+
+D. True A1 A1 A2 A1 A2 A1 A3 A1 A2 A2 A1 A2 A1 A4 A5 
+
+A1 = Accepted_In Progress 
+
+A2 = Queued_Awaiting Assignment 
+
+A3 = Accepted_Assigned 
+
+A4 = Completed_Resolved 
+
+A5 = Completed_Closed 
+
+A6 = Accepted_Wait 
+
+A7 = Accepted_Wait - Customer 
+
+A8 = Accepted_Wait - Implementation 
+
+A9 = Accepted_Wait - User 
+
+A10 = Accepted_Wait - Vendor 
+
+A11 = Completed_Cancelled 
+
+A12 = Completed_In Call 
+
+A13 = Unmatched_Unmatched 
+
+Dual stage attention analysis for case 18 | valid length = 15 | exact match = False 
+
+(b) BPI13I 
+
+Figure 8: Dual Stage Attention Analysis Panel of Representative Samples from BPI13C and BPI13I Wang and Damiani: Preprint submitted to Elsevier Page 36 of 35 GGATN 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 
+
+Key position 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+> Query position
+
+A. Transformer self attention (valid positions) 
+
+0.025 
+
+0.050 
+
+0.075 
+
+0.100 
+
+0.125 
+
+0.150 
+
+0.175 
+
+0.200 
+
+> Weight
+> A1
+> A2
+> A3
+> A4
+> A5
+> A6
+> A7
+> A8
+> A9
+> A10
+> A11
+> A12
+> A13
+> A14
+> A15
+> A16
+> A17
+> A18
+> A19
+> A20
+> A21
+> A22
+> A23
+> A24
+> A25
+> A26
+> A27
+> A28
+> A29
+> A30
+> A31
+> A32
+> A33
+> A34
+> A35
+> A36
+> A37
+> A38
+> A39
+> A40
+> A41
+> A42
+> A43
+> A44
+> A45
+> A46
+> A47
+> A48
+> A49
+> A50
+> A51
+> A52
+> A53
+> A54
+> A55
+> A56
+> A57
+> A58
+> A59
+> A60
+> A61
+> A62
+> A63
+> A64
+> A65
+> A66
+
+Activity node 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+16 
+
+17 
+
+18 
+
+19 
+
+20 
+
+21 
+
+> Sequence position
+
+B. Graph cross attention (positions activities) 
+
+0.025 
+
+0.050 
+
+0.075 
+
+0.100 
+
+0.125 
+
+0.150 
+
+0.175 
+
+Pos Correct Entropy W_True W_Pred 
+
+0 Y 3.79 0.007 0.007 
+
+1 Y 3.85 0.010 0.010 
+
+2 Y 3.94 0.046 0.046 
+
+3 Y 3.87 0.023 0.023 
+
+4 Y 3.67 0.032 0.032 
+
+5 Y 3.49 0.009 0.009 
+
+6 Y 3.29 0.007 0.007 
+
+7 Y 3.23 0.002 0.002 
+
+8 Y 3.36 0.008 0.008 
+
+9 Y 3.35 0.005 0.005 
+
+10 Y 3.49 0.008 0.008 
+
+11 Y 3.57 0.005 0.005 
+
+12 Y 3.76 0.005 0.005 
+
+13 Y 3.97 0.015 0.015 
+
+14 Y 3.99 0.007 0.007 
+
+15 Y 4.14 0.012 0.012 
+
+16 Y 4.18 0.013 0.013 
+
+17 Y 4.19 0.016 0.016 
+
+18 Y 4.19 0.014 0.014 
+
+19 Y 4.19 0.015 0.015 
+
+20 Y 4.13 0.010 0.010 
+
+21 Y 4.17 0.013 0.013 
+
+Graph attention concentration 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 
+
+C. Pred A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A17 A19 A20 A21 
+
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 
+
+Valid position index 
+
+D. True A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A17 A19 A20 A21 
+
+A1 = A_Create Application_complete 
+
+A2 = A_Submitted_complete 
+
+A3 = W_Handle leads_schedule 
+
+A4 = W_Handle leads_withdraw 
+
+A5 = W_Complete application_schedule 
+
+A6 = A_Concept_complete 
+
+A7 = W_Complete application_start 
+
+A8 = W_Complete application_suspend 
+
+A9 = A_Accepted_complete 
+
+A10 = O_Create Offer_complete 
+
+A11 = O_Created_complete 
+
+A12 = O_Sent (mail and online)_complete 
+
+A13 = W_Complete application_ate_abort 
+
+A14 = W_Call after offers_schedule 
+
+A15 = W_Call after offers_start 
+
+A16 = A_Complete_complete 
+
+A17 = W_Call after offers_suspend 
+
+A18 = W_Call after offers_resume 
+
+A19 = A_Cancelled_complete 
+
+A20 = O_Cancelled_complete 
+
+A21 = W_Call after offers_ate_abort 
+
+A22 = A_Denied_complete 
+
+A23 = A_Incomplete_complete 
+
+A24 = A_Pending_complete 
+
+A25 = A_Validating_complete 
+
+A26 = O_Accepted_complete 
+
+A27 = O_Refused_complete 
+
+A28 = O_Returned_complete 
+
+A29 = O_Sent (online only)_complete 
+
+A30 = W_Assess potential fraud_ate_abort 
+
+A31 = W_Assess potential fraud_complete 
+
+A32 = W_Assess potential fraud_resume 
+
+A33 = W_Assess potential fraud_schedule 
+
+A34 = W_Assess potential fraud_start 
+
+A35 = W_Assess potential fraud_suspend 
+
+A36 = W_Assess potential fraud_withdraw 
+
+A37 = W_Call after offers_complete 
+
+A38 = W_Call after offers_withdraw 
+
+A39 = W_Call incomplete files_ate_abort 
+
+A40 = W_Call incomplete files_complete 
+
+A41 = W_Call incomplete files_resume 
+
+A42 = W_Call incomplete files_schedule 
+
+A43 = W_Call incomplete files_start 
+
+A44 = W_Call incomplete files_suspend 
+
+A45 = W_Complete application_complete 
+
+A46 = W_Complete application_resume 
+
+A47 = W_Complete application_withdraw 
+
+A48 = W_Handle leads_ate_abort 
+
+A49 = W_Handle leads_complete 
+
+A50 = W_Handle leads_resume 
+
+A51 = W_Handle leads_start 
+
+A52 = W_Handle leads_suspend 
+
+A53 = W_Personal Loan collection_resume 
+
+A54 = W_Personal Loan collection_schedule 
+
+A55 = W_Personal Loan collection_start 
+
+A56 = W_Personal Loan collection_suspend 
+
+A57 = W_Shortened completion _resume 
+
+A58 = W_Shortened completion _schedule 
+
+A59 = W_Shortened completion _start 
+
+A60 = W_Shortened completion _suspend 
+
+A61 = W_Validate application_ate_abort 
+
+A62 = W_Validate application_complete 
+
+A63 = W_Validate application_resume 
+
+A64 = W_Validate application_schedule 
+
+A65 = W_Validate application_start 
+
+A66 = W_Validate application_suspend 
+
+Dual stage attention analysis for case 11 | valid length = 22 | exact match = True 
+
+Figure 9: Dual Stage Attention Analysis Panel of Representative Samples from BPI17 Wang and Damiani: Preprint submitted to Elsevier Page 37 of 35 GGATN B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+
+(a) Graph cross attention decomposition 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.15 
+
+0.10 
+
+0.05 
+
+0.00 
+
+0.05 
+
+> Attention weight
+
+(b) Gap and target activity attention 
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+Admissible transition attention 
+
+Inadmissible transition attention 
+
+True target activity attention 
+
+Predicted target activity attention 
+
+Admissibility gap (Admissible - Inadmissible) 
+
+(a) Helpdesk B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+
+(a) Graph cross attention decomposition 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Attention weight
+
+(b) Gap and target activity attention 
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+Admissible transition attention 
+
+Inadmissible transition attention 
+
+True target activity attention 
+
+Predicted target activity attention 
+
+Admissibility gap (Admissible - Inadmissible) (b) Sepsis B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+
+(a) Graph cross attention decomposition 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Attention weight
+
+(b) Gap and target activity attention 
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+Admissible transition attention 
+
+Inadmissible transition attention 
+
+True target activity attention 
+
+Predicted target activity attention 
+
+Admissibility gap (Admissible - Inadmissible) 
+
+(c) BPI13C B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Attention weight
+
+(a) Graph cross attention decomposition 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.8 
+
+0.6 
+
+0.4 
+
+0.2 
+
+0.0 
+
+> Attention weight
+
+(b) Gap and target activity attention 
+
+Graph cross attention to transition admissibility and target activity by relative sequence position 
+
+Admissible transition attention 
+
+Inadmissible transition attention 
+
+True target activity attention 
+
+Predicted target activity attention 
+
+Admissibility gap (Admissible - Inadmissible) (d) BPI17 
+
+Figure 10: Graph Grounded Cross Attention to Transition Admissibility and Target Activity for Helpdesk, Sepsis, BPI13C and BPI17 0.4 
+
+0.2 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+> ptrue
+
+Change in true activity probability after refinement 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.10 
+
+0.05 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions 
+
+Provisionally misclassified Provisionally correct 
+
+(a) BPI13I 0.4 
+
+0.3 
+
+0.2 
+
+0.1 
+
+0.0 
+
+0.1 
+
+0.2 
+
+> ptrue
+
+Change in true activity probability after refinement 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.02 
+
+0.00 
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+0.12 
+
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions 
+
+Provisionally misclassified Provisionally correct (b) Sepsis 0.4 
+
+0.2 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+> ptrue
+
+Change in true activity probability after refinement 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.10 
+
+0.05 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+0.30 
+
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions 
+
+Provisionally misclassified Provisionally correct 
+
+(c) BPI20 0.2 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> ptrue
+
+Change in true activity probability after refinement 
+
+B1 B2 B3 B4 B5 
+
+Relative sequence position bin 
+
+0.1 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+> Jensen  Shannon divergence
+
+Distributional shift between provisional and final predictions 
+
+Provisionally misclassified Provisionally correct (d) BPI17 
+
+Figure 11: Refinement Based Activity Distribution Reshaping for BPI13I, Sepsis, BPI20 and BPI17 Wang and Damiani: Preprint submitted to Elsevier Page 38 of 35 GGATN Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 
+
+Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 2171 Inadmissible: 2 
+
+Final Outcome Totals 
+
+Corrected to admissible: 2 Reassigned among admissible: 62 Retained: 2109 
+
+(a) Helpdesk Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 
+
+Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 6877 Inadmissible: 11 
+
+Final Outcome Totals 
+
+Corrected to admissible: 11 Reassigned among admissible: 757 Retained: 6120 
+
+(b) BPI13I Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 
+
+Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 713 Inadmissible: 1 
+
+Final Outcome Totals 
+
+Corrected to admissible: 1 Reassigned among admissible: 114 Retained: 599 
+
+(c) BPI13C 
+
+Figure 12: Transition Correction under Structured Decoding for Helpdesk, BPI13I, and BPI13C Wang and Damiani: Preprint submitted to Elsevier Page 39 of 35 GGATN Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 
+
+Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 1583 Inadmissible: 16 
+
+Final Outcome Totals 
+
+Corrected to admissible: 16 Reassigned among admissible: 574 Retained: 1009 
+
+(d) Sepsis Bin 1 Bin 1 Bin 1 Bin 1 Bin 1 
+
+Bin 2 Bin 2 Bin 2 Bin 2 Bin 2 
+
+Bin 3 Bin 3 Bin 3 Bin 3 Bin 3 
+
+Bin 4 Bin 4 Bin 4 Bin 4 Bin 4 
+
+Bin 5 Bin 5 Bin 5 Bin 5 Bin 5 
+
+Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable Admissible + EOS reachable 
+
+Inadmissible Inadmissible Inadmissible Inadmissible Inadmissible 
+
+Retained Retained Retained Retained Retained 
+
+Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible Corrected to admissible 
+
+Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible Reassigned among admissible 
+
+Transition Correction under Structured Decoding 
+
+Summary of Flows Raw Status Totals 
+
+Admissible + EOS reachable: 1852 Inadmissible: 32 
+
+Final Outcome Totals 
+
+Corrected to admissible: 32 Reassigned among admissible: 68 Retained: 1784 
+
+(e) BPI20 
+
+Figure 13: Transition Correction under Structured Decoding for Sepsis and BPI20 Wang and Damiani: Preprint submitted to Elsevier Page 40 of 35
