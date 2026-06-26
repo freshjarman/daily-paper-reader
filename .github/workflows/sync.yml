@@ -16,15 +16,15 @@ jobs:
   sync_latest_from_upstream:
     name: Sync latest commits from upstream repo
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     if: ${{ github.event.repository.fork }} # 只有 Fork 的仓库才运行
 
     steps:
       - name: Random delay to spread scheduled runs
         if: github.event_name == 'schedule'
         run: |
-          DELAY=$(shuf -i 0-3599 -n 1)
-          echo "Sleeping ${DELAY}s (≈$((DELAY/60))min) to stagger fork runs over 1 hour …"
+          DELAY=$(shuf -i 0-599 -n 1)
+          echo "Sleeping ${DELAY}s (≈$((DELAY/60))min) to stagger fork runs over 10 minutes …"
           sleep $DELAY
 
       # 1. 检出用户仓库的代码
@@ -33,30 +33,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 2. 配置 .gitattributes 中的 merge=ours 驱动，用于保护用户运行态文件
-      - name: Configure protected merge driver
+      # 2. 配置 git 身份和 .gitattributes 中的 merge=ours 驱动，用于保护用户运行态文件
+      - name: Configure git
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global merge.ours.driver true
 
-      # 3. 运行同步 Action
+      # 3. 同步上游仓库。直接使用 git，避免第三方 Action 运行时变更导致失败。
       - name: Sync upstream changes
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
-        with:
-          # 👇 【重要】这里写死你的源仓库地址 (Developer's Repo)
-          upstream_sync_repo: ziwenhahaha/daily-paper-reader
-          upstream_sync_branch: main
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }} # 自动生成，无需用户配置
-          
-          # 👇 【关键配置】设置为 'false' 表示进行 Git Merge (合并)，而不是覆盖
-          # 默认行为其实就是 merge，但为了保险起见，不要开启 'hard_reset' 类的选项
-          test_mode: false
+        env:
+          UPSTREAM_REPO: ziwenhahaha/daily-paper-reader
+          UPSTREAM_BRANCH: main
+          TARGET_BRANCH: main
+        run: |
+          set -euo pipefail
+
+          git checkout -B "${TARGET_BRANCH}" "origin/${TARGET_BRANCH}"
+          git remote remove upstream-sync 2>/dev/null || true
+          git remote add upstream-sync "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream-sync "+refs/heads/${UPSTREAM_BRANCH}:refs/remotes/upstream-sync/${UPSTREAM_BRANCH}"
+
+          if git merge-base --is-ancestor "upstream-sync/${UPSTREAM_BRANCH}" HEAD; then
+            echo "No upstream commits to sync."
+            exit 0
+          fi
+
+          echo "Upstream commits to sync:"
+          git log --oneline "HEAD..upstream-sync/${UPSTREAM_BRANCH}"
+          git merge --no-edit "upstream-sync/${UPSTREAM_BRANCH}"
+          git push origin "HEAD:${TARGET_BRANCH}"
 
       # 4. 如果同步失败（比如有冲突），打印错误
       - name: Sync check
         if: failure()
         run: |
-          echo "[Error] 自动同步失败！可能是因为你修改了源代码导致冲突。"
-          echo "请手动前往 GitHub 页面解决冲突。"
+          echo "[Error] 自动同步失败！可能是因为 upstream 合并冲突，或同步期间 target 分支被新的提交推进。"
+          echo "请查看上一步 git 输出；如是 push rejected，重新运行 workflow 即可。"
           exit 1
