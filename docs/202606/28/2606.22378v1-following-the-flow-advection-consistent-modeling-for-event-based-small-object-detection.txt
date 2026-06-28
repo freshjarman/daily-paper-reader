@@ -1,0 +1,664 @@
+Title: Following the Flow: Advection-Consistent Modeling for Event-based Small Object Detection
+
+URL Source: https://arxiv.org/pdf/2606.22378v1
+
+Published Time: Tue, 23 Jun 2026 02:26:11 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Following the Flow: Advection-Consistent Modeling for Event-based Small Object Detection 
+
+Wen Guo 1 , Fulong Cai 1 , and Wuzhou Quan 2 ⋆ 
+
+> 1
+
+School of Information and Electronic Engineering, Shandong Technology and Business University, Yantai 264005, China 
+
+{wguo,2024410008}@sdtbu.edu.cn  
+
+> 2
+
+Nanjing University of Aeronautics and Astronautics, Nanjing 210016, China 
+
+q.wuzhou@gmail.com 
+
+Abstract. Event cameras enable high-frequency visual perception with microsecond latency, offering advantages for dynamic scenes. However, event-based small object detection remains challenging due to sparse asynchronous measurements and weak object responses that are easily disrupted by noise. Limited spatial support causes small-object signals to lose temporal continuity, resulting in fragmented and unstable pre-dictions. To address this issue, we propose a physics-guided advection-consistent modeling framework, termed PACT, which formulates event evolution as a motion-driven feature transport process. Instead of rely-ing solely on local spatio-temporal aggregation, PACT propagates fea-tures along estimated velocity fields and enforces trajectory-level consis-tency through advection constraints. This design preserves weak event responses over time and prevents their degradation under complex back-ground interference. Technically, PACT integrates motion-aware feature extraction with a differentiable advection-based transport operator, en-abling coherent motion representation and effective noise suppression during temporal evolution. Extensive experiments on benchmark event-based datasets demonstrate that PACT consistently outperforms state-of-the-art methods, achieving improvements of 20.72% in IoU and 15.03% in accuracy while maintaining comparable computational efficiency. The code is publicly available at https://github.com/fulongcai/PACT .
+
+Keywords: Event cameras · advection-consistent transport · temporal continuity 
+
+## 1 Introduction 
+
+Event cameras represent a new generation of vision sensors that respond asyn-chronously to changes in scene brightness, producing measurements with mi-crosecond level temporal resolution and a wide dynamic range [6, 14]. These properties make event cameras particularly effective at capturing rapid scene dynamics and fine-grained temporal variations driven by brightness changes,  
+
+> ⋆
+
+Corresponding author.  
+
+> arXiv:2606.22378v1 [cs.CV] 21 Jun 2026 2W. Guo et al.
+
+which are difficult to observe with traditional frame-based cameras [11, 22]. In-stead of being a sequence of images, an event stream can be interpreted as a spatio-temporal signal whose structure continuously evolves over time. While this representation provides high temporal resolution, it also makes the resulting measurements sparse, irregular, and sensitive to noise [30]. Thus, event responses triggered by small or low-contrast entities are often fragmented in space and in-termittent in time, even when their motion follows coherent kinematic patterns, especially under strong background activity and noise [20]. Accurately modeling and maintaining these weak event responses is therefore critical for reliable and generalizable event-based perception under challenging conditions with strong noise. Existing approaches generally fall into two paradigms. Frame-based pipelines first aggregate events into static representations [17,19,36]. This aggregation in-evitably collapses the continuous temporal evolution and removes cues needed to distinguish weak signals from noise. Alternatively, Spiking Neural Networks (SNNs) [5, 16, 21, 32] perform temporal integration through neuronal dynamics, yet weak and intermittent responses often fail to elicit stable spiking activity and become indistinguishable from background noise. A critical shared limita-tion is that both paradigms model temporal continuity implicitly. Without an explicit propagation rule, these approaches struggle to preserve fragmented weak trajectories as coherent structures under strong background activity. Crucially, although weak entities induce sparse and intermittent event re-sponses, the underlying physical motion remains continuous. This property fun-damentally distinguishes such weak responses from background noise, which lacks a persistent motion source [6]. Within sufficiently short time intervals, event responses induced by the same entity tend to be temporally coherent and continuously displaced along a consistent motion direction, whereas noise-induced triggers exhibit no such directional persistence. In this regime, motion continuity becomes the only remaining cue capable of separating entity-induced weak responses from random background activity. To formalize this distinction, we adopt the weakest physical constraint that captures motion continuity without imposing stronger assumptions on appear-ance, shape, or intensity. Over short time scales, the evolution of event responses can be well approximated by advection under a local velocity field [2, 7, 38], while higher-order effects such as deformation or acceleration are negligible. This velocity-driven spatiotemporal evolution naturally aligns with advection in physics. Importantly, advection imposes a minimal and unavoidable con-straint: responses originating from the same moving entity remain under a consis-tent transport field, whereas scattered noise triggers, lacking a coherent motion source, cannot satisfy such consistency. Motivated by this observation, we introduce an advection-consistency con-straint to explicitly model the propagation of event responses over time. Under this constraint, responses that can be consistently transported along a local velocity field remain temporally aligned and accumulate coherently, whereas re-sponses that violate advection consistency lose alignment and are progressively Advection Consistency for Weak Event Responses 3
+
+suppressed. Advection consistency therefore provides an operational criterion for preserving weak yet physically meaningful trajectories in highly noisy event streams. Building upon this formulation, we propose PACT , a framework that lever-ages a Physics-consistent Advection-Consistent Transport mechanism to main-tain weak yet motion-consistent event structures. PACT consists of three com-plementary components that work in concert. The Trajectory-Guided Feature Extraction (T-FE) module distills motion-aware features from sparse event mea-surements to support trajectory reasoning. The Advection-based Trajectory Con-sistency (ATC) module estimates a locally consistent velocity field, supervised by a trajectory-consistent velocity loss, and enforces temporal coherence via advec-tion consistency. Finally, the Advection-Consistent Feature Reconstruction (A-FR) module aligns and reconstructs features along the estimated velocity field, turning fragmented responses into continuous trajectory structures, while back-ground clutter is progressively suppressed when transport consistency is absent. In practice, weak event responses are most prominent in small-object scenarios, where sparse and intermittent activations are easily dominated by background activity. We evaluate PACT on event-based small object detection benchmarks as a concrete instantiation of the proposed formulation, demonstrating its ability to recover weak trajectories and suppress noise under challenging conditions. Al-though our experiments are conducted in the context of detection, the proposed advection-based formulation is defined independently of any specific task and provides a general mechanism for maintaining weak spatio-temporal structures in event streams. 
+
+## 2 Related Work 
+
+2.1 Event Representation and Temporal Association 
+
+A common way to process event streams is to convert asynchronous events into regular tensors so that standard backbones can be applied [17]. Early de-signs aggregate polarities or counts within a window, while later ones inject timing cues, such as time surfaces and kernelized timestamp encoding [8, 13]. Reconstruction-based pipelines further map events to intensity-like proxies to reintroduce photometric cues [26]. To preserve temporal structure more explic-itly, voxel-based methods discretize events into spatiotemporal volumes and ap-ply 3D operators or recurrent updates to extend the temporal support [9,25,38]. Other approaches keep state evolution with spiking dynamics or sparse relational reasoning [3, 28, 32, 37]. Despite different forms, most methods rely on implicit continuity. Cross-temporal linkage is largely driven by local neighborhoods or short-range propagation. Under strong background activity, weak responses drift and appear intermittently, so evidence fragments rather than accumulating into motion-consistent traces. 4 W. Guo et al.  
+
+> Fig. 1: Overall architecture of PACT. The encoder stacks four T-FE modules. ATC estimates velocity fields and consistency scores at each scale. The decoder uses four A-FR modules with skip fusion to reconstruct temporally continuous trajectories.
+
+2.2 Physics-guided Dynamics 
+
+To stabilize motion cues in low-SNR event streams, many works introduce phys-ical priors. A classic line is contrast maximization, which warps events to a refer-ence time under a motion model and optimizes the motion parameters to sharpen the compensated accumulation [7, 18, 31]. Other formulations propagate sparse evidence with dynamical processes, including diffusion-like smoothing and prob-abilistic motion modeling [29,35]. Diffusion can denoise, but isotropic smoothing may also spread clutter and weaken directional patterns. Advection provides a motion-aligned alternative. A local velocity field specifies how information should move over short time spans [2, 7, 38]. PACT builds on this view and models representation evolution as advection-consistent transport, so aligned responses persist and accumulate, while inconsistent triggers lose alignment and are sup-pressed. 
+
+## 3 Methods 
+
+3.1 Advection-Consistent Representation 
+
+Given sparse, asynchronous event streams, informative responses often appear as sparse activations with fragmented temporal support, yet reveal coherent struc-ture when traced over time. Coherent activations remain mutually alignable when propagated by a local motion field, whereas spurious triggers from back-ground activity quickly lose temporal consistency over time. This motivates an advection-consistent representation, where the feature field is approximately con-served under advection driven by the local motion field. Advection Consistency for Weak Event Responses 5
+
+We treat the sparse voxel features as samples of a C-channel field u(x, t )
+
+defined over space and time. Within a short time interval, its evolution is ap-proximated by the advection equation [2]: 
+
+∂u (x, t )
+
+∂t + v(x, t ) · ∇ u(x, t ) ≈ 0, (1) where v(x, t ) denotes a local velocity field. Along a characteristic curve x(t)
+
+satisfying dx(t) 
+
+> dt
+
+= v(x(t), t ), the transported feature is approximately preserved, 
+
+ddt u(x(t), t ) ≈ 0. (2) For a discrete temporal step τ and locally constant velocity, the transport admits a displacement operator: 
+
+Tv(u)( x, t ) = u(x − τ v, t − τ ). (3) Advection consistency corresponds to a small deviation under Tv [38]. We there-fore measure the transport residual as: 
+
+Radv (x, t ) = ∥u(x, t ) − T v(u)( x, t )∥ , (4) where ∥ · ∥ is a channel-wise discrepancy measure. Throughout the pipeline, 
+
+Radv provides a consistency signal. Features with smaller residuals receive higher confidence and are propagated more reliably under the estimated local velocity field. 
+
+3.2 Trajectory-Constrained Feature Encoding 
+
+As illustrated in Fig. 1, the pipeline follows an encoder–decoder architecture with multi-scale sparse processing. The input is a sparse voxel tensor X = 
+
+{C, A}, where C stores voxel indices (b, x, y, t ) and A stores normalized attributes 
+
+(˜ x, ˜y, ˜t, p ) with polarity p. The encoder progressively extracts motion-aware fea-tures using four stages of sparse processing, producing a pyramid {Fienc }4
+
+> i=1
+
+.Rather than treating motion priors as an external post-processing step, we im-pose trajectory consistency inside feature encoding. At each scale, the represen-tation is shaped to preserve components that remain coherent under transport, so that the subsequent decoding can propagate and connect weak responses more reliably. At each scale, as shown in Fig. 2(a), T-FE aggregates spatiotemporal context to support transport assessment. Specifically, we form Fmulti via multi-branch sparse convolutions with dilation rates D = {1, 2, 3, 4}. ATC then evaluates transport feasibility on Fmulti and outputs participation weights for subsequent propagation. At the core is a trajectory-consistency evaluator that predicts a local dis-placement field and measures the agreement between the observed feature and 6 W. Guo et al.    
+
+> (a) T-FE module. (b) A-FR module.
+
+Fig. 2: Architectures of the proposed modules. (a) T-FE filters and enhances sparse responses under trajectory-consistency guidance. (b) A-FR propagates features along the estimated velocity field to reconstruct continuous trajectories while suppressing incoherent triggers. 
+
+its transported prediction. For each active voxel i with feature Fi, we predict a bounded 2D displacement ∆pi on the spatial grid: 
+
+∆pi = v max tanh(MLP(F i)) , p′ 
+
+> i
+
+= pi + ∆pi, (5) where vmax limits the maximum displacement for stability. Since p′ 
+
+> i
+
+is generally off-grid, we obtain Fadv by Gaussian-kernel sampling on the (x, y ) lattice with normalized weights. We quantify trajectory consistency using a gating weight g that combines the agreement between Fadv and F and a mild penalty on large velocities, 
+
+g = exp 
+
+
+
+− ∥Fadv − F∥1
+
+∥F∥1 + ε
+
+
+
+⊙ 11 + α (|vx| + |vy |) . (6) This weight yields a conservative fusion between the transported prediction and the original observation, 
+
+Tadv = g · Fadv + (1 − g) · F. (7) Intuitively, g acts as a trajectory-consistency score: components that remain sta-ble under transport receive stronger support from the transported prediction, Advection Consistency for Weak Event Responses 7
+
+while inconsistent components are prevented from dominating the representa-tion. We use Tadv and g to constrain encoding at each scale, producing features that are better aligned with the estimated velocity field and thus more amenable to transport-based propagation. 
+
+3.3 Advection-Guided Trajectory Propagation 
+
+The decoder aims to transform deep motion-aware features into temporally con-tinuous trajectory structures. This is challenging in event data because coherent activations are intermittent, and naive upsampling tends to amplify isolated triggers. We therefore perform decoding as advection-guided propagation by ex-tending features along the velocity field to connect fragmented responses over time, while naturally down-weighting components that do not admit coherent transport. At each decoding stage, as illustrated in Fig. 2 (b), we take the lower-resolution feature Fbottom and the corresponding velocity guidance vi from the encoder, and perform transport-based alignment. Because velocity estimation can be uncertain in sparsely activated regions, we form a set of perturbed hy-potheses around vi,
+
+vki = v i + δk, k = 1 , . . . , K,  (8) where δk are fixed small perturbations. For each hypothesis, we compute a trans-ported candidate and its trajectory consistency, 
+
+{Ak, Gk} = ATC(F bottom , vki ), (9) where Ak is the transported feature and Gk is the corresponding confidence derived from transport agreement. To avoid linking trajectories through ab-normally high activations, we introduce a magnitude penalty Sk and compute consistency-aware aggregation weights: 
+
+πk = Softmax ( η Gk − Sk) , ¯A = 
+
+> K
+
+X
+
+> k=1
+
+πkAk. (10) Here Sk is the channel-averaged energy of Ak.We then combine the aligned feature with the original bottom feature to avoid information loss, 
+
+Falign = CA 
+
+
+
+Concat(F bottom , ¯A) 
+
+
+
+, (11) where CA is a lightweight channel attention. Finally, we inject the corresponding encoder skip feature Fenc to recover spatial details. The skip feature is first compressed by a bottleneck transform, concatenated with Falign , and refined by multi-dilated sparse convolutions with a residual connection, 
+
+Ftraj = CA 
+
+
+
+DConv d
+
+ Concat(F align , Bottleneck(F enc ))  + F align 
+
+
+
+. (12) 8 W. Guo et al. 
+
+Repeating this process across scales produces a trajectory feature pyramid {Fitraj }4
+
+> i=1
+
+,whose responses are progressively connected along time by advection-guided transport, yielding temporally coherent trajectory representations for down-stream prediction. 
+
+3.4 Learning Objectives 
+
+We train the network with a joint objective that combines voxel-level segmenta-tion supervision and a regularizer on the predicted velocity field, 
+
+L = (1 − λ)Lseg + λLvel , (13) where λ balances the two terms. We use binary cross-entropy for Lseg over predicted mask probabilities. Dense flow annotations are unavailable in typical event settings. We there-fore construct pseudo velocity targets via sparse temporal matching between foreground voxels across nearby time slices. For a foreground voxel i at time t
+
+with center pi, we find a nearest matched voxel j from the same instance at a neighboring time t′, and define: 
+
+v∗ 
+
+> i
+
+= pj − pi
+
+t′ − t . (14) We supervise the predicted velocity with the Smooth-ℓ1 loss, 
+
+Lvel = 1
+
+|V| 
+
+X
+
+> i∈V
+
+SmoothL1 ( vi − v∗ 
+
+> i
+
+) , (15) where V is the set of supervised foreground voxels. This regularizer stabilizes the learned transport field and improves temporal coherence, while the main supervision remains on the final task output. 
+
+## 4 Experiments 
+
+4.1 Implementation Details 
+
+All experiments are conducted on the EV-UAV dataset [4], which contains 147 se-quences and over 2.3M event-level annotations. The targets are extremely small, with an average size of 6.8 × 5.4 pixels, and appear under complex backgrounds and challenging illumination. We follow the official split with 99 training and 24 test sequences. All compared methods are retrained on the same split. For fairness, all methods are evaluated on the same raw event streams, annotations, and metrics, while each baseline keeps its native event representation. Input streams are sliced into 8s windows and voxelized at a temporal reso-lution of 1 ms. We train PACT for 50 epochs using Adam [12] with an initial learning rate of 10 −3 and decay on an NVIDIA RTX 4060 Ti GPU. For all experiments, we use the same hyperparameter setting: α = 0 .25 , ϵ = 10 −6,
+
+K = 5 , δk = 0 .6, η = 0 .75 , and λ = 0 .3. We report IoU and Acc for event-level segmentation quality, and Pd and Fa for localization performance. Advection Consistency for Weak Event Responses 9
+
+Table 1: Quantitative comparison of the proposed method to state-of-the-art methods. The bold and the underline represent the best and second-best performance, respec-tively. Methods Publications Event Rep. Temporal IoU (%) ↑ ACC (%) ↑ Pd(%) ↑ Fa(10 −4) ↓ #Params. Runtime(ms) SSD ECCV 2016 Event Count No 25.31 28.56 26.31 486.63 25.2M 2113 Faster RCNN TPAMI 2016 Event Count No 26.93 29.68 27.39 689.68 41.2M 3962 DETR ICLR 2020 Event Count No 30.35 33.63 31.64 631.37 39.8M 3136 YOLOv10-S NIPS 2025 Event Count No 32.55 33.39 32.18 589.67 7.3M 1627 EMS-YOLO ICCV 2023 SNN Yes 36.77 42.92 50.68 112.36 3.3M 1229 Spike-YOLO ECCV 2024 SNN Yes 43.94 48.26 59.62 55.38 69.0M 1883 GET ICCV 2023 Group Token Yes 40.31 48.91 60.73 46.35 18.4M 2168 RED NeurIPS 2020 Voxel Grid Yes 35.99 45.54 53.76 102.27 24.1M 3427 RVT CVPR 2023 Voxel Grid Yes 43.21 51.38 60.35 55.68 9.9M 1737 SAST CVPR 2024 Voxel Grid Yes 34.31 40.22 51.21 150.32 18.5M 3075 KPConv ICCV 2019 Points Yes 48.19 57.28 68.59 16.32 50.1M 562 RandLA-Net CVPR 2020 Points Yes 50.32 59.29 70.56 6.95 1.2M 353 COSeg CVPR 2024 Points Yes 51.89 60.93 71.32 9.21 23.4M 364 EV-SpSegNet ICCV 2025 Points Yes 55.18 65.02 77.53 1.63 4.0M 36 Ours - Points Yes 75.90 80.05 91.84 0.76 2.9M 58 
+
+4.2 Benchmark Comparisons 
+
+We divide the compared methods into three groups and select several state-of-the-art approaches in each group. The first group consists of frame-based generic object detectors, including SSD [15], Faster R-CNN [27], Deformable DETR [39], and YOLOv10 [34]. The second group covers event-based detection methods, including RVT [9], SAST [23], GET [24], RED [25], EMS-YOLO [32], and Spike-YOLO [16]. The third group contains point-cloud segmentation meth-ods, including KPConv [33], RandLA-Net [10], COSeg [1], and EV-SpSegNet [4]. For the frame-based methods, the input is an event frame aggregated over a 50 ms time window. Table 1 reports the results of frame-based, event-based, and point-based de-tectors. Frame-based methods perform the worst, as 50 ms event aggregation removes much of the within-window temporal structure. Event-based models improve temporal modeling but remain limited in low-SNR scenes with heavy clutter. Point-based segmentation baselines perform best among existing meth-ods, with EV-SpSegNet reaching 55.18% IoU and 77.53% Pd. PACT further increases the IoU to 75.90% and Pd to 91.84%, while reducing Fa from 1.63 
+
+to 0.76 (×10 −4). With 2.9M parameters and 58 ms inference time per window, PACT achieves this gain without increasing model complexity. Qualitative Results: Fig. 3 shows representative qualitative results. RVT fre-quently misses targets and produces scattered detections under clutter. Point-based methods preserve sparse geometry better, but still suffer from trajectory breaks and residual background triggers. PACT produces denser and more con-tinuous target trajectories with fewer missed and false detections, confirming the benefit of advection-consistent propagation. 10 W. Guo et al.                                              
+
+> Fig. 3: Qualitative results of different methods. Correct detections are marked in green, false detections in red, missed detections in blue, and noise points in gray.
+> Table 2: Ablation study on framework scheme. T-FE ATC A-FR IoU ↑ACC ↑Pd↑Fa↓#Params. 59.90 63.18 78.80 0.76 2.3M
+> ✓66.54 69.67 84.48 0.64 2.6M
+> ✓55.11 69.95 83.35 4.76 2.4M
+> ✓63.26 65.34 79.97 0.37 2.5M
+> ✓✓71.95 73.48 85.61 0.18 2.7M
+> ✓✓70.55 76.04 88.76 1.54 2.8M
+> ✓✓✓75.90 80.05 91.84 0.76 2.9M
+
+4.3 Ablation Studies 
+
+We evaluate the physical formulation of PACT in Table 2. The Baseline has no explicit transport constraint, so weak responses remain temporally fragile and are easily overwhelmed. When ATC is attached to the Baseline, the false alarm rate rises to 4.76 × 10 −4. This indicates that enforcing advection consistency on unstructured features induces spurious temporal correspondences, because the baseline features provide no a stable substrate for transport consistency. With only T-FE or only A-FR, the model behaves conservatively. These variants sup-press noise effectively, yet they do not aggregate intermittent responses into co-herent temporal traces, which limits the detection gain. The full benefit emerges only after closing the physical loop. T-FE produces motion-consistent features, and ATC imposes a transport-feasibility constraint on their propagation. A-FR then extends the consistent responses along the estimated flow to form stable temporal traces. Overall, the ablation provides evidence for a coupled cycle of extraction, constraint, and propagation for sustaining weak temporal traces. Advection Consistency for Weak Event Responses 11    
+
+> Fig. 4: Advection residual density across training stages. Kernel density estimates show the advection residual Radv for target events and spurious triggers, with the corresponding detection metrics reported next to each stage.
+
+4.4 Advection-Guided Representation Evolution 
+
+PACT uses advection consistency to preserve weak, fragmented temporal re-sponses while suppressing triggers that do not support coherent transport. A key question is whether this constraint actually reshapes the internal representation, rather than merely improving the final metrics. To examine this, we track the distribution of advection residuals during training and test whether foreground responses progressively concentrate at low residuals while background activity remains broadly distributed at higher residuals. For each checkpoint, we measure the advection residual between features before and after transport under the estimated velocity field, 
+
+Radv = ∥F − T v(F)∥ , (16) and plot kernel density estimates for foreground (green) and background (gray) responses using ground-truth labels. Fig. 4 shows four stages from initialization to convergence, together with the corresponding detection metrics. At early stages, foreground and background residuals largely overlap, indi-cating that transport does not yet provide reliable alignment for weak responses. As training proceeds, foreground residuals form a sharp peak near zero and sep-arate clearly from the background, whereas background residuals remain broad at higher values. A near-zero residual means that the transported prediction agrees with the observation, allowing intermittent target activations to accumu-late into coherent temporal traces, while clutter remains in the high-residual regime. Overall, the growing separation is consistent with the metric improve-ment and provides direct evidence that transport consistency stabilizes weak traces under heavy clutter. 
+
+4.5 Temporal Continuity Analysis 
+
+To quantitatively evaluate temporal consistency, we analyze the distribution of continuity metrics over all test sequences. For each target, we convert the frame-wise hit status into a binary hit sequence and compute two complementary 12 W. Guo et al.   
+
+> Fig. 5: Comparison of temporal continuity statistics across methods. We report the average length of continuous successful detection and the maximum length of contin-uous detection loss per target.
+> Fig. 6: Comparison of temporal continuity visualizations across methods. We align each target’s detection trajectory to a unified time scale and visualize the hit ratio at each time step with color, where dark blue indicates no hit and yellow indicates a higher hit ratio. The right-side color strip groups targets by scene, with each block corresponding to one scenario, which makes it easy to compare continuous detection segments and interruption patterns across methods.
+
+measures in Fig. 5. The first metric is the mean track length, defined as the average length of continuous successful detection segments. The second metric is the max interruption interval, defined as the maximum length of consecutive missed detections. Both metrics are normalized by the ground-truth target du-ration so that values lie in [0 , 1] , enabling fair comparisons across targets with different temporal extents. Fig. 5 shows that our method yields stronger temporal continuity than the baselines. For mean track length, our method attains a higher median and a distribution shifted toward larger values, whereas EV-SpSegNet [4], COSeg [1], and KPConv [33] concentrate at smaller values. This indicates that baseline pre-dictions are frequently fragmented into short segments that appear only when local evidence is strong and break once the evidence weakens. In contrast, our approach maintains connected detections over longer spans, producing more co-herent trajectories. For max interruption interval, our method achieves a lower mean and re-duced dispersion. For example, the standard deviation decreases from 0.28 for KPConv [33] to 0.15 for our method. These results align with our design mo-Advection Consistency for Weak Event Responses 13     
+
+> Fig. 7: Mechanism study of challenging scenes. (a) Three-frame visualization of a rep-resentative case. Marker shape indicates time (circle: t, triangle: t+1 , square: t+2 ), and color indicates target ID. Co-occurring targets exhibit markedly different displacements within the same window. (b) Scene-level statistics after removing simple scenes with-out temporal target co-occurrence, since they do not form competing motions within a window. Per-frame Target Density counts how many target IDs are active simulta-neously in a frame. Per-frame Speed Outlier measures how strongly the fastest targets deviate from the typical motion among co-occurring targets.
+
+tivation. By modeling advection-based transport, our method preserves tempo-ral connections through physics-consistent constraints, which helps bridge gaps caused by fluctuating event rates rather than relying on transient peaks. Beyond the statistics, Fig. 6 provides a complementary visual validation. We align each target’s detection trajectory to the normalized target duration and visualize the frame-wise hit ratio, defined as the fraction of ground-truth target points correctly detected at each frame. Colors closer to blue indicate fewer hits, while warmer colors indicate more hits. Across targets and scenes, the baselines often exhibit bursty and intermittent responses, with short high-hit segments separated by frequent low-hit periods. Our method instead forms longer and more continuous high-hit bands and markedly reduces prolonged low-hit stretches, suggesting that the predictions remain temporally connected rather than driven by brief local spikes. Crucially, the 20% relative IoU improvement in Table 1 is consistent with this enhanced temporal integrity. Longer continuous detections and fewer ex-tended interruptions reduce temporal breakages and fragmented accumulation over time. As a result, predicted regions evolve more coherently across the se-quence and yield more complete masks even when foreground evidence is inter-mittent. 
+
+4.6 Multi-Target Motion with Large Velocity Variation 
+
+Fig. 6 shows that PACT improves temporal continuity in most scenes, but the gain over EV-SpSegNet shrinks for the scene group around target index ∼40. We analyze this group to identify motion patterns under which single-field advection brings limited additional benefit. Qualitative evidence (Fig. 7(a)). We visualize a three-frame window, where marker shapes indicate time and colors indicate target IDs. Multiple targets 14 W. Guo et al. 
+
+co-occur within the same window, yet their inter-frame displacements differ sub-stantially. PACT propagates evidence with a single first-order velocity field; this works well when co-occurring targets share similar motion, but it cannot align multiple trajectories with markedly different velocities. As a result, temporal aggregation weakens for a subset of targets, reducing the continuity gain in this group. Scene-level statistics (Fig. 7(b)). We compute statistics only on scenes with temporal target co-occurrence, and each color block matches a scene group in Fig. 6. The target-index-∼40 group (Scene 9) exhibits higher Per-frame Target Density and the highest Per-frame Speed Outlierness . This indicates that more targets compete within the same window and that a few targets frequently move much faster than the rest, which makes a single first-order field insufficient to align all trajectories consistently. The statistics agree with the reduced margin in Fig. 6 and support the above mechanism. Overall, the hard cases are characterized by within-window motion inconsis-tency, especially the presence of fast outliers or abrupt speed changes. Extending the transport model with time-varying motion may better handle such mixed-motion windows. 
+
+## 5 Conclusion and Future Work 
+
+In this work, we formulate event streams as a continuously evolving spatiotem-poral process. Under heavy clutter, the critical challenge is not merely sparsity, but the lack of an explicit propagation mechanism. We cast the mechanism as a local transport process, where motion continuity is expressed as approximate fea-ture conservation along an estimated velocity field. Guided by this view, PACT enforces advection consistency to sustain weak responses and suppress noise. In our experiments, we examine the mechanism by tracking the evolution of transport-residual distributions across checkpoints. As the model converges, target responses increasingly concentrate in a low-residual regime, whereas back-ground triggers remain broadly distributed at higher residuals. The growing separation mirrors the improvement in downstream metrics, providing indirect evidence that the model relies on transport validity to maintain weak responses instead of memorizing static patterns. However, the current formulation models transport with locally constant ve-locity, which is best suited to short, near-linear motion. When acceleration or other non-linear dynamics become prominent, this approximation may become inaccurate. Future work will explore transport models beyond first-order motion so that the same consistency principle extends to more complex dynamics. 
+
+## References 
+
+> 1. An, Z., Sun, G., Liu, Y., Liu, F., Wu, Z., Wang, D., Van Gool, L., Belongie, S.: Rethinking few-shot 3d point cloud semantic segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 3996– 4006 (2024)
+
+Advection Consistency for Weak Event Responses 15 2. Benosman, R., Clercq, C., Lagorce, X., Ieng, S.H., Bartolozzi, C.: Event-based visual flow. IEEE Transactions on Neural Networks and Learning Systems 25 (2), 407–417 (2014) 3. Bi, Y., Chadha, A., Abbas, A., Bourtsoulatze, E., Andreopoulos, Y.: Graph-based object classification for neuromorphic vision sensing. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 491–501 (2019) 4. Chen, N., Xiao, C., Dai, Y., He, S., Li, M., An, W.: Event-based tiny object detection: A benchmark dataset and baseline (2025), arXiv:2506.23575 5. Cordone, L., Miramond, B., Thierion, P.: Object detection with spiking neural networks on automotive event data. In: Proceedings of the International Joint Conference on Neural Networks. pp. 1–8. IEEE (2022) 6. Gallego, G., Delbruck, T., Orchard, G., Bartolozzi, C., Taba, B., Censi, A., Leutenegger, S., Davison, A.J., Conradt, J., Daniilidis, K., Scaramuzza, D.: Event-based vision: A survey. IEEE Transactions on Pattern Analysis and Machine In-telligence 44 (1), 154–180 (2022) 7. Gallego, G., Rebecq, H., Scaramuzza, D.: A unifying contrast maximization frame-work for event cameras, with applications to motion, depth, and optical flow esti-mation. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. pp. 3867–3876 (2018) 8. Gehrig, D., Loquercio, A., Derpanis, K.G., Scaramuzza, D.: End-to-end learn-ing of representations for asynchronous event-based data. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 5632–5642 (2019) 9. Gehrig, M., Scaramuzza, D.: Recurrent vision transformers for object detection with event cameras. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 13884–13893 (2023) 10. Hu, Q., Yang, B., Xie, L., Rosa, S., Guo, Y., Wang, Z., Trigoni, N., Markham, A.: Randla-net: Efficient semantic segmentation of large-scale point clouds. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion. pp. 11108–11117 (2020) 11. Kim, H., Leutenegger, S., Davison, A.J.: Real-time 3d reconstruction and 6-dof tracking with an event camera. In: Proceedings of the European Conference on Computer Vision. Lecture Notes in Computer Science, vol. 9910, pp. 349–364. Springer (2016) 12. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization (2014), arXiv:1412.6980 13. Lagorce, X., Orchard, G., Galluppi, F., Shi, B.E., Benosman, R.B.: Hots: A hier-archy of event-based time-surfaces for pattern recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence 39 (7), 1346–1359 (2017) 14. Lichtsteiner, P., Posch, C., Delbruck, T.: A 128 ×128 120 db 15 μs latency asyn-chronous temporal contrast vision sensor. IEEE Journal of Solid-State Circuits 
+
+43 (2), 566–576 (2008) 15. Liu, W., Anguelov, D., Erhan, D., Szegedy, C., Reed, S., Fu, C.Y., Berg, A.C.: Ssd: Single shot multibox detector. In: Proceedings of the European Conference on Computer Vision. pp. 21–37. Springer (2016) 16. Luo, X., Yao, M., Chou, Y., Xu, B., Li, G.: Integer-valued training and spike-driven inference spiking neural network for high-performance and energy-efficient object detection. In: Proceedings of the European Conference on Computer Vision. pp. 253–272. Springer (2024) 17. Maqueda, A.I., Loquercio, A., Gallego, G., García, N., Scaramuzza, D.: Event-based vision meets deep learning on steering prediction for self-driving cars. In: 16 W. Guo et al. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition. pp. 5419–5427 (2018) 18. Mitrokhin, A., Fermüller, C., Parameshwara, C., Aloimonos, Y.: Event-based mov-ing object detection and tracking. In: Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems. pp. 1–9 (2018) 19. Mitrokhin, A., Hua, Z., Fermüller, C., Aloimonos, Y.: Learning visual motion seg-mentation using event surfaces. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 14414–14423 (2020) 20. Mondal, A., Giraldo, J.H., Bouwmans, T., Chowdhury, A.S.: Moving object de-tection for event-based vision using graph spectral clustering. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 876–884. IEEE (2021) 21. Neftci, E.O., Mostafa, H., Zenke, F.: Surrogate gradient learning in spiking neural networks: Bringing the power of gradient-based optimization to spiking neural networks. IEEE Signal Processing Magazine 36 (6), 51–63 (2019) 22. Pan, L., Hartley, R., Scheerlinck, C., Liu, M., Yu, X., Dai, Y.: High frame rate video reconstruction based on an event camera. IEEE Transactions on Pattern Analysis and Machine Intelligence 44 (5), 2519–2533 (2022) 23. Peng, Y., Li, H., Zhang, Y., Sun, X., Wu, F.: Scene-adaptive sparse transformer for event-based object detection. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 16794–16804 (2024) 24. Peng, Y., Zhang, Y., Xiong, Z., Sun, X., Wu, F.: Get: Group event transformer for event-based vision. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 6038–6048 (2023) 25. Perot, E., de Tournemire, P., Nitti, D., Masci, J., Sironi, A.: Learning to detect objects with a 1 megapixel event camera. In: Advances in Neural Information Processing Systems. vol. 33, pp. 16639–16652 (2020) 26. Rebecq, H., Ranftl, R., Koltun, V., Scaramuzza, D.: High speed and high dynamic range video with an event camera. IEEE Transactions on Pattern Analysis and Machine Intelligence 43 (6), 1964–1980 (2021) 27. Ren, S., He, K., Girshick, R., Sun, J.: Faster r-cnn: Towards real-time object de-tection with region proposal networks. Advances in Neural Information Processing Systems 28 (2015) 28. Schaefer, S., Gehrig, D., Scaramuzza, D.: Aegnn: Asynchronous event-based graph neural networks. In: Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition. pp. 12371–12381. IEEE (2022) 29. Sekikawa, Y., Nagata, J.: Tangentially elongated gaussian belief propagation for event-based incremental optical flow estimation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops. pp. 21940– 21949 (2023) 30. Shariff, W., Dilmaghani, M.S., Kielty, P., Moustafa, M., Lemley, J., Corcoran, P.: Event cameras in automotive sensing: A review. IEEE Access 12 , 51275–51306 (2024) 31. Stoffregen, T., Gallego, G., Drummond, T., Kleeman, L., Scaramuzza, D.: Event-based motion segmentation by motion compensation. In: Proceedings of the IEEE International Conference on Computer Vision. pp. 7244–7253 (2019) 32. Su, Q., Chou, Y., Hu, Y., Li, J., Mei, S., Zhang, Z., Li, G.: Deep directly-trained spiking neural networks for object detection. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 6555–6565 (2023) Advection Consistency for Weak Event Responses 17 33. Thomas, H., Qi, C.R., Deschaud, J.E., Marcotegui, B., Goulette, F., Guibas, L.J.: Kpconv: Flexible and deformable convolution for point clouds. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 6411–6420 (2019) 34. Wang, A., Chen, H., Liu, L., Chen, K., Lin, Z., Han, J.: Yolov10: Real-time end-to-end object detection. Advances in Neural Information Processing Systems 37 ,107984–108011 (2024) 35. Wang, X., Jin, Y., Wu, W., Zhang, W., Zhu, L., Jiang, B., Tian, Y.: Object de-tection using event camera: A moe heat conduction based detector and a new benchmark dataset. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 29321–29330 (2025) 36. Yang, C., Huang, Z., Wang, N.: Querydet: Cascaded sparse query for accelerating high-resolution small object detection. In: Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition. pp. 13668–13677 (2022) 37. Zhang, J., Dong, B., Zhang, H., Ding, J., Heide, F., Yin, B., Yang, X.: Spiking trans-formers for event-based single object tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 8801–8810. IEEE (2022) 38. Zhu, A.Z., Yuan, L., Chaney, K., Daniilidis, K.: Unsupervised event-based learning of optical flow, depth, and egomotion. In: Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition. pp. 989–997 (2019) 39. Zhu, X., Su, W., Lu, L., Li, B., Wang, X., Dai, J.: Deformable detr: Deformable transformers for end-to-end object detection (2020), arXiv:2010.04159 Following the Flow: Advection-Consistent 001 001 
+
+# Modeling for Event-based Small Object Detection 002 002 
+
+# Supplementary Material 003 003 
+
+Anonymous ECCV 2026 Submission 004 004 
+
+Paper ID #13150 005 005 
+
+## 1 Additional Related Work 006 006 
+
+Event-based learning has gradually moved beyond using asynchronous streams 007 007 
+
+only as regular tensors or recurrent states for downstream models [6, 7]. More 008 008 
+
+recent studies begin to examine the representation itself. Zubić et al . show that 009 009 
+
+dense event representations can be explicitly ranked with Gromov-Wasserstein 010 010 
+
+discrepancy for downstream tasks [17], and later introduce state-space models for 011 011 
+
+event cameras to replace conventional recurrence with learned temporal dynam-012 012 
+
+ics [18]. Asynchronous sparse processing has also continued to develop. Schaefer 013 013 
+
+et al . update only the affected part of an evolving spatio-temporal graph in 014 014 
+
+AEGNN [12], Messikommer et al . convert synchronous event models into asyn-015 015 
+
+chronous sparse ones while preserving identical outputs [9], and Li et al . further 016 016 
+
+couple frames and events in a unified asynchronous graph representation [8]. On 017 017 
+
+the detector side, Torbunov et al . adapt image detectors to event-based vision in 018 018 
+
+latent space rather than redesigning the detector from scratch [15]. Across these 019 019 
+
+developments, the emphasis remains on how event streams are represented, up-020 020 
+
+dated, or transferred into downstream models. The formulation adopted here 021 021 
+
+enters at a later stage, when weak encoded responses already exist and must 022 022 
+
+remain coherent over time. 023 023 
+
+Motion-guided event modeling has likewise developed beyond early event 024 024 
+
+warping. Gallego et al . formulate event alignment through contrast maximization 025 025 
+
+under a motion model, while Benosman et al . relate this motion-compensation 026 026 
+
+view to event-based visual flow estimation [1, 5]. Gallego et al . further compare 027 027 
+
+a broad family of focus-based losses and analyze how different objectives affect 028 028 
+
+motion-related estimation [4]. Motion compensation has also been used more 029 029 
+
+directly for motion segmentation and moving-object analysis [10,14]. More recent 030 030 
+
+work begins to model motion together with degradation in the data itself: Shiba 031 031 
+
+et al . estimate motion and noise jointly [13], while Yamaki et al . extend contrast-032 032 
+
+maximization-based motion segmentation to an iterative variational framework 033 033 
+
+[16]. Within this line, motion is still used mainly to align raw events, refine 034 034 
+
+compensation, or define optimization targets. The advection-based formulation 035 035 
+
+adopted here instead uses a local velocity field after encoding, where latent 036 036 
+
+features are transported and weak responses are judged by whether they remain 037 037 
+
+consistent under that transport. 038 038 2 ECCV 2026 Submission #13150 
+
+Table 1: Detailed training settings of the compared methods on EV-UAV. Baseline methods follow the configurations reported in their original papers, as alternative train-ing configurations did not improve their performance. Method Input Optimizer LR Scheduler Batch Epochs 
+
+Frame-based methods 
+
+SSD 50ms/frame SGD 1e-3 Step 32 100 Faster R-CNN SGD 1e-3 Step 8 100 DETR AdamW 1e-4 Step 8 150 YOLOv10-S SGD 1e-2 Linear 16 100 
+
+SNN-based methods 
+
+EMS-YOLO 2.5s/5 slice SGD 1e-2 Cosine 32 100 SpikeYOLO SGD 1e-2 Cosine 20 50 GET 50ms/12 groups Adam 2e-4 OneCycle 8 50 
+
+Voxel-based methods 
+
+RED 50ms/10 slice volume Adam 2e-4 Exponential 8 20 RVT Adam 2e-4 OneCycle 8 50 SAST AdamW 5e-4 Cosine 16 50 
+
+Point-based methods 
+
+KPConv 8s/point stream Momentum 1e-2 Step 10 400 RandLA-Net Adam 1e-2 Exponential 8 100 COSeg AdamW 5e-5 Cosine 4 100 EV-SpSegNet Adam 1e-2 Linear 8 50 
+
+Ours 
+
+PACT (ours) 8s/point stream Adam 1e-3 StepLR 4 50 
+
+Benchmark development shows a similar difference in emphasis. Perot et al .039 039 
+
+introduce the 1 Mpx dataset for general event-based detection in high-resolution 040 040 
+
+automotive scenes [11]. The earlier large-scale automotive benchmark of de 041 041 
+
+Tournemire et al . provides longer driving recordings but excludes targets whose 042 042 
+
+bounding-box diagonal is smaller than 30 pixels [3]. More recently, Chen et al .043 043 
+
+shift the focus to event-based tiny object detection with EV-UAV, emphasizing 044 044 
+
+extremely small targets in complex anti-UAV scenarios [2]. This setting is closer 045 045 
+
+to the one considered here, where the challenge is not only whether a target can 046 046 
+
+be detected, but whether weak and fragmented evidence can remain temporally 047 047 
+
+continuous once event support becomes sparse and easily interrupted. 048 048 
+
+## 2 Additional Experimental Settings 049 049 
+
+For reproducibility, we further summarize the experimental settings of the com-050 050 
+
+pared methods on EV-UAV. Since these baselines follow different input paradigms, 051 051 ECCV 2026 Submission #13150 3
+
+Table 2: Ablation on the number of transport hypotheses K.
+
+K IoU (%) ↑ ACC (%) ↑ Pd (%) ↑ Fa (10 −4) ↓
+
+1 72.23 74.62 87.80 1.32 3 74.42 79.83 91.64 1.13 5 (ours) 75.90 80.05 91.84 0.76 
+
+7 74.98 77.76 89.30 0.93 
+
+we configure their inputs accordingly. The resulting input formats and training 052 052 
+
+configurations are reported in Table 1. 053 053 
+
+## 3 Ablation on the Number of Hypotheses K054 054 
+
+We study the effect of the hypothesis number K used in the A-FR module. This 055 055 
+
+parameter determines how many perturbed transport candidates are generated 056 056 
+
+around the estimated local velocity field during advection-guided propagation. 057 057 
+
+When K is too small, the candidate set cannot adequately cover motion uncer-058 058 
+
+tainty, making the decoder less stable when velocity estimation is unreliable in 059 059 
+
+sparsely activated regions. As K increases, the model can evaluate a broader set 060 060 
+
+of transport hypotheses and better recover fragmented responses along plausible 061 061 
+
+trajectory directions. However, an overly large K also introduces redundant can-062 062 
+
+didates, which increases the risk of aggregating noisy or weakly related responses 063 063 
+
+and reduces the selectivity of consistency-based weighting. 064 064 
+
+Table 2 shows that the performance improves as K increases from a small 065 065 
+
+value, and then saturates or slightly drops when too many hypotheses are intro-066 066 
+
+duced. This suggests that K should be large enough to cover motion uncertainty, 067 067 
+
+but not so large that redundant candidates interfere with stable aggregation. Ac-068 068 
+
+cordingly, we set K = 5 in the final model. 069 069 
+
+## 4 Ablation on the Maximum Displacement Bound vmax 070 070 
+
+We further study the effect of the maximum displacement bound vmax in trajectory-071 071 
+
+consistency estimation. This parameter sets the upper bound of the predicted 072 072 
+
+spatial displacement at each scale and determines the search range of advection-073 073 
+
+guided transport. If vmax is too small, the model cannot cover sufficiently large 074 074 
+
+motion variations, making it difficult to connect weak yet trajectory-consistent 075 075 
+
+responses across neighboring time steps. As a result, the reconstructed trajec-076 076 
+
+tories remain incomplete and fragmented. If vmax is too large, the transport 077 077 
+
+range becomes insufficiently constrained, increasing the risk of linking unrelated 078 078 
+
+activations under cluttered event patterns. 079 079 
+
+As reported in Table 3, the best performance is achieved with a moderate 080 080 
+
+displacement bound. This indicates that vmax should be large enough to cover 081 081 
+
+target motion, but not so large that incorrect long-range transport is introduced. 082 082 
+
+Accordingly, we set vmax = 5 in the final model. 083 083 4 ECCV 2026 Submission #13150 
+
+Table 3: Ablation on the maximum displacement bound vmax .
+
+vmax IoU (%) ↑ ACC (%) ↑ Pd (%) ↑ Fa (10 −4) ↓
+
+2.5 69.22 76.42 89.17 2.06 5.0 (ours) 75.90 80.05 91.84 0.76 
+
+7.5 72.11 75.26 88.11 1.33 10.0 72.38 74.09 86.85 1.45 
+
+## 5 Robustness under Extreme Temporal Sparsity 084 084 
+
+Event streams are inherently continuous in time, whereas most learning-based 085 085 
+
+models are trained and evaluated under relatively dense event observations. This 086 086 
+
+raises a practical concern: whether the model relies on the statistical redundancy 087 087 
+
+of frequent events, or whether it exploits a more intrinsic structure that remains 088 088 
+
+valid when temporal evidence becomes sparse. 089 089 
+
+In our case, the core assumption behind PACT is that feature evolution fol-090 090 
+
+lows an advection process driven by a learned velocity field. If this assumption 091 091 
+
+holds, feature consistency should be preserved along the predicted motion tra-092 092 
+
+jectories, even when intermediate events are missing. On the contrary, a model 093 093 
+
+that mainly depends on repeated activations or dense temporal patterns would 094 094 
+
+be expected to degrade rapidly once such redundancy is removed. 095 095 
+
+To probe this behavior, we perform a controlled event dropping experiment 096 096 
+
+at inference time. Starting from the original event stream, we randomly dis-097 097 
+
+card 30% , 50% , and 70% of events, while keeping the trained model unchanged. 098 098 
+
+Rather than focusing solely on detection accuracy, we examine the underlying 099 099 
+
+mechanism by analyzing the advection residuals before and after feature trans-100 100 
+
+port. 101 101 
+
+Specifically, we compute the kernel density estimates of the advection residual 102 102 
+
+Radv and separate the statistics according to ground-truth labels, resulting in 103 103 
+
+two distributions: one corresponding to target events and the other to spurious 104 104 
+
+triggers. These distributions are visualized in Fig. 1. 105 105 
+
+Across all drop rates, the residual distribution of target events consistently 106 106 
+
+exhibits a pronounced peak near zero. This indicates that, along the predicted 107 107 
+
+velocity field, the transported features remain largely unchanged, despite sub-108 108 
+
+stantial temporal gaps in the input stream. Although the peak becomes slightly 109 109 
+
+broader as the drop rate increases, its location remains stable even when up to 110 110 
+
+70% of events are removed. This behavior suggests that the model maintains fea-111 111 
+
+ture continuity through motion-guided transport, rather than relying on dense 112 112 
+
+temporal sampling. 113 113 
+
+In contrast, spurious triggers produce a much flatter and more dispersed 114 114 
+
+residual distribution. Since these events do not follow a coherent motion pattern, 115 115 
+
+their features fail to satisfy the advection constraint, resulting in consistently 116 116 
+
+higher residuals. Importantly, the separation between the near-zero target peak 117 117 
+
+and the noise distribution persists across all sparsity levels. 118 118 ECCV 2026 Submission #13150 5
+
+Fig. 1: Advection residual distributions under stochastic event dropping (0%–70%). As sparsity increases, target events consistently maintain a sharp peak near zero, indicating that features are conserved along the predicted velocity field. In contrast, spurious triggers exhibit much flatter and more dispersed residual dis-tributions. This suggests that PACT maintains temporal continuity through motion-consistent transport rather than relying on dense signal patterns. 
+
+Taken together, these observations indicate that the robustness of PACT 119 119 
+
+under extreme event dropping arises from the validity of its motion-consistent 120 120 
+
+transport mechanism. The model preserves feature coherence by propagating 121 121 
+
+information along learned trajectories, instead of depending on repetitive or 122 122 
+
+densely observed event patterns. 123 123 
+
+## References 124 124 
+
+1. Benosman, R., Clercq, C., Lagorce, X., Ieng, S.H., Bartolozzi, C.: Event-based 125 125 
+
+visual flow. IEEE Transactions on Neural Networks and Learning Systems 25 (2), 126 126 
+
+407–417 (2014) 127 127 
+
+2. Chen, N., Xiao, C., Dai, Y., He, S., Li, M., An, W.: Event-based tiny object 128 128 
+
+detection: A benchmark dataset and baseline (2025), arXiv:2506.23575 129 129 
+
+3. de Tournemire, P., Nitti, D., Perot, E., Migliore, D., Sironi, A.: A large scale event-130 130 
+
+based detection dataset for automotive (2020), arXiv:2001.08499 131 131 
+
+4. Gallego, G., Gehrig, M., Scaramuzza, D.: Focus is all you need: Loss functions for 132 132 
+
+event-based vision. In: Proceedings of the IEEE/CVF Conference on Computer 133 133 
+
+Vision and Pattern Recognition. IEEE (2019) 134 134 
+
+5. Gallego, G., Rebecq, H., Scaramuzza, D.: A unifying contrast maximization frame-135 135 
+
+work for event cameras, with applications to motion, depth, and optical flow esti-136 136 6 ECCV 2026 Submission #13150 mation. In: Proceedings of the IEEE Conference on Computer Vision and Pattern 137 137 
+
+Recognition. pp. 3867–3876 (2018) 138 138 
+
+6. Gehrig, D., Loquercio, A., Derpanis, K.G., Scaramuzza, D.: End-to-end learn-139 139 
+
+ing of representations for asynchronous event-based data. In: Proceedings of the 140 140 
+
+IEEE/CVF International Conference on Computer Vision. pp. 5632–5642 (2019) 141 141 
+
+7. Gehrig, M., Scaramuzza, D.: Recurrent vision transformers for object detection 142 142 
+
+with event cameras. In: Proceedings of the IEEE/CVF Conference on Computer 143 143 
+
+Vision and Pattern Recognition. pp. 13884–13893 (2023) 144 144 
+
+8. Li, D., Li, J., Liu, X., Fan, X., Tian, Y.: Asynchronous collaborative graph repre-145 145 
+
+sentation for frames and events. In: Proceedings of the IEEE/CVF Conference on 146 146 
+
+Computer Vision and Pattern Recognition. pp. 1655–1666. IEEE (2025) 147 147 
+
+9. Messikommer, N., Gehrig, D., Loquercio, A., Scaramuzza, D.: Event-based asyn-148 148 
+
+chronous sparse convolutional networks. In: Proceedings of the European Confer-149 149 
+
+ence on Computer Vision. pp. 415–431. Springer (2020) 150 150 
+
+10. Mitrokhin, A., Fermüller, C., Parameshwara, C., Aloimonos, Y.: Event-based mov-151 151 
+
+ing object detection and tracking. In: Proceedings of the IEEE/RSJ International 152 152 
+
+Conference on Intelligent Robots and Systems. pp. 1–9 (2018) 153 153 
+
+11. Perot, E., de Tournemire, P., Nitti, D., Masci, J., Sironi, A.: Learning to detect 154 154 
+
+objects with a 1 megapixel event camera. In: Advances in Neural Information 155 155 
+
+Processing Systems. vol. 33, pp. 16639–16652 (2020) 156 156 
+
+12. Schaefer, S., Gehrig, D., Scaramuzza, D.: Aegnn: Asynchronous event-based graph 157 157 
+
+neural networks. In: Proceedings of the IEEE/CVF Conference on Computer Vi-158 158 
+
+sion and Pattern Recognition. pp. 12371–12381. IEEE (2022) 159 159 
+
+13. Shiba, S., Aoki, Y., Gallego, G.: Simultaneous motion and noise estimation with 160 160 
+
+event cameras. In: Proceedings of the IEEE/CVF International Conference on 161 161 
+
+Computer Vision. pp. 6959–6969. IEEE (2025) 162 162 
+
+14. Stoffregen, T., Gallego, G., Drummond, T., Kleeman, L., Scaramuzza, D.: Event-163 163 
+
+based motion segmentation by motion compensation. In: Proceedings of the IEEE 164 164 
+
+International Conference on Computer Vision. pp. 7244–7253 (2019) 165 165 
+
+15. Torbunov, D., Ren, Y., Ghose, A., Dim, O., Cui, Y.: Evrt-detr: Latent space adap-166 166 
+
+tation of image detectors for event-based vision. In: Proceedings of the IEEE/CVF 167 167 
+
+International Conference on Computer Vision. pp. 9812–9821. IEEE (2025) 168 168 
+
+16. Yamaki, R., Shiba, S., Gallego, G., Aoki, Y.: Iterative event-based motion segmen-169 169 
+
+tation by variational contrast maximization. In: Proceedings of the IEEE/CVF 170 170 
+
+Conference on Computer Vision and Pattern Recognition Workshops. pp. 4918– 171 171 
+
+4927. IEEE (2025) 172 172 
+
+17. Zubić, N., Gehrig, D., Gehrig, M., Scaramuzza, D.: From chaos comes order: Or-173 173 
+
+dering event representations for object recognition and detection. In: Proceedings 174 174 
+
+of the IEEE/CVF International Conference on Computer Vision. pp. 12846–12856. 175 175 
+
+IEEE (2023) 176 176 
+
+18. Zubic, N., Gehrig, M., Scaramuzza, D.: State space models for event cameras. 177 177 
+
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern 178 178 
+
+Recognition. pp. 5819–5828. IEEE (2024) 179 179

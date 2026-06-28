@@ -1,0 +1,296 @@
+Title: Weighted Score-Oriented Losses for Temporally Localized Event Prediction
+
+URL Source: https://arxiv.org/pdf/2606.23145v1
+
+Published Time: Tue, 23 Jun 2026 03:00:08 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Weighted Score-Oriented Losses for Temporally Localized Event Prediction 
+
+Edoardo Legnaro ∗
+
+Department of Mathematics, University of Genoa Via Dodecaneso 35, 16146 Genoa, Italy Sabrina Guastavino Department of Mathematics, University of Genoa Via Dodecaneso 35, 16146 Genoa, Italy 
+
+sabrina.guastavino@unige.it 
+
+Francesco Marchetti Department of Mathematics “Tullio Levi-Civita”, University of Padua Via Trieste 63, 35121 Padua, Italy 
+
+francesco.marchetti@math.unipd.it 
+
+Abstract 
+
+Operational event-detection systems are rarely assessed by pointwise accuracy alone. In anomaly detection, changepoint detection, and warning systems, the utility of an alarm depends on its temporal position relative to an event. This produces a score–loss mismatch. Neural networks are commonly trained with classical loss functions, such as cross-entropy, whereas deployment decisions are obtained by thresholding network predictions, merging alarms through post-processing rules, and evaluating them with event-based metrics defined by detection windows and false-alarm costs. This paper studies a temporally localized specialization of weighted score-oriented loss (wSOL) for event prediction. Starting from score-oriented losses based on expected confusion matrices and from the weighted SOL framework of [ 1], we consider temporal weights that discount near-event false positives and reduce false-negative penalties when an event is preceded by an admissible alarm. The resulting objective is differentiable with respect to the network predictions, and therefore can be optimized by back-propagation. It can be instantiated with balanced accuracy, true skill statistic, F1, critical success index, and related confusion-matrix scores. We evaluate the proposed approach by comparing cross-entropy, unweighted score-oriented loss, and wSOL on three benchmark datasets for time-series event prediction and detection. The results show that wSOL can improve performance when the evaluation utility is localized in time and is not already encoded by the pointwise labels. 
+
+Keywords: 
+
+score-oriented loss; temporal weighting; event detection; anomaly detection; changepoint detection; metric-aware learning 
+
+# 1 Introduction 
+
+Binary neural classifiers are usually optimized by minimizing a decomposable loss, most commonly cross-entropy. Here, decomposable means that the training objective is a sum or average of terms, each depending only on the local prediction and label at one index. The final system, however, is often evaluated through non-decomposable performance metrics computed after thresholding, where the metric value depends jointly on multiple predictions through global confusion-matrix counts and, in event-based settings, on additional post-processing rules that couple neighboring predictions. In event-based time-series applications, this discrepancy is particularly severe. A detector may be credited for firing shortly before an anomalous window, penalized for repeated alarms, or judged according to  
+
+> ∗Corresponding author. Email: edoardo.legnaro@edu.unige.it
+
+1
+
+> arXiv:2606.23145v1 [cs.LG] 22 Jun 2026
+
+a range-level score, not according to the number of correctly classified time points. Two prediction batches with identical pointwise confusion matrices may thus have very different operational value. The mismatch between a training loss and an evaluation metric has been studied in several forms. Classical cost-sensitive learning introduces asymmetric penalties for false positives and false negatives [ 2]. This handles unequal error costs but does not by itself model the position of an error in a temporal sequence. Losses designed for class imbalance, including focal loss [3] and class-balanced reweighting [4], similarly modify the relative contribution of samples but remain pointwise objectives. Another line of work studies direct optimization of non-decomposable metrics. Consistency and surrogate-regret analyses for F-like and other generalized classification scores were developed in [ 5 –8 ], while scalable differentiable formulations include [ 9]. A related overlap-based relaxation is the Lovasz-Softmax loss [ 10 ]. These methods share the goal of aligning training with evaluation, but they are usually formulated for independent binary classification or spatial overlap and do not encode localized temporal utility around an event boundary. In early warning and early event prediction, temporal structure has been incorporated through precision-constrained learning [ 11 ], temporal label shaping [ 12 ], and survival-style alarm policies [ 13 ]. Time-series anomaly detection has likewise developed increasingly event-aware evaluation protocols, including Numenta Anomaly Benchmark (NAB) [ 14 , 15 ], range-based precision and recall [ 16 ], local evaluation [ 17 ], threshold-independent range measures such as Volume under the surface (VUS) [ 18 ], and broader taxonomies of metric behavior [ 19 ]; see also [ 20 ] for a critique of inflated adjusted event scoring. These works sharpen the evaluation side of the problem, but they do not turn the temporal reward structure itself into a differentiable training objective. Weighted event losses have also appeared in adjacent detection domains. Examples include class-imbalance and multitask weighting for rare audio event detection [ 21 ] and onset/offset-weighted cross-entropy for sound event detection [ 22 ]. Such losses inject temporal emphasis through pointwise reweighting, but they are not derived from a confusion-matrix score family. Score-oriented losses (SOL) were introduced to reduce the mismatch between training objectives and threshold-based evaluation metrics by replacing the discontinuous hard confusion matrix with its expectation under a threshold distribution [ 23 ]. In this way, scores such as balanced accuracy, F1, true skill statistic, and critical success index can be turned into differentiable loss functions. This idea was later extended in [ 1 ] through a general framework for weighted classification metrics, showing that weighted score-oriented losses encompass cost-sensitive learning, weighted cross-entropy, and value-weighted skill scores [24]. The present work builds on this framework by deriving and testing a temporally weighted score-oriented loss (wSOL) for event detectors whose downstream utility is concentrated in a reward window around an event. The contribution is a focused specialization to temporally localized event prediction: localized event utility is written directly in expected confusion-matrix terms, reformulated in event-detection language, and assessed empirically on anomaly- and changepoint-detection benchmarks. This is the setting in which the loss contains information that is absent from ordinary pointwise labels. Indeed, time-series anomaly detection is commonly evaluated with event- or range-aware metrics rather than pure pointwise accuracy. The NAB uses application profiles that reward early detections inside labeled anomaly windows and penalize false alarms [ 14 , 15 ]. More general range-based precision and recall measures were proposed by Tatbul et al. [ 16 ]. Value-weighted skill scores similarly distinguish temporally useful errors from harmful errors in forecasting problems [ 24 , 25 ]. These evaluation protocols motivate a training loss that can see the temporal reward structure during optimization instead of only after threshold tuning. The paper is organized as follows. Section 2 formalizes the temporally weighted score-oriented loss: starting from the expected confusion-matrix framework of SOL, we introduce the future-event proximity weight and the prior-alarm correction terms, define the resulting wSOL objective, and verify that it reduces to SOL when no temporal weighting is applied. Section 3 describes the experimental setup, including the three benchmark datasets (NAB, SKAB, Exathlon), the common Temporal Convolutional Network (TCN) architecture, and the training and evaluation pipeline. Section 4 reports the held-out comparisons. Section 5 interprets the results across datasets, analyzes the conditions under which temporal weighting helps, and discusses the role of temporal weight selection and the 2limitations of the current formulation. Section 6 summarizes the findings and outlines directions for future work. The implementation of wSOL is available at https://github.com/edoardolegnaro/Sc oreOrientedLosses.git .
+
+# 2 Weighted Score-Oriented Loss 
+
+Let {(xi, y i)}ni=1 be a time-ordered binary dataset of n samples, with input sample xi ∈ Ω ⊂ Rd and 
+
+yi ∈ { 0, 1}. A neural network with parameters θ, denoted by fθ, produces a prediction pi = fθ(xi) ∈
+
+(0 , 1). A threshold τ ∈ (0 , 1) gives the hard prediction ˆyi(τ ) = 1{pi ≥ τ }, where 1{·} denotes the indicator function. The classical confusion-matrix entries are TP τ =
+
+> n
+
+X
+
+> i=1
+
+yi1{pi ≥ τ }, FN τ =
+
+> n
+
+X
+
+> i=1
+
+yi1{pi < τ }, (1) FP τ =
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)1{pi ≥ τ }, TN τ =
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)1{pi < τ }. (2) A given score can be written as sτ = s( TN τ , FP τ , FN τ , TP τ ), where s denotes a classification per-formance or skill score defined in terms of the confusion matrix. Examples used in the experiments include balanced accuracy, which ranges in [0 , 1] and attains its optimum value at 1, and the true skill statistic, which ranges in [ −1, 1] and is optimal when it reaches 1: BA = 12
+
+ TP TP + FN + TN TN + FP 
+
+
+
+, TSS = TP TP + FN + TN TN + FP − 1. (3) These skill scores are particularly suitable for imbalanced classification problems, and they are directly related through BA = 12 (TSS + 1). The score sτ is discontinuous with respect to pi, and therefore in the neural-network parameters. We replace the fixed threshold with a random threshold variable T with cumulative distribution function F on (0 , 1). Let zi = F (pi). Since P(T ≤ pi) = F (pi), the expected confusion-matrix entries are TP F = ET [TP T ] = 
+
+> n
+
+X
+
+> i=1
+
+yizi, FN F = ET [FN T ] = 
+
+> n
+
+X
+
+> i=1
+
+yi(1 − zi), (4) FP F = ET [FP T ] = 
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)zi, TN F = ET [TN T ] = 
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)(1 − zi). (5) For a score s, the score-oriented loss is 
+
+LSOL (θ) = 1 − s(TN F , FP F , FN F , TP F ) . (6) When F is smooth, LSOL is differentiable wherever the chosen score is differentiable. Event-detection metrics often reward alarms in a neighborhood of an event, not only at positively labeled time points. Let H be a temporal horizon and let ω = ( ω1, . . . , ω H ) be a non-negative utility weight vector, with ωh ∈ [0 , 1) for each h ∈ { 1, . . . , H }. In the one-sided formulation below, h indexes the distance from an alarm to a future event, or equivalently the lag of a prior alarm relative to an event. Larger ωh means that an alarm at that lag is more useful. In the experiments, ωh is non-increasing and concentrated near the event boundary. This construction can be read as a temporally localized, event-prediction specialization of the chronological value-weighted wSOL setting already formalized in [1], rewritten here in direct event-utility notation. Two effects are encoded. First, a positive prediction at a negative time point should not be penalized as a full false alarm if an event occurs shortly afterward. Define the future-event proximity 
+
+a+ 
+
+> i
+
+= max  
+
+> 1≤h≤H
+
+ωhyi+h, (7) 3where yj = 0 when the index j falls outside the range of the considered sequence. The weighted expected false-positive term is FP F,ω =
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)(1 − a+ 
+
+> i
+
+)zi. (8) Thus an alarm immediately before an event is discounted when the target metric would treat it as useful. Second, an event should not be treated as fully missed if the model has already raised a strong nearby alarm. Let zi−h = 0 for i − h < 1. A product-style temporal correction is 
+
+cprod  
+
+> i
+
+=
+
+> H
+
+X
+
+> h=1
+
+ωh[zi−h − zi]+, (9) where [ u]+ = max (u, 0). A max-style correction, used in the main experiments, keeps only the upper envelope of previous alarms: 
+
+cmax  
+
+> i
+
+= X
+
+> h∈R i
+
+(ωh − ωh+ )[ zi−h − zi]+. (10) The set Ri is defined by scanning backward from time i. A lag h is included in Ri only if the soft alarm value zi−h is strictly larger than all soft alarm values at closer lags 1 , . . . , h − 1. Thus Ri keeps only the successive record-high previous alarms: weaker alarms that are dominated by a closer alarm cannot add extra credit for the same event. If Ri = {h1 < h 2 < · · · < h m}, then h+ 
+
+> j
+
+= hj+1 for j < m ,and for the last retained lag we set ωh+ 
+
+> m
+
+= 0. The factor ωhj − ωh+
+
+> j
+
+assigns only the incremental temporal weight between two consecutive record alarms. This running-maximum decomposition is a piecewise differentiable surrogate for giving credit to the strongest useful prior alarm without repeatedly rewarding the same event. The weighted expected false-negative term is then FN F,ω =
+
+> n
+
+X
+
+> i=1
+
+yi (1 − zi − ci) , (11) where ci is either (9) or (10). The true-positive and true-negative terms remain TP F,ω =
+
+> n
+
+X
+
+> i=1
+
+yizi, TN F,ω =
+
+> n
+
+X
+
+> i=1
+
+(1 − yi)(1 − zi).
+
+Definition 1 (Temporal weighted score-oriented loss) . Given a confusion-matrix score s, a cumulative distribution function F for a random threshold T , a horizon H, and a temporal weight vector ω, the temporal weighted score-oriented loss is 
+
+LwSOL (θ) = 1 − s(TN F,ω , FP F,ω , FN F,ω , TP F,ω ) . (12) When the temporal weights are zero (or no horizon is used), the weighted loss reduces to the standard score-oriented loss. 
+
+Proposition 1. If H = 0 or ωh = 0 for all h, then LwSOL = LSOL .Proof. With zero temporal weights, a+ 
+
+> i
+
+= 0 and ci = 0 for all i. Equations (8) and (11) reduce to the unweighted expected false-positive and false-negative terms, while the true-positive and true-negative terms are unchanged. Substitution into (12) gives (6). Temporal weighting supplies information that is not present in ordinary pointwise supervision. It should therefore be useful when the evaluation metric rewards alarms in a localized window around an event and the pointwise labels do not already encode that temporal structure. If positive labels already cover the full region in which alarms are useful, then cross-entropy receives a dense and aligned training signal. If anomalous labels span long disturbance ranges, a localized temporal weight vector may even conflict with the range-level evaluation metric. In the following section we empirically test this distinction. 43 Empirical Validation 
+
+In this section, we evaluate the proposed wSOL loss (12) against cross-entropy and the unweighted SOL loss (6) . The comparison uses three time-series benchmarks that differ in whether their evaluation utility is temporally localized. All experiments compare three losses under the same model architecture and data pipeline within each dataset. For SOL and wSOL, the internal score family is selected from balanced accuracy and TSS, with a uniform threshold distribution. For wSOL, the temporal weight vector and horizon are selected from a finite set of candidate families fixed before model selection. All final comparisons use validation-selected loss configurations, thresholds, and post-processing parameters, and the selected pipeline is then evaluated once on the held-out split. For NAB, these candidates are specified from the official positive utility branch, along with one short-horizon control. Specifically, we construct temporal weight vectors that assign higher weights to predictions close to an event and progressively lower weights at larger temporal distances. This approximates the utility structure induced by the NAB scoring function. Let S(r) = 2 σ(−5r) − 1 denote the scaled sigmoid function underlying the positive branch of the NAB utility profile, where σ(·) is the standard sigmoid function. Here, r ∈ [−1, 1] is a normalized coordinate along that branch, ordered from the highest-reward side ( r = −1) to the low-reward side ( r = 1). Let rh = −1 + 2( h − 1) /(H − 1) define a discretization of this normalized temporal window, so h = 1 receives the largest temporal credit. We define 
+
+uh = max( S(rh), 0) 
+
+S(−1) , (13) which represents a normalized and non-negative approximation of the NAB utility profile, rescaled such that its maximum value equals one. The NAB-shaped temporal weight vectors are then defined as 
+
+ωh = bH + ( aH − bH )uγH 
+
+> h
+
+, (14) where H ∈ { 8, 16 , 32 , 64 } controls the temporal resolution of the weight vector, and the parameters (aH , b H , γ H ) determine its amplitude, baseline, and sharpness. In the experiments, the following horizon-specific parameter triples are considered: (aH , b H , γ H ) ∈ { (0 .55 , 0.04 , 2.5) , (0 .50 , 0.025 , 3.0) , (0 .42 , 0.012 , 4.0) , (0 .34 , 0.006 , 5.0) }.
+
+In addition, NAB includes a short-horizon control with H = 4 and ω = (0 .45 , 0.20 , 0.10 , 0.05). These functional forms and finite candidate sets are specified a priori; validation selects among them but does not learn the temporal weights continuously. SKAB uses the same one-sided decaying family of temporal weight vectors with H ∈ { 8, 16 , 32 , 64 }
+
+to match its local reward window. Exathlon instead uses front-loaded heuristic temporal weight vectors with H ∈ { 8, 16 , 32 , 64 , 128 }, because its scoring function does not provide an analogous localized one-sided reward function. These vectors have the form 
+
+ωh = tH + ( pH − tH )
+
+
+
+1 − h − 1
+
+H − 1
+
+qH
+
+,
+
+with horizon-specific parameters (p8, t 8, q 8) = (0 .58 , 0.12 , 1.6) , (p16 , t 16 , q 16 ) = (0 .54 , 0.06 , 2.4) ,
+
+(p32 , t 32 , q 32 ) = (0 .50 , 0.025 , 3.2) , (p64 , t 64 , q 64 ) = (0 .44 , 0.010 , 4.2) ,
+
+(p128 , t 128 , q 128 ) = (0 .38 , 0.004 , 5.4) .
+
+Specifically, Exathlon uses the benchmark’s range-based anomaly-detection (AD) scores, which are F-scores built from range precision and range recall. These scores use increasingly restrictive definitions of what it means to cover an anomalous interval: AD2 uses flat overlap credit over each labeled anomaly range, AD3 adds a front-position bias that rewards earlier overlap within the range, and AD4 further removes duplicate credit for repeatedly matching the same range. We use AD4 as the primary selection metric. 5Table 1 summarizes the benchmarks: NAB [ 14 , 15 ], SKAB [ 26 ], and Exathlon [ 27 ]. NAB and SKAB are the primary empirical datasets because their evaluation functions reward localized alarms. Exathlon is included as a boundary case: it is also an anomaly-detection benchmark, but its labels span long disturbance ranges. It therefore tests whether the proposed loss helps beyond the mere presence of temporal structure.             
+
+> Dataset Domain Structure Class imbalance NAB Streaming anomaly detection 58 univariate time series with labeled anomaly windows and application-specific scoring profiles. Window-membership positives: 33,495 / 365,558 (9.16%). SKAB Industrial changepoint detection 35 multivariate sensor files with physi-cal channels and changepoint/anomaly labels. Changepoint positives: 129 / 37,401 (0.345%). Exathlon Spark ap-plication anomaly detection 81 readable traces after archive repair, 19 derived features, and 86 labeled anomaly ranges across 6 disturbance types. Range-labeled: 86 anomaly ranges over 81 traces (range-level, not pointwise prevalence).
+
+Table 1: Datasets used in the validation. The paper focuses on datasets whose metrics expose temporal label–utility mismatch, with Exathlon retained as a boundary case. The imbalance profile differs sharply across benchmarks and helps interpret the loss comparisons. NAB has a moderate pointwise positive prevalence (33,495/365,558, 9.16%), whereas SKAB is strongly sparse at the point level (129/37,401, 0.345%), making changepoint positives much rarer during optimization and thresholding. Exathlon is reported differently: its labels are annotated as anomaly ranges, and each trace is one full multivariate recording run. Thus, 86 ranges over 81 traces means that one run can contain zero, one, or multiple labeled anomaly intervals; this is a range-level descriptor of event annotation density rather than pointwise class prevalence. For this reason, the Exathlon imbalance entry is not numerically comparable to the NAB and SKAB percentages, and it should be interpreted in terms of interval coverage and range-based evaluation. After the 15-second resampling used in our pipeline, Exathlon contains 5,704 anomalous samples out of 126,674 total samples, corresponding to 4.50% anomaly coverage; equivalently, roughly 95.5% of sampled trace time is non-anomalous. Each benchmark uses a residual temporal convolutional network (TCN) with causal one-dimensional convolutions, ReLU nonlinearities, dropout, and a final sigmoid head. Each residual block contains two causal convolutional layers with kernel size 3 and dilation 2 b in block b, followed by a residual projection when the channel dimension changes. The dropout rate is 0.1 after each convolution and after each hidden layer in the dense head. NAB uses six residual TCN blocks with 48 channels, sequence length 96, batch size 4, and dense head widths 32 and 8. SKAB and Exathlon use five residual TCN blocks with 32 channels, sequence length 120, batch size 2, and dense head widths 24 and 8. All models are trained in PyTorch with Adam, learning rate 10 −4, mixed bfloat16 precision, maximum 80 epochs for NAB and 60 epochs for SKAB and Exathlon, and early stopping with patience 8. Early stopping and checkpoint selection maximize the validation metric used by the corresponding benchmark: the standard NAB profile for NAB and SKAB, and AD4 for Exathlon, after validation-set threshold and post-processing selection. The same backbone configuration is used for CE, SOL, and wSOL within each dataset. For event metrics, the final predicted raw probabilities are converted to binary alarms using the threshold tuned on the validation set. NAB and SKAB use NAB-style scoring profiles and local-maximum post-processing to evaluate event detection quality. Local-maximum post-processing identifies peaks in the probability sequence: a predicted alarm is retained if its predicted probability is higher than its immediate neighbors, which reduces redundant nearby detections. SKAB applies an additional refractory non-maximum-suppression window of 30 time steps: after a prediction peak is detected, any other peaks within the following 30 time steps are suppressed to avoid multiple alarms for the same underlying event. Each dataset is evaluated across four outer folds and five random seeds, giving 20 split–seed comparisons per dataset. The CE baseline contributes one run per split–seed pair 6(20 total); SOL is trained under two score-oriented configurations, yielding 40 runs. wSOL is trained once per temporal candidate family per split–seed pair: NAB and Exathlon use 10 candidate families (200 runs each), while SKAB uses 8 (160 runs). 
+
+# 4 Results 
+
+Table 2 reports validation-selected held-out test performance, summarized as the mean and standard error of the evaluation metric over the 20 split–seed runs for each dataset. The two datasets whose utility is localized around event windows, NAB and SKAB, show positive mean wSOL gains over CE. Exathlon shows the opposite behavior: although some individual weighted candidates improve over SOL, validation-selected wSOL remains well below CE on the range-level objective.                                               
+
+> Dataset Primary metric CE SOL wSOL wSOL −CE NAB Standard profile 18 .186 ±2.186 18 .626 ±3.360 19 .791 ±2.781 +1 .605 ±2.730 SKAB Standard profile 43 .592 ±3.152 46 .657 ±2.290 47 .170 ±2.905 +3 .578 ±2.317 Exathlon AD4 0.4200 ±0.0375 0.2708 ±0.0398 0.2615 ±0.0427 −0.1585 ±0.0394
+
+Table 2: Validation-selected held-out comparisons on NAB, SKAB, and Exathlon. Values are means ±
+
+standard errors over 20 split–seed comparisons after selecting the corresponding loss configuration by validation performance within each comparison. The primary metrics are the NAB standard profile, the SKAB standard profile, and Exathlon AD4; the wSOL − CE column reports the paired test-score difference across the same selected split-seed comparisons. SKAB is the cleanest positive setting. Each series contains a localized changepoint, and the scoring profile rewards alarms in a short window around that change. This is close to the mathematical setting of Section 2: pointwise labels identify event regions, while the evaluation score gives graded temporal credit. The validation-selected wSOL mean score reaches 47.170, compared with 43.592 for CE and 46.657 for SOL. This value is not obtained from one fixed temporal weight vector used everywhere: for each split–seed comparison, the wSOL configuration is selected by validation performance and then evaluated on the held-out test split. As a diagnostic, we also examine what happens if the same window and weights are kept fixed while only the fold and random seed change. Under this stricter fixed-candidate view, the strongest wSOL family is the balanced-accuracy, max-aggregated SKAB-utility weight vector with H = 8. Using that same H = 8 weighting scheme across all 20 comparisons gives a lower mean test score, 46.336, but it is still above CE in 75% of the runs. Longer horizons remain positive on average against CE but give smaller or less stable gains. The result is consistent with the intended use of wSOL: the useful weighting is local, and the incremental gain over SOL is present but more modest than the gain over cross-entropy. In Figure 1, the SKAB row shows that the mean gain is not confined to the event utility. wSOL also improves the area under the receiver operating characteristic curve (AUROC) and the area under the precision–recall curve (AUPRC) over CE and slightly over SOL. This makes SKAB the cleanest positive case in the study: unlike NAB, where most of the gain is concentrated on the event utility, and unlike Exathlon, where ranking can improve while event utility worsens, SKAB shows aligned improvements in both the deployment score and the pointwise ranking statistics. Figure 2 makes this interpretation explicit. On SKAB, the balanced-accuracy family peaks at the shortest tested horizon and then weakens as the temporal horizon extends. The same figure also shows the best fixed temporal weight vectors across datasets: SKAB selects a short localized profile, NAB a broader graded profile, and Exathlon a short front-loaded profile that still fails to recover CE on the target event metric. This comparison is not meant to check whether the selected ω exactly duplicates the benchmark scorer at every time step. Instead, a well-matched surrogate should place weight on the same side of the event, over a similar temporal span, and with a similar increase or decay pattern. NAB gives a second positive case, but the result is less uniform. In Table 2, the mean evaluation metric is 19.791 for wSOL, 18.626 for SOL, and 18.186 for CE. The highest mean test score among 7Figure 1: Validation-selected held-out comparisons on SKAB, NAB, and Exathlon. Rows correspond to datasets, while columns report the event metric, AUROC, and AUPRC. the wSOL candidate families is obtained by the TSS-based max-rule wSOL with H = 16. This configuration reaches 22.610 and is above CE in 12 of 20 runs. The NAB row of Figure 1 compares the event score with pointwise AUROC and AUPRC. The wSOL gain is clearer on the event utility than on the ranking metrics. This supports the central mechanism: temporal weighting changes how the probability sequence interacts with thresholding and post-processing, rather than simply improving global pointwise discrimination. Figure 3 shows that temporal weighting is useful only when the candidate family matches the benchmark profile. Short or mismatched temporal weight vectors can be neutral or negative. This behavior is important for interpretation: wSOL is not merely a stronger optimizer; it is a way to insert a specific utility model into the training objective. Exathlon is an anomaly-detection benchmark, but its labels are structurally different from NAB and SKAB. Disturbance annotations cover extended ranges from root-cause onset through downstream effects. In this setting, a localized temporal weight vector can be misaligned with AD4, the strictest Exathlon range score used here, because AD4 rewards front-positioned range overlap without duplicate credit for repeated detections of the same interval. The validation-selected AD4 score is 0.4200 for CE, 0.2708 for SOL, and 0.2615 for wSOL. Even an oracle diagnostic that selects the best wSOL candidate by held-out AD4 remains below the validation-selected CE baseline. At the same time, the Exathlon row of Figure 1 shows that SOL and wSOL improve mean AUROC and AUPRC relative to CE. This behavior is consistent with the design of SOL and wSOL, which are constructed to optimize confusion-matrix-based metrics such as BA and TSS. These metrics are suitable for imbalanced classification and can improve pointwise rankings, as reflected by AUROC and AUPRC. However, better pointwise ranking does not necessarily imply better event-level performance under the AD4 evaluation protocol. 8Figure 2: Utility alignment in the selected candidates. Left: SKAB candidate landscape, shown as mean test delta versus CE across utility horizons; the balanced-accuracy family peaks at H = 8, while longer horizons give smaller gains. Error bars show standard errors across split-seed rows. Right: best fixed candidate temporal weight vectors across datasets. SKAB selects a short localized profile, NAB a longer NAB-shaped graded profile, and Exathlon a short front-loaded heuristic profile that still does not recover CE on AD4. The comparison is qualitative: these temporal weight vectors are surrogates for the benchmark utilities, not exact copies of the benchmark scorers. 
+
+# 5 Discussion 
+
+The results’ pattern supports the theoretical hypothesis. wSOL helps when two conditions hold: the metric rewards localized temporal behavior, and the pointwise labels do not already provide that behavior as a dense training signal. SKAB and NAB satisfy these conditions and give positive mean differences. Exathlon violates the locality condition because anomalous labels span long disturbance ranges, and the weighted objective does not recover the CE baseline on the range-level score. The experiments also clarify the role of SOL. Some benefit comes from replacing cross-entropy with a score-oriented objective, independent of temporal weights. This is expected in anomaly-detection benchmarks, where positive labels are rare and plain cross-entropy can be dominated by the majority normal class. A score-oriented loss instead optimizes differentiable or piecewise differentiable surrogates of skill scores, which are better aligned with imbalanced classification than accuracy-like pointwise metrics alone. For this reason, SOL is a necessary baseline. On SKAB, SOL already improves substantially over CE, while wSOL adds a smaller further gain. On NAB, the weighted component is more visible in the best TSS-shaped families. On Exathlon, both score-oriented losses improve ranking metrics but not the selected event metric. The selected temporal weight vectors are themselves interpretable results, as shown in Figure 2. In wSOL, the candidate weights are not learned network parameters but explicit hypotheses about deployment utility. The relevant question is not whether the selected ω is identical to the benchmark utility function pointwise, because wSOL inserts ω through the surrogate terms (8) – (11) . Agreement is structural: the selected temporal weight vector should match the temporal neighborhood that receives credit, the time scale over which credit is spread, and the abruptness or gradualness of the decay. Under this criterion, the positive cases are coherent. On SKAB, the strongest fixed family uses a short, front-loaded max temporal weight vector, which agrees with a local changepoint reward window concentrated near the event. This is consistent with (8) – (11) : larger early ωh reduce the effective false-positive penalty through 1 − a+ 
+
+> i
+
+and increase the false-negative correction ci only for nearby alarms, so a narrow reward window should favor short horizons. On NAB, the strongest family shifts to a longer NAB-shaped TSS temporal weight vector, which agrees with the broader, graded official reward profile over an anomaly window. The agreement is stronger than qualitative resemblance. The best fixed NAB family is the TSS-shaped temporal weight vector with H = 16, and its weights satisfy 
+
+ωh = 0 .025 + 0 .475 u3
+
+> h
+
+, with uh defined from the official NAB scaled sigmoid in (13) . In other words, 9Figure 3: NAB candidate-family comparison. The bars report mean split-local NAB standard-score deltas relative to CE for the fixed candidate families. The wSOL advantage is not uniform across temporal weight vectors: it is strongest for the longer NAB-shaped horizons, especially under the TSS-based internal score. The T 4 “balanced” candidates are short-horizon controls from the earlier sweep, whereas the T 8– T 64 candidates use NAB-shaped utility weights. the winning temporal weight vector has the same shape as the positive-reward part of the official NAB utility curve, after rescaling and applying a power transform. The sweep therefore selected the candidate explicitly designed to match the utility shape, not merely a generically decreasing weight vector. Exathlon is different. Its AD4 objective is a front-biased range-overlap F-score defined on extended anomaly intervals, not a localized one-sided reward window. A short front-loaded temporal weight vector can still be the best candidate within the tested wSOL family, but it does not agree with the full structure of the target utility. Relative to Marchetti et al. [ 1], the theoretical novelty of the present work is therefore not the introduction of weighted SOL itself, but its specialization, reformulation, and empirical assessment in the event-based setting of temporally localized reward windows. Several limitations remain. First, the experiments keep the neural backbone fixed within each dataset. This design isolates the effect of the loss function: CE, SOL, and wSOL are compared under the same architecture and data pipeline. The results should therefore be interpreted as controlled loss-level comparisons, not as claims of state-of-the-art performance on the benchmarks. Second, the choice of temporal weight vector is important. In wSOL, this vector is not just a nuisance hyperparameter like batch size or dropout. It encodes an assumption about the deployment utility: which side of an event should be rewarded, how wide the useful detection window is, and how quickly the reward should increase or decay. Validation can select a useful candidate from the predefined families, but it may identify only a plausible utility shape rather than a unique optimum. Third, the present formulation represents event utility through weighted confusion-matrix terms. This captures temporal preferences inside differentiable or piecewise differentiable skill-score surrogates, but it does not reproduce every detail of a full benchmark scorer. Future work could integrate richer event-level constraints, repeated-alarm penalties, or differentiable approximations of complete benchmark scoring rules. 
+
+# 6 Conclusion 
+
+This paper introduced a temporally localized specialization of the weighted SOL framework for anomaly-detection applications. The central goal is to make training sensitive to the timing of an alarm, not only to its pointwise correctness. wSOL does this by applying a differentiable skill score to expected confusion-matrix entries whose false-positive and false-negative terms are modified by 10 temporal weights through differentiable or piecewise differentiable operations. These weights encode the event utility assumed by the task: alarms close to an event can be treated as less harmful than ordinary false positives, and a missed event can be penalized less when the model has already produced a sufficiently strong prior warning. In this way, the loss brings part of the thresholded event metric into the training objective. The experiments show that this mechanism is useful when the benchmark utility has a localized temporal structure. On SKAB and NAB, where the target scores reward alarms within specific time windows, wSOL attains higher mean validation-selected held-out utility than the matched cross-entropy baseline. These gains show that temporal weighting can supply information that ordinary pointwise labels do not fully provide. The Exathlon result gives the complementary lesson: wSOL does not improve the range-level AD4 score, even though it improves mean pointwise ranking metrics. This separates better probability ranking from better event-level utility and shows that the temporal weight vector must match the structure of the final metric. The practical conclusion is therefore application-dependent. wSOL should be used when the deployment objective has a clear temporal reward window and that window is not already encoded densely in the labels. When anomalies are already represented as long labeled ranges, or when the event scorer rewards a different structure from the chosen temporal weight vector, the weighted objective may not improve the final utility score over cross-entropy. Its potential lies in settings where the cost of an alarm depends strongly on its timing: in such cases, wSOL provides a principled way to encode this temporal utility directly into neural-network training. 
+
+# Acknowledgements 
+
+The authors acknowledge the support of GNCS – National Group for Scientific Computing, National Institute of Higher Mathematics “Francesco Severi” (INdAM). 
+
+# Data availability 
+
+The benchmark datasets analyzed in this study are publicly available from the sources cited in the manuscript. The implementation is available at https://github.com/edoardolegnaro/ScoreOrien tedLosses.git .
+
+# References 
+
+[1] F. Marchetti, S. Guastavino, C. Campi, F. Benvenuto, M. Piana, A comprehensive theoretical framework for the optimization of neural networks classification performance with respect to weighted metrics, Optimization Letters (2024). Published online 25 April 2024; issue publication: 19:169–192 (2025). [2] C. Elkan, The foundations of cost-sensitive learning, in: Proceedings of the Seventeenth International Joint Conference on Artificial Intelligence, 2001, pp. 973–978. [3] T.-Y. Lin, P. Goyal, R. Girshick, K. He, P. Doll´ ar, Focal loss for dense object detection, in: Proceedings of the IEEE International Conference on Computer Vision, 2017, pp. 2980–2988. URL: https://arxiv.org/abs/1708.02002 .[4] Y. Cui, M. Jia, T.-Y. Lin, Y. Song, S. Belongie, Class-balanced loss based on effective number of samples, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2019, pp. 9268–9277. URL: https://openaccess.thecvf.com/content_CVPR_201 9/html/Cui_Class-Balanced_Loss_Based_on_Effective_Number_of_Samples_CVPR_2019_ paper.html .[5] H. Narasimhan, R. Vaish, S. Agarwal, On the statistical consistency of plug-in classifiers for non-decomposable performance measures, in: Advances in Neural Information Processing Systems, 11 volume 27, 2014, pp. 1493–1501. URL: https://proceedings.neurips.cc/paper_files/pap er/2014/hash/3644e33a5161ec5f3997a6acb98d4447-Abstract.html .[6] P. Kar, H. Narasimhan, P. Jain, Online and stochastic gradient methods for non-decomposable loss functions, in: Advances in Neural Information Processing Systems, volume 27, 2014, pp. 694–702. URL: https://proceedings.neurips.cc/paper_files/paper/2014/hash/9638ddf c7e3d56a611292c1578b19ff8-Abstract.html .[7] W. Kotlowski, K. Dembczy´ nski, Surrogate regret bounds for generalized classification performance metrics, in: Proceedings of The 19th International Conference on Artificial Intelligence and Statistics, 2016, pp. 405–413. URL: https://proceedings.mlr.press/v45/Kotlowski15.html .[8] H. Bao, M. Sugiyama, Calibrated surrogate maximization of linear-fractional utility in binary classification, in: Proceedings of the 23rd International Conference on Artificial Intelligence and Statistics, 2020, pp. 2337–2347. URL: https://proceedings.mlr.press/v108/bao20a.html .[9] E. Eban, M. Schain, A. Mackey, A. Gordon, R. Rifkin, G. Elidan, Scalable learning of non-decomposable objectives, in: Proceedings of the 20th International Conference on Artificial Intelligence and Statistics, 2017, pp. 832–840. URL: https://proceedings.mlr.press/v54/eb an17a.html .[10] M. Berman, A. R. Triki, M. B. Blaschko, The lovasz-softmax loss: A tractable surrogate for the optimization of the intersection-over-union measure in neural networks, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, 2018, pp. 4413–4421. URL: 
+
+https://openaccess.thecvf.com/content_cvpr_2018/html/Berman_The_Lovasz-Softmax _Loss_CVPR_2018_paper.html .[11] E. Rath, M. C. Hughes, Optimizing early warning classifiers to control false alarms via a minimum precision constraint, in: Proceedings of the 25th International Conference on Artificial Intelligence and Statistics, 2022, pp. 4895–4914. URL: https://proceedings.mlr.press/v151/rath22a.h tml .[12] H. Y` eche, A. Pace, G. Ratsch, R. Kuznetsova, Temporal label smoothing for early event prediction, in: Proceedings of the 40th International Conference on Machine Learning, 2023, pp. 39913–39938. URL: https://proceedings.mlr.press/v202/yeche23a.html .[13] H. Y` eche, M. Burger, D. Veshchezerova, G. Ratsch, Dynamic survival analysis for early event prediction, in: Proceedings of the Fifth Conference on Health, Inference, and Learning, 2024, pp. 540–557. URL: https://proceedings.mlr.press/v248/yeche24a.html .[14] S. Ahmad, A. Lavin, S. Purdy, Z. Agha, Unsupervised real-time anomaly detection for streaming data, Neurocomputing 262 (2017) 134–147. [15] Numenta, Numenta anomaly benchmark, 2017. URL: https://doi.org/10.5281/zenodo.104 0335 . doi: 10.5281/zenodo.1040335 .[16] N. Tatbul, T. J. Lee, S. Zdonik, M. Alam, J. Gottschlich, Precision and recall for time series, in: Advances in Neural Information Processing Systems, volume 31, 2018, pp. 1920–1930. URL: 
+
+https://proceedings.neurips.cc/paper/2018/hash/8f468c873a32bb0619eaeb2050ba45d 1-Abstract.html .[17] A. Huet, J. M. Navarro, D. Rossi, Local evaluation of time series anomaly detection algorithms, in: Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, 2022, pp. 635–645. URL: https://dl.acm.org/doi/10.1145/3534678.3539339 .doi: 10.1145/3534678.3539339 .[18] J. Paparrizos, P. Boniol, T. Palpanas, R. S. Tsay, A. J. Elmore, M. J. Franklin, Volume under the surface: A new accuracy evaluation measure for time-series anomaly detection, Proceedings of the VLDB Endowment 15 (2022) 2774–2787. 12 [19] S. Sørbø, M. Ruocco, Navigating the metric maze: A taxonomy of evaluation metrics for anomaly detection in time series, Data Mining and Knowledge Discovery 38 (2024) 1027–1068. [20] K. Doshi, S. Abudalou, Y. Yilmaz, Reward once, penalize once: Rectifying time series anomaly detection, in: 2022 International Joint Conference on Neural Networks, 2022, pp. 1–8. URL: https: //doi.org/10.1109/IJCNN55064.2022.9891913 . doi: 10.1109/IJCNN55064.2022.9891913 .[21] H. Phan, M. Krawczyk-Becker, T. Gerkmann, A. Mertins, Weighted and multi-task loss for rare audio event detection, in: 2018 IEEE International Conference on Acoustics, Speech and Signal Processing, 2018, pp. 336–340. URL: https://doi.org/10.1109/ICASSP.2018.8461353 .doi: 10.1109/ICASSP.2018.8461353 .[22] T. Song, Onset and offset weighted loss function for sound event detection, CoRR abs/2403.13254 (2024). [23] F. Marchetti, S. Guastavino, M. Piana, C. Campi, Score-oriented loss (sol) functions, Pattern Recognition 132 (2022) 108913. [24] S. Guastavino, M. Piana, F. Benvenuto, Bad and good errors: value-weighted skill scores in deep ensemble learning, IEEE transactions on neural networks and learning systems 35 (2022) 1993–2002. [25] S. Guastavino, M. Piana, M. Tizzi, F. Cassola, A. Iengo, D. Sacchetti, E. Solazzo, F. Benvenuto, Prediction of severe thunderstorm events with ensemble deep learning and radar data, Scientific Reports 12 (2022) 20049. [26] I. D. Katser, V. O. Kozitsin, Skoltech anomaly benchmark (skab), https://www.kaggle.com/d sv/1693952 , 2020. URL: https://doi.org/10.34740/KAGGLE/DSV/1693952 . doi: 10.34740/K AGGLE/DSV/1693952 .[27] V. Jacob, F. Song, A. Stiegler, B. Rad, Y. Diao, N. Tatbul, Exathlon: A benchmark for explainable anomaly detection over time series, Proceedings of the VLDB Endowment 14 (2021) 2613–2626. 13

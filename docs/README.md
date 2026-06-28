@@ -6,46 +6,39 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-21
-- 运行时间：2026-06-21 21:09:15 UTC
+- 最新运行日期：2026-06-28
+- 运行时间：2026-06-28 21:25:13 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：5
-- 速读区：3
+- 本次总论文数：5
+- 精读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-1) 今日精读5篇、速读3篇，聚焦振荡动力学联合推断与活动预测模型对比，高分论文亮点突出。  
-2) 最值得精读的两篇：Bayesian SSM 实现振荡与点过程耦合推断（9.0分），以及简单 Argmax 在下一活动预测中竟能挑战 LSTM/Transformer（8.0分）。  
-3) 建议优先吃透精读论文的核心方法，并可速览《Anomaly Detection for Sparse and Irregular Multivariate Time Series with Latent SDEs》以拓展异常检测思路。
-- 详情：[/202606/21/README](/202606/21/README)
+今日精读2篇高分论文，速读2篇，聚焦事件序列生成与小目标检测。
+
+最值得关注的是《Latent Block-Diffusion》提出的半自回归框架（9.0分），以及《Following the Flow》中基于光流的连续建模方法（8.0分），分别革新了时序事件生成与事件相机检测。
+
+建议优先精读这两篇高分论文，深入理解其核心思想，再根据兴趣浏览速读中关于事件预测损失函数和时空预测分解的论文。
+- 详情：[/202606/28/README](/202606/28/README)
 
 ### 精读区论文标签
-1. [BAYESIAN STATE-SPACE MODEL FOR JOINT INFERENCE OF OSCILLATORY DYNAMICS AND POINT-PROCESS COUPLING](/202606/21/biorxiv-10-64898-2026-06-15-732402-v1-bayesian-state-space-model-for-joint-inference-of-oscillatory-dynamics-and-point-process-coupling)  
+1. [Latent Block-Diffusion Temporal Point Processes: A Semi-Autoregressive Framework for Asynchronous Event Sequence Generation](/202606/28/2606.24982v1-latent-block-diffusion-temporal-point-processes-a-semi-autoregressive-framework-for-asynchronous-event-sequence-generation)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：通过连续时间点过程模型联合推断尖峰-场耦合
-2. [David vs. Goliath in Next Activity Prediction: Argmax vs. LSTM, Transformer, and LLM](/202606/21/2606.15868v1-david-vs-goliath-in-next-activity-prediction-argmax-vs-lstm-transformer-and-llm)  
+   evidence：直接提出潜在块扩散TPP用于异步事件序列生成
+2. [Following the Flow: Advection-Consistent Modeling for Event-based Small Object Detection](/202606/28/2606.22378v1-following-the-flow-advection-consistent-modeling-for-event-based-small-object-detection)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：使用神经网络模型在事件日志上进行下一活动预测
-3. [Double zero-inflated spatio-temporal modeling of daily precipitation under detection thresholds](/202606/21/2606.17717v1-double-zero-inflated-spatio-temporal-modeling-of-daily-precipitation-under-detection-thresholds)  
+   evidence：使用平流一致性框架建模事件序列
+3. [Explaining Temporal Graph Neural Networks via Feature-induced Information Flow](/202606/28/2606.27201v1-explaining-temporal-graph-neural-networks-via-feature-induced-information-flow)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：对日降水量的双零膨胀时空建模
-4. [Graph Grounded Cross Attention Transformer Neural Network for Structurally Constrained Full Event Sequence Generation in Predictive Process Monitoring](/202606/21/2606.18726v1-graph-grounded-cross-attention-transformer-neural-network-for-structurally-constrained-full-event-sequence-generation-in-predictive-process-monitoring)  
-   标签：评分：8.0/10、query:tpp-es
-   evidence：用于事件序列生成的神经网络，匹配连续时间事件序列建模
-5. [Continuous partitioning of neuronal variability](/202606/21/biorxiv-10-1101-2025-07-23-666404-v4-continuous-partitioning-of-neuronal-variability)  
-   标签：评分：8.0/10、query:tpp-es
-   evidence：针对脉冲序列变异性的连续双随机模型
+   evidence：基于事件的时间图神经网络用于事件预测
 
 ### 速读区论文标签
-1. [DYNA-PRUNER: Input-Adaptive Data-Model Co-Pruning for Efficient and Scalable Spatio-Temporal Media Prediction](/202606/21/2606.15346v1-dyna-pruner-input-adaptive-data-model-co-pruning-for-efficient-and-scalable-spatio-temporal-media-prediction)  
+1. [Weighted Score-Oriented Losses for Temporally Localized Event Prediction](/202606/28/2606.23145v1-weighted-score-oriented-losses-for-temporally-localized-event-prediction)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：时空媒体预测中的输入自适应剪枝
-2. [EventConnector: Mining Social Event Relations through Temporal Graphs](/202606/21/2606.15448v1-eventconnector-mining-social-event-relations-through-temporal-graphs)  
+   evidence：提出用于时间局部化事件预测的加权分数导向损失，直接针对事件检测任务
+2. [FDN: Interpretable Spatiotemporal Forecasting with Future Decomposition Networks](/202606/28/2606.25201v1-fdn-interpretable-spatiotemporal-forecasting-with-future-decomposition-networks)  
    标签：评分：7.0/10、query:tpp-es
-   evidence：从时间事件图中挖掘社交事件关系
-3. [Anomaly Detection for Sparse and Irregular Multivariate Time Series with Latent SDEs](/202606/21/2606.18898v1-anomaly-detection-for-sparse-and-irregular-multivariate-time-series-with-latent-sdes)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：基于连续时间潜变量随机微分方程的不规则多变量时间序列建模
+   evidence：可解释的分解网络用于时空预测
 
 
 <div class="dpr-home-promo-card">

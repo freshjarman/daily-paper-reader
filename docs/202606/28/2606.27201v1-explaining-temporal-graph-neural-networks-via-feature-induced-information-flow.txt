@@ -1,0 +1,1573 @@
+Title: Explaining Temporal Graph Neural Networks via Feature-induced Information Flow
+
+URL Source: https://arxiv.org/pdf/2606.27201v1
+
+Published Time: Fri, 26 Jun 2026 01:13:35 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Explaining Temporal Graph Neural Networks via Feature-induced Information Flow 
+
+Ping Xiong a,b , Thomas Schnake f,g,h , Klaus-Robert Müller a,b,d,e , Shinichi Nakajima a,b,c, ∗
+
+> aBerlin Institute for the Foundations of Learning and Data – BIFOLD, 10623 Berlin, Germany
+> bMachine Learning Group, Technical University of Berlin, Berlin, Germany
+> cRIKEN AIP, Tokyo, Japan
+> dDepartment of Artificial Intelligence, Korea University, Seoul, Korea
+> eMax Planck Institute for Informatics, Saarbrücken, Germany
+> fDepartment of Chemistry, Chemical Physics Theory Group, University of Toronto, Toronto, Canada
+> gVector Institute for Artificial Intelligence, Toronto, Canada
+> hAcceleration Consortium, University of Toronto, Toronto, Canada
+
+Abstract 
+
+Event-based Temporal Graph Neural Networks (ETGNNs) have demonstrated strong performance across a wide range of applications, including social network analysis, epidemic tracing, recommender systems, and political event forecasting. However, their increasing complexity poses significant challenges for explainability. Existing explanation methods focus only on a subset of the information flow within ETGNNs, typically tracing contributions from the event-related embeddings to the output. Consequently, they overlook the important pathways through event-induced variables, which mediate interactions between nodes and thereby play a central role in capturing long-range temporal dependencies. To overcome this limitation, we propose a novel attribution method that analyzes the entire information flow through all event-associated variables. Our method is built upon the recent Normalized Relevance Measure (NRM) framework, which enables explicit quantification of information flow originating from event embeddings as well as information flow passing through event-induced variables. It also ensures comparability of latent variables across layers, and supports higher-order analysis of interactions between events. To handle the architectural complexity of ETGNNs, we extend the NRM framework with a modular decomposition procedure that facilitates the systematic construction of relevance structure for complex neural architectures. We evaluate our approach on two synthetic datasets for epidemic tracing and social dynamics, as well as a real-world dataset of political event networks. Our qualitative and quantitative experiments show that our method consistently outperforms existing explanation approaches while producing more human-interpretable explanations. 
+
+Keywords: explainable artificial intelligence, layer-wise relevance propagation, normalized signed measure, temporal graph neural networks 
+
+1. Introduction 
+
+Event-based Temporal Graph Neural Networks (ETGNNs) are powerful models for learning from dynamic relational data represented as temporal graphs—where edges are induced by events with time-stamps—and have been applied across a wide range of domains, including recommender systems [ 1], social networks [ 2], epidemic modeling [ 3 ], and tra ffi c networks [ 4]. However, ETGNNs pose significant challenges in explainability, as their complex architectures make it di ffi cult to determine what information should be attributed and how attribution should be performed. This lack of interpretability is particularly prob-lematic in high-stakes applications, where understanding the rationale behind model predictions is essential. Several explainable artificial intelligence (XAI) methods, such as Temporal GNN Explainer (TGNNExplainer) [ 5] and Tempo-ral Motifs Explainer (TempME) [ 6], have been proposed, and have successfully identified relevant events for predictions in   
+
+> ∗Corresponding author
+> Email address: nakajima@tu-berlin.de (Shinichi Nakajima)
+
+social networks and political event networks. However, they pri-marily explain the later stages of the network, while overlooking the upstream computational process that governs the temporal evolution of the graph. As a result, their explanatory power is limited, since long-range temporal dependencies play a central role in ETGNN predictions. To address this limitation, we propose a novel explanation method that considers information flow throughout the entire ETGNN. Specifically, our definition of event relevance (ER) ac-counts for the entire information flow associated with an event, including flow passing through intermediate features, called 
+
+messages , that are induced by events and mediate interactions between nodes. Analyzing these messages is crucial for under-standing how ETGNNs capture long-range temporal dependen-cies. We build our method upon the Normalized Relevance Measure 
+
+(NRM) framework [ 7 ], a generalized procedure following the higher-order XAI method GNN-LRP [ 8] to define the relevance of arbitrary sets of neurons and derive the corresponding Layer-wise Relevance Propagation (LRP) algorithms. This framework enables explicit quantification of the entire event-induced infor-
+
+> arXiv:2606.27201v1 [cs.LG] 25 Jun 2026 Figure 1: Overview of the proposed Event Relevance (ER). Our ER (bottom row) is defined within the NRM framework, which facilitates tracing information flow throughout the entire ETGNN architecture. As illustrated on the right, ER identifies event chains that contribute to the prediction and naturally extends to higher-order joint event relevance, enabling the discovery of interactions among multiple events (see Section 5.1 for details). By capturing the complete event-induced information flow, ER provides more faithful and fine-grained explanations than the existing explanation methods (top row), which primarily analyze the final embedding and prediction stages, overlooking the latent memory evolution process induced by time-stamped events.
+
+mation flow, and guarantees comparability of relevance scores across layers. Furthermore, it supports the joint relevance analy-sis, which quantifies the contribution of higher-order interactions among events. This capability is particularly important in ap-plications such as infection chain analysis, where sequences of events may jointly contribute to the predicted outcome. To handle the complex architecture of ETGNNs, we propose a hierarchical procedure for defining relevance via modulariza-tion , which significantly simplifies the application of the NRM framework to complex networks. Building upon this exten-sion of NRM framework, our ER captures information flow more faithfully throughout the entire model, including the la-tent memory evolution process, which is overlooked by existing methods. Furthermore, our joint event relevance identifies im-portant higher-order interactions, providing a more fine-grained explanation of information flow. Figure 1 provides a conceptual illustration of our approach. In our experiments, we constructed synthetic datasets with ground-truth explanation that simulate disease infections and social networks, enabling human-verifiable evaluation of XAI methods. Our qualitative evaluation on these synthetic datasets, as well as on a real-world dataset of political events, demonstrate that our proposed ER yields human-interpretable explanations. Our quantitative experiments further validate the superior per-formance of our approach compared to existing XAI methods. The main contributions of this paper are summarized as fol-lows: 
+
+• We propose a novel ER that attributes predictions to each event based on information flow throughout the entire ET-GNN. 
+
+• We extend the NRM framework with a modular decomposi-tion procedure for hierarchically defining relevance, which significantly simplifies its application to complex networks. 
+
+• We demonstrate the superior performance of our approach, both qualitatively and quantitatively, compared to exist-ing baseline methods across di ff erent prediction tasks and datasets. The remainder of the paper is organized as follows. Af-ter reviewing related work in Section 2, we present our modularization-based extension of the NRM framework in Sec-tion 3. We then propose our ER definitions for ETGNNs in Section 4, followed by experimental evaluations in Section 5. Section 6 concludes. 
+
+2. Related Work 
+
+In this section, we review related work on LRP, NRM, ET-GNN and existing XAI methods for it. 
+
+2.1. Layer-wise Relevance Propagation (LRP) 
+
+Layer-wise Relevance Propagation (LRP) [ 9] is a post-hoc, propagation-based XAI method for neural networks, which de-composes model predictions into relevance scores of input fea-tures via a backward propagation from output to input. As it requires only a single backward pass, LRP is computationally effi cient. LRP has been widely applied in various fields such as computer vision [ 10 , 11 ], natural language processing [ 12 , 13 ]and quantum chemistry [ 8, 14 ]. LRP is mathematically justified as a first-order Deep Taylor Decomposition (DTD) [ 15 , 16 ], ap-proximating the forward process with layer-wise linearizations. Bach et al. [ 9] introduced LRP with propagation rules such as 
+
+ε-rule and it’s later extended by the γ-rule [17] and variants for recurrent networks [18]. 2LRP has also been applied to analyze information flow across layers. Schnake et al. [ 8 ] introduced the notion of a walk , a sequence of neurons from the input layer to the output layer, and defined its relevance based on LRP propagation rules. Building on this concept, the authors proposed GNN-LRP, which explains GNN predictions in terms of walk relevances. Specifically, GNN-LRP attributes to a given subgraph the total relevance of the walks passing through neuron sets associated with the nodes in the subgraph. Here the associated neuron set consists of neurons representing the node embeddings across layers. Our approach follows a similar spirit for event-level explanations for ETGNNs, where each event is attributed the total relevance of the walks passing through the neuron set associated with that event. 
+
+2.2. Normalized Relevance Measure (NRM) 
+
+Xiong et al. [ 7] proposed the Normalized Relevance Measure (NRM), a general framework for defining relevance of arbitrary neuron sets and deriving the corresponding LRP algorithms. This framework is motivated by the similarity between LRP computations and message passing probability computation in Markov chains [ 19 ], and allows us to directly specify the rele-vance quantity to be computed. The relevance specification is carried out via marginalization and conditional operations, in analogy to the probability theory. Furthermore, NRM guarantees comparability of neurons across layers, and enables joint rele-vance analysis to capture higher-order interactions. Our method is built on NRM to capture entire event-induced information flow, and to provide higher-order explanations. 
+
+2.3. Temporal Graph Neural Networks (TGNN) 
+
+Graphs are an important data expression in many application domains including social networks [ 20 , 21 , 22 ], molecular dy-namics [ 23 ], and natural language processing [ 24 ], for which various learning paradigms have been proposed [ 25 ]. Analyzing temporal graphs, i.e., temporally evolving graphs, has recently drawn attentions in the research fields of recommender systems [1], social networks [ 2 ], epidemic modeling [ 3], and tra ffi c net-works [ 4], where capturing the dynamics of graph evolutions plays an important role. Although GNNs have been adapted for handling temporal graphs [ 21 , 26 ], more specialized architec-tures, called Temporal Graph Neural Networks (TGNNs) [ 27 , 4 ], have shown to improve the performance. In this paper, among many variants of TGNNs, we focus on Event-based TGNNs (ETGNN) 1 [ 27 , 28 ]—one of the most general architectures in-cluding Jodie [29], TGAT [30], and DyRep [31]. In ETGNNs, a temporal graph is defined as an initial graph and a series of events , where each event induces an inter-action between two nodes at a specific time, dynamically adding /removing the corresponding link at the time. An ET-GNN generally consists of three modules, Event Processing (EP), Embedding (Emb), and Decoding (Dec) modules. The EP module is normally a recurrent neural network (RNN) that 
+
+> 1Although ETGNN is named Temporal Graph Network (TGN) in the original paper [ 27 ], we call it ETGNN throughout this paper to avoid confusion with other TGNNs.
+
+updates the time-dependent node-embeddings, called memory ,according to the associated events. Using the memories and the temporal graph at the inference time, the Emb module finalizes the node representations, and the Dec module makes predictions for downstream tasks, e.g., node regression, link prediction, and graph classification. 
+
+2.4. XAI for ETGNNs 
+
+Several methods have been proposed for explaining ETGNNs. Temporal GNN Explainer (TGNNExplainer) [ 5] applies Monte-Carlo Tree Search (MCTS) [ 32 ] to find the subgraph—as a set of event edges—that dominate the network decisions. The search starts with a subgraph of a given number of most recent neighboring events, and the MCTS removes unimportant events one-by-one from the subgraph, until the target size of subgraph is reached. The search process is accelerated by an MLP that predicts the edge importance score. Temporal Motifs Explainer (TempME) [ 6] samples temporal graph motifs and train an MLP to predict the motifs’ importance scores, which is used to build an important subgraph. The method uses information bottleneck theory [ 33 ] to optimize the MLP such that the important sub-graph generates similar prediction as the original input graph while being small. These existing XAI methods o ff er valuable insights into the model’s prediction mechanisms. However, they primarily focus on the Emb and Dec modules, overlooking the information flow within the EP module. This limitation is crucial, as long-time dependencies are typically captured within the EP module. To address this limitation, we propose an alternative LRP-based XAI method that accounts for the information flow in all mod-ules, thereby providing more faithful explanations. 
+
+3. Modular Decomposition for NRM 
+
+Our method is built upon the NRM framework [ 7 ], which sup-ports direct specification of the relevance quantity, comparability across layers, and higher-order analysis. However, applying it to complex architectures requires defining the relevance structure over a large network, which can be challenging. To facilitate this process, we introduce a modular decomposition procedure that enables hierarchical relevance definition. 
+
+3.1. Overview of NRM 
+
+Let us consider an L-layer feed forward neural network (FFNN) to be a function f : RN(0) 
+
+7 → RN(L)
+
+that maps from an N(0) -dimensional input vector to a N(L)-dimensional output vector. For each intermediate layer l = 1, . . . , L − 1, there is a latent vector that consists of N(l) neurons. Let N(l) ≡ { 1, . . . , N(l)}
+
+denote the set of neuron indices in layer l.In the Normalized Relevance Measure (NRM) framework [ 7], the relevance of a set of walks is defined as a normal-ized signed measure, satisfying RWalk (∅) = 0, RWalk (W) =
+
+1, RWalk (S j W j) = P j RWalk (W j) for any pairwise disjoint sets 
+
+W j ∈ P (W). Here, W ≡ ⊗ Ll=0 N(l) is the set of walks, and P(W)is its power set. Then, we identify the relevance of the set of 3neurons with the relevance of all walks that pass through the specified sets, i.e., 
+
+R(S(L)) = RWalk (⊗Ll=0 eS(l)),
+
+where eS(l) =
+
+
+
+S(l) for l ∈ L ,
+
+N(l) for l < L.
+
+Here, L ≡ { 0, . . . , L}, L = {l1, . . . , l|L| } ⊂ L, and we represent a set of neurons as a sequence of neuron sets over selected layers, i.e., S(L) = (S(l))l∈L .Under this definition, the relevance of any set of neurons is expressed as a sum of walk relevances R(n) = R(n(0) , . . . , n(L))with n(l) ∈ N(l), i.e., 
+
+R(S(L)) = P   
+
+> n∈W:n(l)∈eS(l)∀l∈L
+
+R(n).
+
+The relevance measure R(·) defined this way satisfies all prop-erties of a probability measure P(·) except for non-negativity. 2
+
+Accordingly, we adopt notation from probability theory, and define joint, marginal, conditional relevances, in analogy to their probabilistic counterparts, e.g., 
+
+R(n(l1), n(l2)) = Pn(l)∈N(l)∀l<{l1,l2} R(n), (1) 
+
+R(n(l2)) = Pn(l1)∈N(l1) R(n(l1), n(l2)), (2) 
+
+R(n(l1)|n(l2)) =
+
+ 
+
+> R(n(l1),n(l2))
+> R(n(l2))
+
+if R(n(l2)) , 0,
+
+0 otherwise . (3) Under the backward Markov property, the walk relevance, which corresponds to the full joint relevance, is decomposed as 
+
+R(n) = Q Ll=1 R(n(l−1) |n(l)) R(n(L)). (4) Specifying each factor on the right-hand side of Eq. (4) , based on propagation rules and network outputs, defines the relevance structure of the entire network. Although the NRM framework assumes a restricted class of FFNNs, called proper FFNNs, any architecture can be virtually converted into a proper FFNN [ 7], and thus the framework is applicable to genereal architectures. For introducing modularization in the next subsection, we use the notion of a substructure and its relevance: For a set of consecutive layers, i.e., L = {l, l + 1, . . . , l − 1, l}, we call the set of neurons S(L) = S(l:l) = (S(l), . . . , S(l)) a substructure, and its relevance 
+
+R(S(l:l)) = P 
+
+> n(l)∈S (l),..., n(l)∈S (l)
+
+R(n(l), . . . , n(l)) (5) a substructure relevance. 
+
+3.2. Modularization 
+
+NNs with complicated architectures typically consist of sep-arable components. When explaining such models, it is often convenient to define relevance locally within each component. 
+
+> 2Under this analogy, layers, neurons, and walks correspond to random vari-ables, their possible values, and joint assignments, respectively.
+> Figure 2: A series connection (left) and a parallel connection (right) of modules. Parallel connections often require the (virtual) insertion of a DuPlication (DP) layer so that both parallel modules can receive the forward information from the same input neurons, while ensuring separability.
+
+We define a substructure S(l:l) = (S(l), . . . , S(l)) to be a mod-ule if all interactions with the remainder of the network occur exclusively through its input and output layers. Namely, a mod-ule is connected to other components only through neurons in 
+
+{S (l), S(l)}. Note that a module can share their input and output neurons with other modules. We also define a local relevance and a local conditional rel-evance with respect to a substructure S(l:l) as the renormalized relevance within the substructure, i.e., 
+
+R⊆S (l:l)
+
+(n(l:l)) = 1(n(l:l)∈S (l:l)) 
+
+> R(S(l:l))
+
+R(n(l:l)), (6) where n(l:l) = (n(l), . . . , n(l)) denotes a partial walk, and 1(·) is the indicator function equal to one if the event is true and zero otherwise. Local joint, marginal, conditional relevances are similarly defined as Eqs. (1) – (3) , respectively, by replacing the full joint relevance R(n) with its locally normalized variant (6). The multiplication and addition laws of relevance measure [ 7] naturally give rise to the following modular decompositions. 
+
+Series Connections of Modules Assume that the layers l : l
+
+can be divided into two modules connected in series (see Figure 2 left). If the first module consists of the layers l : l and the second module consists of the layers l : l, the relevance can be decomposed as 
+
+R(n(l:l−1) |n(l)) = R(n(l:l−1) |n(l))R(n(l:l−1) |n(l)). (7) 
+
+Parallel Connections of Modules Assume that the substruc-tures S(l:l) = (S(l), . . . , S(l)) and S(l:l)
+
+= (S(l)
+
+, . . . , 
+
+S(l)
+
+) are non-overlapping modules in parallel that are comple-ment of each other (see Figure 2 right). Then, it holds that 
+
+R(n(l:l−1) |n(l)) = R⊆S (l:l)
+
+(n(l:l−1) |n(l))
+
++ R⊆S (l:l)
+
+(n(l:l−1) |n(l)). (8) Parallel modules often share the same input neurons. In such cases, a DuPlication (DP) layer is introduced, which duplicates the neurons {n(l−1) } at layer l − 1 to the input layer l of each par-allel module, thereby making them non-overlapping, as shown in Figure 2 (right). 4Hierarchical Layer Structure For a series connection of mod-ules, it is often convenient to describe the relevance structure in a marginalized form. Specifically, the intermediate layers within each module are marginalized out, leaving only the input and output layers of each module explicit. For example, we describe the relevance of a network consisting of two modules, Module 1 (M1) and Module 2 (M2), connected in series as 
+
+R(n(0) , n(l)|n(L)) = RM1 (n(0) |n(l))RM2 (n(l)|n(L)). (9) Furthermore, because referencing global layer indices is cum-bersome and provides little benefit, we assign layer indices 
+
+separately within each hierarchy and each module. Under this convention, the top-level structure (9) is represented as a two-layer module-wise network, 
+
+R(n(0) , n(1) |n(2) ) = RM1 (n(0) |n(1) )RM2 (n(1) |n(2) ),
+
+and the relevance of each module is defined locally using its own layer indices, i.e., 
+
+RM1 (n(0: l−1) |n(l)) = Qll′=1 RM1 (n(l′−1) |n(l′)),
+
+RM2 (n(0: L−l−1) |n(L−l)) = QL−ll′=1 RM2 (n(l′−1) |n(l′)).
+
+This implicitly defines the full joint relevance of the entire net-work with the global layer indices: 
+
+R(n(0: L−1) |n(L)) = RM1 (n(0: l−1) |n(l))RM2 (n(l:L−1) |n(L)).
+
+Since the LRP algorithm is formulated as sum-product mes-sage passing [ 7], relevance propagation can also be carried out locally within each module. 
+
+3.3. Example Application to LSTM 
+
+Here we apply our modular decomposition procedure to LSTM (Figure 3a) as an illustrative example. LSTM processes an input sequence {xt}T −1 
+
+> t=0
+
+by recursively applying the LSTM cell, 
+
+it = σ(Wi xt−1 + Ui ht−1),
+
+ft = σ(W f xt−1 + U f ht−1),
+
+ot = σ(Wo xt−1 + Uo ht−1),
+
+˜ct = tanh( Wc xt−1 + Uc ht−1),
+
+ct = ft ⊙ ct−1 + it ⊙ ˜ct,
+
+ht = ot ⊙ tanh( ct),
+
+at each time step for t = 1, . . . , T , where σ(·) and ⊙ denote the sigmoid function and element-wise multiplication, respectivey. Here we omitted bias terms for simplicity. To apply the NRM framework, we first convert the network into a proper FFNN following Xiong et al. [ 7]: the recurrent architecture is unfolded, intermediate inputs and outputs are copied to the input and output layers, respectively, and skip connections are eliminated by duplicating neurons across the skipped intermediate layers (Figure 3b). LSTM can be seen as a series connection of LSTM cell mod-ules, where each module takes as inputs the previous hidden and 
+
+> Figure 3: Modularization applied to an LSTM network (a). Its proper FFNN representation (b) consists of LSTM cell modules connected in series (c), for which the top-level relevance is decomposed as Eq.(10).
+
+cell states ( ht−1, ct−1) together with the input sequence {xt′ } for 
+
+t′ ≥ t − 1, and outputs the current hidden and cell states ( ht, ct)together with the input sequence {xt′ } for t′ ≥ t (Figure 3c). Therefore, following the modular decomposition rule in Eq. (7) and the hierarchical layer indexing convention, the top-level relevance of LSTM is decomposed as 
+
+RLSTM (n(0: T −1) |n(T )) =
+
+> T
+
+Y
+
+> t=1
+
+RLSTM −Cell (n(t−1) |n(t)), (10) where n(·) specifies a neuron in each (local) layer as 
+
+n(t) ∈ S (t)({ht, ct, {xt′ }T −1 
+
+> t′=t
+
+}). (11) Here, S(l)(X) denotes the whole set of neuron indices in the 
+
+l-th layer that represent a set of variables X. Defining the local relevance RLSTM −Cell (·) for each module, which is detailed in Appendix A, completes the entire relevance definition. This example, together with another example of modulariza-tion involving parallel connections in Appendix B, highlights the advantages of modularization: the relevance can be defined lo-cally and assembled hierarchically into the entire structure. The same principle is applied in Section 4 to handle the considerably more complex architecture of ETGNNs. 
+
+4. Explaining Event-based Temporal Graph Neural Net-works (ETGNNs) 
+
+We apply NRM and explain one of the most general and popular variants of ETGNN proposed by Rossi et al. [ 27 ]. Events serve as the primary inputs of ETGNNs [ 27 , 28 ], making event-level explanation a natural choice for explaining the model. The 5challenge, however, lies in defining a meaningful attribution quantity (relevance score) for each event. Here, we propose a principled approach to defining and computing such scores within the NRM framework. We first briefly introduce temporal graphs and events, and describe the forward process of ETGNNs. Then, we give an explicit definition of relevance structure for the entire model, and propose our novel event relevance. 
+
+4.1. Temporal Graphs and Events 
+
+A temporal graph is specified by an initial graph G0 = (V, A0)with a set V of nodes and a set A0 of edges, together with a set 
+
+E of events with time stamps. The temporal graph Gt = (V, At)evolves at the time when each event occurs with addition of the edge between the associated nodes 3. Each event e ∈ E is associated with the origin node v(e)o , the destination node v(e)d , the event encoding τ(e), and the event occurring time t(e) > 0. We define the event feature as 
+
+ε(e)(t) = (τ(e), ϕ(|t − t(e)|)) ∈ RDE , (12) where ϕ(·) is a time encoding function and t is the time when the feature is referred to (e.g., inference time). Each event a ff ects the graph at the time t(e) by connecting the origin node v(e)o and the destination node v(e)d , and updating their node features. 
+
+4.2. Forward Process of ETGNNs 
+
+An ETGNN, illustrated in Figure 4a, consists of three mod-ules, an Event Processing (EP) module, an Embedding (Emb) model, and a Decoding (Dec) module. In the EP module, each node v ∈ V is assigned a dynamic node feature ηv(t) ∈ RDV ,called node memory , which is initialized at t = 0 and evolves over time along with the temporal graph connectivity. After all events up to the time t = T are processed, the Emb module refines the node embeddings for the inference at t = T ∗(≥ T ), based on the node memories and the latest graph GT . The resulting node embeddings are used by the Dec module for downstream tasks. 
+
+Updating Node Memories In the EP module, events are pro-cessed batch-wise in the order of the event occurrence time, and, in each batch process, node memories ηv(t) are updated with for-ward message exchanges between the origin and the destination nodes. Let {E b}Bb=1 = E be the event set decomposition into B
+
+batches. Then, each node memory function is a step function with at most B + 1 di ff erent values: 
+
+ηv(t) = η(b) 
+
+> v
+
+for tb ≤ t < tb+1, b = 0, . . . , B,
+
+where tb = max e∈E b t(e) for b = 1, . . . , B is the time that the last event in the batch Eb occurred, and we define t0 = 0, tB = T ,and tB+1 = ∞. Starting from the initial node memories η(0) 
+
+> v
+
+, the following forward process is performed for the batches 
+
+b = 1, . . . , B.                    
+
+> 3Removal of edge or node-level event are also possible. We focus on addition-only definition for simplicity, but our approach can straightforwardly be extended to cover other cases. Emb module EP module :node memory :event feature :node embedding :node memory updating function Dec module
+> (a) Forward computation of ETGNN. Node memories are initialized at t=0, and updated in the Event Processing (EP) module. After the last training time point
+> t=T, the Embedding (Emb) module finalizes the node memories into the final node embeddings, which are used in the Decoding (Dec) module for downstream prediction at t=T∗≥T.EP Emb Dec
+> (b) ETGNN as a proper FFNN with three modules. Each module consists of many layers.
+> Figure 4: Overview of ETGNN: (a) forward computation process, and its (b) equivalent proper FFNN view.
+
+For each event e ∈ E b in the b-th batch, we compute messages 
+
+m(e) 
+
+> v1
+
+= Message o(η(b−1)  
+
+> v1
+
+, η(b−1)  
+
+> v2
+
+, ε(e)(t− 
+
+> v1
+
+)) , (13) 
+
+m(e) 
+
+> v2
+
+= Message d(η(b−1)  
+
+> v2
+
+, η(b−1)  
+
+> v1
+
+, ε(e)(t− 
+
+> v2
+
+)) , (14) for the origin v1 = v(e)o and destination v2 = v(e) 
+
+> d
+
+nodes. Here, 
+
+t− 
+
+> v
+
+is the latest update time of the node v, and Message o[·] and Message d[·] are forward message functions, typically imple-mented with MLPs. After all messages invoked by all events in the batch Eb are generated, they are aggregated for each node, with which the node memory is updated. Specifically, for each node v ∈ V as-sociated with at least one event e ∈ E b in the batch, we compute 
+
+bmv = Aggregate( {m(e) 
+
+> v
+
+}e∈E b ), (15) 
+
+η(b) 
+
+> v
+
+= Update( bmv, η(b−1)  
+
+> v
+
+), (16) where Aggregate [·] and Update [·] are aggregate and update func-tions, respectively. Typical choices for the aggregate function include sum /average over the messages, and a usual choice for the update function is a Gated Recurrent Unit (GRU) cell [ 34 ]. The memory of the nodes that do not receive message is un-changed, i.e., η(b) 
+
+> v
+
+= η(b−1)  
+
+> v
+
+.6Inference Details Before making a prediction at time t = T ∗ >
+
+T , the Emb module refines the node memories to the final node embeddings: 
+
+ζv = Emb( v, {η(B) 
+
+> v′
+
+}v′∈V , GT ∗ ), (17) where Emb (·) is the embedding function, which can be simply a copy of the latest memory η(B) 
+
+> v
+
+, or a multilayer attention mech-anism [ 30 ] that aggregates the memories of the neighboring nodes. With the final node embeddings, the downstream node-, edge-and graph-level predictions are performed as 
+
+ynode = Dec node (ζv), (18) 
+
+yedge = Dec edge (ζv1 , ζv2 ), (19) 
+
+ygraph = Dec graph ({ζv}v∈V ), (20) respectively, where Dec —(·) is a downstream decoding module, which is typically an MLP. Here, the node v and edge ( v1, v2)are specified by the user. 
+
+4.3. Relevance Definition for ETGNNs 
+
+After converting the ETGNN to a proper FFNN (following the procedure in Xiong et al. [ 7] and our extension of modulariza-tion), the entire network (Figure 4a) can be seen as a series con-nection of the EP, Emb, and Dec modules (see Figure 4b). The EP module takes as inputs the initial node memories {η(0)  
+
+> v
+
+}v∈V 
+
+and the event embeddings {ε(e)}e∈E , and provides as outputs the last node memories {η(B) 
+
+> v
+
+}v∈V and the event embeddings {ε(e)}e∈E .Note that the event embeddings {ε(e)}e∈E in the outputs are exact copies of those in the inputs—which is required for the network to be a proper FFNN. The Emb module takes those outputs, and provides the final node embeddings {ζv}v∈V . The Dec module then uses the node embeddings for predicting the final output y.Let us summarize the variables introduced above as ⃗ V(b) =
+
+{η(b) 
+
+> v
+
+}v∈V ,⃗ E = {ε(e)}e∈E ,⃗ Z = {ζv}v∈V , and ⃗ Y = {y}. Following our modularization procedure with hierarchical layer indexing (see Section 3.2), the top-level relevance structure for the entire ETGNN is decomposed as a three-layer modular-wise network: 
+
+RETGNN (n(0) , n(1) , n(2) |n(3) ) =
+
+REP (n(0) |n(1) )REmb (n(1) |n(2) )RDec (n(2) |n(3) ). (21) Here n(·) specifies a single neuron from the set of neurons that represent the variables at the corresponding layer, i.e., 
+
+n(0) ∈ S (0) (⃗V(0) ∪⃗ E), n(1) ∈ S (1) (⃗ V(B) ∪⃗ E),
+
+n(2) ∈ S (2) (⃗Z), n(3) ∈ S (3) (⃗Y). (22) For example, n(1) specifies a neuron from those for ⃗ V(B) ∪⃗ E,which are the output of the EP module, and the input of the Emb module. Each factor in Eq. (21) should be further decomposed into relevances of submodules. Iterating decompositions hierarchi-cally, we obtain the definition of the full joint relevances, i.e., the relevance of all individual walks. This procedure is detailed in Appendix C. EP ......          
+
+> Emb Dec
+> Figure 5: Illustration of ER-feat for the event e, explaining the node-level prediction of node v.(b) ER-msg (a) ER-feat (c) ER-Emb (d) ER ... ...
+> ... ... ... ...
+> ... ...
+> Figure 6: Illustration of four ER definitions. (a) ER-feat is the relevance of all walks arriving at the event feature ε(e). (b) ER-msg is the relevance of all walks passing through one of the two messages between nodes v,v′induced by the event e. (c) ER-Emb extracts only the relevance received in the Emb module. (d) ER is the relevance of the union of the walks for ER-feat, ER-msg, and ER-Emb, which is equal to the sum of ER-feat and ER-msg. Note that the neurons over all layers outside this figure, except the output layer, are marginalized.
+
+4.4. Event Relevance 
+
+We propose a novel definition of event relevance (ER), con-sidering three types of information flow that are associated with each event. We further extend the idea to higher-order joint ER that focuses on the intersection of the information flows associated with multiple events. In addition, we propose the Grad ×Input [ 35 , 36 ] counterpart that approximates our ER defi-nition. 
+
+Event Relevance through Feature (ER-feat) A simple way to define the relevance of an event e ∈ E is to count the relevance of all walks that arrive at the input neurons that represent the event feature ε(e)—concatenation of the event type and the time embeddings—defined in Eq.(12): ER-feat e|n(L) ≡ R(n(0) ∈ S ({ε(e)})|n(L)), (23) where n(0) and n(L) specify neurons at the input l = 0 and the output l = L layers of the entire ETGNN. This relevance collects all relevances that the event feature ε(e) receives both in the EP and Emb modules. Figure 5 and Figure 6 (a) illustrate this quantity as the corresponding set of walks. 7Event Relevance through Messages (ER-msg) To account for how an event a ff ects the memory updates of the associated nodes, ER-msg collects all relevances passing through the neu-rons representing one of the two messages {m(e)
+
+> v(e)O
+
+, m(e)
+
+> v(e)d
+
+} induced by the event e ∈ E in the EP module: ER-msg e|n(L) ≡
+
+R(n(lmsg( e)) ∈ S ({m(e)
+
+> v(e)o
+
+, m(e)
+
+> v(e)d
+
+})|n(L)). (24) Here, lmsg( e) is the (globally indexed) layer where the neurons for the message variables appear in the EP module. Figure 6 (b) illustrates ER-msg, where the neuron variables in all other layers except the output layer are marginalized. 
+
+Event Relevance through Emb Module (ER-Emb) The third definition of event relevance only considers the relevance that the event feature receives in the Emb module. Focusing on the same layer lmsg( e) as for ER-msg, it can be evaluated as ER-Emb e|n(L) ≡ R(n(lmsg( e)) ∈ S ({ε(e)})|n(L)), (25) as illustrated in Figure 6 (c). Note that we define ER-Emb not as a promising ER definition, but as an NRM counterpart of the existing XAI methods, e.g., TGNNExplainer, that ignore the entire process within the EP module. Indeed, ER-Emb performs as poorly as the existing methods, as seen in Section 5. 
+
+Event Relevance (ER) Our proposed ER is the relevance of the union of the walks considered above, which actually amounts to the sum of ER-msg and ER-Emb (see Figure 6 (b)-(d)): ER e|n(L) ≡
+
+R(n(lmsg( e)) ∈ S ({m(e)
+
+> v(e)o
+
+, m(e)
+
+> v(e)d
+
+, ε(e)})|n(L)). (26) 
+
+Joint Relevance of Multiple Events Our ER definition can be naturally generalized to joint relevance of multiple events. Specifically, we define the relevance for a set of events, 
+
+{e1, · · · , eK }, as ER e1,..., eK |n(L) ≡
+
+R(n(lmsg( e1)) ∈ S ({m(e1)
+
+> v(e1)o
+
+, m(e1)
+
+> v(e1)d
+
+}), . . . , 
+
+n(lmsg( eK )) ∈ S ({m(eK ) 
+
+> v(eK)o
+
+, m(eK ) 
+
+> v(eK)d
+
+})|n(L)). (27) This quantity focuses on the information flow passing through one of the two message variables associated with each specified event, and thus captures higher-order interactions between the events. An example of joint relevance of two events is illustrated in Figure 7. 
+
+Grad ×Input-msg Grad ×Input [ 35 , 36 ] is a simple explanation method, which is known to be equivalent to LRP-0 [ 9] in FFNNs with ReLU activations. We propose to use Grad ×Input applied to the messages induced by the event e ∈ E , as an approximation to our ER-msg. ... ... ...  ...              
+
+> Figure 7: Joint relevance of events e1and e2, where e1is associated with nodes
+> uand wand e2is with nodes vand w.
+
+5. Empirical Evaluation of Explaining ETGNNs 
+
+In this section, we conduct qualitative and quantitative experi-ments with synthetic and real-world temporal graph datasets, and compare our methods with baselines. 4 Specifically, we consider two artificial and one real-world datasets: a simulated infection network (Section 5.1), simulated attacker subgraphs in a social network (Section 5.2), and a real-world political events network (Section 5.3). The model configurations and performances are listed in Ap-pendix E. Details of the datasets are described in each corre-sponding subsection. Across all datasets, in addition to qualitatively interpreting the results, we quantitatively evaluate the performance of our explanation method and compare it against baseline methods. Specifically, we use both ground-truth-based and perturbation-based metrics [ 37 ]: For synthetic datasets with ground-truth labels, we measure the precision and recall of the top-k most relevant features, while for real datasets where ground-truth labels are unavailable, we instead evaluate pruning and activation curves, which assess whether the attributed relevance to each feature is a good estimate of the decrease in model output when that feature is removed from the input. More details on the evaluation metrics can be found in Appendix D. 
+
+Baseline Methods As discussed in Section 2.3, existing expla-nation methods for ETGNN, including TGNNExplainer [ 5 ] and TempME [ 6], ignore the influence of events to the node memo-ries in the EP module, and only focus on how the event features influence the final node representations in the Emb module, and thus to the final predictions in the Dec module. As baselines, we evaluate TGNNExplainer and its adapted version. The original 
+
+TGNNExplainer is evaluated only in the experiments where the Emb module is not identity, while the adapted version, named 
+
+TGNNExplainer-EP , is evaluated in all experiments. The latter also accounts for the information flow in the EP module by per-turbing the node memories when calculating the reward values in MCTS. 5 We also evaluate two popular, simple, but generally 
+
+> 4The implementation will be made publicly available upon publication.
+> 5It is not straightforwared to adjust the MLP accelerator of TGNNExplainer such that it masks events in the EP module that involves GRU cells. Therefore, we do not use the MLP accelerator in TGNNExplainer-EP. This does not a ff ect performance, because it is only for accelerating computation.
+
+8Ground-Truth and Baselines Ours Figure 8: Top-20 most relevant event edges for node prediction for an example episode in the Infection dataset. Nodes are depicted as circles except special ones: the crosses are the nodes initially infected, and the star is the node to be predicted. The yellow and green colors indicate that the node is infected and not-infected, respectively, at the inference time. A ground-truth chain is shown as the connected black line segments. Our methods, ER-feat, ER-msg, and ER, successfully identify the chain as positively relevant, while the others fail. 
+
+eff ective explanation methods. Occlusion [38 ] defines the rele-vance of an event e as the change in prediction when the event is masked out. Grad ×Input [35 , 36 ] defines the relevance score of an event as the product of the gradient and the input for the event embedding ε(e).In all ER methods, we use LRP-γ rule with γ = 0.1 for linear layers, and LRP-all rule for element-wise multiplication in GRU and attention mechanism. We add a small term ε = 10 −6 to numerator of LRP-γ rule to ensure numerical stability. We summarize all average metric scores over top-k events in Table 1. 
+
+5.1. Explaining Infection Network Predictions 
+
+We simulate an infectious disease spreading within a pool of 500 people (nodes). In each time step, 20 events (interactions between a pair of nodes) occur. In each interaction, infection occurs if one is sick and the other is not, with probability α
+
+that depends on a binary event feature— α = 0.1 if both wear masks and α = 0.9 otherwise. For simplicity, we assume that the disease is not recoverable. Starting from 5 initial infected nodes, we simulate the spreading process for 1000 times. The model is trained on a node-level binary classification task, where the positive class means that the node is infected at the prediction time. We generated 100 graphs and used 80% for training and 20% for testing. Note that for this dataset, the oracle (highest possible) accuracy is ≈ 84%, which was computed by simulating the probability for each node to be infected at the prediction time. We also identified the ground-truth set of infection chains, based on their frequency in the simulation. Specifically, we collect as the ground-truth chains all those with probability larger than 5%. We trained a model with a single layer attention Emb module, and a model with Identity Emb module, whose prediction accuracies are 81 .6% and 80 .7%, respectively. 
+
+5.1.1. Qualitative Visualization 
+
+For qualitative evaluation, we use the model with the attention Emb module. Figure 8 shows an explanation of node predic-tion for an example temporal graph. The infection of the node marked as yellow star is predicted, for which each explanation method provides the top-20 most relevant events. In this exam-ple, the most probable infection chain is the one shown as black connected edges. ER-feat, ER-msg, and ER identified this entire ground-truth infection chain within the top-20 relevant events, while the baseline methods, as well as ER-Emb that ignores the entire process in the EP module, at best only find a few last steps. This result clearly shows that accounting for the information flow in the EP module is essential for good explanation. Note that other ground-truth chains with lower probability are not identified by any method. This is reasonable because the model can predict well if one infection chain is recognized. 
+
+5.1.2. Quantitative Evaluation 
+
+Since the ground-truth infection chains are available, we eval-uate Recall-chain —a metric evaluates whether the top-k events can form a chain that connects the initial infected person to the target person—defined in Eq.(D.3) in Appendix D. The second column in Table 1 reports on the average recall chain over the top-k events (see Figure F.4 for the corresponding recall curve). We observe that ER methods (except ER-Emb) significantly outperform the baseline methods, quantitatively confirming the qualitative findings above. Furthermore, ER-feat is significantly weaker than ER-msg and ER, which supports our strategy of accounting for the full event-induced informa-tion flow, including pathways through event-associated message 9Dataset Infection Attacker ICEWS18 
+
+Metric Recall-chain Precision Recall Pruning Activation Pruning Activation ER (ours) 0.844 0.874 0.535 0.843 0.565 0.098 0.173 ER-feat (ours) 0.563 0.726 0.415 0.845 0.206 0.092 0.170 ER-msg (ours) 0.844 0.874 0.535 0.843 0.565 0.065 0.180 ER-Emb (ours) 0.104 - - - - 0.090 0.174 G×I-msg (ours) 0.183 0.180 0.104 0.166 0.020 0.023 0.183 G×I 0.125 0.290 0.171 0.255 0.006 0.003 0.198 
+
+Occlusion 0.352 0.714 0.450 0.698 0.443 - -TGNNExp 0.055 0.237 0.142 0.336 0.025 -0.021 0.077 TGNNExp-EP 0.021 0.265 0.171 0.316 0.188 -0.023 0.066  
+
+> Table 1: Average Scores of di ff erent metrics over top-kevents. For the Attacker experiment, the model uses Identity Emb module, and thus ER-msg is equal to ER and ER-Emb is not applicable. For ICEWS18, the runtime of Occlusion is infeasible. We highlight the best scores in bold. Detailed results including precision, reall, pruning, and activation curves can be found in Appendix F.
+
+variables, for event relevance assessment. Note the di ff erence between ER-feat and ER-msg, shown in Figure 6 (a) and (b): although both account for walks going through one of the two associated messages, ER-feat counts only those arriving at the event feature in the input layer, while ER-msg counts those ar-riving at any neuron in the input layer. ER-Emb, as well as TGNNExplainer, performs poorly, indicating that the primary event-induced processes occur in the EP module, rather than in the Emb module. Although we experimented with di ff erent initial event coalition settings for TGNNExplainer, beyond the 25 closest 2-hop events used in the original paper [ 5], the per-formance remained similarly poor. A possible explanation is that increasing the initial event coalition size can include longer range temporal dependency, but this also increases the search space exponentially, making MCTS substantially more di ffi cult. 
+
+5.1.3. Relevance of Longer Infection Chains 
+
+Although the experiments above showed superior perfor-mance of our ER methods to the baselines, collecting the top-k
+
+events based on the marginal relevance of single edge event is not optimal for identifying an entire infection chain—which intrinsically requires to capture higher-order interactions. The joint event relevance (27) is expected to capture such higher-order interactions between events. Figure 9 shows an example infection scenario, where the single event relevance by ER fails to identify the entire infection chain: Although two of the event edges in the ground-truth chain (black lines) are identified as positively (red) relevant, the other event edge is identified as negatively (blue) relevant. On the other hand, as shown in the bottom of Figure 9, where the top-3 jointly relevant three-event sets are reported, the ground-truth chain is successfully identi-fied as the most relevant set. This result highlights an advantage of our joint relevance definition, which arises naturally within the NRM framework. 
+
+5.2. Simulated Attacker Subgraph in Social Network 
+
+Inspired by BA-2motif—a common synthetic benchmark dataset for evaluating XAI methods for static GNN [ 8]—we synthesize a dataset of temporal graphs by adding temporal de-pendencies. Specifically, we generate a random Barabási–Albert 
+
+Event Relevances Sorted by Absolute Value 
+
+482 5 1 2.1054 
+
+226 39 482 1.4617 33 15 482 1.2365 70 40 33 0.8336 212 2 3 0.6683 414 50 315 0.5749 438 43 414 0.5593 315 60 199 0.5458 212 7 438 0.5124 260 18 33 0.4740 199 60 70 0.4670 226 66 121 0.3654 
+
+226 77 199 -0.3488 ... ... Top Joint Relevance of 3 Events 
+
+482 5 1, 226 39 482, 226 77 199 1.1251 33 15 482, 70 40 33, 199 60 70 0.7277 482 5 1, 33 15 482, 70 40 33 0.5949 ... ...           
+
+> Figure 9: Marginal and joint event relevances for predicting the infection of node 199 (marked with ⋆). The ground-truth infection chain is shown as black lines, and the event between the nodes aand bat time tis denoted as atb. Top: Marginal event scores by ER, which fails to identify the entire ground-truth chain as all positively relevant edges. Bottom: Joint event relevance for three-event sets, which successfully identify the ground-truth chain as the most relevant set.
+
+graph attached with house or ring motif subgraph(s), and add a time-stamp to each edge (see Figure 10 left). We see each temporal graph as an artificial social network, where the nodes correspond to users and the event edges correspond to interac-tions between nodes, with or without attacker subgraphs. An attacker subgraph is a group of collaborative malicious users, and we assume that it consists of a fast-built dense sub-network, because the malicious users can easily interact with each other but not with genuine users. In our synthetic dataset, we label a house motif subgraph (consisting of 6 edges) built within 7
+
+time steps as an attacker. Figure 10 left visualizes the defini-tion of attacker and normal subgraphs. We train an ETGNN for graph-level binary classification—whether a graph contains at 10 18910 12 11 built fast slow house ring 23 34455623 45667713 6859215896attacker =6 =5 =9 =9 Figure 10: Class definitions in the Attacker dataset. The number next to each edge indicates the time at which it was created. Left: A temporal graph sample with an attacker motif marked with a circle. A graph containing at least one attacker is labeled positive. Right: A house subgraph built fast within 7 time steps (i.e., ∆t = tmax − tmin + 1 ≤ 7, where tmax and tmin are highlighted in red and green, respectively) is defined as an attacker subgraph, while the other three are defined as benign. 
+
+least one attacker subgraph or not. For training the model, we generated 500 samples with half positive and half negative labels and randomly sampled 80% for training and 20% for testing. The test accuracy is 99.0%. 
+
+5.2.1. Qualitative Visualization 
+
+Figure 11 shows the relevance heatmaps obtained by the base-line methods and ER for positive samples with two attacker subgraphs. Since TGNNExplainer does not provide edge-level explanations, we visualize the most relevant 10-event subgraph in red with uniform intensity. The ground-truth attacker sub-graphs are marked with circles. We observe that our ER correctly identifies the attacker sub-graph as positively relevant, while the other methods fail. A possible reason of Occlusion’s failure is that perturbing only one attacker should not change the prediction when another at-tacker exists. In contrast, ER identifies all attacker-related event edges as positively relevant, highlighting the e ff ectiveness of our attribution approach. More results are provided in Appendix F.2. 
+
+5.2.2. Quantitative Evaluation 
+
+We quantitatively evaluate the quality of the top-k most rel-evant events detected by our methods and the baselines. For TGNNExplainer, the top-k relevant edges are defined as the edges of the most relevant subgraph consisting of k edges. The average scores over the top-k events of four metrics, Precision (D.1) , Recall (D.2) , Pruning (D.4) and Activate (D.5) , defined in Appendix D, are shown in Table 1. This evaluation was conducted on a test set of 450 temporal graphs, where a half contain only one attacker subgraph, and the other half contain multiple attacker subgraphs. We observe that ER significantly outperforms the other methods. Although Occlusion performs comparably well with ER on the graphs with only a single at-tacker, as shown in Appendix F.2, it tends to fail to identify the relevant edges when multiple attackers exist, as discussed in Section 5.2.1. Further details, including performance curves, can be found in Appendix F.2. 
+
+5.3. Political Events Network 
+
+ICEWS18 is a real-world event dataset that contains 468558 political events between various entities from 2018-01-01 to 2018-10-31 (24 hours time granularity) [ 39 , 40 ]. There are 304 time steps and on average 1541 events for each time step. Nodes have no feature, while events have 256 di ff erent tags ( relation s) indicating the event type. For example, with the notation intro-duced in Section 4.1, an event e: “Kim Jong-Un −Threaten →
+
+United States on 2018-01-01” is an interaction between the ori-gin node v(e)o : “Kim Jong-Un” and the destination node v(e)d :“United States” happened at the time “2018-01-01” with the event type τ: “Threaten”. We consider the event-level multi-class classification task, where the type of event that happens between two given enti-ties is predicted. The dataset is one large temporal graph, of which the set of events are split into training and testing sets according to the time stamp of events: the events with the first 80% time steps are used for training and the rest for testing. During training, we update the node memories with events up to time step t, then predict the events at t + 1 to calculate the loss function. In the test time, we start from t = 0, and update the node memories up to the final training event t = T , and make predictions for the test events. Our model reaches about 33% accuracy and 55% Hit@3, 6 which is comparable to the model reported in Jin et al. [ 39 ], although the authors used a di ff erent RE-Net architecture. 
+
+5.3.1. Qualitative Results 
+
+As a qualitative evaluation result, Table 2 shows the most relevant events for the prediction of the event “United Nations −Make an appeal or request → Legislature (Poland) on 2018-03-22.” The table shows the 10 most relevant and the 3 least (or negatively most) relevant events detected by ER, Grad ×Input, and TGNNExplainer. Occlusion is excluded due to its computational intractability, requiring one forward computa-tion for each event. 7
+
+Since no ground-truth explanation is available, we chose the predicted events such that the relations with other events can be intuitively understood from news articles. According to a news article, 8 the appeal or request was about stopping the bill that prohibits abortion. The explanation by our ER method suc-cessfully detects intuitively relevant events related to Poland’s diplomatic cooperation with neighboring countries, for exam-ple, “EU’s accusation to Polish legislature” and “Polish citizen’s demonstration or rally against Polish legislature.” Besides, the result also highlighted several events that the UN is involved, which implies the way how the model understands UN’s role. Our methods can not only detect temporally close events but also some events that occurred months before the predicted event. Compared to ours, Grad ×Input and TGNNExplainer provide                   
+
+> 6Hit@ kis defined as the percentage of test samples, for which the kclasses with highest predictive probability contains the target class.
+> 7For example, to explain one event at t=2000 with Occlusion, the time needed is # of events ×forward computation time ≈1.6×10 5×30 s≈57 days .
+> 8https: // reproductiverights.org /over-200-sexual-reproductive-rights-ngos-call-for-polish-parliament-to-protect-womens-health-and-rights /
+
+11 Figure 11: Explanation by baseline and our proposed methods. The ground-truth attacker subgraphs are marked with circles, and the numbers on the edges denote the timestamps. Our ER successfully identifies both attackers, while the other methods fail. 
+
+less human-interpretable explanations, which are not very help-ful for the users to understand the rationale of the model. We also observe that some events assigned negative relevance by Grad ×Input are, in fact, plausibly relevant for the prediction. This discrepancy may stem from the shattered gradient eff ect [ 41 ], which introduces strong positive and negative fluctuations into the feature-wise relevance scores. Additional examples of qualitative explanation are given in Appendix F.3. 
+
+5.3.2. Quantitative Evaluation 
+
+We preformed pruning and activation tests for the top-20 most relevant events on 50 randomly sampled events from the ones correctly predicted. Average scores over top-20 are shown in Table 1 (the activation and pruning curves can be found in Fig-ure F.9). Our ER methods significantly outperform the baselines in the pruning test, while slightly worse than Grad ×Input in the activation test. 
+
+5.4. Computational Time 
+
+Here, we report on computation time of our method and the baselines. We run the experiments on an M1Pro CPU. For a given temporal graph, ER performs a forward computa-tion to prepare the propagation matrices and the output relevance, and then a backward computation for the relevance propagation. We denote the computation time for forward and backward com-putation as tER  
+
+> →
+
+and tER  
+
+> ←
+
+, respectively. The backward computation can be costly for large temporal graphs. For example, for the temporal graph from ICEWS18 with 468558 events, tER  
+
+> →
+
+≈ 2 min and tER  
+
+> ←
+
+≈ 18 min . However, for small graphs in the Attacker dataset, tER  
+
+> →
+
+≈ 0.003 sec and tER  
+
+> ←
+
+≈ 3.5 sec. Occlusion performs a forward computation for each occlusion pattern. This is costly when we have to compute the relevance of all events to identify the most relevant ones in a temporal graph. For the ICEWS18 dataset, a single forward computation takes 
+
+∼ 1 min , and thus the total computation time is 468558 ×1 min ≈
+
+325 day , which is infeasible. For small graphs with only ∼ 50 events in the Attacker dataset, Occlusion takes only ∼ 1 sec. Grad ×Input requires only a single forward pass and backward relevance propagation, which are generally inexpensive with au-tomatic di ff erentiation libraries. It takes ∼ 5 min and ∼ 0.03 sec for the ICEWS18 and Attacker datasets, respectively. TGNNExplainer requires training an MLP as a ‘navigator’ and then running a Monte-Carlo Tree Search. For the latter part, the most time consuming process is in the reward calculation, which is equal to a single forward computation of the model on a subgraph. This process is performed once for each rollout. By default, the rollout times is set to 500 and the initial event subgraph size is 25 as in Xia et al. [ 5 ], which is by orders of magnitude smaller than the original temporal graph. Therefore the whole process can be finished in a few seconds. Table 3 summarizes the computation time. 
+
+6. Conclusion 
+
+Time-series data play a central role in many real-world appli-cations, ranging from scientific monitoring to event prediction in complex systems. While modeling such data with deep neural networks has achieved strong predictive performance, their in-ternal decision mechanisms often remain opaque. In particular, explaining temporal graph neural networks is challenging due to their dependence on evolving latent representations and long-range event interactions, which renders existing explainability techniques incomplete or insu ffi ciently faithful. In this paper, we focused on explainability for Event-based Temporal Graph Neural Networks (ETGNNs), and proposed a novel event relevance (ER) definition built upon the Normalized Relevance Measure (NRM) framework. Unlike existing methods that overlook latent memory evolution, our approach accounts for the full event-induced information flow, enabling more faith-ful explanations. To make NRM applicable to such complex architectures, we introduced a modularized relevance decom-position scheme that supports hierarchical relevance definition. Furthermore, our method naturally extends to higher-order at-tribution, allowing the joint relevance of multiple events to be quantified and thereby capturing interactions among events for more fine-grained explanations. Our experiments on artificial and real-world datasets showed that our proposed approach achieves state-of-the-art perfor-mance, producing both qualitatively interpretable heatmaps and quantitatively faithful explanations. In addition, the joint rele-vance analysis successfully captures long-range interactions, which are essential for accurate modeling in tasks such as infection-chain prediction. 12 Method: ER                                                                                                                                                                                        
+
+> Event #D ago Legislature (Poland) –Engage in diplomatic cooperation →Lithuania 11 Lithuania –Engage in diplomatic cooperation →Legislature (Poland) 11 United Nations –Appeal for change in leadership →Joseph Kabila 80
+> European Commission –Accuse →Legislature (Poland) 71 Citizen (Poland) –Demonstrate or rally →Legislature (Poland) 67 Legislature (Poland) –Investigate →Citizen (Poland) 68
+> David Granger –Make statement →United Nations 80 United Nations –Make statement →Military (Myanmar) 80
+> Citizen (Poland) –Demonstrate or rally →Legislature (Poland) 69
+> United Nations –Make an appeal or request →Actor (Congo) 80
+> · · ·
+> Lithuania –Consult →Estonia 1Latvia –Consult →Lithuania 1Lithuania –Consult →Latvia 1
+> Method: Grad ×Input
+> Event #D ago United Nations –Appeal for change in leadership →Joseph Kabila 80 Andrzej Duda –Make statement →Poland 80
+> Citizen (Poland) –Demonstrate or rally →Legislature (Poland) 67
+> United States –Make statement →Legislature (Poland) 50 Saulius Skvernelis –Make an appeal or request →Citizen (Poland) 76 Saulius Skvernelis –Express intent to meet or negotiate →Citizen (Poland) 76 Lawmaker (Russia) –Consider policy option →Russia 80 Czech Republic –Engage in diplomatic cooperation →Russia 80 Russia –Engage in diplomatic cooperation →Czech Republic 80 United Nations –Make an appeal or request →Actor (Congo) 80
+> · · ·
+> Citizen (Poland) –Impose embargo, boycott, or sanctions →Poland 79 Member of Legislative (Lithuania) –Make an appeal or request →Legislature (Poland) 21
+> Ethnic Group (Poland) –Make an appeal or request →Legislature (Poland) 45
+> Method: TGNNExplainer
+> Event #D ago United Nations –Praise or endorse →International Committee of the Red Cross 2United Nations –Investigate →Government (Sweden) 1Foreign A ff airs (Turkey) –Accuse →United Nations 2United States –Provide economic aid →United Nations 2United Nations –Criticize or denounce →Foreign A ff airs (Turkey) 1Revolutionary Armed Forces of Colombia –Provide military aid →United Nations 2United Nations –Make statement →Pierre Nkurunziza 2United Nations –Consult →Abd al-Rab Mansur al-Hadi 2Abd al-Rab Mansur al-Hadi –Consult →United Nations 2United States –Praise or endorse →United Nations 2
+
+Table 2: The 10 most positively relevant and the 3 least (or most negatively) relevant events detected by our ER, Grad ×Input, and TGNNExplainer for predicting the event “United Nations −Make an appeal or request → Legislature (Poland)” (TGNNExplainer does not provide the least relevant events). Red and blue color with di ff erent intensity indicates the positive and negative relevance, respectively. ER does not attribute significantly negative relevance and therefore the least relevance is neutral (white). ’# D ago’ indicates how many days before the predicted event the corresponding event occurred. We marked in bold the events that are assumed to be relevant. 
+
+Method ICEWS18 Attacker ER (ours) 20 min 3.5 sec Occlusion infeasible 1 sec Grad ×Input 5 min 0.03 sec TGNNExplainer 10 sec 3 sec 
+
+Table 3: Approximate runtime for our method and baselines on a big graph (ICEWS18) and small graphs (Attacker). ER, providing the best explanation in our qualitative and quantitative experiments, requires a reasonable amount of computation time. For TGNNExplainer we only consider the MCTS searching process. 
+
+In future work, we plan to develop a tool that further facilitates the construction of relevance structures based on the proposed modular decomposition, ultimately enabling partial automation from the specification of forward computations and LRP rules. Further improvements toward more e ffi cient implementations, for example, via the forward-hook trick [ 8, 16 ], are also of interest. These techniques would further extend the applicability of the NRM framework to a broader class of models. 
+
+Acknowledgments 
+
+The authors thank Grégoire Montavon for helpful discussions and valuable suggestions during this research. This work was funded by the German Ministry for Education and Research as BIFOLD - Berlin Institute for the Foundations of Learn-ing and Data (ref. BIFOLD25B). Klaus-Robert Müller was partly supported by the Institute of Information & Communica-tions Technology Planning & Evaluation (IITP) grant funded by the Korea government (MSIT) (No. RS-2019-II190079, Artifi-cial Intelligence Graduate School Program, Korea University) and grant funded by the Korea government (MSIT, No. RS-2024-00457882, AI Research Hub Project), and Hector Fellow Academy. Thomas Schnake is a postdoctoral fellow at the Uni-versity of Toronto in the Eric and Wendy Schmidt AI in Science Postdoctoral Fellowship Program, a program of Schmidt Sci-ences. 13 References 
+
+[1] C. Gao, X. Wang, X. He, Y. Li, Graph neural networks for recommender system, in: WSDM, ACM, 2022, pp. 1623–1625. [2] S. Deng, H. Rangwala, Y. Ning, Learning dynamic context graphs for predicting social events, in: KDD, ACM, 2019, pp. 1007–1016. [3] G. Cencetti, G. Santin, A. Longa, E. Pigani, A. Barrat, C. Cattuto, S. Lehmann, M. Salathé, B. Lepri, Digital prox-imity tracing on empirical contact networks for pandemic control, Nat. Commun. 12 (1) (2021) 1655. [4] L. Zhao, Y. Song, C. Zhang, Y. Liu, P. Wang, T. Lin, M. Deng, H. Li, T-GCN: A temporal graph convolutional network for tra ffi c prediction, IEEE Trans. Intell. Transp. Syst. 21 (9) (2020) 3848–3858. [5] W. Xia, M. Lai, C. Shan, Y. Zhang, X. Dai, X. Li, D. Li, Explaining temporal graph models through an explorer-navigator framework, in: ICLR, OpenReview.net, 2023. [6] J. Chen, R. Ying, Tempme: Towards the explainability of temporal graph neural networks via motif discovery, in: NeurIPS, 2023. [7] P. Xiong, T. Schnake, G. Montavon, K.-R. Müller, S. Naka-jima, Normalized relevance measure as a unifying frame-work to explain neural network latent structures, CoRR abs /2606.00557 (2026). [8] T. Schnake, O. Eberle, J. Lederer, S. Nakajima, K. T. Schütt, K.-R. Müller, G. Montavon, Higher-order explana-tions of graph neural networks via relevant walks, IEEE Trans. Pattern Anal. Mach. Intell. 44 (11) (2022) 7581– 7596. [9] S. Bach, A. Binder, G. Montavon, F. Klauschen, K.-R. Müller, W. Samek, On pixel-wise explanations for non-linear classifier decisions by layer-wise relevance propaga-tion, PloS one 10 (7) (2015) e0130140. [10] R. Achtibat, S. M. V. Hatefi, M. Dreyer, A. Jain, T. Wie-gand, S. Lapuschkin, W. Samek, Attnlrp: Attention-aware layer-wise relevance propagation for transformers, in: ICML, Vol. 235 of Proceedings of Machine Learning Re-search, PMLR / OpenReview.net, 2024, pp. 135–168. [11] J. Kau ff mann, J. Dippel, L. Ru ff , W. Samek, K.-R. Müller, G. Montavon, Explainable ai reveals clever hans e ff ects in unsupervised learning models, Nature Machine Intelli-gence 7 (3) (2025) 412–422. [12] L. Arras, F. Horn, G. Montavon, K.-R. Müller, W. Samek, "what is relevant in a text document?": An interpretable machine learning approach, PLOS ONE 12 (8) (2017) 1– 23. [13] A. Ali, T. Schnake, O. Eberle, G. Montavon, K.-R. Müller, L. Wolf, XAI for transformers: Better explanations through conservative propagation, in: ICML, Proceedings of Ma-chine Learning Research, PMLR, 2022, pp. 435–451. [14] M. Esders, T. Schnake, J. Lederer, A. Kabylda, G. Mon-tavon, A. Tkatchenko, K.-R. Müller, Analyzing atomic interactions in molecules as learned by neural networks, J. Chem. Theory Comput. 21 (2) (2025) 714–729. [15] G. Montavon, S. Lapuschkin, A. Binder, W. Samek, K.-R. Müller, Explaining nonlinear classification decisions with deep taylor decomposition, Pattern Recognit. 65 (2017) 211–222. [16] W. Samek, G. Montavon, S. Lapuschkin, C. J. Anders, K.-R. Müller, Explaining deep neural networks and beyond: A review of methods and applications, Proc. IEEE 109 (3) (2021) 247–278. [17] G. Montavon, A. Binder, S. Lapuschkin, W. Samek, K.-R. Müller, Layer-wise relevance propagation: An overview, in: Explainable AI, Springer, 2019, pp. 193–209. [18] L. Arras, J. A. Arjona-Medina, M. Widrich, G. Montavon, M. Gillhofer, K.-R. Müller, S. Hochreiter, W. Samek, Ex-plaining and interpreting LSTMs, in: Explainable AI: In-terpreting, Explaining and Visualizing Deep Learning, Vol. 11700, Springer, 2019, pp. 211–238. [19] P. Xiong, T. Schnake, G. Montavon, K.-R. Müller, S. Naka-jima, E ffi cient computation of higher-order subgraph attri-bution via message passing, in: ICML, PMLR, 2022, pp. 24478–24495. [20] J. Chen, T. Ma, C. Xiao, Fastgcn: Fast learning with graph convolutional networks via importance sampling, in: ICLR (Poster), OpenReview.net, 2018. [21] W. L. Hamilton, Z. Ying, J. Leskovec, Inductive repre-sentation learning on large graphs, in: NIPS, 2017, pp. 1024–1034. [22] T. N. Kipf, M. Welling, Semi-supervised classification with graph convolutional networks, in: 5th International Con-ference on Learning Representations, ICLR 2017, Toulon, France, April 24-26, 2017, Conference Track Proceedings, 2017. [23] K. T. Schütt, H. E. Sauceda, P.-J. Kindermans, A. Tkatchenko, K.-R. Müller, Schnet–a deep learning ar-chitecture for molecules and materials, J. Chem. Phys. 148 (24) (2018) 241722. [24] H. Yuan, H. Yu, S. Gui, S. Ji, Explainability in graph neural networks: A taxonomic survey, IEEE Trans. Pattern Anal. Mach. Intell. 45 (5) (2023) 5782–5799. [25] W. Ju, Z. Fang, Y. Gu, Z. Liu, Q. Long, Z. Qiao, Y. Qin, J. Shen, F. Sun, Z. Xiao, J. Yang, J. Yuan, Y. Zhao, Y. Wang, X. Luo, M. Zhang, A comprehensive survey on deep 14 graph representation learning, Neural Networks 173 (2024) 106207. [26] F. Monti, D. Boscaini, J. Masci, E. Rodolà, J. Svoboda, M. M. Bronstein, Geometric deep learning on graphs and manifolds using mixture model cnns, in: CVPR, IEEE Computer Society, 2017, pp. 5425–5434. [27] E. Rossi, B. Chamberlain, F. Frasca, D. Eynard, F. Monti, M. M. Bronstein, Temporal graph networks for deep learn-ing on dynamic graphs, CoRR abs /2006.10637 (2020). [28] Y. Ma, Z. Guo, Z. Ren, J. Tang, D. Yin, Streaming graph neural networks, in: SIGIR, ACM, 2020, pp. 719–728. [29] S. Kumar, X. Zhang, J. Leskovec, Predicting dynamic embedding trajectory in temporal interaction networks, in: KDD, ACM, 2019, pp. 1269–1278. [30] D. Xu, C. Ruan, E. Körpeoglu, S. Kumar, K. Achan, Induc-tive representation learning on temporal graphs, in: ICLR, OpenReview.net, 2020. [31] R. S. Trivedi, M. Farajtabar, P. Biswal, H. Zha, Dyrep: Learning representations over dynamic graphs, in: ICLR (Poster), OpenReview.net, 2019. [32] L. Kocsis, C. Szepesvári, Bandit based monte-carlo plan-ning, in: ECML, Vol. 4212 of Lecture Notes in Computer Science, Springer, 2006, pp. 282–293. [33] N. Tishby, F. C. N. Pereira, W. Bialek, The informa-tion bottleneck method, CoRR physics /0004057 (2000). 
+
+arXiv:physics/0004057 .[34] K. Cho, B. van Merrienboer, Ç. Gülçehre, D. Bahdanau, F. Bougares, H. Schwenk, Y. Bengio, Learning phrase representations using RNN encoder-decoder for statistical machine translation, in: EMNLP, ACL, 2014, pp. 1724– 1734. [35] A. Shrikumar, P. Greenside, A. Kundaje, Learning impor-tant features through propagating activation di ff erences, in: ICML, PMLR, 2017, pp. 3145–3153. [36] M. Ancona, E. Ceolini, C. Öztireli, M. Gross, Towards bet-ter understanding of gradient-based attribution methods for deep neural networks, in: ICLR (Poster), OpenReview.net, 2018. [37] W. Samek, A. Binder, G. Montavon, S. Lapuschkin, K.-R. Müller, Evaluating the visualization of what a deep neural network has learned, IEEE Trans. Neural Netw. Learn. Syst. 28 (11) (2017) 2660–2673. [38] S. Blücher, J. Vielhaben, N. Strodtho ff , Preddi ff : Explana-tions and interactions from conditional expectations, Artif. Intell. 312 (2022) 103774. [39] W. Jin, M. Qu, X. Jin, X. Ren, Recurrent event network: Autoregressive structure inferenceover temporal knowl-edge graphs, in: EMNLP (1), Association for Computa-tional Linguistics, 2020, pp. 6669–6683. [40] E. Boschee, J. Lautenschlager, S. O’Brien, S. Shellman, J. Starz, M. Ward, ICEWS Coded Event Data (2015). [41] G. Montavon, Gradient-based vs. propagation-based ex-planations: An axiomatic comparison, in: Explainable AI: Interpreting, Explaining and Visualizing Deep Learning, Springer International Publishing, Cham, 2019, pp. 253– 265. [42] L. Arras, G. Montavon, K.-R. Müller, W. Samek, Explain-ing recurrent neural network predictions in sentiment analy-sis, in: WASSA@EMNLP, Association for Computational Linguistics, 2017, pp. 159–168. 
+
+Appendix A. Modularized NRM for LSTM 
+
+Here we give details of example application of the NRM framework to an LSTM network (Figure A.1 left). Following Xiong et al. [ 7], we first convert the network into a proper FFNN by unfolding the recurrent architecture, copying intermediate inputs and outputs to the input and output layers, respectively, and eliminating the skip connections by duplicating neurons across the skipped intermediate layers (Figure A.1 right). Viewing each LSTM cell as a module, we can decompose the relevance of the entire LSTM network as a T -layer modular-wise network: 
+
+RLSTM (n(0: T −1) |n(T )) =
+
+> T
+
+Y
+
+> t=1
+
+RLSTM −Cell (n(t−1) |n(t)),
+
+where n(·) specifies a neuron in each layer as 
+
+n(t) ∈ S (t)({ht, ct, {xt′ }T −1 
+
+> t′=t
+
+}).
+
+Here, S(l)(X) denotes the set of neurons in the l-th layer that rep-resent a set X of the variables, and we used the hierarchical layer indexing convention—i.e., layer indices are defined locally in each hierarchy and each module for convenience—as explained in Section 3.2. According to the layered structure within each LSTM cell module (see the right bottom plot in Figure A.1), the relevance of an LSTM-cell is decomposed as a 3-layer network as 
+
+RLSTM −Cell (n(0) , n(1) , n(2) , n(3) ) =
+
+RStep1 (n(0) |n(1) )RStep2 (n(1) |n(2) )RStep3 (n(2 |n(3) ), (A.1) where n(·) specifies a neuron in each layer as 
+
+n(0) ∈ S (0) ({ht−1, ct−1, {xt′ }T −1
+
+> t′=t−1
+
+}),
+
+n(1) ∈ S (1) ({ct, it, ft, ˜ct, ot, {xt′ }T −1 
+
+> t′=t
+
+}),
+
+n(2) ∈ S (2) ({ct, ot, {xt′ }T −1 
+
+> t′=t
+
+}),
+
+n(3) ∈ S (3) ({ct, ht, {xt′ }T −1 
+
+> t′=t
+
+}).
+
+Each factor in Eq. (A.1) is defined as follow. Since each layer consists of multiple variables, we follow the general NRM con-struction (see Section 3.3 in Xiong et al. [ 7 ]), and first define the unnormalized propagation matrices {eT(l,v(l−1) 1 ←v(l)2 )} for all pairs 15 Figure A.1: Application of NRM to LSTM with modularization. Left: original LSTM with skip connections and inputs in intermediate layers. Right: LSTM transformed into a proper FFNN. LSTM can be seen as a series connection of LSTM cell modules. The colors of the connection denotes the type of it. 
+
+(v(l−1) 1 , v(l)2 ) of variables in consecutive layers, which will be nor-malized to obtain the consecutive conditional relevance. For the identity connections, depicted in red in Figure A.1 (bottom right), e.g., the connection between the pair ( v(0) 1 , v(1) 2 ) =
+
+(c(0) 
+
+> t−1
+
+, c(1) 
+
+> t−1
+
+), the relevance should be identically propagated, i.e., 
+
+T(l,v(l−1) 1 ←v(l)2 ) = I. (A.2) For weighted sum connection (in black color) such as ˜ct = Wc xt−1 + Uc ht−1. (A.3) For example, for the pair ( v(0) 1 , v(1) 2 ) = (xt−1, ˜ct), with LRP-0 rule, the unnormalized propagation entries are given by ˜T (l,v(l−1) 1 ←v(l)2 ) 
+
+> i j
+
+= wi j z(l) 
+
+> i
+
+, (A.4) where wi j denotes the corresponding weight connecting neuron 
+
+i to neuron j and z(l) 
+
+> i
+
+denotes the activation of neuron i at layer 
+
+l. With another more popular rule LRP-γ, the unnormalized propagation entries are given by ˜T (l,v(l−1) 1 ←v(l)2 ) 
+
+> i j
+
+= (γ max( wi j , 0) + wi j )z(l) 
+
+> i
+
+. (A.5) For element-wise multiplications of g as a gate variable (in blue color) and s as a signal variable (in green color) 
+
+y = g ⊙ s, (A.6) we use LRP-all rule [ 42 ] that assigns all relevance to the signal branch: 
+
+T(l,g←y) = I, T(l,s←y) = 0, (A.7) At the neuron level, this corresponds to an identity propagation between the signal neurons and the output neurons. After constructing all local unnormalized propagation matri-ces, they are normalized according to the NRM framework: 
+
+T (l) 
+
+> i j
+
+=
+
+˜T (l)
+
+> i j
+
+Pi′ ˜T (l) 
+
+> i′j
+
+. (A.8) Walk relevance, marginal relevance, conditional relevance, and joint relevance then follow directly from the standard NRM definitions. This example demonstrates that modularization avoids the need to explicitly manipulate the full unfolded LSTM graph. Relevance can instead be defined at the module level, while neuron-level propagation rules are constructed locally inside each module. The same principle is used in Section 4 to define relevance quantities for the substantially more complex ETGNN architecture. 
+
+Appendix B. Example of Modularization 
+
+Consider the network shown in Figure B.2 (left), which con-sists of four modules connected in series and in parallel. We first make the two parallel modules, i.e., Module 2 (red shadow) and Module 3 (green shadow), non-overlapping by inserting a DP layer, as shown in Figure B.2 (right). Then, following the series (7) and parallel (8) connection rules and hierarchical layer indexing, the top-level relevance is decomposed as 
+
+R(n(0) , n(1) , n(2) , n3) |n(4) ) = RM1 (n(0) |n(1) )RDP (n(1) |n(2) )
+
+
+
+R⊆S (2:3)  
+
+> M2
+
+(n(2) |n(3) ) + R⊆S (2:3)  
+
+> M3
+
+(n(2) |n(3) )
+
+
+
+RM4 (n(3) |n(4) ), (B.1) 16 ... ... ... ... ... ... ... ... ... ... ... ... DP M1 M2 M3 M4 Figure B.2: An example network consisting of four modules. Left: the parallel modules (red and green shadows) share the same input neurons (colored). Right: DP layer is inserted such that the parallel modules have no overlapping, and thus the top-level relevance is decomposed as Eq.(B.1). 
+
+where each factor on the right-hand side can be defined locally using the layer indices of the corresponding module. Note that the layer indices need not be synchronized across parallel mod-ules, because the total relevance is normalized within each mod-ule. Consequently, the sum of the total relevance at any layer in M2 and that at any layer in M3 is also properly normalized. Given a target quantity, for example, the input feature rele-vance R(n(0) |n(4) ) with respect to an output, the message passing should be first applied to the last factor RM4 (n(3) |n(4) ), propa-gating the relevance from its output to the input. Then, the message passing for the local relevances R⊆S (2:3)  
+
+> M2
+
+(n(2) |n(3) ) and 
+
+R⊆S (2:3)  
+
+> M3
+
+(n(2) |n(3) ) should be applied in parallel, giving the condi-tional relevance R(n(2) |n(4) ). Finally, the message passing for 
+
+RDP (n(1) |n(2) ) and RM1 (n(0) |n(1) ) is applied sequentially, giving the target quantity R(n(0) |n(4) ). 
+
+Appendix C. Details of Relevance Definition for ETGNNs 
+
+In this section, we specify each factor in Eq. (21) . For simplic-ity, we describe the relevance definition for a simple ETGNN consisting of the identity message function, the sum aggregation function, the GRU node memory updating function, the identity Emb module and a linear decoder for node level prediction. We further assume that the batch size is one and no node-level event exists. One can define the relevance of general ETGNNs in the same way with more steps and hierarchy. 
+
+Appendix C.1. Event Processing (EP) Module 
+
+The EP module can be seen as a |E| -layer NN, and in each layer one event is processed. Initially, node memories are η(0)  
+
+> v
+
+,and in layer l = 1, . . . , |E| , event el is processed, the nodes involved in this event are the origin node v(el)o and destination node v(el)d . We simplify the notation to vl
+
+> o
+
+, vl 
+
+> d
+
+as in each layer only one event is processed. Then the computation in layer l can be formulated as: 
+
+η(l) 
+
+> v
+
+=
+
+
+
+η(l−1)  
+
+> v
+
+, v < {vl
+
+> o
+
+, vl
+
+> d
+
+},
+
+GRU( m(el) 
+
+> v
+
+, η(l−1)  
+
+> v
+
+), v ∈ { vl
+
+> o
+
+, vl
+
+> d
+
+}, (C.1) 
+
+m(el)
+
+> vl
+> o
+
+=
+
+
+
+η(l−1) 
+
+> vl
+> o
+
+|| η(l−1) 
+
+> vl
+> d
+
+|| ε(el)(t−
+
+> vl
+> o
+
+)
+
+
+
+, (C.2) 
+
+m(el)
+
+> vl
+> d
+
+=
+
+
+
+η(l−1) 
+
+> vl
+> d
+
+|| η(l−1) 
+
+> vl
+> o
+
+|| ε(el)(t−
+
+> vl
+> d
+
+)
+
+
+
+, (C.3) [·||· ] means concatenating operation. Event embeddings ε(el)(·)are additionally copied from the first to the last layer. For this EP: Event Process Module EPB: Event Process Batch Module ... ... ... ... EPB DP      
+
+> MU ... ...
+> MU
+> DP MS
+> AG
+> UD
+> EPB EP ... ... ... ... ... ... ...
+> EPB EPB
+> ... ... ...
+> ... ... ...
+> MS: Message Module AG: Aggregate Module UD: Update Module DP: Duplication Module MU: Memory Update Module
+
+Figure C.3: Hierarchical module structure of EP module, EPB module and MU module. 
+
+EP module the neuron sets of input and output variables are 
+
+Sin EP = S({η(0)  
+
+> v
+
+|v ∈ V} ∪ { ε(el)(t− 
+
+> v
+
+)}v∈{ vl
+
+> o,vl
+> d},l=1,..., |E|
+
+| {z }⃗
+
+> E
+
+),
+
+Sout EP = S {η(|E| ) 
+
+> v
+
+}v∈V ∪⃗ E .
+
+We demonstrate how EP module is built with hierarchical modules in Figure C.3. All modules are proper FFNNs, i.e., they don’t contain skip connections or intermediate input and output. 
+
+Appendix C.2. Event Processing Batch (EPB) Module 
+
+The EP module consists of a series of EP Batch modules. In this simple setting where batch size is 1, there are |E| EPB 17 modules (see Figure C.3). For the l-th EPB module, the neuron sets of inputs and outputs are 
+
+Sin EPB ,l = S {η(l−1)  
+
+> v
+
+}v∈V ∪⃗ E ,
+
+Sout EPB ,l = S {η(l) 
+
+> v
+
+}v∈V ∪⃗ E .
+
+Clearly, Sin EPB ,0 = Sin EP and Sout EPB ,|E| = Sout EP . Therefore, the rele-vance of the EP module is decomposed as 
+
+REP (n(0) , . . . , n(|E|− 1) |n(|E| )) =
+
+> |E|
+
+Y
+
+> l=1
+
+REPB (n(l−1) |n(l)), (C.4) where n(l) ∈ S in EPB ,l+1 for 0 ≤ l < |E| , n(|E| ) ∈ S out EPB ,|E| .The conditional relevance can be factorized as 
+
+REPB (n(0) , n(1) |n(2) ) = RDP (n(0) |n(1) )·
+
+
+
+R⊆MU MU (n(1) MU |n(2) MU ) + R⊆MU ID (n(1) MU |n(2) MU )
+
+
+
+, (C.5) where n(·)
+
+... specifies a neuron in each local layer as 
+
+n(0) ∈ S in EPB ,l,
+
+n(1) ∈ S MU ∪ MU  ,
+
+MU = {η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+, ε(el)(t−
+
+> vl
+> o
+
+), ε(el)(t−
+
+> vl
+> d
+
+)},
+
+MU =⃗ E ∪ { η(l−1)  
+
+> vl
+
+}v∈V\{ vl
+
+> o,vl
+> d}
+
+,
+
+n(1)  
+
+> MU
+
+∈ S (MU ), n(1)  
+
+> MU
+
+∈ S (MU ), (C.6) 
+
+n(2) ∈ S MU ′ ∪ MU ′ ,
+
+MU ′ = {η(l)
+
+> vl
+> o
+
+, η(l)
+
+> vl
+> d
+
+},
+
+MU ′ =⃗ E ∪ { η(l) 
+
+> vl
+
+}v∈V\{ vl
+
+> o,vl
+> d}
+
+,
+
+n(2)  
+
+> MU
+
+∈ S (MU ′), n(2)  
+
+> MU
+
+∈ S (MU ′).
+
+Here, R⊆MU MU (· · · ) is the local relevance (6) of the MU mod-ule, which is defined below. RDP (· · · ) is the relevance of a DP module, which parallelizes the MU and its complement, and 
+
+R⊆MU ID (· · · ) is the local relevance of an IDentical copying process. 
+
+Appendix C.3. Memory Update (MU) Module 
+
+An MU module consists of DP, MS, AG and UD sub-modules as shown in Figure C.3. The relevance of the MU module is defined as follows: 
+
+RMU (n(0) , n(1) , n(2) , n(3) |n(4) ) = RDP (n(0) |n(1) )·
+
+nR⊆MS MS (n(1) MS |n(2) MA )R⊆AG AG (n(2) MA |n(3) AG )
+
++R⊆MS ID (n(1) MS |n(2) MA )R⊆AG ID (n(2) MA |n(3) AG )
+
+
+
+RUD (n(3) |n(4) ), (C.7) where n(·) specifies a neuron in each local layer as 
+
+n(0) ∈ S ({η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+, ε(el)(t−
+
+> vl
+> o
+
+), ε(el)(t−
+
+> vl
+> d
+
+)}),
+
+n(1) ∈ MS ∪ MS , n(1) MS ∈ MS , n(1) MS ∈ MS ,
+
+MS = S({η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+, ε(el)(t−
+
+> vl
+> o
+
+), ε(el)(t−
+
+> vl
+> d
+
+)}),
+
+MS = S({η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}),
+
+n(2) ∈ MA ∪ MA , n(2) MA ∈ MA , n(2) MA ∈ MA ,
+
+MA = S({mel
+
+> vl
+> o
+
+, mel
+
+> vl
+> d
+
+}), (C.8) MA = S({η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}),
+
+n(3) ∈ AG ∪ AG , n(3) AG ∈ AG , n(3) AG ∈ AG ,
+
+AG = S({dmvl 
+
+> o
+
+, dmvl 
+
+> d
+
+),
+
+AG = S({η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}),
+
+n(4) ∈ S ({η(l)
+
+> vl
+> o
+
+, η(l)
+
+> vl
+> d
+
+}).
+
+Here, RDP (· · · ) is the relevance for the DP layer duplicating 
+
+{η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}, R⊆MS MS (· · · ) and R⊆AG AG (· · · ) are the local relevances for the MeSsage (MS) and AGgregate (AG) functions, respec-tively, R⊆MS ID (· · · ) and R⊆AG ID (· · · ) are the local relevance for the identical copying process for {η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}, and RUD (· · · ) is the relevance for the UpDate (UD) function. They are defined in the following sections. 
+
+Message (MS) Module and Aggregate (AG) Module In this simplest case, the message function is identity. The aggregate function is also identity as each batch only contains a single event. Therefore, 
+
+RMS (n(0) |n(1) ) = RID (n(0) |n(1) ), (C.9) 
+
+n(0) ∈ MS , n(1) ∈ MA , (C.10) 
+
+RAG (n(0) |n(1) ) = RID (n(0) |n(1) ), (C.11) 
+
+n(0) ∈ MA , n(1) ∈ AG . (C.12) 
+
+Update (UD) Module The UD module is a GRU cell, there-fore, 
+
+RUD (n(0) |n(1) ) = RGRU (n(0) |n(1) ), (C.13) 
+
+n(0) ∈ S ({bmvl 
+
+> o
+
+, bmvl 
+
+> d
+
+η(l−1) 
+
+> vl
+> o
+
+, η(l−1) 
+
+> vl
+> d
+
+}), (C.14) 
+
+n(1) ∈ S ({η(l)
+
+> vl
+> o
+
+, η(l)
+
+> vl
+> d
+
+}). (C.15) 
+
+RGRU (· · · ) can be defined similarly considering GRU cell as a module. 
+
+Appendix C.3.1. Embedding (Emb) Module 
+
+In this simplest case, the Emb module is an ID module that uses the final node memory as node embedding, i.e., 
+
+ζv = η(|E| ) 
+
+> v
+
+. (C.16) Therefore, REmb (n(0) |n(1) ) = RPID (n(0) |n(1) ), where n(0) ∈S({η(|E| ) 
+
+> v
+
+}v∈V ∪ { ε(e)(·)}e∈E ) and n(1) ∈ S ({ζv}v∈V ). RPID (· · · ) is the relevance of the Partial IDentity (PID) function that copies a part of the input (node memory) and drops the rest part (event embedding), which is defined as follows. 18 The PID forward mapping have two input variables {μ(1) ∈
+
+RD, μ(2) ∈ RD′
+
+}, and copy only the first one, ignoring the second, i.e, ν = f ({μ( j)}2
+
+> j=1
+
+) = μ(1) ∈ RD. For this mapping, we set 
+
+eT(μ(1) ←ν) = ID, α(μ(1) ←ν) = 1,
+
+eT(μ(2) ←ν) = 0D′×D, α(μ(2) ←ν) = 0,
+
+where 0D′×D ∈ RD′×D denotes the zero matrix. Then, 
+
+RPID (n(0) |n(1) ) = δn(0) ,n(1) ,
+
+where n(0) ∈ S {μ( j)}2 
+
+> j=1
+
+, n(1) ∈ S ν. (C.17) Here, δn,n′ is the Kronecker delta. 
+
+Appendix C.3.2. Decoding (Dec) Module 
+
+The Dec module is a node-level MLP that transforms node embeddings to node-level predictions, i.e., yv = MLP (ζv). There-fore, its relevance is RDec (n(0) |n(1) ) = RMLP (n(0) |n(1) ), n(0) ∈S({ζv}), n(1) ∈ S ({yv}). 
+
+Appendix D. Quantitative Criteria for Evaluating Explana-tions 
+
+We use ground-truth-based and perturbation-based metrics. For the synthetic datasets, where the ground-truth of relevant events are known, we can compute precision and recall curves for the top-k most relevant events Etop  
+
+> k
+
+detected by XAI methods as Precision k = |E ground-truth ∩E top   
+
+> k|
+> k
+
+, (D.1) Recall k = |E ground-truth ∩E top   
+
+> k||E ground-truth |
+
+, (D.2) where Eground-truth is the set of ground-truth relevant events. In the analysis of the infection network in Section 5.1.2, it is also important to identify possible chains of events that connect an initial infected person to the target person. To assess the perfor-mance of such infection chain identification, we also define Recall-chain k = 1 ∃C ∈ G s.t. C ⊆ E top 
+
+> k
+
+ , (D.3) where G = {C 1, . . . , CM ∈ G} denotes the set of ground-truth infection chains. This criterion gives 1 if at least one entire ground-truth chain is included in the top-k relevant events. For any dataset, we can use perturbation-based metrics. We use pruning and activation curves [ 19 ], which measure the de-crease in output probability when removing the top-k relevant events from the original temporal graph, and the output proba-bility when only using the top-k relevant events as input, respec-tively: Prune k = f model  
+
+> c
+
+(E) − f model  
+
+> c
+
+(E\E top  
+
+> k
+
+), (D.4) Activate k = f model  
+
+> c
+
+(Etop  
+
+> k
+
+), (D.5) where f model  
+
+> c
+
+(·) is the model output probability for the target class c. If the events Etop  
+
+> k
+
+are relevant, the model prediction for the target class should drop drastically when we remove these events from the input, giving a high Prune k. Similarly, predictions with input events consisting only of Etop  
+
+> k
+
+should increase rapidly when we add the most relevant events, giving a high Activate k. Therefore, for both criteria, higher values indicate better explanation quality. To give an overall performance score for comparison, we use Average Score over top-k metric: AS fk = 1
+
+> k
+
+Pki=1 fi, (D.6) where f can be Precision, Recall, Prune or Activate. 
+
+Appendix E. Model Training Information 
+
+For all datasets, the ETGNN has identity message function, mean aggregate function, a GRU cell for the update function, and a linear layer for the decoder. For the Attacker dataset, we use the identity embedder func-tion, and set the dimension of node memory to 10. The model’s output dimension is 2 for the binary classification task. Test Accuracy is 99.0%. For the Infection dataset, the dimension of node memory is again 10, while the model output dimension is 2. We tested two models with the embedding function being identity (ETGNN-id) or a 1-layer attention mechanism (ETGNN-attn). Test Accuracy for ETGNN-id is 80.7% and for ETGNN-attn is 81.6%. For the ICEWS18 dataset, we use the identity embedding function, and set the dimension of node memory to 100. The output dimension is 256. Test Accuracy is 32.7%. 
+
+Appendix F. More Results for Qualitative Evaluation 
+
+Appendix F.1. Infection Dataset 
+
+Figure F.4 shows the Recall-chains for ETGNNs with the iden-tity Emb module (left) and with an attention Emb module. For both models, our proposed ER and ER-msg clearly outperform the others. Figure F.5 shows the top-20 most relevant events when two other nodes are predicted than the one in the main text. We calculate the joint relevance of two events, and plot them in Figure F.6. In this example, the ground-truth is an infection chain consisting of two events, of which the joint relevance is the highest. However, this infection chain cannot be detected by only looking at the marginal event relevances, because an event in the ground-truth is assigned a negative relevance score. 19 Figure F.4: The Recall-chain (D.3) with the top-k relevant events for the model with the identity Emb module (left) and with the attention Emb module (right). ER-msg and ER are almost overlapped with each other. Other methods perform poorly even for the attention Emb model, which implies the importance of accounting for the information flow in the EP module.       
+
+> Figure F.6: Joint and marginal event relevance for node 303. The two events in ground-truth (439 71 1 and 439 81 303) have highest joint relevance, but the marginal relevance of event 439 81 303 is negatively relevant. The top 3 highest joint relevance are listed in the left panel. We only show 20 events that has highest absolute value of marginal relevance for the sake of clarity.
+
+Appendix F.2. Attacker Dataset 
+
+Figure F.7 shows the relevance heatmaps obtained by the base-line methods (upper-row) and our proposed methods (bottom-row) for positive samples (a) with a single attacker subgraph and (b) with two attacker subgraphs. Since TGNNExplainer, as well as TGNNExplainer-EP, does not output edge-level explanation, we plot the most relevant 10 events subgraph in red with uniform intensity. The attacker subgraphs are marked with circles, and the numbers on edges indicates the time-stamp. We observe that our ER and ER-msg correctly identify the attacker subgraph as positively relevant, while the other methods fail. One of the reasons why TGNNExplainer does not perform well is that the MCTS is initialized with a small number of candidate events (25 closest 2-hop events as in the experiments in Xia et al. [ 5]) as the starting point of the search, which limits the relevant subgraph consisting only of recent events. Although Occlusion also explains the attacker subgraph well for the single attacker sample, as seen in Figure F.7 (a), it fails to find the attacker subgraphs when the sample has multiple attackers, as seen in Figure F.7 (b). This behavior is as expected, because removing just one attacker should not change the prediction. In contrast, our proposed ER and ER-msg, both of which account for information flow in the EP module, successfully identify the attacker subgraphs even when multiple attackers exist. We quantitatively compare the quality of the top-k most rel-evant events detected by our methods and the baselines. For TGNNExplainer that attributes relevance to subgraphs, the top-
+
+k relevant edges are defined as the edges of the most relevant subgraph consisting of k edges. Figure F.8 shows the Precision (D.1) , Recall (D.2) , Pruning (D.4) and Activate (D.5) evaluated on the positive samples in each column. We separately evaluated the performance on the set of graphs that contain one attacker subgraph (top row) and on the set of graphs that contain more than one attackers (bottom row). For this evaluation, we aug-mented the training data with 200 samples with two or more attacker motifs, so that the number of samples with a single at-tacker and with multiple attackers is comparable. The results are consistent with the qualitative results in Section 5.2.1: ER and Occlusion perform similarly and outperform the other methods for the single attacker samples, while Occlusion fails to identify attacker motifs for the multiple attacker samples. These results empirically prove the superior performance of our ER methods over the baselines. 
+
+Appendix F.3. Political Events Dataset 
+
+We preformed pruning and activation tests for the top-20 most relevant events on 50 randomly sampled events that are correctly predicted. Results are shown in Figure F.9. We observe from the pruning curves that our ER, ER-feat, and ER-Emb outperform the others. The activation curves show a similar trend except for Grad ×Input, which performs well for large k. However, if one wants to find a small number of the most relevant events, our ER methods perform better. 20 (a) Node to predict: 10. 
+
+> (b) Node to predict: 17.
+
+Figure F.5: The top-20 most relevant events for node prediction in the Infection dataset. The ground-truth infection chain depicted as black lines is the most probable one. The yellow star ⋆ is the node to be predicted, yellow /green nodes are infected /not infected nodes at the end of the episode. The initial infected nodes are depicted as yellow crosses ×. Overall, ER-feat, ER and ER-msg detect the infection chain, while the other methods fail. 1 4 7 10 13 16 19       
+
+> top k events
+> 0.05
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Pruning Curve
+> 14710 13 16 19
+> top k events
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> Activation Curve
+> TGNNExplainer
+> TGNNExplainer-EP
+> Grad×Input
+> Grad×Input-msg
+> ER-feat
+> ER-Emb
+> ER-msg
+> ER-all
+
+Figure F.9: Pruning and Activation curves on ICEWS18. 
+
+We show an additional example of explaining the predic-tion on another event “Shinzo Abe −Express intent to meet or negotiate →North Korea” on 2018-06-05. Table F.4 shows the 10 most relevant and the 3 least relevant events detected by ER, Grad ×Input, and TGNNExplainer. ER successfully detects events between Japan, North Korea, China and US, which ex-plain the tense situation on the Korean Peninsula at that time. More specifically, it finds relatively old events ( ∼ 150 days ago), e.g., “North Korea −make statement →United States” and vise versa, that explain the political background, as well as shortly-before events ( ∼ 3 days ago), e.g., “Shinzo Abe −discuss by telephone →Donald Trump” and vise versa, that might directly triggered Shinzo Abe’s expression of intent to meet or negotiate with North Korea. In contrast, the baseline methods yield less interpretable explanations: Grad ×Input tends to find some irrel-evant events between Donald Trump and other countries such 21 as Australia, while TGNNExplainer tends to focus on irrelevant events that happened one day ago, ignoring long-range event dependencies. 22 Method: ER 
+
+Event #D ago 
+
+North Korea – Make statement → United States 156 
+
+Government (North Korea) – Impose administrative sanctions → North Korea 156 
+
+Donald Trump – Make statement → North Korea 156 
+
+Kim Jong-Un – Make statement → North Korea 156 
+
+Shinzo Abe – Discuss by telephone → Donald Trump 3Donald Trump – Discuss by telephone → Shinzo Abe 3China – Host a visit → Shinzo Abe 154 Shinzo Abe – Make a visit → China 154 
+
+Shinzo Abe – Make statement → Government (Japan) 5North Korea – Express intent to meet or negotiate → South Korea 156 
+
+· · · 
+
+Donald Trump – Consult → Sheikh Hamad bin Isa al Khalifah 156 Shinzo Abe – Engage in diplomatic cooperation → Donald Trump 27 Donald Trump – Engage in diplomatic cooperation → Shinzo Abe 27 
+
+Method: Grad ×Input 
+
+Event #D ago Donald Trump – Make statement → Australia 123 Ministry (Iran) – Make statement → Donald Trump 123 Donald Trump – Express intent to engage in diplomatic cooperation (such as policy support) → Malcolm Bligh Turnbull 123 Donald Trump – Make statement → North Korea 156 Donald Trump – Threaten to reduce or stop aid → Pakistan 156 Donald Trump – Make statement → Bharatiya Janata 156 Shinzo Abe – Make statement → Indonesia 136 North Korea – Express intent to meet or negotiate → South Korea 156 Kim Jong-Un – Make statement → North Korea 156 China – Mobilize or increase police power → Vietnam 156 
+
+· · · 
+
+Donald Trump – Make pessimistic comment → Pakistan 156 China – Host a visit → Shinzo Abe 154 Shinzo Abe – Make a visit → China 154 
+
+Method: GNNExplainer 
+
+Event #D ago Shinzo Abe – Make statement → Aso Taro 1Vladimir Putin – Express intent to meet or negotiate → North Korea 1South Korea – Make an appeal or request → North Korea 1United States – Make an appeal or request → North Korea 1Shinzo Abe – Meet at a ’third’ location → G7 1G7 – Meet at a ’third’ location → Shinzo Abe 1Shinzo Abe – Make an appeal or request → Ministry (Japan) 1North Korea – Return, release person(s) → Citizen (United States) 1North Korea – Host a visit → Sergey Viktorovich Lavrov 1Sergey Viktorovich Lavrov – Make a visit → North Korea 1
+
+Table F.4: The most relevant events by ER, Grad ×Input and TGNNExplainer. ‘# D ago’ indicates how many days the event happened before the predicted event. Predicted event: Shinzo Abe −Express intent to meet or negotiate →North Korea@2018-06-05. 
+
+23 (a) Relevance heatmaps for a positive sample with a single attacker subgraph. 
+
+(b) Relevance heatmaps for a positive sample with two attacker subgraphs. 
+
+Figure F.7: Explanation by baseline and our proposed methods. The attacker subgraphs are marked with circles, and the numbers on edges denote the timestamps. 
+
+24 1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 Precision 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Recall 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Pruning Curve 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Activation Curve 
+
+TGNNExplainer 
+
+TGNNExplainer-EP 
+
+Grad×Input-msg 
+
+Grad×Input 
+
+Occlusion 
+
+ER-feat 
+
+ER (a) On 219 correctly classified positive samples with a single attacker motif. 1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 Precision 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Recall 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Pruning Curve 
+
+1 2 3 4 5 6 7 8 9 10 
+
+top k edges 
+
+Activation Curve 
+
+TGNNExplainer 
+
+TGNNExplainer-EP 
+
+Grad×Input-msg 
+
+Grad×Input 
+
+Occlusion 
+
+ER-feat 
+
+ER 
+
+(b) On 231 correctly classified positive samples with multiple attacker motifs. 
+
+Figure F.8: Precision, Recall, Pruning and Activate on Attacker dataset. For all metrics, the higher is the better. ER and Occlusion perform similarly good (a) for the single attacker cases, while Occlusion performs poorly (b) for the multiple attacker cases. 
+
+25
