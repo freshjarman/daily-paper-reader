@@ -27,11 +27,17 @@ jobs:
           echo "Sleeping ${DELAY}s (≈$((DELAY/60))min) to stagger fork runs over 10 minutes …"
           sleep $DELAY
 
-      # 1. 检出用户仓库的代码
+      # 1. 检出用户仓库的代码。
+      #    优先使用 SYNC_PAT（fine-grained PAT，需对本仓库授予 Contents + Workflows 写权限，
+      #    建议设为 No expiration），以便把上游对 .github/workflows/ 的改动推回本仓库。
+      #    未配置 SYNC_PAT 时回退到 GITHUB_TOKEN，但 GITHUB_TOKEN 受 GitHub 平台限制，
+      #    无法推送任何对 workflow 文件的改动——此时若上游改了 workflow 文件，push 会被拒。
       - name: Checkout target repo
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT || github.token }}
+          persist-credentials: true
 
       # 2. 配置 git 身份和 .gitattributes 中的 merge=ours 驱动，用于保护用户运行态文件
       - name: Configure git
@@ -68,6 +74,11 @@ jobs:
       - name: Sync check
         if: failure()
         run: |
-          echo "[Error] 自动同步失败！可能是因为 upstream 合并冲突，或同步期间 target 分支被新的提交推进。"
-          echo "请查看上一步 git 输出；如是 push rejected，重新运行 workflow 即可。"
+          echo "[Error] 自动同步失败，常见原因："
+          echo "  1) 上游改了 .github/workflows/ 下的文件，但本仓库未配置 SYNC_PAT，"
+          echo "     GITHUB_TOKEN 无权推送 workflow 文件 -> 报 'refusing to allow ... without workflows permission'。"
+          echo "     解决：创建 fine-grained PAT（Contents+Workflows 写、仅本仓库、No expiration），"
+          echo "     存为仓库 secret 'SYNC_PAT' 后重跑本 workflow。"
+          echo "  2) upstream 与本仓库存在合并冲突，或同步期间 target 分支被新提交推进。"
+          echo "     解决：查看上一步 git 输出手动解决；若只是 push rejected，重新运行即可。"
           exit 1
