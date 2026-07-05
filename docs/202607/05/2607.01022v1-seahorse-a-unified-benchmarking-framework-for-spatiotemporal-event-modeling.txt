@@ -1,0 +1,672 @@
+Title: Seahorse: A Unified Benchmarking Framework for Spatiotemporal Event Modeling
+
+URL Source: https://arxiv.org/pdf/2607.01022v1
+
+Published Time: Thu, 02 Jul 2026 01:26:19 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# SEAHORSE :A Unified Benchmarking Framework for Spatiotemporal Event Modeling 
+
+Yahya Aalaila 1,2 Gerrit Grossmann 1 Sebastian Vollmer 1,21German Research Center for Artificial Intelligence (DFKI), Data Science and its Applications Research Group, Kaiserslautern, Germany 
+
+> 2
+
+Department of Computer Science, Rhineland-Palatinate Technical University of Kaiserslautern-Landau (RPTU), Kaiserslautern, Germany 
+
+yahya.aalaila@dfki.de gerrit.grossmann@dfki.de sebastian.vollmer@dfki.de 
+
+## Abstract 
+
+Spatiotemporal point processes (STPPs) model event data in continuous time and space, with applications in mobility, epidemiology, and public safety. Recent neural STPPs span expressive intensity models, conditional density models, continuous-time latent dynamics, normalizing-flow spatial decoders, and score-based genera-tive mechanisms. Yet comparison remains fragile because implementations differ in preprocessing, coordinate normalization, splits, likelihood conventions, and evaluation protocols. We present S EAHORSE , a unified framework for reproducible STPP experimentation. S EAHORSE formalizes neural STPPs through a common encode–evolve–decode interface and trains, tunes, and evaluates every model fam-ily under a single executable benchmark protocol with raw-coordinate likelihood reporting. This enables fair comparisons but, more importantly, controlled diag-nostic studies. We pair S EAHORSE with HawkesNest, a synthetic stress-test suite, and show that increasing event-pattern complexity exposes each family’s inductive bias, degrading some models sharply and leaving others stable. 
+
+Code. SEAHORSE is available at github.com/YahyaAalaila/seahorse; install with 
+
+pip install seahorse-stpp . The v0.1.0 release is archived on Zenodo [ 1]. 
+
+## 1 Introduction 
+
+When earthquakes trigger aftershocks, infections seed new clusters, or ride requests concentrate around urban stations, the underlying data are sequences of discrete events in space and time, with each event potentially influencing what happens next. Spatiotemporal point processes (STPPs) are the mathematical objects used to model such data [ 2 , 3]. Their applications span seismology, epidemiology, criminology, urban analytics, and neuroscience, wherever the question is when and where events will occur next. Neural point process models have substantially expanded the classical toolkit: recurrent and attention-based encoders model complex event histories [ 4, 5, 6 ], while recent neural STPPs introduce continuous-time latent dynamics, learned spatial densities, exact-integration networks, and gen-erative mechanisms for events in continuous space and time [ 7 , 8, 9]. This diversity is scientifically useful, but it makes empirical comparison difficult because model families expose different predictive objects, including intensities, conditional densities, cumulative hazards, and generative samplers, and therefore require different training and evaluation machinery. 
+
+> Preprint.
+> arXiv:2607.01022v1 [cs.LG] 1 Jul 2026
+
+Figure 1: Overview of S EAHORSE . The framework takes fixed event datasets, model presets, and benchmark configuration as inputs, runs heterogeneous STPP models under a common contract, and returns comparable performance metrics, selected configurations, and reproducible artifacts. Despite rapid progress, evidence for neural STPPs remains difficult to compare across papers. Reported performance often depends not only on the model architecture, but also on how event sequences are preprocessed, how spatial support and coordinate systems are defined, and how likelihoods are evaluated [ 10 , 11 ]. Point-process likelihoods are densities with respect to a chosen measure, so coordinate transforms, support construction, and normalization conventions can change the reported scale. The problem is sharper for models trained with surrogate objectives such as variational bounds, score matching, or imitation losses, which are not directly comparable to exact point-process likelihoods without explicit evaluation semantics [ 12 , 13 ]. As a result, state-of-the-art claims are difficult to audit even when papers appear to use similar datasets or model families. In addition, existing comparisons typically ask which model obtains the best aggregate score on a fixed dataset. They less often ask which inductive biases fail under which data-generating regimes. This distinction matters for STPPs: temporal–spatial factorization, self-excitation, smooth latent dynamics, flow-based spatial densities, and diffusion-style generation encode different assumptions about event structure. Real datasets alone rarely isolate these assumptions. We therefore include a controlled synthetic suite, HawkesNest [ 14 ], designed to vary structural axes such as spatiotemporal entanglement and background heterogeneity. This allows us to evaluate whether models degrade gracefully under controlled changes to the data-generating process, rather than only asking which model performs well on average. We introduce S EAHORSE , a unified framework for reproducible STPP experimentation. S EAHORSE 
+
+standardizes dataset handling, model construction, training modes, hyperparameter tuning, and evaluation artifacts under a single executable benchmarking contract. Models are expressed through a common conceptual pipeline—history encoding, state evolution, decoding, and next-event prediction— while still allowing intensity-based, density-based, and generative parameterizations. This enables classical, neural, and diffusion-style STPP models to be evaluated under shared preprocessing, fixed splits, coordinate-aware likelihood reporting, and consistent post-NLL diagnostics. Figure 1 summarizes this role: fixed event data, model presets, and benchmark configuration enter a common contract, which returns comparable metrics, selected configurations, and reproducible artifacts. The public S EAHORSE implementation, including preset configurations and reproduction scripts, is available at Seahorse repository . Our contributions are: 1. A unified framework. We propose a four-stage decomposition of neural STPPs — history encoding, state evolution, decoding, and next-event prediction — that subsumes intensity-based, density-based, and generative models under a common interface. This decomposition makes the design choices that differentiate existing methods explicit and additive, rather than entangled in implementation details. 2. An executable benchmarking contract. We implement this framework in S EAHORSE , an open-source platform that runs every supported model through identical dataset handling, splits, preprocessing, training modes, hyperparameter tuning, coordinate-aware likelihood reporting, and evaluation artifacts. The contract is enforced by a single configuration layer, making cross-model comparisons directly auditable and reproducible. 23. Controlled diagnostics. Using S EAHORSE , we benchmark neural STPPs on real datasets and stress-test their inductive biases on HawkesNest [ 14 ], a controlled synthetic suite, moving beyond aggregate leaderboards toward diagnostic evaluation that exposes how each family responds to increasing spatiotemporal entanglement. 4. An extensible research platform. SEAHORSE is designed as a reusable platform: practi-tioners can apply included models to new datasets through configuration, while researchers can add new STPP methods by implementing the common model interface or wrapping existing PyTorch modules. This reduces the reimplementation burden and makes future STPP methods immediately comparable to a shared baseline suite. 
+
+## 2 Background 
+
+A spatiotemporal point process (STPP) is a stochastic process that induces a distribution over sequences of events occurring in continuous space and time [ 15 , 16 ]. In this work, we focus on the two-dimensional spatial case. A realization (sample) of an STPP is an event sequence defined up to a time horizon T ∈ R≥0. Formally, it is a finite ordered sequence 
+
+(t1, x 1, y 1), (t2, x 2, y 2), . . . , (tn, x n, y n),
+
+where ti ∈ [0 , T ] denotes the time of event i and (xi, y i) ∈ R2 its spatial location. A probabilistic model is useful for STPP modeling if it (i) has trainable parameters, (ii) allows efficient sampling of event sequences, and (iii) enables efficient (approximate) likelihood computation for training. A practical way of doing this is to generate event sequences autoregressively (one event after another). This reduces modeling the joint density over entire sequences to specifying the conditional distribution of the next event given the history. The history prior to time t is defined as 
+
+Ht = {(ti, x i, y i) | ti < t }.
+
+The next-event distribution can be specified either directly via a conditional density, p(t, x, y | H t),
+
+or via an intensity function, λ(t, x, y | H t), which defines the infinitesimal event rate. Under an absolute-continuity assumption, the two formulations are equivalent [ 16 ]. The log-likelihood of a sequence under an intensity-based model is 
+
+L =
+
+> n
+
+X
+
+> i=1
+
+log λ(ti, x i, y i | H ti ) −
+
+Z T
+
+> 0
+
+Z
+
+> R2
+
+λ(t, x, y | H t) dx dy dt, 
+
+and is typically optimized via the log-likelihood or a surrogate objective. There are two main approaches to parameterizing autoregressive STPPs: 
+
+Classical parametric functions. These specify explicit parametric forms for the intensity. For a homogeneous Poisson process, 
+
+λθ (t, x, y | H t) = μ, 
+
+where the trainable parameter is θ = {μ}, with μ the constant background event rate. For a self-exciting Hawkes process, 
+
+λθ (t, x, y | H t) = μ + X
+
+> ti<t
+
+αe −β(t−ti)kσ (x − xi, y − yi),
+
+where the trainable parameters are θ = {μ, α, β, σ }: μ is the background rate, α the excitation strength, β the temporal decay, and σ the spatial interaction scale. Here, kσ is a spatial kernel describing how influence decays with distance, for instance a Gaussian kernel. 
+
+Neural STPPs. Modern approaches replace fixed parametric forms with learned components [ 10 ]. Most methods follow a common autoregressive pattern: a history encoder maps past events into a latent state hi = fenc (Hti ), a state evolution propagates it forward h(t) = fevo (hi, t i, t ), and an 
+
+event head produces the next-event distribution 
+
+(ti+1 , x i+1 , y i+1 ) ∼ pθ (· | h(t)) .
+
+3Event history History Encoder   
+
+> State Evolution Decoder Next event
+> RNN, Transformer, set encoder
+> Piecewise constant, neural ODE + jumps
+> Mixture, CNF, integral net, score net
+
+Figure 2: Unified model decomposition for neural STPPs. Every method in our benchmark instantiates these three components; families differ in the architectural choice at each stage (annotated below). Table 1 gives the per-method assignments. Architectures differ in each component: the history encoder may be an RNN [ 4], self-attention [ 17 , 6], or a set encoder; state evolution may be piecewise constant or governed by a neural ODE [ 7]; and the event head may factorize into temporal and spatial parts [ 8], model the joint intensity directly [ 9 ], or use score-based generative models [18]. 
+
+## 3 A Unified Framework for Neural STPPs 
+
+Figure 2 summarizes the encode–evolve–decode abstraction used by S EAHORSE . Given the observed past, each method builds a conditioning representation and maps it to a predictive law for the next time– location pair. The abstraction separates three roles: the history encoder determines what information is retained from the past, the state evolution mechanism determines how this representation changes between events, and the decoder exposes the predictive object used for training and evaluation. This gives intensity-based, density-based, and generative STPPs a common forward contract without forcing them to share the same internal parameterization. 
+
+History encoder. The history encoder determines what information from the observed past Ht−
+
+is available to the model. In classical processes this role is played by hand-designed sufficient statistics, such as cumulative counts, elapsed times, or running excitation terms. Neural models replace these summaries with learned representations: recurrent encoders process events sequentially [4, 5], attention-based encoders condition on a finite or full event window [ 17 , 6], and window-based architectures retain per-event embeddings together with raw time–space coordinates. The output may be a single latent state, a set of event embeddings, or conditioning tokens; in all cases, it defines the information about the past that downstream components may use. 
+
+State evolution. The state evolution component specifies how the conditioning representation changes between observed events. Some models are static with respect to event time: the encoder produces a representation at the most recent event, and this representation is reused until the next event is observed. This covers many window-based likelihood models and score-based next-event generators, whose denoising dynamics are internal to decoding rather than physical-time evolution. Other models use continuous-time state dynamics, as in Neural STPPs, where a latent state evolves according to an ODE between events and is updated at event times. Continuous evolution can represent smoothly changing inter-event dynamics, but introduces solver cost and numerical tolerances into training and evaluation. In S EAHORSE , both cases satisfy the same contract: given a history and query time, they provide the conditioning state required by the decoder. 
+
+Decoder. The decoder maps the current latent state to a law for the next event’s time and location, and is where STPP families differ most. Factorized decoders combine a temporal model with a conditional spatial model, such as a log-normal mixture over inter-event times with a Gaussian mixture over locations [ 8], or a hazard-based temporal intensity with a conditional normalizing flow for space [ 7]. Joint decoders model time and space as one object: AutoSTPP [ 9] parameterizes a joint intensity through a monotone integral network with an exact compensator, while NSMPP [ 19 ] uses spectral features for a joint conditional intensity. Generative decoders produce samples rather than explicit densities: SMASH [ 20 ] uses a learned score function and Langevin dynamics, while Diffusion STPP [ 18 ] uses a multi-step diffusion process. The decoder output determines both the training objective and the available evaluation queries: intensity and density decoders support likelihood-based training and pointwise likelihood or intensity evaluation, whereas score-based decoders require 4Table 1: Neural and neural-style methods covered by the unified STPP interface. Classical factorized and temporal-only baselines are summarized in Appendix B.1.             
+
+> Representative method History / context Inter-event state Decoder / event law Objective
+> DeepSTPP [8] Amortized variational encoder over past events Latent stochastic process Nonparametric space–time intensity Variational likelihood objective AutoSTPP [9] Fixed-window event embeddings History-conditioned integral network Joint spatio-temporal intensity with exact compensator Exact point-process likelihood NSMPP [19] Raw history No separate latent dynamics Joint conditional intensity with numerical compensator Point-process likelihood NJSDE [21] Recurrent history encoding Neural ODE state between events Temporal likelihood with conditional GMM spatial head Likelihood with auxiliary regularization Jump-CNF [7] Recurrent history encoding Neural ODE state with event jumps Temporal likelihood with jump-CNF spatial head Likelihood with auxiliary regularization Attn-CNF [7] Recurrent / attention-conditioned history encoding Neural ODE state conditioned on prior paths Temporal likelihood with attentive-CNF spatial head Likelihood with auxiliary regularization SMASH [20] History-conditioned score network Static event-time conditioning; decoder-internal score dynamics Score-based sampler for next event Score-matching pseudolikelihood DSTPP [18] Spatio-temporal co-attention history encoder Static event-time conditioning; decoder-internal diffusion trajectory Diffusion sampler for joint next-event distribution Diffusion denoising / ELBO
+
+surrogate losses and typically provide samples from which likelihood-related quantities must be approximated. Table 1 instantiates this decomposition for every method in our benchmark. The unification is not a shared formula but a stable interface: each component has a well-defined input/output contract, and families differ only in how they fill each slot. This is what enables S EAHORSE to train, evaluate, and compare all supported methods through a single pipeline. 
+
+## 4 Seahorse: A Framework for Heterogeneous STPPs 
+
+The unified abstraction in Section 3 is not sufficient by itself to make STPP results comparable. Two models may both report NLL while evaluating different quantities: one may score events in normalized coordinates, another in raw coordinates; one may use a model-specific support box, another a native density space; one may optimize an exact point-process likelihood, another a variational or score-matching surrogate. Since densities depend on the reference measure, native-space likelihoods are not comparable unless mapped back to a common reporting space. S EAHORSE 
+
+addresses this by separating a model’s internal training space from the benchmark reporting space. Models may transform and parameterize the data internally, but benchmark metrics are reported under a shared raw-space protocol with the required coordinate correction. The public Seahorse repository provides the corresponding implementation of these execution modes and artifact conventions. 
+
+Benchmark contract. SEAHORSE uses a raw-first benchmark contract. Datasets, event order, and train/validation/test splits are fixed in original data coordinates. A model preset may estimate its own normalization, coordinate transform, support bounds, or quadrature domain, but only from the training partition, and the resulting transform is stored with the run. This lets each family operate in its native numerical space without redefining the benchmark input. Evaluation is fixed separately from training: 5PresetDescriptor      
+
+> Local TVT split
+> HuggingFace
+> Evaluation metrics
+> Reporting space
+> Checkpoint
+> selection
+> Resolve defaults,
+> policies, and paths into
+> concrete run
+> con fi guration
+> Dataset Preset & Con fi g
+> resolution
+> Benchmark
+> policy
+> Model instantiation
+> Objective
+> NLL
+> Report space
+> Evaluation exposure
+> Preset status
+> Reproducibility
+> metadata
+> Derives
+> quantities from
+> train partition
+> Inject derived quantities
+> and resolved con fi g into
+> model construction
+> Encoder Evolution Decoder Data dependent
+> transforms / support
+> bounds
+
+Shared Family-owned Execution modes  
+
+> Under the same frozen policy
+> Fit
+> Tune
+> bench
+> eval
+> RunResult artifact
+> (Version, seeds, git SHAs,
+> environment)
+> YAML
+> overrides
+> Frozen benchmark contract (applied identically across models)
+> Synthetic
+
+Figure 3: SEAHORSE execution contract. Shared benchmark components fix the dataset, split, policy, and resolved configuration, while family-owned presets inject training-only support statistics and transforms before model construction. All execution modes preserve the same policy metadata and write a R UN RESULT artifact for auditable reporting. test NLL is computed event-wise by conditioning on the realized pre-event history and scoring the next event in raw coordinates. If likelihood is evaluated in transformed coordinates, S EAHORSE 
+
+applies the corresponding log-Jacobian correction before reporting. Thus, validation objectives may differ across families, but reported benchmark NLLs remain tied to the same event-level target and reference measure. 
+
+Model instantiation. As shown in Figure 3, benchmark runs are specified by named configurations identifying the dataset, model family, training policy, and hyperparameters. Instantiation follows a fixed order: S EAHORSE resolves the benchmark policy, applies configuration overrides, calls the family-owned preset to derive training-data-dependent quantities, and constructs the executable model. At this final step, the preset loads the components defined by the unified interface in Section 3: the history encoder, state evolution mechanism, and decoder or event law. This prevents support bounds, coordinate transforms, and normalization statistics from leaking information from validation or test data while preserving each family’s native parameterization. 
+
+Training, sampling, and tuning. Training remains family-specific. Each preset optimizes the objective for which the method was designed, including exact likelihoods, numerical likelihoods, variational objectives, score-matching losses, or auxiliary regularized objectives. Sampling is also capability-dependent: generative models use their native samplers, while intensity-based models can sample through thinning or model-specific next-event routines where available. Hyperparameter search is exposed through the tune mode, with Ray Tune support for benchmark-scale sweeps. The goal is not to force a single optimizer or sampler across all families, but to make the resulting training objective, sampling path, and evaluation exposure explicit in the run metadata. 
+
+Execution pipeline. SEAHORSE exposes four execution modes: fit trains one configured model; 
+
+tune performs hyperparameter search; bench launches multi-model, multi-dataset, multi-seed bench-mark campaigns under a frozen policy; and evaluate computes post-fit diagnostics. All modes preserve the same semantic metadata. Each run artifact records the training objective, likelihood reporting convention, reporting coordinate space, supported evaluation modalities, selected check-point, and preset status. This makes downstream tables auditable: likelihoods, predictive scores, and diagnostics remain tied to the objective, coordinate space, and evaluation interface that produced them. Together, these design choices define the semantic layer of S EAHORSE : a benchmark contract that fixes data handling, configuration resolution, execution modes, reporting conventions, and run artifacts before model-specific machinery is invoked. The framework preserves each model family’s native parameterization while recording the metadata needed to interpret exact likelihoods, approximate likelihoods, predictive scores, and sample-based diagnostics under a common experimental substrate. 65 Software Interface 
+
+SEAHORSE exposes a command-line interface for large-scale execution and a Python interface for interactive use, both backed by the same configuration and runtime contracts. Users specify a preset and experiment overrides; S EAHORSE resolves them into a runnable STPP pipeline for training, tuning, benchmarking, or post-fit evaluation. The software interface is therefore a controlled interface to the benchmark contract described above: it launches experiments reproducibly while preserving the semantic metadata needed for later comparison, diagnosis, and reuse. Practitioners can run included models on benchmark datasets or on new datasets following the S EAHORSE data schema. Researchers can add new models by registering a preset or wrapping an existing PyTorch module, after which the model can be trained, tuned, and evaluated against the same datasets and metrics as the included baselines. Full configuration details, API references, dataset specifications, and extension examples are available at the online documentation. S EAHORSE is distributed as the seahorse-stpp package on PyPI, and the v0.1.0 release used for this paper is archived on Zenodo [1]. 
+
+## 6 Experiments 
+
+6.1 Experimental Setup Datasets. We evaluate on both real and synthetic STPP datasets. The real datasets are Citibike trip-start events in New York City [ 22 ], USGS earthquake catalog events [ 23 ], and county-level COVID-19 case events in New Jersey [ 24 ]. These three form the core 2D-spatial trio used for the headline real-data comparison and belong to a larger curated catalog of thirteen ready-to-use real-world STPP datasets that Seahorse ships—spanning urban mobility, crime and public safety, natural hazards, public health, social check-ins, and neuroimaging—all loadable through the same interface (Appendix 8); we leave the broader set for future empirical study. Synthetic datasets are generated with HawkesNest [ 14 ], a controlled STPP generator that varies structural axes such as spatiotemporal entanglement, spatial heterogeneity, and domain topology while retaining access to the ground-truth intensity. This makes it possible to evaluate both predictive performance and recovery of the latent event-generating structure. Preprocessing details are given in Appendix D. 
+
+Baselines. We evaluate the model families summarized in Table 1. The synthetic comparison focuses on neural STPP and neural event-generation models: DeepSTPP, AutoSTPP, NSMPP, NJSDE, Neural Jump-CNF, Neural Attn-CNF, SMASH, DSTPP, and THP as a neural temporal baseline. Implementation details are given in Appendix B.1. 
+
+Protocol. All models are trained and evaluated on identical raw event sequences using fixed temporal 70 /10 /20 train/validation/test splits, averaged over three seeds. We use two evaluation scopes. On real datasets, we run the full benchmark suite and report held-out test NLL across model families. On HawkesNest synthetic suites, we focus on neural STPPs, the main target of this study, and use the controlled ground truth for configuration-wise diagnostics. Computationally expensive presets use canonical configurations from their reference implementations; the remaining presets undergo a short validation sweep. 
+
+Evaluation. The primary metric is held-out per-event test NLL in raw coordinates. For models trained in normalized coordinates, we apply the corresponding log-Jacobian correction so that likelihoods are reported in a common coordinate system. Models with numerical, variational, or sample-based likelihood paths are flagged in the tables. In addition to NLL, we report temporal CRPS for next-event temporal prediction and ground-truth intensity correlation on synthetic suites where the true intensity is available. Metric definitions are given in Appendix C. 
+
+6.2 Results and discussion Real-data likelihood. Table 2 reports test NLL on the three real datasets. The ranking is domain-dependent: Attn-CNF is strongest on COVID and Citibike, while DeepSTPP is strongest on Earth-quakes. Hawkes-TvCNF remains competitive on Citibike, indicating that classical self-excitation with a flexible spatial head can still match neural methods in some regimes. Poisson and self-correcting 7Table 2: Real-data test NLL. Lower is better. Best and second-best means are shown in bold and underline. The full factorized-baseline table with all spatial heads is reported in Appendix E. 
+
+Preset COVID Earthquakes Citibike Mean Std Mean Std Mean Std 
+
+AutoSTPP −1.920 0.009 2.750 0.009 −5.033 0.009 
+
+DeepSTPP −2.104 0.012 2.705 0.054 −5.256 0.044 
+
+SMASH −1.812 0.063 5.406 0.109 −5.743 0.007 
+
+DSTPP −0.583 0.585 5.359 0.024 −3.970 1.198 
+
+NSMPP −1.611 0.219 4.734 0.104 −5.456 0.390 
+
+Attn-CNF −2.305 0.032 4.374 0.060 −6.444 0.0123 
+
+Jump-CNF −1.962 0.125 4.923 0.061 −5.780 0.021 
+
+NJSDE −1.799 0.067 5.155 0.160 −5.786 0.001 
+
+RMTPP 1.316 0.003 8.015 0.001 −2.915 0.000 
+
+THP 1.230 0.017 8.011 0.002 −2.916 0.000 
+
+Poisson TvCNF 1.876 0.060 9.021 0.076 −2.837 0.043 
+
+Hawkes TvCNF −2.014 0.039 5.462 0.021 −5.720 0.002 
+
+SC-Hawkes TvCNF 26 .863 0.383 34 .946 0.198 1.820 0.069 
+
+variants are consistently weaker, suggesting that simple background-rate or inhibition dynamics are insufficient for these real spatiotemporal patterns. These results motivate cross-dataset benchmarking: architecture-level rankings are unstable unless preprocessing, likelihood reporting, and evaluation semantics are held fixed. The full factorized-baseline grid is reported in Appendix E. 
+
+Controlled entanglement. Table 3 reports NLL on the HawkesNest entanglement suite, where lev-els L0–L3 progressively strengthen spatiotemporal coupling in the data-generating process. NSMPP achieves the best likelihood at every level, consistent with its inductive bias: it models the joint intensity as a positive background plus an additive sum of learned kernels over past events, with kernels defined directly on (t, x, y ). This mirrors the additive Hawkes-style mechanism used by the generator and avoids the temporal–spatial separation imposed by factorized models. The advantage is stable across all four levels, suggesting that NSMPP remains well aligned with the generator as coupling increases. However, the post-NLL diagnostics in Figure 5 show that this is not uniform dominance: NSMPP does not lead in temporal CRPS, and its intensity correlation is substantially lower than AutoSTPP and DeepSTPP, decreasing further with entanglement. Thus, its likelihood advantage reflects strong conditional fit to the Hawkes-like event mechanism, but coexists with weaker recovery of the latent intensity structure. The continuous-time and flow-based neural variants form the next likelihood tier, followed by AutoSTPP and DeepSTPP, while sample-based generative models (SMASH, DSTPP) trail under NLL. 
+
+Learning under increasing entanglement. Figure 4 shows test NLL versus training budget for the same entanglement sweep. The curves expose behavior hidden by final NLL: stronger coupling changes both the final likelihood and the path by which architectures reach it. AutoSTPP in Figure 4a maintains a persistent L3 gap, suggesting that its fixed event-window and integral-network parameterization struggles to absorb the strongest joint time–space coupling. DeepSTPP in Figure 4b has a large early L3 gap that mostly closes by convergence, suggesting that its window-aggregated latent state and mixture-based spatial decoder can adapt given enough optimization budget. NSMPP in Figure 4c is the contrast case: its curves remain tightly packed, consistent with its stable NLL across L0–L3 in Table 3. SMASH in Figure 4d has comparatively flat budget curves, indicating limited sensitivity to additional training budget but also no recovery of the likelihood gains achieved by the strongest likelihood-based models. Appendix E.1 reports the available curves for the more expensive continuous-time and flow-based neural presets, and Table 10 summarizes L0 versus L3 by best-checkpoint location and final-minus-best NLL gap. 
+
+Beyond likelihood. Figure 5 evaluates the same entanglement sweep beyond NLL. Panel (a) shows that temporal CRPS does not reproduce the likelihood ranking: several non-leading likelihood models remain competitive one-step predictors. Panel (b) shows a different pattern for intensity 8Table 3: Suite 3 entanglement synthetic test NLL. Lower is better. Best and second-best means are shown in bold and underline. Means and standard deviations are computed over completed seeds; “–” denotes a single completed seed, for which seed variability is not reported. 
+
+Preset L0 L1 L2 L3
+
+Mean Std Mean Std Mean Std Mean Std 
+
+AutoSTPP −1.832 0.001 −1.824 0.005 −1.826 0.001 −1.779 0.004 
+
+DeepSTPP −1.782 0.010 −1.779 0.008 −1.777 0.009 −1.733 0.003 
+
+SMASH −1.625 0.020 −1.637 0.008 −1.432 0.343 −1.587 0.015 
+
+DSTPP −1.399 0.062 −1.339 0.048 −1.421 0.094 −1.386 0.105 
+
+NSMPP −2.724 0.215 −2.753 0.153 −2.695 0.165 −2.694 0.146 
+
+RMTPP 2.256 0.000 2.255 0.000 2.249 0.000 2.266 0.000 
+
+THP 2.274 0.000 2.273 0.000 2.268 0.000 2.285 0.000 
+
+Attn-CNF −1.904 0.004 −1.902 0.0011 −1.905 0.0021 −1.865 0.0021 
+
+Jump-CNF −1.906 – −1.893 – −1.871 – −1.827 –NJSDE −1.876 0.001 −1.876 0.0005 −1.872 0.0018 −1.838 0.0009 25 50 75 100 
+
+> Training budget (%)
+> −1.82
+> −1.80
+> −1.78
+> −1.76
+> Test NLL
+
+(a) AutoSTPP 25 50 75 100  
+
+> Training budget (%)
+> −1.5
+> −1.0
+> −0.5
+> 0.0
+> 0.5
+> 1.0
+> Test NLL
+> L0 (easy)
+> L1
+> L2
+> L3 (hard)
+
+(b) DeepSTPP 25 50 75 100  
+
+> Training budget (%)
+> −3.0
+> −2.9
+> −2.8
+> −2.7
+> −2.6
+> −2.5
+> −2.4
+> −2.3
+> Test NLL
+
+(c) NSMPP 25 50 75 100  
+
+> Training budget (%)
+> −1.8
+> −1.7
+> −1.6
+> −1.5
+> −1.4
+> −1.3
+> −1.2
+> −1.1
+> Test NLL
+
+(d) SMASH 
+
+Figure 4: Learning dynamics on the HawkesNest entanglement suite. Each panel reports test NLL as a function of training budget for one model, with curves corresponding to increasing entanglement levels L0–L3. The appendix reports the corresponding available curves for the more expensive continuous-time and flow-based neural presets. recovery: AutoSTPP and DeepSTPP retain the strongest correlations with the ground-truth intensity surface, whereas NSMPP, despite leading NLL, remains substantially lower. Autoregressive rollout diagnostics in Appendix E.2 provide a complementary autoregressive generation view beyond the teacher-forced and surface-recovery diagnostics in Figure 5. 
+
+## 7 Related Work 
+
+Neural spatiotemporal point processes. Neural point process models have increased the flexibility of event-sequence modeling, first mainly in the temporal setting through recurrent or attention-based conditional intensities such as Neural Hawkes, SAHP, and THP [ 5 , 17 , 6 ]. Recent work extends this direction to spatiotemporal point processes, where each event carries both time and location [10 , 11 ]. Representative models include neural spatiotemporal event dynamics with learned intensity components [ 8 ], Neural STPP with continuous-time latent dynamics and conditional normalizing flows [ 7], automatically integrable neural STPPs [ 9], spectral marked point-process models [ 19 ], and diffusion-based spatiotemporal point processes [ 18 ]. These methods differ in parameterization, training objective, likelihood estimation, and computational requirements, making direct comparison difficult without a shared experimental protocol. 
+
+Benchmarking and software for point processes. Standardized tooling has received more at-tention for temporal point processes than for full spatiotemporal models. EasyTPP provides open benchmarking infrastructure for temporal point processes, including datasets, model implementa-tions, evaluation programs, documentation, and unified interfaces [ 25 ]. HoTPP extends temporal point-process benchmarking toward long-horizon prediction for marked event sequences [ 26 ]. These benchmarks are closest in spirit to our goal of reproducible point-process evaluation, but they operate primarily on temporal or marked temporal event sequences rather than continuous spatiotemporal 9L0 L1 L2 L3   
+
+> Entanglement level
+> 0.035
+> 0.040
+> 0.045
+> 0.050
+> 0.055
+> 0.060
+> 0.065
+> Temporal CRPS ↓
+> Clipped: RMTPP ≈0.149 THP ≈0.123 AutoSTPP
+> DeepSTPP
+> DSTPP
+> NJSDE
+> NSMPP
+> SMASH
+
+(a) Teacher-forced temporal prediction L0 L1 L2 L3  
+
+> Entanglement level
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Intensity Correlation ↑
+> SMASH & DSTPP excluded
+> (KDE surface approx. misspecified)
+> AutoSTPP
+> DeepSTPP
+> NJSDE
+> Jump-CNF
+> NSMPP
+> RMTPP
+> THP
+
+(b) Ground-truth intensity recovery 
+
+Figure 5: Post-NLL diagnostics on the HawkesNest entanglement suite. Panel (a) reports temporal CRPS across entanglement levels. Panel (b) reports ground-truth intensity correlation for models with well-defined surface estimates. Shaded bands denote seed variability. event data. S EAHORSE fills this gap by standardizing data handling, model interfaces, training, raw-space likelihood reporting, and diagnostics for heterogeneous STPP models under a common experimental pipeline. 
+
+## 8 Conclusions and Future Work 
+
+We introduced S EAHORSE , a unified benchmarking framework for spatiotemporal point process models. Its goal is to make STPP evaluation less dependent on inconsistent preprocessing, splitting, training, and reporting choices. By placing heterogeneous model families under a shared experimental contract, S EAHORSE enables fairer and more reproducible comparison. Our results show that performance varies strongly across real datasets and controlled synthetic regimes. No model family dominates uniformly, and degradation under controlled entanglement highlights the need for diagnostic benchmarks rather than isolated leaderboard-style results. Current limitations are primarily empirical in scope: while Seahorse ships a curated catalog of thirteen real-world datasets, our headline comparison evaluates a three-dataset 2D-spatial subset, and some expensive neural presets remain computationally fragile. Future work will broaden empirical coverage across the dataset suite, integrate additional STPP and generative event models, and extend the diagnostic suite toward richer calibration, robustness, and task-oriented operational metrics. 
+
+## References 
+
+[1] Yahya Aalaila, Gerrit Großmann, and Sebastian Vollmer. Seahorse: Unified benchmarking for spatio-temporal point processes. https://github.com/YahyaAalaila/seahorse , 2026. Software, Apache-2.0. Archived at https://doi.org/10.5281/zenodo.21078077 .[2] Daryl J Daley and David Vere-Jones. An Introduction to the Theory of Point Processes: Volume II: General Theory and Structure . Springer Science & Business Media, 2007. [3] Alex Reinhart. A review of self-exciting spatio-temporal point processes and their applications. 
+
+Statistical Science , 33(3):299–318, 2018. [4] Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. Recurrent marked temporal point processes: Embedding event history to vector. In 
+
+Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining , pages 1555–1564, 2016. [5] Hongyuan Mei and Jason M Eisner. The neural hawkes process: A neurally self-modulating multivariate point process. Advances in neural information processing systems , 30, 2017. 10 [6] Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, and Hongyuan Zha. Transformer Hawkes process. In International Conference on Machine Learning , pages 11692–11702. PMLR, 2020. [7] Ricky T. Q. Chen, Brandon Amos, and Maximilian Nickel. Neural spatio-temporal point processes. In International Conference on Learning Representations , 2021. [8] Zihao Zhou, Xingyi Yang, Ryan Rossi, Handong Zhao, and Rose Yu. Neural point process for learning spatiotemporal event dynamics. In Learning for Dynamics and Control Conference ,pages 777–789. PMLR, 2022. [9] Zihao Zhou and Rose Yu. Automatic integration for spatiotemporal neural point processes. 
+
+Advances in Neural Information Processing Systems , 36, 2024. [10] Sumantrak Mukherjee, Mouad Elhamdi, George Mohler, David Antony Selby, Yao Xie, Sebas-tian Josef Vollmer, and Gerrit Großmann. Neural spatiotemporal point processes: Trends and challenges. Transactions on Machine Learning Research , 2025. Survey Certification. [11] Xiuyuan Cheng, Zheng Dong, and Yao Xie. Deep spatiotemporal point processes: Advances and new directions. Annual Review of Statistics and Its Application , 13, 2025. [12] Shixiang Zhu, Shuang Li, Zhigang Peng, and Yao Xie. Imitation learning of neural spatio-temporal point processes. IEEE Transactions on Knowledge and Data Engineering , 34(11):5391– 5402, 2021. [13] Yixuan Zhang, Quyu Kong, and Feng Zhou. Integration-free training for spatio-temporal multimodal covariate deep kernel point processes. Advances in Neural Information Processing Systems , 36:25031–25049, 2023. [14] Yahya Aalaila, Sumantrak Mukherjee, Gerrit Großmann, and Sebastian Vollmer. HawkesNest: A multi-axis synthetic benchmark for spatiotemporal pattern complexity, 2026. [15] Jesper Moller and Rasmus Plenge Waagepetersen. Statistical inference and simulation for spatial point processes . CRC Press, 2003. [16] Jakob Gulddahl Rasmussen. Lecture notes: Temporal point processes and the conditional intensity function. arXiv preprint arXiv:1806.00221 , 2018. [17] Qiang Zhang, Aldo Lipani, Omer Kirnap, and Emine Yilmaz. Self-attentive Hawkes process. In International Conference on Machine Learning , pages 11183–11193. PMLR, 2020. [18] Yuan Yuan, Jingtao Ding, Chenyang Shao, Depeng Jin, and Yong Li. Spatio-temporal diffusion point processes. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 3173–3184, 2023. [19] Shixiang Zhu, Haoyun Wang, Xiuyuan Cheng, and Yao Xie. Neural spectral marked point processes. In International Conference on Learning Representations , 2022. [20] Zichong Li, Qunzhi Xu, Zhenghao Xu, Yajun Mei, Tuo Zhao, and Hongyuan Zha. Beyond point prediction: Score matching-based pseudolikelihood estimation of neural marked spatio-temporal point process. In Forty-first International Conference on Machine Learning , 2024. [21] Junteng Jia and Austin R Benson. Neural jump stochastic differential equations. Advances in Neural Information Processing Systems , 32, 2019. [22] Citi Bike NYC (Lyft, Inc.). Citi bike system data. https://citibikenyc.com/ system-data . Accessed YYYY-MM-DD. [23] U.S. Geological Survey, Earthquake Hazards Program. Advanced national seismic system (ANSS) comprehensive catalog of earthquake events and products (ComCat). https:// earthquake.usgs.gov/data/comcat/ , 2017. [24] The New York Times. Coronavirus (COVID-19) data in the united states. https://github. com/nytimes/covid-19-data , 2021. County-level case data. Accessed YYYY-MM-DD. 11 [25] Siqiao Xue, Xiaoming Shi, Zhixuan Chu, Yan Wang, Hongyan Hao, Fan Zhou, Caigao Jiang, Chen Pan, James Y. Zhang, Qingsong Wen, Jun Zhou, and Hongyuan Mei. EasyTPP: Towards open benchmarking temporal point processes. In The Twelfth International Conference on Learning Representations , 2024. [26] Ivan Karpukhin, Foma Shipilov, and Andrey Savchenko. Hotpp benchmark: Are we good at the long horizon events forecasting? arXiv preprint arXiv:2406.14341 , 2024. [27] FiveThirtyEight. Uber tlc foil response. https://github.com/fivethirtyeight/ uber-tlc-foil-response , 2015. Data obtained from the New York City Taxi and Limousine Commission through a Freedom of Information Law request. Accessed: 2026-06-26. [28] Sobhan Moosavi, Mohammad Hossein Samavatian, Srinivasan Parthasarathy, and Rajiv Ram-nath. A countrywide traffic accident dataset. arXiv preprint arXiv:1906.05409 , 2019. [29] Sobhan Moosavi, Mohammad Hossein Samavatian, Srinivasan Parthasarathy, Radu Teodorescu, and Rajiv Ramnath. Accident risk prediction based on heterogeneous sparse data: New dataset and insights. In Proceedings of the 27th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems . Association for Computing Machinery, 2019. [30] City of Chicago. Crimes — 2001 to present. https://data.cityofchicago.org/ Public-Safety/Crimes-2001-to-Present/ijzp-q8t2 , 2026. Chicago Data Portal. Ac-cessed: 2026-06-26. [31] City of Los Angeles. Crime data from 2020 to 2024. https://data.lacity.org/ Public-Safety/Crime-Data-from-2020-to-2024/2nrs-mtv8 , 2026. Los Angeles Open Data Portal. Accessed: 2026-06-26. [32] National Consortium for the Study of Terrorism and Responses to Terrorism (START). Global terrorism database (gtd). https://www.start.umd.edu/data-tools/GTD , 2022. Univer-sity of Maryland. Accessed: 2026-06-26. [33] City of Austin. Austin 311 public data. https://data.austintexas.gov/ Utilities-and-City-Services/Austin-311-Public-Data/xwdj-i9he , 2026. City of Austin Open Data Portal. Accessed: 2026-06-26. [34] Karen C. Short. Spatial wildfire occurrence data for the united states, 1992–2015 [fpa_fod_-20170508] (4th edition). https://doi.org/10.2737/RDS-2013-0009.4 , 2017. [35] Eunjoon Cho, Seth A. Myers, and Jure Leskovec. Friendship and mobility: User movement in location-based social networks. In Proceedings of the 17th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , KDD ’11, pages 1082–1090, New York, NY, USA, 2011. Association for Computing Machinery. [36] Nadine Chang, John A. Pyles, Austin Marcus, Abhinav Gupta, Michael J. Tarr, and Elissa M. Aminoff. BOLD5000, a public fMRI dataset while viewing 5000 visual images. Scientific Data ,6(1):49, 2019. 
+
+## A Software Interface and Reproducibility 
+
+A.1 Architecture Overview 
+
+Figure 6 summarizes the internal software architecture of S EAHORSE . The framework separates configuration, data handling, model construction, execution, evaluation, and artifact recording. A benchmark run begins with schema-validated configuration objects and fixed raw event splits. Dataset adapters expose event sequences in a common format, while model presets derive training-only quantities such as support bounds, coordinate transforms, and decoder-specific parameters. The resolved configuration is then used to instantiate the model components described in Section 3. Runners execute training, tuning, benchmark campaigns, or post-fit evaluation, and all outputs are written to structured artifacts that record the objective, reporting space, checkpoint rule, evaluation path, and preset status. The documentation and implementation are available in the public Seahorse repository .12 Figure 6: SEAHORSE software architecture. The CLI resolves schema-validated configuration objects, dataset adapters expose raw event splits, preset registries construct UnifiedSTPP models, and runner/evaluation layers write structured artifacts. The architecture separates configuration, data resolution, model construction, execution, evaluation, and artifact recording. 
+
+A.2 Getting Started Guide Run an Included Model. The simplest use case is to select an existing dataset split, choose a model preset, and launch a single training run 1. The user does not need to construct model objects manually: the preset resolves the required model components, training-only transforms, and reporting metadata. 
+
+python -m seahorse fit \ --preset auto_stpp \ --train data/example/train.jsonl \ --val data/example/val.jsonl \ --test data/example/test.jsonl \ --out runs/auto_stpp_example 
+
+The output directory contains the resolved configuration, selected checkpoint, metric logs, and a RUN RESULT . This path is intended for users who want to evaluate one included STPP model on a provided or newly formatted event dataset. 
+
+Run a Benchmark Campaign. The benchmark interface launches a matrix of datasets, presets, and seeds under a frozen policy. This is the path used for the paper tables: each cell is executed under the same split, reporting-space convention, checkpoint rule, and status accounting 2.
+
+python -m seahorse bench \ --dataset examples/tiny_jsonl \ --presets auto_stpp deep_stpp nsmpp \ --seeds 1 2 3 \ --out runs/benchmark_example   
+
+> 1Quickstart guide: https://yahyaaalaila.github.io/seahorse/getting-started/
+> 2Benchmark guide: https://yahyaaalaila.github.io/seahorse/benchmarks/ , with a runnable example at
+> https://yahyaaalaila.github.io/seahorse/examples/run-a-small-benchmark/ .
+
+13 Benchmark campaigns write aggregate tables together with per-cell metadata. Failed, partial, missing, and still-running cells are represented explicitly rather than silently dropped. 
+
+A.3 Researcher Path: Add or Wrap a Model 
+
+SEAHORSE is designed to make new STPP models immediately comparable to the benchmark suite. A researcher can add a method through either a native S EAHORSE implementation or a compatibility wrapper for an existing PyTorch/PyTorch Lightning model 3.
+
+Native S EAHORSE implementation. If the model naturally fits the encode–evolve–decode ab-straction, the preferred path is to implement the internal state/event decomposition. The researcher defines a StateModel for history encoding and state evolution, an EventModel for the conditional event law, and composes them as a UnifiedSTPP . The event model declares its supported bench-mark queries through EventCapabilities : exact or approximate NLL, intensity queries, native sampling, surface evaluation, and rollout support. The model is then registered as a named preset through BaseModelConfig and ConfigRegistry , with default hyperparameters stored in a preset YAML file. Once registered, the model can be launched with the same fit , bench , and evaluate 
+
+commands used for the included baselines. 
+
+> class MyStateModel(StateModel): def encode_history(self, times, locations, lengths, **kwargs): return StateContext(payload={"history_state": ...}) class MyEventModel(EventModel): @property def capabilities(self): return EventCapabilities( training_objective="nll", nll_kind="exact", has_intensity=True, has_native_sampler=True, )def training_loss(self, state_context, times, locations, lengths, **kwargs): return ... @ConfigRegistry.register("my_stpp") @dataclass class MySTPPConfig(BaseModelConfig): def build_model(self): return UnifiedSTPP( state_model=MyStateModel(...), event_model=MyEventModel(...), )
+
+Compatibility wrapper for external models. Some STPP implementations do not naturally follow the S EAHORSE internal decomposition. In this case, the researcher can wrap an existing PyTorch or PyTorch Lightning model behind an EventModel -style adapter. The wrapper exposes the training loss and declares the subset of benchmark queries the model actually supports. For example, a model may support training and sampling but not exact raw-space likelihood or pointwise intensity evalua-tion. This limited exposure is not treated as an error: it is recorded through EventCapabilities 
+
+and R UN RESULT metadata, so benchmark tables can distinguish exact likelihoods, approximate likelihoods, sample-based diagnostics, and unavailable metrics.  
+
+> class ExternalEventAdapter(EventModel): def __init__(self, external_model): super().__init__()
+> 3Extending Seahorse (add or wrap a model): https://yahyaaalaila.github.io/seahorse/extend/overview/
+
+14 self.external_model = external_model @property def capabilities(self): return EventCapabilities( training_objective="external_loss", nll_kind="approx", has_native_sampler=True, has_intensity=False, )def training_loss(self, state_context, times, locations, lengths, **kwargs): return self.external_model.loss(times, locations, lengths) 
+
+Typical extension points are: 
+
+> models/state_models/, models/event_models/, models/configs/, configs/<preset>.yaml.
+
+This design lets new methods enter the same benchmark grid without rewriting data loaders, split handling, raw-space likelihood correction, metric computation, or result aggregation. It also prevents unsupported quantities from being silently fabricated: if a wrapped model cannot expose exact NLL, intensity surfaces, or autoregressive samples, the corresponding capability is marked unavailable and propagated into the reported artifacts. 
+
+## B Model Implementations and Presets 
+
+B.1 Benchmark Model Summaries 
+
+Table 4 summarizes how each benchmarked method instantiates the S EAHORSE interface. The paragraphs below give implementation-level context for the presets used in our experiments and identify the source method or implementation followed where applicable. 
+
+Factorized classical baselines. The factorized baselines combine a temporal point-process fam-ily with a learned conditional spatial head. We instantiate Poisson, Hawkes, and self-correcting temporal processes with three spatial heads: Gaussian mixtures ( poisson_gmm , hawkes_gmm ,
+
+selfcorrecting_gmm ), time-invariant continuous normalizing flows ( poisson_cnf , hawkes_-cnf , selfcorrecting_cnf ), and time-varying continuous normalizing flows ( poisson_tvcnf ,
+
+hawkes_tvcnf , selfcorrecting_tvcnf ). These presets provide classical reference points for separating temporal-process assumptions from spatial-decoder expressivity. 
+
+RMTPP and THP with spatial heads. RMTPP [ 4] and THP [ 6] are temporal neural point-process baselines. In S EAHORSE , they are paired with a conditional Gaussian-mixture spatial head and reported as rmtpp_gmm and thp_gmm . These presets test whether strong temporal history encoders remain competitive when extended to continuous spatial prediction through a shared spatial decoder. 
+
+DeepSTPP. DeepSTPP [ 8] is implemented as a neural likelihood model for spatiotemporal event dynamics. It uses learned event-history representations and a flexible space–time intensity parameter-ization, providing a representative window-based neural STPP baseline in our benchmark. 
+
+AutoSTPP. AutoSTPP [ 9] is an intensity-based STPP model built around automatic integration. Its integral network is parameterized so that differentiating the integrated quantity recovers the intensity, enabling exact likelihood evaluation with an exact compensator. In S EAHORSE , this preset represents joint-intensity models with explicit integration structure. 15 Table 4: Full method inventory covered by the benchmark, including classical factorized baselines, temporal neural baselines, neural STPP likelihood models, continuous-time Neural STPP variants, and sample-based generative models. 
+
+Representative method History / context Inter-event state Decoder / event law Objective 
+
+Poisson STPP Raw event history Constant rate / baseline intensity Temporal intensity with learned conditional spatial head Log-likelihood Hawkes STPP Additive self-excitation from past events Self-correcting STPP Increasing baseline with event-driven inhibition RMTPP [4] RNN history embedding Discrete recurrent state Temporal TPP likelihood with conditional GMM spatial head Log-likelihood THP [6] Self-attention history encoding Attention-based event representation DeepSTPP [8] Amortized variational encoder over past events Latent stochastic process Nonparametric space–time intensity Variational likelihood objective AutoSTPP [9] Fixed-window event embeddings History-conditioned integral network Joint spatio-temporal intensity with exact compensator Exact point-process likelihood NSMPP [19] Raw event history No separate latent dynamics Joint conditional intensity with numerical compensator Point-process likelihood NJSDE [21] Recurrent encoding of event history Neural jump SDE / ODE-style state evolution Temporal likelihood with conditional GMM spatial head Likelihood with auxiliary regularization Jump-CNF [7] Recurrent encoding of event history Continuous-time hidden state with event jumps Temporal likelihood with jump-CNF spatial head Likelihood with auxiliary regularization Attn-CNF [7] Recurrent / attention-conditioned history encoding Continuous-time hidden state conditioned on prior paths Temporal likelihood with attentive-CNF spatial head Likelihood with auxiliary regularization SMASH [20] History-conditioned score network Static event-time conditioning; decoder-internal score dynamics Score-based sampler for next event Score-matching pseudolikelihood DSTPP [18] Spatio-temporal co-attention history encoder Static event-time conditioning; decoder-internal diffusion trajectory Diffusion sampler for joint next-event distribution Diffusion denoising / ELBO 
+
+NSMPP. NSMPP [ 19 ] models the joint conditional intensity over time, space, and marks using learned spectral feature maps. In our implementation, it acts as a direct joint-intensity baseline with a numerical compensator, making it especially relevant for testing Hawkes-like additive self-excitation in the controlled synthetic suites. 
+
+NJSDE. NJSDE [ 21 ] is a continuous-time latent-dynamics model based on neural jump stochastic differential equations. In S EAHORSE , the njsde preset uses this backbone with a conditional Gaussian-mixture spatial decoder, providing a continuous-time neural baseline with explicit event-driven state evolution. 
+
+Neural STPP variants. The Neural STPP family [ 7] uses continuous-time hidden dynamics for event histories and conditional normalizing flows for spatial likelihoods. We include two variants: 
+
+neural_jumpcnf , with a jump-conditioned continuous normalizing flow, and neural_attncnf ,16 Table 5: Reference implementations used for preset alignment.             
+
+> Preset family Reference implementation
+> DeepSTPP Rose-STL-Lab/DeepSTPP
+> AutoSTPP Rose-STL-Lab/AutoSTPP
+> Neural Attn-CNF facebookresearch/neural_stpp
+> Neural Jump-CNF facebookresearch/neural_stpp
+> NJSDE facebookresearch/neural_stpp
+> NSMPP facebookresearch/neural_stpp
+> SMASH zichongli5/SMASH
+> DSTPP tsinghua-fib-lab/Spatio-temporal-Diffusion-Point-Processes
+> factorized facebookresearch/neural_stpp
+> RMTPP Rose-STL-Lab/AutoSTPP
+> THP SimiaoZuo/Transformer-Hawkes-Process
+
+with an attention-conditioned continuous normalizing flow. These presets test the effect of flow-based spatial likelihoods and continuous-time state evolution under the shared benchmark contract. 
+
+SMASH. SMASH [ 20 ] is a score-matching-based generative STPP model. It replaces exact likelihood optimization with a normalization-free pseudolikelihood objective and generates event samples through score-based dynamics. In S EAHORSE , SMASH represents sample-based generative models whose likelihood and intensity diagnostics require explicit evaluation-path metadata. 
+
+DSTPP. DSTPP [ 18 ] models future spatiotemporal events with a diffusion-based generative process. Rather than exposing a conventional conditional intensity, it generates next-event samples through denoising dynamics conditioned on event history. This preset provides a second sample-based generative family and motivates the benchmark distinction between exact likelihoods, approximate likelihoods, and sampling-based diagnostics. Where available, our implementations follow the public reference repositories released by the original authors; repository links and exact preset configurations are included in the released code documentation. 
+
+B.2 Reference Implementations 
+
+Where available, S EAHORSE presets follow the public reference implementations released by the original authors. Table 5 lists the implementation sources used for alignment and cross-checking. 
+
+## C Evaluation Semantics and Metrics 
+
+C.1 Raw-Space Held-Out Likelihood 
+
+All likelihood-based evaluations target the same event-wise object: the conditional density of each observed event given its pre-event history, 
+
+f ∗(ti, si | H ti ).
+
+The per-event negative log-likelihood is 
+
+NLL i = − log f ∗(ti, si | H ti ), (1) and the reported test NLL is the average over test events, 
+
+NLL = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+NLL i.
+
+For intensity-based models, the same quantity is evaluated through the equivalent event term and compensator form. Score-based and diffusion models do not generally expose exact likelihoods; when they appear in likelihood tables, their evaluation path is marked as approximate or variational. 17 Table 6: NLL evaluation paths. “Training loss” is the optimized objective; “Eval NLL” is the reported benchmark likelihood path.                      
+
+> Model family Training loss Eval NLL Annotation
+> AutoSTPP Point-process NLL Exact compensator via integral network exact DeepSTPP Model-native like-lihood /variational objective Evaluated density or likelihood path exact / model-native NSMPP Point-process likeli-hood Numerical compen-sator numerical NJSDE / Neural STPP variants Likelihood with auxil-iary regularization High-precision numer-ical likelihood path numerical RMTPP / THP Temporal likelihood with spatial density head Factorized next-event likelihood exact / numerical DSTPP Diffusion denoising / variational objective Variational or approxi-mate NLL path approximate SMASH Score-matching pseu-dolikelihood Approximate NLL path when reported approximate
+
+Coordinate correction. Many STPP models rescale time and space internally for numerical stability. Let z = (∆ t, x, y ) denote raw coordinates and u = g(z) the model’s native coordinates. If 
+
+g is affine with Jacobian 
+
+det ∂g ∂z = Y
+
+> d
+
+r−1 
+
+> d
+
+,
+
+then raw-space and native-space NLLs satisfy 
+
+NLL (i)raw = NLL (i)native + X
+
+> d
+
+log rd. (2) All benchmark-facing NLL values are reported in raw coordinates after applying the corresponding correction. This avoids comparing likelihoods defined with respect to different coordinate measures. 
+
+C.2 Objective, Capability, and Diagnostic Semantics 
+
+The optimized training objective is not always the benchmark quantity reported in the tables. Some models optimize exact point-process likelihoods, others optimize density likelihoods, numerical likelihoods, variational objectives, or score-matching losses. SEAHORSE therefore records the likelihood evaluation path in the run metadata, rather than treating all scalar losses as comparable NLLs. The benchmark is also capability-aware. It does not assume that every model exposes the same queries: some models provide pointwise intensities, some provide normalized conditional densities, and some provide only samples. These differences determine which diagnostics can be computed directly. SEAHORSE records whether a fitted model supports likelihood evaluation, intensity queries, sampling, surface evaluation, and autoregressive rollout; unsupported quantities are marked unavailable rather than inferred implicitly. Beyond the metrics reported in the main text, the implementation makes a larger diagnostic catalog available for model inspection. Teacher-forced metrics condition on the realized pre-event history and evaluate the next observed event, isolating one-step predictive quality from autoregressive error accumulation. Surface-recovery metrics apply to synthetic suites with known ground-truth intensity. Rollout metrics repeatedly sample the next event, append it to the generated history, and evaluate sequential coherence at horizons H ∈ { 1, 5, 10 }. PIT metrics are reported as deviations from the uniform calibration target, so lower values indicate better calibrated predictive distributions. The paper reports only the subset most relevant to likelihood comparability, teacher-forced prediction, intensity-surface recovery, and rollout behavior. 18 Table 7: Evaluation metrics used in S EAHORSE . Not all metrics apply to all model families. 
+
+Metric Regime Direction Purpose 
+
+NLL Held-out likelihood ↓ Raw-coordinate event likelihood fit Temporal CRPS Teacher-forced prediction ↓ Distributional next-event time predic-tion Spatial energy score Teacher-forced prediction ↓ Spatial predictive distribution quality Temporal PIT error Calibration ↓ Deviation from the uniform temporal PIT target Spatial PIT error Calibration ↓ Deviation from the spatial calibration target Temporal MAE Point prediction ↓ Error of temporal point summary Spatial MAE / RMSE Point prediction ↓ Spatial point-summary error Joint distance Teacher-forced prediction ↓ Joint time-space next-event error Intensity correlation Synthetic surface recovery ↑ Correlation with ground-truth intensity surface Log-intensity RMSE Synthetic surface recovery ↓ Magnitude error on log-intensity scale Mass placement error Synthetic surface recovery ↓ Misplacement of predicted mass rela-tive to ground-truth intensity Rollout W1 Autoregressive generation ↓ Sequential coherence of generated con-tinuations 
+
+Table 8: Datasets supported in the S EAHORSE benchmark suite. The core 2D-spatial trio (COVID, Earthquakes, Citibike) is used for the headline real-data comparison; the remaining real-world datasets are repo-supported and load through the same interface. HawkesNest provides controlled synthetic stress tests with known ground-truth intensity. 
+
+Dataset Domain Source / construction Role COVID Public health County-level COVID-19 case events, New Jersey [24] Real (benchmark) Earthquakes Seismology USGS catalog, Japan, magnitude ≥ 2.5 [23] Real (benchmark) Citibike Urban mobility NYC bike trip-start events, Apr–Aug 2019 [22] Real (benchmark) Uber Pickups Urban mobility Ride-hailing pickup requests, NYC [27] Repo-supported US Accidents Road safety Ro US [28, 29] Chicago Crime Public safety Rego [30] Repo-supported LA Crime Public safety Reported crime incidents, Los Angeles [31] Repo-supported GTD Public safety Wobal Terrorism DB) [32] Repo-supported Austin 311 Urban services Non-emergency city service requests, Austin [33] Repo-supported US Wildfires Environment Wildfire ignition records, US [34] Repo-supported Gowalla Social check-ins Lola network) [35] Repo-supported Brightkite Social check-ins Location-based check-ins (Brightkite network) [35] Repo-supported BOLD5000 Neuroimaging Eventized fMRI responses from BOLD5000 (non-2D) [36] Repo-supported HawkesNest Synthetic STPP Coown ground-truthintensity [14] Synthetic stress test 
+
+## D Datasets and Benchmark Protocols 
+
+D.1 Dataset Summary 
+
+Table 8 summarizes the datasets currently supported in the benchmark suite 4. Real datasets are used to evaluate likelihood and predictive performance under naturally occurring event structure. Synthetic suites are used when ground-truth intensity is available, enabling controlled stress tests and direct surface-recovery diagnostics. 
+
+D.2 Raw Event Splits and Preprocessing 
+
+All datasets are represented as event sequences with times and spatial locations 5. Benchmark inputs are defined in raw event coordinates and under fixed train/validation/test splits. Unless otherwise   
+
+> 4Dataset catalog: https://yahyaaalaila.github.io/seahorse/datasets/catalog/ ; ready-to-use HF datasets:
+> https://yahyaaalaila.github.io/seahorse/datasets/hf-datasets/ .
+> 5Data format and conversion standard: https://yahyaaalaila.github.io/seahorse/data-format/
+
+19 specified, real-data experiments use a temporal 70 /10 /20 split with ordering preserved. Model-specific normalization, support bounds, and coordinate transforms are estimated from the training split only and stored with the run artifacts. Reported likelihoods are mapped back to raw coordinate space as described in Appendix C.1. 
+
+D.3 Real-Data Benchmarks COVID. COVID is derived from county-level COVID-19 case records for New Jersey. Daily county-level case observations are converted into spatiotemporal events, with spatial locations assigned within the corresponding county support. The dataset is used as a public-health event benchmark with structured spatial support and strong temporal nonstationarity. 
+
+Earthquakes. Earthquakes is derived from the USGS earthquake catalog. We use events in Japan from 1990 to 2020 with magnitude at least 2.5, treating origin time and epicentral location as the event time and spatial coordinate. The dataset evaluates whether models capture clustered seismic activity and aftershock-like event structure. 
+
+Citibike. Citibike is derived from New York City bike trip-start records. We use trip starts from April to August 2019 and represent each start time and station/location as a spatiotemporal event. The dataset evaluates urban mobility event dynamics with daily structure and spatial concentration around station locations. 
+
+BOLD5000-STPP. BOLD5000-STPP is available in the repository as an eventized neuroimaging dataset derived from BOLD5000 fMRI responses. We include it as a supported dataset in the software suite, but keep the main real-data comparison focused on COVID, Earthquakes, and Citibike because several benchmark presets are designed for two-dimensional spatial event domains. 
+
+Additional supported datasets. Beyond the datasets used in the main comparison, Seahorse ships a broader curated catalog of real-world STPP datasets that load through the same interface but are not part of the headline benchmark: ride-hailing pickups (Uber, NYC) [ 27 ], road traffic accidents [ 28 , 29 ], reported crime incidents (Chicago [ 30 ] and Los Angeles [ 31 ]), worldwide terrorism events [ 32 ], non-emergency city service requests (Austin 311) [ 33 ], wildfire ignitions [ 34 ], and location-based social check-ins (Gowalla, Brightkite) [35]. 
+
+D.4 Controlled Synthetic Suites 
+
+HawkesNest is used as a controlled synthetic event suite with known ground-truth intensity. It is built on a multivariate Hawkes process backbone, where past events increase the conditional intensity of future events through self-excitation and cross-excitation. This makes it a natural synthetic basis for STPP benchmarking: the generator produces event-like spatiotemporal data while keeping the latent mechanism observable. The purpose of HawkesNest in this paper is diagnostic. Real-world event datasets are opaque: the true intensity surface, triggering structure, and latent complexity are unknown. HawkesNest instead varies controlled axes of spatiotemporal pattern complexity while holding other confounding factors fixed. The broader suite includes axes such as spatiotemporal entanglement, background structure, cross-event interactions, and domain topology. In the main text we focus on the entanglement axis, with configurations L0–L3 progressively increasing spatiotemporal coupling. This axis is deliberately stressful for neural STPP models because it requires the model to capture joint time-space dependence rather than treating temporal and spatial prediction as weakly coupled subproblems. The resulting synthetic stress test lets us compare final likelihood, learning behavior, one-step prediction, and recovery of the ground-truth intensity surface under increasing structural difficulty. Additional diagnostics on the entanglement suite are reported in Appendix E. HawkesNest is used here as a diagnostic benchmark for S EAHORSE ; its full generator design is treated as a controlled data source rather than as the main software contribution of this paper. 20 Table 9: Full real-data test NLL. Lower is better. Best and second-best means are shown in bold and underline.                                                                                                                           
+
+> Preset COVID Earthquakes Citibike Mean Std Mean Std Mean Std
+> AutoSTPP −1.920 0.009 2.750 0.009 −5.033 0.009
+> DeepSTPP −2.104 0.012 2.705 0.054 −5.256 0.044
+> SMASH −1.812 0.063 5.406 0.109 −5.743 0.007
+> DSTPP −0.583 0.585 5.359 0.024 −3.970 1.198
+> NSMPP −1.611 0.219 4.734 0.104 −5.456 0.390
+> Attn-CNF −2.305 0.032 4.374 0.060 −6.444 0.0123
+> Jump-CNF −1.962 0.125 4.923 0.061 −5.780 0.021
+> NJSDE −1.799 0.067 5.155 0.160 −5.786 0.001
+> RMTPP 1.316 0.003 8.015 0.001 −2.915 0.000
+> THP 1.230 0.017 8.011 0.002 −2.916 0.000
+> Poisson GMM 2.201 0.059 9.370 0.062 −2.482 0.049
+> CNF 1.826 0.042 8.879 0.057 −2.830 0.075
+> TvCNF 1.876 0.060 9.021 0.076 −2.837 0.043
+> Hawkes GMM −1.663 0.000 5.910 0.000 −5.365 0.000
+> CNF −2.075 0.026 5.343 0.028 −5.739 0.029
+> TvCNF −2.014 0.039 5.462 0.021 −5.720 0.002
+> SC-Hawkes GMM 26 .798 0.001 34 .194 0.000 1.980 0.012
+> CNF 26 .769 0.349 34 .331 0.068 1.958 0.186
+> TvCNF 26 .863 0.383 34 .946 0.198 1.820 0.069
+
+## E Additional Results 
+
+This section provides an audit trail for the compact empirical results in the main text. We report the full real-data NLL grid, additional learning-curve diagnostics for the entanglement suite, autoregressive rollout diagnostics, and wall-clock training-time diagnostics. These results are not intended as separate leaderboards; they document how the main comparisons depend on baseline coverage, optimization behavior, rollout stability, and computational cost. The compact real-data table in the main text reports a representative subset of factorized baselines for readability. Table 9 restores the full grid: Poisson, Hawkes, and self-correcting temporal processes paired with Gaussian-mixture, CNF, and time-varying CNF spatial heads. This checks whether the real-data conclusions depend on a particular spatial decoder choice for the classical baselines. 
+
+E.1 Additional Learning-Curve Diagnostics 
+
+The main text reports four representative learning-budget curves for readability. Figure 7 reports the corresponding available curves for the more expensive continuous-time and flow-based neural presets. These curves are included as optimization diagnostics: their per-epoch cost is substantially higher than the window-based and additive-kernel presets, so the available checkpoint trajectories are informative even when the nominal epoch budget is not directly matched across families. Table 10 summarizes the checkpoint-wise curves by comparing the easiest and hardest entanglement configurations, L0 and L3. We report the checkpoint at which each selected preset attains its best test NLL and the final-minus-best gap ∆. A best checkpoint near 100% indicates that the model benefits from the full recorded budget, while a positive ∆ indicates that the final checkpoint is worse than the best observed checkpoint. 
+
+E.2 Autoregressive Rollout Diagnostics 
+
+Autoregressive rollout evaluates a model after it feeds on its own generated events, rather than conditioning on the realized history as in teacher-forced prediction. Figure 8 reports rollout coherence 21 25 50 75 100 
+
+> Training budget (%)
+> −1.88
+> −1.87
+> −1.86
+> −1.85
+> −1.84
+> −1.83
+> −1.82
+> −1.81
+> Test NLL
+> L0 (easy)
+> L1
+> L2
+> L3 (hard)
+
+(a) NJSDE 25 50 75 100  
+
+> Training budget (%)
+> −1.91
+> −1.90
+> −1.89
+> −1.88
+> −1.87
+> −1.86
+> −1.85
+> −1.84
+> Test NLL
+
+(b) Attn-CNF 
+
+Figure 7: Additional learning-budget curves on the HawkesNest entanglement suite. Each panel reports checkpoint-wise test NLL across entanglement levels L0–L3 for a more expensive continuous-time or flow-based neural preset. Table 10: Training-budget summary for selected presets on the easiest and hardest entanglement configurations. ∆ is final-minus-best test NLL; lower is more stable. 
+
+Model L0 L3 Reading Best at ∆ Best at ∆
+
+Hawkes+TvCNF 100% 0.000 100% 0.000 Stable factorized reference with flexible spatial head. AutoSTPP 100% 0.000 100% 0.000 Uses full budget; L3 difficulty appears in final NLL, not late drift. DeepSTPP 100% 0.000 100% 0.000 Stable convergence across easiest and hardest levels. NSMPP 100% 0.000 100% 0.000 Stable under the Hawkes-like generator. NJSDE 30% 0.012 40% 0.001 Peaks before final checkpoint, with small late gap. Attn-CNF 35% 0.022 30% 0.002 Peaks early, with limited late degradation. SMASH 50% 0.017 100% 0.000 Mid-training optimum at L0; stable final check-point at L3.DSTPP 50% 0.040 30% 0.042 Peaks before final checkpoint at both levels. 
+
+on the HawkesNest entanglement suite. This diagnostic adds a sequential generation view: a model may perform well under one-step prediction but still drift when its own sampled events become part of the conditioning history. 
+
+E.3 Training-Time Diagnostics 
+
+Figure 9 reports median successful-run wall-clock training time for each preset on the real-data benchmark and on HawkesNest Suite 3. The figure is intended as a practical compute diagnostic, not as a hardware-normalized efficiency benchmark: failed, cancelled, and repeated attempts are not counted in the median, and factorized families are aggregated over spatial heads. Runtime varies by orders of magnitude. RMTPP and THP train in minutes, sample-based models such as DSTPP and SMASH remain under roughly 20 minutes on median, while exact-integration, continuous-time, and flow-based presets are substantially more expensive. AutoSTPP takes on the order of hours, Attn-CNF reaches the ten-hour scale, and Jump-CNF is the most costly and least stable case among the successful runs. This cost profile is part of the benchmark record: model comparison should account not only for likelihood and diagnostics, but also for whether a preset can be trained and evaluated reliably across datasets, seeds, and controlled synthetic regimes. 22 Figure 8: Autoregressive rollout coherence on the HawkesNest entanglement suite. Curves show mean rollout coherence across entanglement levels L0–L3; shaded bands denote seed variability. Higher is better. Unlike teacher-forced metrics, rollout coherence evaluates sequential generation under self-fed histories. 10 −2 10 −1 10 0 10 1 
+
+> THP
+> RMTPP
+> Hawkes
+> Self-correcting
+> Poisson
+> DSTPP
+> SMASH
+> NSMPP
+> DeepSTPP
+> AutoSTPP
+> AttnCNF
+> JumpCNF
+> Real data Suite 3
+
+Figure 9: Median successful-run wall-clock training time on real datasets and HawkesNest Suite 3. The x-axis is logarithmic. Factorized families are aggregated over spatial heads. These timings are practical runtime diagnostics recorded from benchmark artifacts, not hardware-normalized efficiency claims. 
+
+## F Limitations, Compute, and Release Notes 
+
+Computational cost. The benchmark covers model families with very different computational profiles. Factorized baselines and window-based likelihood models are comparatively stable, while continuous-time and flow-based presets require substantially higher wall-clock budgets and are more sensitive to numerical settings. S EAHORSE records runtime, parameter count, seed, checkpoint, and evaluation metadata in the run artifacts, and failed or unavailable cells are marked explicitly rather than silently removed. 
+
+Compute and artifacts. Experiments were run in a Slurm-managed HPC environment using containerized Python/PyTorch jobs. Most training jobs requested one NVIDIA GPU with 8 CPU cores and 32–48 GB RAM; evaluation jobs commonly requested 16 CPU cores and 32–64 GB RAM, with memory-heavy reruns using up to 128 GB RAM. The artifacts indicate use of NVIDIA GPU nodes, including A100-class 80 GB GPUs for some runs, although the exact GPU model is not consistently recorded in all run artifacts. Each fitted run stores run_result.json metadata including seed, runtime ( train_time_sec ), parameter count ( n_params ), selected checkpoint path, effective configuration, normalization statistics, NLL kind and reporting space, test NLL, context counts, and missing-context counts. Post-training evaluation artifacts additionally record the metric 23 profile, evaluation seed, split, device, artifact manifests, elapsed evaluation time where available, checkpoint selection, and checkpoint-test NLL details. 
+
+Metric availability. Not all diagnostics apply to all model families. Surface-recovery metrics require known ground-truth intensity and therefore apply only to controlled synthetic suites. Sample-based models such as SMASH and DSTPP do not generally expose direct pointwise intensities, so intensity-surface diagnostics require an explicit approximation or are marked unavailable. Similarly, autoregressive rollout metrics require reliable sampling and are more expensive than teacher-forced predictive metrics. 
+
+Benchmark scope. The current experiments focus on fixed train/validation/test splits, raw-space likelihood reporting, post-NLL diagnostics, and controlled entanglement stress tests. The framework is designed to support additional datasets, metrics, and model presets, but the present paper does not claim exhaustive coverage of all STPP modeling regimes. In particular, covariate-conditioned STPPs and operational downstream objectives are left for future extensions. 
+
+Release. The release includes the S EAHORSE codebase, preset configurations, dataset schema documentation, benchmark scripts, and instructions for regenerating the main tables and figures. The 
+
+Seahorse repository provides the code and reproduction materials 6 needed to regenerate the main experimental artifacts.  
+
+> 6Reproduce the paper results: https://yahyaaalaila.github.io/seahorse/paper-reproduction/
+
+24

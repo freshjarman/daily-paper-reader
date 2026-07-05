@@ -6,39 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-28
-- 运行时间：2026-06-28 21:25:13 UTC
+- 最新运行日期：2026-07-05
+- 运行时间：2026-07-05 21:23:35 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：3
-- 速读区：2
+- 本次总论文数：7
+- 精读区：6
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读2篇高分论文，速读2篇，聚焦事件序列生成与小目标检测。
-
-最值得关注的是《Latent Block-Diffusion》提出的半自回归框架（9.0分），以及《Following the Flow》中基于光流的连续建模方法（8.0分），分别革新了时序事件生成与事件相机检测。
-
-建议优先精读这两篇高分论文，深入理解其核心思想，再根据兴趣浏览速读中关于事件预测损失函数和时空预测分解的论文。
-- 详情：[/202606/28/README](/202606/28/README)
+今日精读6篇、速读1篇，重点推荐两篇9.0分论文。时空事件建模基准Seahorse与稀疏事件预测AlphaEarth是最值得关注的方向。建议优先阅读AlphaEarth，其用上下文补偿稀疏历史的方法对实际预测应用很有启发。
+- 详情：[/202607/05/README](/202607/05/README)
 
 ### 精读区论文标签
-1. [Latent Block-Diffusion Temporal Point Processes: A Semi-Autoregressive Framework for Asynchronous Event Sequence Generation](/202606/28/2606.24982v1-latent-block-diffusion-temporal-point-processes-a-semi-autoregressive-framework-for-asynchronous-event-sequence-generation)  
+1. [Seahorse: A Unified Benchmarking Framework for Spatiotemporal Event Modeling](/202607/05/2607.01022v1-seahorse-a-unified-benchmarking-framework-for-spatiotemporal-event-modeling)  
    标签：评分：9.0/10、query:tpp-es
-   evidence：直接提出潜在块扩散TPP用于异步事件序列生成
-2. [Following the Flow: Advection-Consistent Modeling for Event-based Small Object Detection](/202606/28/2606.22378v1-following-the-flow-advection-consistent-modeling-for-event-based-small-object-detection)  
+   evidence：时空点过程基准框架
+2. [When Context Compensates for Sparse Event History: AlphaEarth for Spatio-Temporal Point-Process Forecasting](/202607/05/2607.01082v1-when-context-compensates-for-sparse-event-history-alphaearth-for-spatio-temporal-point-process-forecasting)  
+   标签：评分：9.0/10、query:tpp-es
+   evidence：直接研究时空点过程预测，使用对数高斯Cox过程和空间上下文嵌入
+3. [Efficient Temporal Point Processes via Monotone Alternating Splines](/202607/05/2607.01752v1-efficient-temporal-point-processes-via-monotone-alternating-splines)  
+   标签：评分：9.0/10、query:tpp-es
+   evidence：时间点过程建模方法
+4. [Data integration with uneven spatiotemporal coverage: A point-process approach for dynamic species distribution models](/202607/05/biorxiv-10-1101-2025-11-07-687170-v3-data-integration-with-uneven-spatiotemporal-coverage-a-point-process-approach-for-dynamic-species-distribution-models)  
+   标签：评分：9.0/10、query:tpp-es
+   evidence：点过程方法用于时空物种分布模型
+5. [EHHN: An Event-driven Heterogeneous Hypergraph Network for Object-Centric Next Activity Prediction](/202607/05/2607.01785v1-ehhn-an-event-driven-heterogeneous-hypergraph-network-for-object-centric-next-activity-prediction)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：使用平流一致性框架建模事件序列
-3. [Explaining Temporal Graph Neural Networks via Feature-induced Information Flow](/202606/28/2606.27201v1-explaining-temporal-graph-neural-networks-via-feature-induced-information-flow)  
+   evidence：使用事件驱动神经网络从对象中心事件日志预测下一个活动
+6. [Uncovering internal states with a robust shared-state multi-neuron GLM-HMM framework](/202607/05/biorxiv-10-64898-2026-06-27-734988-v1-uncovering-internal-states-with-a-robust-shared-state-multi-neuron-glm-hmm-framework)  
    标签：评分：8.0/10、query:tpp-es
-   evidence：基于事件的时间图神经网络用于事件预测
+   evidence：使用GLM-HMM对神经尖峰序列进行点过程建模
 
 ### 速读区论文标签
-1. [Weighted Score-Oriented Losses for Temporally Localized Event Prediction](/202606/28/2606.23145v1-weighted-score-oriented-losses-for-temporally-localized-event-prediction)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：提出用于时间局部化事件预测的加权分数导向损失，直接针对事件检测任务
-2. [FDN: Interpretable Spatiotemporal Forecasting with Future Decomposition Networks](/202606/28/2606.25201v1-fdn-interpretable-spatiotemporal-forecasting-with-future-decomposition-networks)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：可解释的分解网络用于时空预测
+1. [Aionoscope: Debugging Latent-State Accessibility in Time-Series Representations](/202607/05/2607.00956v1-aionoscope-debugging-latent-state-accessibility-in-time-series-representations)  
+   标签：评分：6.0/10、query:tpp-es
+   evidence：调试时间序列表示中包括事件时序的潜在状态可访问性
 
 
 <div class="dpr-home-promo-card">

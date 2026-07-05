@@ -1,0 +1,601 @@
+Title: EHHN: An Event-driven Heterogeneous Hypergraph Network for Object-Centric Next Activity Prediction
+
+URL Source: https://arxiv.org/pdf/2607.01785v1
+
+Published Time: Fri, 03 Jul 2026 00:38:01 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 1
+
+# EHHN: An Event-driven Heterogeneous Hypergraph Network for Object-Centric Next Activity Prediction 
+
+Jiaxing Wang, Kaitao Chen, Zhubin Han, Chenyu Hou, Bin Cao, Jing Fan and Ji Zhang 
+
+Abstract —Next activity prediction helps service-oriented pro-cesses anticipate upcoming steps before delays, exceptions, or service-level risks occur. Most existing methods assume classical single-case event logs, whereas real service processes often involve events shared by multiple typed business objects. Object-centric event logs (OCELs) capture such interactions, but current pre-dictors remain limited. Flattening-based approaches lose cross-object context, and native OCEL graph-based approaches encode multi-object events through pairwise relations. Existing models also do not jointly capture event-driven object state changes, inter-event timing, and global execution patterns. We propose EHHN, an Event-driven Heterogeneous Hypergraph Network for object-centric next activity prediction. EHHN represents each prediction prefix as a heterogeneous hypergraph, where event–object hyperedges bind retained co-participating objects and a lifecycle hyperedge groups the primary object’s observed lifecycle events. Based on this representation, EHHN uses adual-stream architecture in which a micro-spatial stream models event-driven object-state evolution and a macro-evolution stream captures temporal dynamics using retrieved global prototypes. The two streams are fused to predict the next activity. Experi-ments on four public OCEL benchmarks against nine baselines show that EHHN achieves the best accuracy and macro F1-score on all datasets, with improvements of up to 8.1 and 12.4 percentage points over the strongest baselines. Compared with the strongest OCEL-native graph baseline, EHHN also reduces peak GPU memory by up to 24 ×. Code is available at https://github.com/chenkaitao1112/EHHN. 
+
+Index Terms —Services computing, predictive process monitor-ing, object-centric event logs, next activity prediction, heteroge-neous hypergraph networks. 
+
+I. I NTRODUCTION 
+
+Next activity prediction plays an important role in predic-tive process monitoring (PPM) by enabling service providers to anticipate the upcoming behavior of running process in-stances [1], [2]. In an order-fulfillment service, for example, predicting the next activity of an order, such as delivery scheduling, return handling, or exception resolution, can guide resource allocation and trigger service-level agreement (SLA) risk alerts. Such prediction may depend not only on the order’s observed lifecycle events, but also on events involving related objects such as items, packages, and invoices. Most existing predictors, however, are built on classical single-case event logs, where each event is associated with one process instance, 
+
+*Bin Cao and Ji Zhang are corresponding authors. Jiaxing Wang, Kaitao Chen, Zhubin Han, Chenyu Hou, Bin Cao, and Jing Fan are with the College of Computer Science and Technology, Zhejiang Uni-versity of Technology, 310023, Hangzhou, China (e-mail: {wjx, chenkaitao, hanzhubin, houcy, fanjing, bincao }@zjut.edu.cn Ji Zhang is with the University of Southern Queensland, Toowoomba, QLD 4350, Australia (e-mail: ji.zhang@unisq.edu.au) Manuscript received XXX, 2026; revised XXX, 2026. 
+
+naturally represented as an ordered event sequence [1]–[8]. This single-case view cannot directly represent service events shared by multiple typed business objects or dependencies across related object lifecycles. Object-centric event logs (OCELs) move beyond the single-case view by recording each event together with all typed objects it involves, thereby representing multi-object processes through many-to-many event-object relations [9], [10]. This richer representation also makes prediction more challenging: the model can no longer rely on a single activity sequence, because the next activity may depend on several related objects and the events they share. Existing OCEL-based predictors and closely related predictive monitoring methods mainly follow two directions. Flattening-based methods project the OCEL onto a selected object type and apply sequence mod-els developed for classical logs, treating cross-object events from that single perspective [11]–[13]. Native OCEL graph-based methods preserve more object-centric information by representing events, objects, and their relations as event-object graphs, which are encoded with graph neural networks for prediction [14]–[17]. Despite this progress, existing OCEL-based prediction methods still leave four limitations. First, flattening-based methods project multi-object events onto one selected perspec-tive, losing co-participating objects and cross-object depen-dencies. Second, native OCEL graph-based methods usually represent each multi-object event through pairwise edges, weakening the joint binding among the event and all objects involved in the same occurrence. Third, existing models rarely distinguish the asymmetric roles of events and objects: events are transient triggers of state changes, while objects persist over time and accumulate these changes. Fourth, inter-event timing and global execution patterns are seldom modeled to-gether, although they are important for distinguishing prefixes with similar local event-object structures but different timing or process variants. These limitations call for a representation that preserves multi-object event semantics and a model that jointly captures event-driven state evolution, inter-event tim-ing, and global execution patterns. To this end, we propose EHHN, an Event-driven Hetero-geneous Hypergraph Network for object-centric next activity prediction. EHHN represents the observed prefix around a primary object as a heterogeneous hypergraph: event–object hyperedges bind each retained event with its retained co-participating objects, avoiding pairwise decomposition within the bounded prefix, while a lifecycle hyperedge groups the primary object’s observed lifecycle events. On top of this representation, a dual-stream architecture processes the prefix.  
+
+> arXiv:2607.01785v1 [cs.LG] 2 Jul 2026 IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 2
+
+The micro-spatial stream treats events as transient triggers and objects as persistent states, modeling event-driven object-state transitions and lifecycle-constrained refinement to capture lo-cal object evolution. A heterogeneous interaction encoder then aligns event and object representations into a shared space. The macro-evolution stream first uses time-aware attention to model inter-event timing and then retrieves latent execution patterns from a global prototype memory to provide dataset-level guidance. The fused representation combines these local and global signals for next activity prediction. The main contributions of this paper are as follows:  
+
+> •
+
+We introduce a bounded heterogeneous hypergraph rep-resentation for object-centric next activity prediction. For each prediction prefix, event–object hyperedges connect each retained event with its retained participating ob-jects, preserving joint multi-object participation within the bounded prefix, while a lifecycle hyperedge groups the primary object’s observed lifecycle events. This repre-sentation avoids single-perspective flattening and pairwise decomposition of retained event-object relations.  
+
+> •
+
+We propose a micro-spatial encoder that models the asymmetric roles of events and objects in OCELs. The en-coder treats events as transient sources of update signals and objects as persistent entities with evolving states, so object representations are updated by their incident events and further refined with the primary object’s lifecycle context.  
+
+> •
+
+We design a macro-evolution encoder for information not captured by local event-object updates. The encoder applies time-aware attention to the primary object’s life-cycle sequence to model inter-event timing and retrieves prototypes from a global prototype memory to provide dataset-level execution-pattern guidance.  
+
+> •
+
+We evaluate EHHN on four public OCEL benchmarks against nine representative baselines. EHHN achieves the best Accuracy and macro F1-score on all datasets, with improvements of up to 8.1 and 12.4 percentage points, respectively, and reduces peak GPU memory by up to 
+
+24 × over the strongest OCEL-native graph baseline. II. R ELATED WORK 
+
+This section reviews two bodies of work most relevant to EHHN: PPM on classical single-case event logs, with an emphasis on next activity prediction, and PPM on OCELs. 
+
+A. PPM on Classical Single-Case Event Logs 
+
+Next activity prediction has been widely studied in PPM on classical single-case event logs [18]. Early studies re-lied on statistical, rule-based, probabilistic, and feature-engineered models [19]–[21], while recent approaches are mainly sequence-based or graph-based. Sequence-based meth-ods model each running case as an ordered event sequence and learn temporal dependencies with LSTM variants [22]– [24], CNN-BiLSTM and attention-based models [3], Trans-former encoders [4], [5], [25]–[27], multi-view or knowledge-enhanced predictors [28]–[32], and recent LLM-based meth-ods [6], [33], [34]. Graph-based methods improve struc-tural expressiveness by constructing instance-, sequence-, homogeneous-, or heterogeneous-graph representations and encoding them with GNNs or graph-enhanced recurrent ar-chitectures [1], [2], [8], [35]–[38]. Despite these advances, classical PPM methods assume that each event belongs to a single process instance, so they cannot natively model events shared by multiple typed objects or de-pendencies across object lifecycles. Applying them to OCELs requires object-perspective projection or pairwise graph con-version, losing part of the native multi-object semantics. 
+
+B. PPM on OCELs 
+
+OCELs record each event together with all typed objects involved in it, enabling predictive monitoring beyond the single-case perspective. Existing OCEL predictors mainly fol-low two directions. Flattening-based methods convert OCELs into sequence or feature inputs and reuse classical predic-tive models [11], [12]. Although such methods show that OCEL-derived inputs can support prediction, the model no longer operates on the native multi-object event structure. Galanti et al. [13] incorporate object interaction information, and later work uses GAT-based embeddings of object-centric directly-follows graphs as contextual information for an LSTM predictor [39]. These methods still rely on derived object-centric features or selected object-type perspectives. Native OCEL graph-based approaches retain event-object topology more directly, but they mainly target predictive tasks other than next activity prediction. Adams et al. [14], [15] study object-centric feature extraction and graph-preserving encodings for process-mining tasks. HOEG [16] builds a het-erogeneous event-object graph and applies an end-to-end GNN for remaining-time prediction. Gherissi et al. [17] propose a modular object-centric PPM framework based on graph-based process executions and evaluate it on remaining-time and event-count prediction. Overall, existing OCEL predictors demonstrate the value of object-centric information, yet object-centric next activity prediction that preserves multi-object event binding remains underexplored. Existing methods either reduce OCELs to selected object perspectives or encode multi-object events through pairwise graph structures, and they have not jointly addressed multi-object event binding, event-object role asym-metry, inter-event timing, and dataset-level execution regular-ities. III. P RELIMINARIES AND PROBLEM FORMULATION 
+
+This section introduces the notation and formal definitions used throughout the paper. 
+
+A. Object-Centric Event Logs 
+
+An Object-Centric Event Log (OCEL) records each business event together with all typed objects involved in it. Formally, an OCEL is a tuple 
+
+L = ( E, O, OT, π act , π time , π obj , π type , π ea , π oa ),
+
+where E, O, and OT are finite sets of events, objects, and object types; A is the activity label set; and UT is IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 3
+
+the timestamp domain. The mappings πact : E → A and 
+
+πtime : E → UT assign activity labels and timestamps; 
+
+πobj : E → P (O) \ {∅} maps each event to a non-empty subset of participating objects, where P(O) denotes the set of all subsets of O; πtype : O → OT assigns object types; and 
+
+πea , π oa assign attribute values to events and objects. To define object traces consistently, we impose a deter-ministic order on events. Events are ordered by ≺ using the lexicographic key (πtime (e), ι (e)) , where ι(e) is a deterministic event index used to break timestamp ties. For an object o ∈ O, its object trace is the sequence of events in which o participates, sorted by ≺:
+
+σ(o) = ⟨e1, e 2, . . . , e no ⟩,
+
+where each ei satisfies o ∈ πobj (ei), the sequence contains all such events, and ei ≺ ei+1 for 1 ≤ i < n o. Since one event may appear in the traces of multiple objects, OCELs natu-rally encode cross-object dependencies that single-perspective projections cannot fully preserve. 
+
+B. Primary-Object Perspective and Prediction Prefix 
+
+A primary object type τ ∗ ∈ OT specifies the object type whose lifecycle is monitored for prediction. For example, in a procure-to-pay process containing purchase orders, invoices, goods receipts, and suppliers, choosing purchase order as τ ∗
+
+means predicting the next activity for each purchase order. A primary object opri ∈ O is an object of this type, i.e., 
+
+πtype (opri ) = τ ∗.Given the ordered object trace σ(opri ) = ⟨e1, . . . , e n⟩, each position t ∈ { 1, . . . , n − 1} defines a prediction prefix for forecasting the activity of the next lifecycle event et+1 . We denote by Pt(opri ) the prediction prefix of primary object opri 
+
+after observing its first t lifecycle events: 
+
+Pt(opri ) = ( opri , E (t)
+
+> hist
+
+, O (t)
+
+> hist
+
+, E (t) 
+
+> ctx
+
+),
+
+with 
+
+E(t) 
+
+> hist
+
+= {e1, . . . , e t}, O(t) 
+
+> hist
+
+=
+
+ [
+
+> e∈E(t)
+> hist
+
+πobj (e)
+
+
+
+\ { opri },
+
+and 
+
+E(t) 
+
+> ctx
+
+= {e ∈ E\E(t) 
+
+> hist
+
+| πtime (e) < π time (et), π obj (e)∩O(t)
+
+> hist
+
+̸ = ∅} .
+
+Here, E(t) 
+
+> hist
+
+contains the observed lifecycle events of the primary object, O(t) 
+
+> hist
+
+contains the auxiliary objects that co-participate in these events, excluding the primary object itself, and E(t) 
+
+> ctx
+
+contains context events that occur before the times-tamp of the prefix endpoint and involve at least one observed auxiliary object. This strict timestamp cutoff is applied only to context events, so non-lifecycle events with the same or later timestamp than et are excluded from the prefix input. The prediction target is the next activity label at+1 = πact (et+1 ),where at+1 ∈ A .
+
+C. Problem Formulation 
+
+Given an OCEL L, a primary object type τ ∗, and a predic-tion prefix Pt(opri ), the object-centric next activity prediction problem is to learn a classifier Ωθ that maps the prefix to a probability distribution over activity labels in A. The predicted activity label is ˆat+1 = arg max a′∈A [Ω θ (Pt(opri ))] a′ , and the ground-truth label is at+1 = πact (et+1 ).IV. T HE EHHN F RAMEWORK 
+
+EHHN is designed to preserve the native multi-object structure of OCEL prefixes while modeling both event-driven object-state evolution and temporal execution patterns. As shown in Fig. 1, EHHN consists of four connected stages: heterogeneous hypergraph construction, micro-spatial stream, macro-evolution stream, and final fusion, prediction, and train-ing. Given a prediction prefix, the construction stage builds a bounded heterogeneous prefix hypergraph with four node layers: the primary object, its observed lifecycle events, co-participating auxiliary objects, and context events associated with those auxiliary objects. The micro-spatial stream captures how observed events update persistent object states within the prefix hypergraph. The macro-evolution stream models inter-event timing along the primary-object lifecycle and retrieves latent execution patterns from a global prototype memory. Finally, the two representations are fused for next activity classification, and the model is trained end-to-end with clas-sification, auxiliary time-prediction, and prototype-diversity objectives. 
+
+A. Heterogeneous Hypergraph Construction 
+
+A prediction prefix in an OCEL contains not only the primary object’s observed lifecycle, but also auxiliary objects that co-participate in its events and historical events associated with those objects. A sequential representation loses this cross-object context, while pairwise graph edges weaken the joint semantics of multi-object events. To preserve such structure within a controlled input size, EHHN constructs a bounded heterogeneous prefix hypergraph H = (V, R, X) for each prediction prefix. The construction consists of 2-hop neigh-borhood expansion, hyperedge construction, and node-feature encoding, which are detailed below. 
+
+1) 2-Hop Neighborhood Expansion: Starting from a predic-tion prefix, EHHN first places the primary object and its ob-served lifecycle events into the first two layers: V(0) = {opri }
+
+and V(1) = E(t)
+
+> hist
+
+. It then expands to two outer layers: the auxiliary objects that co-participate in the observed lifecycle events, V(2) = O(t)
+
+> hist
+
+, and the retained context events of those auxiliary objects: 
+
+V(3) = {e ∈ E\V (1) | πtime (e) < π time (et), π obj (e)∩V (2) ̸ = ∅} .
+
+(1) The endpoint et is determined by the prediction position t,and the strict timestamp cutoff keeps only context events that occur before the prefix endpoint. The node set is V = V(0) ∪V(1) ∪ V (2) ∪ V (3) , with object nodes VO = V(0) ∪ V (2) and event nodes VE = V(1) ∪ V (3) . The ordered lifecycle sequence 
+
+⟨e1, . . . , e t⟩ is retained as the history trace of the primary IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 4
+
+Fig. 1: Overview of the EHHN framework. A prediction prefix is converted into a heterogeneous prefix hypergraph with event–object and lifecycle hyperedges. The micro-spatial stream applies JEST, LCSE, and HIE to encode local event-driven object-state evolution, while the macro-evolution stream uses TASE and prototype memory to model temporal and global execution patterns. The two streams are fused for next activity prediction. object. This bounded 2-hop construction is chosen to retain the objects that directly interact with the primary object’s observed lifecycle and the contextual event evidence associated with those objects. Expanding less would discard auxiliary-object context, whereas expanding further would introduce indirectly related objects and events that substantially increase graph size and may add weakly relevant noise. 
+
+2) Hyperedge Types: The bounded prefix contains two essential relational semantics: event-object participation and primary-object lifecycle membership. EHHN therefore uses two complementary hyperedge types to encode these relations. 
+
+Event–object hyperedges connect each retained event with the participating objects that are also retained in the prefix: 
+
+Reo = {ϵe = {e} ∪ (πobj (e) ∩ V O ) | e ∈ V E }. (2) Thus, each retained event is represented by one hyperedge rather than a set of pairwise edges, preserving the joint event-object binding within the bounded prefix. The intersection with 
+
+VO prevents context events in V(3) from introducing additional object nodes outside the prefix. Consequently, a context-event hyperedge contains only the participating objects retained in the bounded prefix, which keeps the prefix size controlled and avoids introducing weakly related objects. The lifecycle hyperedge groups the observed lifecycle events of the primary object: 
+
+ϵlc = V(1) . (3) This hyperedge captures lifecycle membership among the observed primary-object events, which is not expressed by individual event–object hyperedges alone. Since each prefix contains one primary-object lifecycle, Rlc = {ϵlc } contains a single lifecycle hyperedge. Together, the four node layers and two hyperedge types define the incidence structure of the heterogeneous prefix hypergraph H, with R = Reo ∪ R lc .
+
+3) Node Features: Each node in the heterogeneous prefix hypergraph H is assigned an initial feature vector derived from its object or event attributes. For object nodes, numerical attributes are min–max scaled and categorical attributes are one-hot encoded. Event nodes are processed analogously and are further augmented with temporal features. Specifically, each event node carries a cyclic timestamp encoding and two log-scaled relative-time features measured against the primary-object history trace: the elapsed time since the start of the trace and the elapsed time since the nearest preceding lifecycle event. Let zT (e) denote a timestamp component and T its period: weekday with T = 7 , hour with T = 24 , and minute and second with T = 60 . For each component, 
+
+ϕT (e) = sin(2 πz T (e)/T ), cos(2 πz T (e)/T ). (4) The encodings are concatenated over weekday, hour, minute, and second components. The resulting object and event fea-tures constitute the node-feature matrix X.Overall, this stage produces three outputs for the subsequent streams: hypergraph features formed by the retained hyper-edges and incidence relations, the node-feature matrix X, and the ordered history trace ⟨e1, . . . , e t⟩. The first two are passed to the micro-spatial stream, while the history trace is used by the macro-evolution stream. IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 5
+
+B. Micro-Spatial Stream: Event-Driven State Evolution 
+
+The micro-spatial stream is designed around an asymmetric view of OCEL nodes: events are transient triggers, while ob-jects are persistent entities whose states evolve through event participation. Rather than treating events and objects as fully symmetric message-passing nodes, the stream updates object states through event-driven transitions. Using the hypergraph features and node-feature matrix produced by the construction stage, it outputs a representation hmicro that captures how observed events have shaped the primary object’s state. As shown in Fig. 1, the micro-spatial stream applies three operators in cascade. Joint Event-Driven State Transition (JEST) computes event-level update signals and propagates them to retained participating objects. Lifecycle-Constrained State Evolution (LCSE) injects lifecycle context into the primary-object state. Heterogeneous Interaction Encoder (HIE) aligns event and object representations into a shared space through hypergraph attention. A gated readout then combines the primary-object representation with a pooled retained-event representation to produce hmicro .
+
+1) JEST: JEST is designed to preserve the joint partic-ipation of objects in a multi-object event while respecting the asymmetric roles of events and objects. Pairwise graph encoders split a multi-object event into independent links, whereas generic hypergraph operators often propagate mes-sages symmetrically among incident nodes. In an OCEL prefix, however, an event is a transient occurrence that triggers state changes, while objects are persistent entities that accumu-late the effects of events over their lifecycles. JEST therefore keeps each event as the source of an event-conditioned update signal and applies this signal to its retained participating objects. Let he and ho denote the current representations of event node e and object node o, respectively, and let 
+
+Oe = πobj (e) ∩ V O denote the participating objects of event e
+
+retained in the prefix. The update consists of three phases. 
+
+Phase 1: Context aggregation. For each event e, JEST ag-gregates the current representations of its retained participating objects to form a per-event context vector: 
+
+ce = 1
+
+|O e|
+
+X
+
+> o∈O e
+
+ψctx (ho), (5) where ψctx (·) is a learnable object-context projection. The context vector summarizes the joint object state under which event e occurs. 
+
+Phase 2: Update signal generation. Given the context vector 
+
+ce, JEST combines it with the event representation he to generate an event-level update signal: 
+
+ie = MLP imp ([ he∥ce]) . (6) This signal encodes both the event attributes and the joint object state summarized by ce, and is shared by all objects in 
+
+Oe as the impulse induced by event e.
+
+Phase 3: Gated state update. For each object o ∈ V O , let 
+
+N (o) = {e ∈ V E | o ∈ O e} denote the retained incident events of o. The update signals from these events are summed and fed into a GRU cell: 
+
+hspa  
+
+> o
+
+= GRUCell 
+
+P  
+
+> e∈N (o)
+
+ie, ho
+
+
+
+, (7) where hspa  
+
+> o
+
+is the spatially updated object state. Although an event-level signal ie is shared by all retained objects participating in event e, object-specific differentiation arises because each object accumulates signals from its own incident-event set N (o) and updates a per-object hidden state through the GRU gate. The summation models the cumulative effect of multiple retained events, while the GRU gate controls how much of the accumulated event-driven signal is absorbed and how much prior object state is retained. 
+
+2) LCSE: JEST captures event-triggered object updates but does not explicitly inject the primary object’s lifecycle context. Two primary objects may have similar recent events but different accumulated histories, leading to different next activities. LCSE addresses this by using the lifecycle hyper-edge together with the primary-object index to aggregate the observed lifecycle events into a lifecycle profile popri , and then incorporating this profile into the primary-object state through a GRU cell while leaving auxiliary objects unchanged: 
+
+popri = 1
+
+|V (1) |
+
+X
+
+> e∈V (1)
+
+ψlc (he), (8) where ψlc (·) is a learnable lifecycle-event projection. 
+
+hlc  
+
+> o
+
+=
+
+(
+
+GRUCell( popri , hspa  
+
+> o
+
+), if o = opri ,
+
+hspa  
+
+> o
+
+, otherwise, (9) for each object node o ∈ V O . Only the primary object receives the lifecycle profile because the prediction target is its next activity. Auxiliary objects keep their JEST-updated states and serve as contextual evidence. 
+
+3) HIE: After JEST and LCSE, object states encode event-driven updates and lifecycle context, while event nodes retain activity, attribute, and temporal information. Because these object-state and event-node representations are complementary but heterogeneous, HIE first projects them into a shared D-dimensional space using separate MLPs for event nodes and object nodes. It then applies two residual UniGAT hypergraph attention layers [40] to refine node representations over the merged incidence structure containing retained event–object hyperedges and the lifecycle hyperedge. The UniGAT lay-ers do not use separate type-specific hyperedge parameters or hyperedge features. Relation-specific inductive biases are provided before this shared refinement: JEST models event-object participation through event-driven updates, LCSE in-jects lifecycle context, and event/object-specific projections handle node heterogeneity. For prediction, the readout combines the primary-object state with event-side context from the retained prefix. We extract the refined representation of the primary object as 
+
+ho 
+
+> micro
+
+and obtain he 
+
+> micro
+
+by mean-pooling selected retained event-node representations. In implementation, this pooling uses up to the last three retained event nodes of each prefix. A learned gate combines these two representations: 
+
+g = σ(Wro [ho
+
+> micro
+
+∥he
+
+> micro
+
+] + bro ), (10) 
+
+hmicro = g ⊙ ho 
+
+> micro
+
++ (1 − g) ⊙ he
+
+> micro
+
+, (11) where ⊙ denotes element-wise multiplication. The resulting 
+
+hmicro summarizes the primary-object state and the retained event-side context. IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 6
+
+C. Macro-Evolution Stream: Temporal Guidance and Global Modulation 
+
+The micro-spatial stream focuses on local event-object inter-actions and lifecycle-aware object states. To complement it, the macro-evolution stream captures two sequence-level signals that are not explicitly modeled by local structural updates. First, it models inter-event timing, since two executions with the same activity sequence may evolve over very different time scales. Second, it captures global execution patterns, since similar local prefixes may belong to different process variants. The macro-evolution stream implements these two functions through Time-Aware State Evolution (TASE), which takes the primary object’s lifecycle event feature sequence as input and injects inter-event timing into attention, and a global prototype memory, which retrieves process prototypes that summarize dataset-level execution patterns. 
+
+1) TASE: TASE extends a standard Transformer encoder to model inter-event timing over the primary object’s lifecycle events in chronological order. Its input is the preprocessed feature sequence of the observed lifecycle events, rather than the HIE-refined event representations from the micro-spatial stream. Let xei denote the feature vector of lifecycle event ei
+
+after node-feature preprocessing and projection to dimension 
+
+D. The TASE input is ⟨xe1 , . . . , xet ⟩, padded and masked when needed. Unlike standard Transformers that assign atten-tion weights based only on feature similarity, TASE adds a logarithmic time-decay bias Btime to the attention scores: 
+
+Attn( Q, K, V) = Softmax 
+
+ QK ⊤
+
+√d + Btime 
+
+
+
+V, (12) 
+
+Btime [i, j ] = −| w| · log(1 + ∆ tij ) + b. (13) The distance ∆tij is derived from relative lifecycle gaps. Let gi be the raw gap in seconds between lifecycle event 
+
+ei and its preceding lifecycle event, with g1 = 0 . We use 
+
+δi = (log(1 + gi) − μg )/(σg + ϵ), where μg and σg are computed from the training partition and ϵ is a small constant, set si = Piℓ=1 δℓ, and define ∆tij = |si − sj |. The scalars 
+
+w, b ∈ R are learnable, and no additional clipping is applied. TASE stacks two such attention layers with four attention heads. As ∆tij increases, the decay term becomes more negative and reduces attention between temporally distant events. The logarithmic form compresses large temporal gaps, matching the irregular timing of business processes. The output at the last observed lifecycle position is used as the trajectory representation htraj ∈ RD , which summarizes the primary object’s temporal execution and serves as input to the global prototype memory. During training, an auxiliary regression head attached to htraj predicts the time gap to the next event. This auxiliary task uses the Smooth L1 loss, which is robust to large regression errors, and provides additional supervision for temporal representation learning. 
+
+2) Global Prototype Memory and FiLM Modulation: The global prototype memory complements TASE by injecting global execution patterns into the trajectory representation. We maintain a learnable prototype matrix P ∈ RK×D , where each row represents a latent execution pattern learned from the training data. A query vector is formed by projecting the concatenation of the micro-spatial representation and the trajectory representation: 
+
+q = LayerNorm( Wq [hmicro ∥htraj ] + bq ), Wq ∈ RD×2D.
+
+(14) Before retrieval, the query and prototypes are ℓ2-normalized as 
+
+eq = q/∥q∥2 and ePi = Pi/∥Pi∥2 for the i-th prototype, and eP
+
+stacks all row-wise normalized prototypes. Let ρi = eq eP⊤ 
+
+> i
+
+/τ ,where τ is the temperature, and let S be the index set of the top-kp entries in {ρi}Ki=1 . The retrieval weights are 
+
+wi =
+
+( exp( ρi)P   
+
+> j∈S exp( ρj)
+
+, i ∈ S ,
+
+0, i / ∈ S , cglobal = X
+
+> i∈S
+
+wi ePi. (15) Here, cglobal is the retrieved global context. The global con-text modulates htraj through feature-wise linear modulation (FiLM) [41]: 
+
+γ = 1+α tanh(MLP γ (cglobal )) , β = α tanh(MLP β (cglobal )) ,
+
+(16) where α bounds the modulation amplitude. The modulated trajectory representation is γ ⊙ htraj + β. The final FiLM layers are zero-initialized so that the model starts from an unmodulated trajectory representation and gradually learns how much global context to use. 
+
+D. Fusion, Prediction, and Training Stream fusion. The FiLM-modulated trajectory representa-tion is added to the micro-spatial representation: 
+
+hfinal = hmicro + ( γ ⊙ htraj + β). (17) This additive fusion treats the micro-spatial representation as the base signal and lets the macro-evolution stream provide a learned trajectory correction. With zero-initialized FiLM layers, prototype-based modulation is inactive at initialization and is learned gradually during training. 
+
+Prediction head. The fused representation is mapped to the activity-label space by a two-layer prediction head: 
+
+ˆy = Softmax( Wpred tanh( Wfuse hfinal + bfuse )) . (18) Here, ˆy is the predicted probability distribution over activity labels. This prediction head instantiates the classifier Ωθ
+
+defined in Section III. 
+
+Tri-objective training loss. The model is trained with a main classification loss, an auxiliary time-prediction loss, and a prototype-diversity regularizer: 
+
+J = LCE + λ1(s)Laux + λ2Ldiv . (19) where LCE is the cross-entropy loss for next activity predic-tion, Laux is the Smooth L1 loss for predicting the time gap to the next event, and 
+
+Ldiv = ∥ eP eP⊤ − IK ∥2 
+
+> F
+
+(20) encourages different prototype vectors to be orthogonal and prevents prototype collapse. This term is used only when the global prototype memory is retained; it is omitted in ablation variants without prototypes. The weight λ1(s) follows a linear warmup over training step s so the activity classifier stabilizes before time-prediction supervision takes effect. IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 7
+
+V. E XPERIMENTS AND EVALUATION 
+
+This section presents the experimental setup and empirical evaluation of EHHN. The evaluation addresses five research questions: overall effectiveness against representative base-lines (RQ1), component contributions through ablation studies (RQ2), training time, inference latency, and GPU memory cost (RQ3), sensitivity to the global prototype count K (RQ4), and prototype interpretability and robustness to attribute and event-feature noise (RQ5). 
+
+A. Experimental Setup 1) Datasets: We evaluate EHHN on four publicly available OCEL benchmarks. BPI 2017 1 is an object-centric version of the widely used Dutch loan application process log and serves as the largest benchmark in our study. OTC 2 is an order-management OCEL involving customers, orders, items, products, and packages. Intermediate 3 is an application-offer OCEL involving application and offer objects. P2P 4
+
+is a procure-to-pay OCEL involving purchase requisitions, purchase orders, quotations, goods receipts, invoice receipts, payments, and materials. Table I summarizes the basic statistics and complexity of the four OCEL benchmarks. The basic statistics report event, object, activity, primary-object, and prefix counts. Let O∗ be the set of primary objects, i.e., O∗ = {o ∈ O | πtype (o) = τ ∗},and let E∗ be the set of events involving at least one primary object, i.e., E∗ = {e ∈ E | πobj (e) ∩ O∗̸ = ∅} .For structural complexity, objects per event is the aver-age event arity, 1
+
+> |E|
+
+P 
+
+> e∈E
+
+|πobj (e)|. Non-primary objects per event in E∗ is 1
+
+> |E∗|
+
+P 
+
+> e∈E∗
+
+|{ o ∈ πobj (e) | πtype (o)̸ =
+
+τ ∗}| . Event-size entropy measures the diversity of event ar-ities and is defined as Hsize = − P 
+
+> k
+
+pd(k) ln pd(k), where 
+
+pd(k) = |{ e ∈ E | |πobj (e)| = k}| /|E|. For object-perspective complexity, object-type co-occurrence entropy measures the diversity of event-level object-type signatures: 
+
+Htype = − P 
+
+> c
+
+ptype (c) ln ptype (c), where c(e) = {πtype (o) |
+
+o ∈ πobj (e)} and ptype (c) = |{ e ∈ E | c(e) = c}| /|E|.Primary-object participation is the fraction of events involving primary objects, ρpri = |E∗|/|E|.For temporal complexity, let ∆to = (∆ to, 1, . . . , ∆to,n o−1)
+
+be the sequence of timestamp gaps between consecu-tive events in object trace σ(o). Temporal gap vari-ability is the mean object-level coefficient of variation, 
+
+> 1
+> |O∆|
+
+P 
+
+> o∈O∆
+
+std(∆ to)/mean(∆ to), where O∆ contains ob-jects with at least two gaps. Let r(e) be the rank of event 
+
+e in the deterministic global event order ≺. Global event-order gap is    
+
+> P
+> o∈O∗
+> P|σ(o)|− 1
+> i=1 (r(ei+1 )−r(ei)−1)
+> P
+> o∈O∗(|σ(o)|− 1)
+
+, where σ(o) = 
+
+⟨e1, . . . , e |σ(o)|⟩ is the ordered trace of primary object o.Overall, OTC is the most structurally complex benchmark, with the highest objects per event, non-primary objects per 
+
+> 1https://github.com/ocpm/ocpa/blob/main/sample logs/csv/BPI2017.zip
+> 2https://github.com/niklasadams/PreservingOCStructures/blob/main/orders. zip
+> 3https://github.com/ocpm/ocpa/blob/main/sample logs/jsonocel/ intermediate.jsonocel
+> 4https://github.com/ocpm/ocpa/blob/main/sample logs/jsonocel/p2p-2023. jsonocel
+
+TABLE I: Basic statistics and complexity of the benchmarks.                                                     
+
+> Measure OTC BPI 2017 Interm. P2P
+> Basic statistics
+> #Event instances 22,367 393,931 20,641 8,320 #Object instances 11,522 74,504 3,686 5,379 #Activity labels 11 21 20 10 #Primary-object instances 8,159 31,509 1,000 896 #Prediction prefixes 56,758 297,385 15,668 4,302
+> Structural complexity
+> Objects per event 8.15 1.35 1.33 2.45 Non-primary objs. per primary event 5.25 0.41 0.41 1.43 Event-size entropy 2.08 0.68 0.67 0.70
+> Object-perspective complexity
+> Object-type co-occurrence entropy 0.49 1.01 1.03 1.64 Primary-object participation 1.00 0.83 0.81 0.57
+> Temporal complexity
+> Temporal gap variability 1.33 1.88 1.66 0.95 Global event-order gap 131.78 2484.59 101.00 116.44
+
+primary-object event, and event-size entropy. BPI 2017 is the largest benchmark and has the largest global event-order gap, indicating long-range separation between consec-utive primary-object lifecycle events. P2P shows the strongest object-perspective complexity, with the highest object-type co-occurrence entropy and the lowest primary-object participa-tion. Intermediate does not dominate any single complexity dimension and provides a relatively balanced benchmark. 
+
+2) Baselines: We compare EHHN against nine representa-tive baselines. (i) Flattening/adapted classical methods: Dual-View [7] and PROPHET [1] are state-of-the-art predictors adapted to OCEL by treating each object type as a separate perspective; Flat-LSTM [22] applies a standard LSTM over flattened sequences; GAT+LSTM [39] combines a GAT-based snapshot encoder with an LSTM decoder. (ii) Native OCEL methods: HOEG [16] builds a heterogeneous event-object graph with GNN; GCN [42], GAT [43], GraphTrans-former [44], and Logistic Regression [45] follow a two-stage OCEL graph-embedding pipeline in which the prefix is first encoded into a graph-level representation and a down-stream predictor is applied. Every baseline is tuned on the validation set within the same hyperparameter search budget. All baselines use the same primary-object split, prediction-prefix generation protocol, target labels, evaluation metrics, and available event/object attributes when supported by the corresponding model. 
+
+3) Evaluation Metrics: We use Accuracy and macro F1-score as the main evaluation metrics [28]. Accuracy measures overall prediction correctness, while macro F1-score assigns equal weight to each activity label and is therefore more suit-able for long-tailed activity distributions. For brevity, F1-score in the tables refers to macro F1-score. All experiments are repeated over five random seeds {42 , 12345 , 3423 , 523 , 6556 },and the tables report the mean and sample standard deviation over the five runs. 
+
+4) Implementation Details: Each dataset is split by primary-object identifier to avoid assigning prefixes from the same primary object to different partitions. The primary object types are set to items for OTC, application for BPI 2017 and IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 8
+
+TABLE II: Overall comparison with flattening/adapted classical baselines and native OCEL graph baselines (mean ±std over 5 runs). Best per column in bold , second-best underlined.                                                                                            
+
+> OTC BPI 2017 Intermediate P2P Method Accuracy F1-score Accuracy F1-score Accuracy F1-score Accuracy F1-score
+> Flattening/adapted classical baselines
+> Dual-View 0.802 ±0.004 0.685 ±0.006 0.768 ±0.001 0.552 ±0.012 0.697 ±0.005 0.537 ±0.005 0.755 ±0.011 0.690 ±0.027
+> PROPHET 0.754 ±0.038 0.560 ±0.035 0.762 ±0.041 0.579 ±0.031 0.595 ±0.067 0.417 ±0.067 0.797 ±0.002 0.842 ±0.002
+> Flat-LSTM 0.773 ±0.003 0.660 ±0.015 0.758 ±0.001 0.561 ±0.003 0.703 ±0.003 0.542 ±0.005 0.824 ±0.019 0.816 ±0.009
+> GAT+LSTM 0.711 ±0.037 0.615 ±0.030 0.748 ±0.049 0.687 ±0.067 0.510 ±0.067 0.436 ±0.084 0.773 ±0.003 0.766 ±0.004
+> Native OCEL graph baselines
+> Logistic Regression 0.293 ±0.017 0.090 ±0.004 0.632 ±0.001 0.495 ±0.009 0.556 ±0.008 0.455 ±0.008 0.652 ±0.022 0.571 ±0.019
+> HOEG 0.622 ±0.001 0.452 ±0.003 0.801 ±0.009 0.652 ±0.002 0.548 ±0.008 0.400 ±0.008 0.795 ±0.012 0.806 ±0.005
+> GCN 0.372 ±0.001 0.049 ±0.001 0.436 ±0.015 0.249 ±0.035 0.403 ±0.008 0.260 ±0.015 0.571 ±0.019 0.344 ±0.053
+> GraphTransformer 0.371 ±0.001 0.056 ±0.003 0.593 ±0.006 0.357 ±0.028 0.574 ±0.010 0.408 ±0.019 0.719 ±0.013 0.573 ±0.043
+> GAT 0.371 ±0.001 0.056 ±0.003 0.623 ±0.002 0.462 ±0.010 0.541 ±0.012 0.432 ±0.024 0.617 ±0.013 0.521 ±0.021
+> EHHN 0.858 ±0.002 0.809 ±0.003 0.836 ±0.001 0.702 ±0.001 0.719 ±0.007 0.573 ±0.011 0.905 ±0.010 0.903 ±0.014
+
+Intermediate, and purchase order for P2P. We reserve 20% of primary objects as the test partition and 10% of the remaining primary objects as validation, yielding an effective 72:8:20 train/validation/test split. Event and object attributes are encoded as input features. Categorical attributes are one-hot encoded using vocabularies built from the training partition only, with missing values mapped to an unknown token. Missing numerical values are first filled with zero, and the MinMaxScaler is fitted on the training partition only before being applied to the validation and test partitions. Timestamps are parsed as provided while preserving the original precision and timezone information available in each log. Event ordering and prefix cutoffs are computed on the preserved timestamps, and cyclic sine/cosine features are computed from weekday, hour, minute, and second components. Prefix construction uses a timestamp-based cut-off, so context events must occur earlier than the last observed lifecycle event and the target event is excluded. Lifecycle sequences use a maximum recent window size of 5 and are padded with zeros and boolean masks. EHHN is implemented in PyTorch with DHG and trained on a single NVIDIA RTX 3090 GPU. We use AdamW with learning rate 1e −4, betas (0 .9, 0.999) , no weight decay, and batch size 256. The learning rate follows cosine annealing with a 10-epoch warmup. The maximum number of epochs is 200, with early stopping patience of 20 epochs after a minimum of 20 epochs. The embedding dimension is D = 256 . The micro-spatial stream uses one JEST module, one LCSE module, and two HIE layers with dropout 0.1. The macro-evolution stream uses two TASE-Transformer layers with four attention heads. The classification loss uses label smoothing 0.1, and gradients are clipped at 0.5. The auxiliary time-prediction loss uses Smooth L1 loss, with its weight linearly warmed up from 0 to 0.01 over the first 10 epochs. The prototype-diversity loss is enabled for the full EHHN model and uses λ2 = 1e −3. The global prototype counts are selected on the validation partition and set to K = 8 , 4, 8, 64 for OTC, BPI 2017, Intermediate, and P2P, respectively, before final test evaluation. 
+
+B. Overall Effectiveness (RQ1) 
+
+Table II compares EHHN with nine baselines, including flattening/adapted classical methods and native OCEL graph-based methods. EHHN achieves the highest Accuracy and macro F1-score on all four benchmarks among all compared methods. For Accuracy, the strongest baseline methods are Dual-View on OTC, HOEG on BPI 2017, and Flat-LSTM on Intermediate and P2P. EHHN improves over them by +5 .6,
+
++3 .5, +1 .6, and +8 .1 percentage points, respectively. For macro F1-score, the strongest baseline methods are Dual-View on OTC, GAT+LSTM on BPI 2017, Flat-LSTM on Intermediate, and PROPHET on P2P. EHHN improves over them by +12 .4, +1 .5, +3 .1, and +6 .1 percentage points. These results indicate that EHHN consistently outperforms the nine baselines across the four evaluated datasets. The gains are consistent with the dataset complexity profile in Table I. On OTC, many objects per event, high event-size entropy, and wide non-primary object branching pose challenges to pairwise graph baselines, while EHHN retains multi-object participation through hyperedges. On BPI 2017, the large scale and long global event-order gap indicate a long-range temporal challenge, where EHHN improves over HOEG, suggesting the benefit of combining structural connectivity with time-aware lifecycle modeling. On Intermediate, whose complexity profile is more balanced, EHHN still provides clear gains over Flat-LSTM. On P2P, the high object-type co-occurrence entropy and low primary-object participation indicate diverse cross-perspective interactions, where EHHN achieves its largest Accuracy gain. Overall, the results suggest that EHHN is particularly useful when structural, temporal, or object-perspective complexity is high, while still maintaining gains on the more balanced benchmark. 
+
+C. Ablation Study (RQ2) 
+
+Table III reports seven ablation variants grouped into three categories. Operator replacement replaces the pro-posed JEST+LCSE+HIE stack with generic U NI GATC ONV 
+
+or HGNNC ONV operators. Stream isolation keeps only the micro-spatial stream (S PATIAL ) or only the macro-evolution IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 9
+
+TABLE III: Ablation study results (mean ±std over 5 runs). Best per column in bold .                                                                           
+
+> OTC BPI 2017 Intermediate P2P Variant Accuracy F1-score Accuracy F1-score Accuracy F1-score Accuracy F1-score
+> EHHN 0.858 ±0.002 0.809 ±0.003 0.836 ±0.001 0.702 ±0.001 0.719 ±0.007 0.573 ±0.011 0.905 ±0.010 0.903 ±0.014
+> (i) Operator replacement
+> UNI GATC ONV 0.846 ±0.000 0.788 ±0.003 0.830 ±0.001 0.693 ±0.001 0.705 ±0.002 0.556 ±0.006 0.886 ±0.004 0.881 ±0.005
+> HGNNC ONV 0.844 ±0.004 0.782 ±0.014 0.828 ±0.001 0.690 ±0.003 0.681 ±0.005 0.533 ±0.009 0.825 ±0.008 0.796 ±0.016
+> (ii) Stream isolation
+> SPATIAL 0.852 ±0.001 0.800 ±0.001 0.834 ±0.001 0.696 ±0.003 0.705 ±0.006 0.554 ±0.007 0.901 ±0.011 0.896 ±0.013
+> TRANS 0.764 ±0.001 0.599 ±0.003 0.822 ±0.001 0.666 ±0.001 0.701 ±0.004 0.535 ±0.009 0.828 ±0.012 0.804 ±0.022
+> (iii) Macro-component coupling
+> SP+TASE 0.852 ±0.002 0.801 ±0.004 0.836 ±0.001 0.700 ±0.001 0.712 ±0.006 0.561 ±0.010 0.902 ±0.017 0.899 ±0.024
+> SP+P ROTO 0.845 ±0.002 0.794 ±0.001 0.834 ±0.001 0.697 ±0.002 0.703 ±0.006 0.564 ±0.012 0.893 ±0.014 0.885 ±0.016
+> SP+HGNN 0.830 ±0.002 0.780 ±0.001 0.824 ±0.001 0.680 ±0.003 0.619 ±0.004 0.477 ±0.013 0.852 ±0.008 0.845 ±0.008
+
+(a) BPI 2017 (b) Intermediate 
+
+Fig. 2: Frequency-stratified per-class F1-score on BPI 2017 and Intermediate. stream (T RANS ). Macro-component coupling tests S P+TASE, SP+P ROTO , and S P+HGNN, which combine the spatial back-bone with the TASE representation, the prototype memory, and an HGNN-based macro alternative, respectively. The ablation results reveal three main observations. First, replacing the proposed JEST+LCSE+HIE stack with generic UNI GATC ONV or HGNNC ONV operators reduces perfor-mance on all datasets. The gap is especially visible for HGN-NC ONV on Intermediate and P2P, suggesting that event-driven object-state updates and lifecycle-aware refinement offer a useful inductive bias beyond generic hypergraph message passing. Second, in stream isolation, S PATIAL remains close to the full model, while T RANS alone drops by 9.4, 1.4, 1.8, and 7.7 Accuracy points on OTC, BPI 2017, Intermediate, and P2P, respectively. This indicates that the micro-spatial stream is the stronger standalone component, whereas the macro-evolution stream mainly complements it in the full model. Third, in macro-component coupling, S P+TASE stays close to S PATIAL , S P+P ROTO does not consistently improve over S PATIAL , and S P+HGNN is weaker than the full model on all datasets. By contrast, the full model improves F1-score over S PATIAL by 0.9, 0.6, 1.9, and 0.7 points across the four datasets, suggesting that the temporal and prototype components provide modest but consistent joint gains. Because the macro-evolution stream brings only modest gains in aggregate metrics, we further examine whether these gains vary across activity classes. We focus on BPI 2017 and Intermediate since they contain enough activity classes to make frequency-stratified per-class comparison meaningful. Fig. 2 reports frequency-stratified per-class F1-score, where classes are sorted from frequent to rare. On BPI 2017, EHHN and S PATIAL perform similarly on frequent classes, while EHHN shows clearer gains in several mid-frequency and tail classes, such as Call incomplete files , Cancel offer , and 
+
+Refuse offer . On Intermediate, the two curves are mostly close across activity classes, indicating that the additional macro-evolution information contributes less to class-level separation on this dataset. Overall, the analysis suggests that the macro-evolution stream provides class-dependent refinements rather than uniformly large gains across all datasets. 
+
+D. Efficiency and Deployment Feasibility (RQ3) 
+
+Table IV compares EHHN with two baselines that rep-resent different efficiency-structure trade-offs. Flat-LSTM is a flattened sequence model that illustrates the efficiency of ignoring the native multi-object OCEL structure. HOEG is a native OCEL graph baseline and is used as the main structure-preserving comparison for training cost, latency, and GPU memory. On OTC, EHHN is slower and uses slightly more memory than HOEG, indicating that its hypergraph construc-tion and dual-stream encoding introduce extra overhead on this dataset. On BPI 2017, the largest benchmark, EHHN shows its clearest scalability advantage over HOEG: training time decreases from 671.85 to 133.11 s/epoch, and peak GPU IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 10 
+
+TABLE IV: Training and inference efficiency comparison. Bold indicates the better value between the two structure-preserving methods, EHHN and HOEG, for training time and memory. 
+
+Dataset Metric EHHN Flat-LSTM HOEG OTC Train time (s/epoch) 75.17 1.41 56.03 
+
+Latency (ms/sample) 10.66 0.72 5.64 Memory (GB) 0.99 0.05 0.81 
+
+BPI 2017 Train time (s/epoch) 133.11 7.89 671.85 Latency (ms/sample) 10.15 0.75 3.37 Memory (GB) 0.19 0.05 4.60 Interm. Train time (s/epoch) 9.43 0.54 4.23 
+
+Latency (ms/sample) 35.80 1.02 3.32 Memory (GB) 0.23 0.06 0.23 
+
+P2P Train time (s/epoch) 2.91 0.13 2.48 
+
+Latency (ms/sample) 37.41 1.08 5.40 Memory (GB) 0.23 0.05 0.24 
+
+memory decreases from 4.60 to 0.19 GB, corresponding to a 24 × reduction. On Intermediate, EHHN and HOEG use the same peak memory, while HOEG is faster. On P2P, their training time and memory are close, although EHHN has higher inference latency. Overall, EHHN does not aim to be the fastest predictor. Flat-LSTM remains much faster because it uses a flattened se-quence representation, and HOEG often has lower per-sample latency. The practical value of EHHN is that it improves prediction quality while keeping GPU memory manageable for structure-preserving OCEL prediction, especially on the largest benchmark, at the cost of higher inference latency. 
+
+E. Sensitivity Analysis of Prototype Count K (RQ4) 
+
+The macro-evolution stream uses a global prototype mem-ory with K learnable prototypes to represent global execution patterns. Fig. 3 reports a sensitivity analysis over K ∈{1, 2, 3, 4, 8, 12 , 16 , 24 , 32 , 48 , 64 } to examine the robustness of EHHN to the prototype count. This analysis is not used to select the hyperparameters for the final test results. Overall, EHHN is not highly sensitive to K: Accuracy and macro F1-score fluctuate within a relatively small range across most settings, indicating that the prototype memory provides stable guidance without requiring a finely tuned prototype count. The curves show dataset-dependent preferences: BPI 2017 performs well with a compact prototype memory, OTC and Intermediate favor moderate values, and P2P benefits from a larger memory. The dataset-dependent best K values can be interpreted through the complexity profile in Table I. Since prototypes are intended to represent recurring global execution patterns, a larger K is more useful when the log contains more diverse object-perspective interactions. Such diversity is reflected by high object-type co-occurrence entropy and low primary-object participation: events involve more varied combinations of object types, and the primary-object perspective is less dominant. This explains why P2P, which has the strongest object-perspective complexity, reaches its best macro F1-score at K = 64 . In contrast, BPI 2017 is the largest benchmark and has the largest global event-order gap, but its object-perspective complexity is not the highest, so a small prototype memory can already cover its dominant execution patterns. OTC is the most structurally complex benchmark, but its object-type combinations are less diverse than P2P and its primary-object participation is higher, making a moderate K
+
+sufficient. Intermediate has a relatively balanced profile and is also well served by a moderate K.
+
+F. Interpretability and Robustness (RQ5) 1) Prototype Interpretability: In EHHN, the macro-evolution stream uses a global prototype memory with K
+
+learnable prototypes to capture dataset-level execution pat-terns. To examine whether these prototypes are interpretable, we visualize prototype activations on OTC. We choose OTC because its activity labels have clear business meanings, in-cluding payment, packaging, delivery, and exception handling. For OTC, the selected prototype count is K = 8 , so the columns P0–P7 in Fig. 4 correspond to the eight learned prototypes. Each cell records how frequently prefixes ending with a given activity activate a prototype, with darker colors indicating higher activation frequency. The heatmap shows domain-related grouping without manually defined process modes: P2 is strongly activated by pay order and payment re-minder , corresponding to a financial-transaction pattern, while 
+
+P7 is activated by send package , package delivered , failed delivery , and reorder item , corresponding to a logistics and exception-handling pattern. This suggests that the prototype memory learns interpretable execution patterns. 
+
+2) Robustness to Noisy Logs: Real-world event logs may contain corrupted attributes or event features. Table V reports Accuracy and macro F1-score under two 30% noise settings: 
+
+attribute masking , which randomly masks node attributes, and 
+
+event-feature masking , which randomly masks event features. We compare with Flat-LSTM because it is a flattened sequence baseline without explicit object-centric structural redundancy, making it a suitable contrast for evaluating whether EHHN’s hypergraph structure improves robustness. EHHN remains more stable than Flat-LSTM under both noise types. On OTC, EHHN loses at most 4.9 Accuracy points and 6.3 F1 points, whereas Flat-LSTM loses up to 32.6 Accuracy points and 30.2 F1 points. On Intermediate, EHHN loses at most 5.2 Accuracy points and 5.7 F1-score points, while Flat-LSTM loses up to 12.9 Accuracy points and 10.7 F1-score points. These results suggest that the hypergraph representation provides useful structural redundancy: when local attributes or event features are corrupted, neighboring event-object context and lifecycle information can still support prediction. In contrast, flattened sequence models have less object-centric context to rely on once event or attribute features are corrupted. VI. C ONCLUSION 
+
+This paper addressed object-centric next activity prediction by modeling prediction prefixes extracted from OCELs as IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 11 
+
+(a) OTC (b) BPI 2017 
+
+(c) Intermediate (d) P2P 
+
+Fig. 3: Sensitivity of EHHN to prototype count K on four benchmarks. 
+
+Fig. 4: Prototype activation heatmap on OTC. heterogeneous hypergraphs and encoding them with a dual-stream architecture. The hypergraph representation retains multi-object event participation within a bounded prefix with-out flattening the log or decomposing retained event-object relations into pairwise links. The dual-stream architecture connects local event-driven object-state evolution with time-aware trajectory modeling and prototype-based global guid-ance. Experiments on four public OCEL benchmarks show that EHHN achieves higher Accuracy and macro F1-score TABLE V: Robustness under 30% noisy event logs.                               
+
+> Dataset Noise setting EHHN Flat-LSTM Accuracy F1 Accuracy F1 OTC No noise 0.858 0.809 0.773 0.660 Attribute masking 0.810 0.751 0.447 0.358 Event-feature mask 0.809 0.746 0.539 0.447 Intermediate No noise 0.719 0.573 0.702 0.543 Attribute masking 0.667 0.516 0.573 0.441 Event-feature mask 0.687 0.532 0.573 0.436
+
+than nine baselines, with improvements of up to 8.1 and 12.4 percentage points, respectively. The efficiency results show that EHHN keeps GPU memory practical for structure-preserving prediction, especially on the largest benchmark. The interpretability and robustness analyses suggest that the learned prototypes capture meaningful process modes and that the hypergraph representation is more resilient than flattened sequence modeling under noisy attributes and event features. Future work will explore adaptive primary-object selection, online updating for streaming OCELs, and validation on industrial service logs. REFERENCES [1] V. Pasquadibisceglie, R. Scaringi, A. Appice, G. Castellano, and D. Malerba, “PROPHET: Explainable predictive process monitoring with heterogeneous graph neural networks,” IEEE Transactions on Services Computing , vol. 17, no. 4, pp. 1521–1534, 2024. IEEE TRANSACTIONS ON SERVICES COMPUTING, VOL. XX, NO. XX, XX 2026 12 
+
+[2] J. Wang, Y. Yu, N. Fang, B. Cao, J. Fan, and J. Zhang, “Mhg-predictor: A multi-layer heterogeneous graph-based predictor for next activity in complex business processes,” in Companion Proceedings of the ACM on Web Conference 2025 , 2025, pp. 500–509. [3] X. Sun, S. Yang, Y. Ying, and D. Yu, “Next activity prediction of ongoing business processes based on deep learning,” Expert Systems ,vol. 41, no. 5, p. e13421, 2024. [4] T.-H. Nguyen, K.-S. Kim, and K. P. Kim, “A switch-transformer predic-tive process monitoring model for next activity prediction in business process management,” in Proceedings of the 2024 8th International Conference on Advances in Artificial Intelligence , 2024, pp. 196–200. [5] H. Zare, M. Abbasi, M. Ahang, and H. Najjaran, “An innovative next activity prediction approach using process entropy and daw-transformer,” 
+
+arXiv preprint arXiv:2502.10573 , 2025. [6] A. Oved, S. Shlomov, S. Zeltyn, N. Mashkif, and A. Yaeli, “Snap: semantic stories for next activity prediction,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 28, 2025, pp. 28 871– 28 877. [7] B. Chen, S. Zhao, Q. Zhang, C. Tang, and L. Lin, “Dual-view deep learning approach for predictive business process monitoring,” IEEE Transactions on Services Computing , vol. 18, 2025, early access. [8] J. Wang, C. Lu, Y. Yu, B. Cao, K. Fang, and J. Fan, “Higpp: A history-informed graph-based process predictor for next activity,” in 
+
+International Conference on Service-Oriented Computing . Springer, 2025, pp. 337–353. [9] A. F. Ghahfarokhi, G. Park, A. Berti, and W. M. P. van der Aalst, “Ocel: A standard for object-centric event logs,” in New Trends in Database and Information Systems , L. Bellatreche, M. Dumas, P. Karras, R. Matuleviˇ cius, A. Awad, M. Weidlich, M. Ivanovi´ c, and O. Hartig, Eds. Cham: Springer International Publishing, 2021, pp. 169–175. [10] S. Fioretto and E. Masciari, “A comparative analysis of predictive pro-cess monitoring: Object-centric versus classical event logs,” Knowledge and Information Systems , vol. 67, pp. 7355–7398, 2025. [11] W. Gherissi, J. El Haddad, and D. Grigori, “Object-centric predic-tive process monitoring,” in Service-Oriented Computing—ICSOC 2022 Workshops , ser. LNCS, vol. 13821. Springer, 2023, pp. 27–39. [12] T. Rohrer, A. F. Ghahfarokhi, M. Behery, G. Lakemeyer, and W. M. P. van der Aalst, “Predictive object-centric process monitoring,” arXiv preprint arXiv:2207.10017 , 2022. [13] R. Galanti, M. de Leoni, N. Navarin, and A. Marazzi, “Object-centric process predictive analytics,” Expert Systems with Applications , vol. 213, p. 119173, 2023. [14] J. N. Adams, G. Park, S. Levich, D. Schuster, and W. M. P. van der Aalst, “A framework for extracting and encoding features from object-centric event data,” in International Conference on Service-Oriented Computing (ICSOC) . Springer, 2022, pp. 36–53. [15] J. N. Adams, G. Park, and W. M. P. van der Aalst, “Preserving complex object-centric graph structures to improve machine learning tasks in process mining,” Engineering Applications of Artificial Intelligence , vol. 125, p. 106764, 2023. [16] T. K. Smit, H. A. Reijers, and X. Lu, “HOEG: A new approach for object-centric predictive process monitoring,” in Advanced Information Systems Engineering (CAiSE) , ser. LNCS, vol. 14663. Springer, 2024, pp. 231–247. [17] W. Gherissi, J. El Haddad, and D. Grigori, “A framework for object-centric predictive process monitoring using graph-based process execu-tions,” in IEEE International Conference on Web Services , 2025. [18] A. E. M´ arquez-Chamorro, M. Resinas, and A. Ruiz-Cort´ es, “Predictive monitoring of business processes: A survey,” IEEE Transactions on Services Computing , vol. 11, no. 6, pp. 962–977, 2017. [19] C. Di Francescomarino, M. Dumas, F. M. Maggi, and I. Teinemaa, “Clustering-based predictive process monitoring,” IEEE Transactions on Services Computing , vol. 12, no. 6, pp. 896–909, 2019. [20] K. B¨ ohmer and S. Rinderle-Ma, “Probability based heuristic for pre-dictive business process monitoring,” in On the Move to Meaningful Internet Systems (OTM) . Springer, 2018, pp. 78–96. [21] B. A. Tama and M. Comuzzi, “An empirical comparison of classification techniques for next event prediction using business process event logs,” 
+
+Expert Systems with Applications , vol. 129, pp. 233–245, 2019. [22] N. Tax, I. Verenich, M. La Rosa, and M. Dumas, “Predictive business process monitoring with LSTM neural networks,” in Advanced Informa-tion Systems Engineering (CAiSE) , 2017, pp. 477–492. [23] M. Camargo, M. Dumas, and O. Gonz´ alez-Rojas, “Learning accurate LSTM models of business processes,” in Business Process Management (BPM) , ser. LNCS, vol. 11675. Springer, 2019, pp. 286–302. [24] B. R. Gunnarsson, S. vanden Broucke, and J. De Weerdt, “A direct data aware LSTM neural network architecture for complete remaining trace and runtime prediction,” IEEE Transactions on Services Computing ,vol. 16, no. 4, pp. 2330–2342, 2023. [25] Z. A. Bukhsh, A. Saeed, and R. M. Dijkman, “Processtransformer: Predictive business process monitoring with transformer network,” arXiv preprint arXiv:2104.00721 , 2021. [26] W. Ni, G. Zhao, T. Liu, Q. Zeng, and X. Xu, “Predictive business process monitoring approach based on hierarchical transformer,” Electronics ,vol. 12, no. 6, p. 1273, 2023. [27] A. Jalayer, M. Kahani, A. Pourmasoumi, and A. Beheshti, “Ham-net: Predictive business process monitoring with a hierarchical attention mechanism,” Knowledge-Based Systems , vol. 236, p. 107722, 2022. [28] V. Pasquadibisceglie, A. Appice, G. Castellano, and D. Malerba, “A multi-view deep learning approach for predictive business process mon-itoring,” IEEE Transactions on Services Computing , vol. 15, no. 4, pp. 2382–2395, 2022. [29] J. Wang, C. Lu, B. Cao, and J. Fan, “Mitfm: A multi-view information fusion method based on transformer for next activity prediction of business processes,” in Proceedings of the 14th Asia-Pacific Symposium on Internetware , 2023, pp. 281–291. [30] H. Chen, X. Fang, and H. Fang, “Multi-task prediction method of business process based on bert and transfer learning,” Knowledge-Based Systems , vol. 254, p. 109603, 2022. [31] V. Pasquadibisceglie, A. Appice, G. Castellano, and D. Malerba, “Jarvis: Joining adversarial training with vision transformers in next-activity prediction,” IEEE Transactions on Services Computing , vol. 17, no. 4, pp. 1593–1606, 2024. [32] I. Donadello, J. Ko, F. M. Maggi, J. Mendling, F. Riva, and M. Weidlich, “Knowledge-driven modulation of neural networks with attention mech-anism for next activity prediction,” arXiv preprint arXiv:2312.08847 ,2023. [33] V. Pasquadibisceglie, A. Appice, and D. Malerba, “Lupin: A llm approach for activity suffix prediction in business process event logs,” in 2024 6th International Conference on Process Mining (ICPM) , 2024, pp. 1–8. [34] A. Casciani, M. L. Bernardi, M. Cimitile, and A. Marrella, “Enhancing next activity prediction in process mining with retrieval-augmented generation,” Information Systems , vol. 137, p. 102642, 2026. [35] A. Chiorrini, C. Diamantini, A. Mircoli, and D. Potena, “Exploiting instance graphs and graph neural networks for next activity prediction,” in International conference on process mining . Springer, 2021, pp. 115–126. [36] A. Chiorrini, C. Diamantini, L. Genga, and D. Potena, “Multi-perspective enriched instance graphs for next activity prediction through graph neural network,” Journal of Intelligent Information Systems ,vol. 61, no. 1, pp. 5–25, 2023. [37] E. Rama-Maneiro, J. C. Vidal, and M. Lama, “Embedding graph convolutional networks in recurrent neural networks for predictive monitoring,” IEEE Transactions on Knowledge and Data Engineering ,vol. 36, no. 1, pp. 137–151, 2024. [38] Y. Deng, J. Wang, C. Wang, C. Zheng, M. Li, and B. Li, “Enhancing predictive process monitoring with sequential graphs and trace atten-tion,” in IEEE International Conference on Web Services . IEEE, 2024, pp. 406–415. [39] W. Gherissi, M. Acheli, J. E. Haddad, and D. Grigori, “Predictive process monitoring using object-centric graph embeddings,” in International Conference on Service-Oriented Computing . Springer, 2024, pp. 55–67. [40] J. Huang and J. Yang, “Unignn: a unified framework for graph and hypergraph neural networks,” ArXiv , vol. abs/2105.00956, 2021. [41] M. Brockschmidt, “GNN-FiLM: Graph neural networks with feature-wise linear modulation,” in Proceedings of the 37th International Conference on Machine Learning (ICML) , ser. PMLR, vol. 119, 2020, pp. 1144–1152. [42] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” in International Conference on Learning Rep-resentations (ICLR) , 2017. [43] P. Velickovic, G. Cucurull, A. Casanova, A. Romero, P. Li` o, and Y. Bengio, “Graph attention networks,” ArXiv , vol. abs/1710.10903, 2017. [44] S. Yun, M. Jeong, R. Kim, J. Kang, and H. J. Kim, “Graph transformer networks,” in Neural Information Processing Systems , 2019. [45] F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, G. Louppe, P. Prettenhofer, R. Weiss, R. J. Weiss, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay, “Scikit-learn: Machine learning in python,” J. Mach. Learn. Res. , vol. 12, pp. 2825–2830, 2011.
