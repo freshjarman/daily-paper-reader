@@ -1,0 +1,4457 @@
+Title: Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution
+
+URL Source: https://arxiv.org/pdf/2607.07716v1
+
+Published Time: Fri, 10 Jul 2026 00:00:40 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Yazheng Liu 1 Xi Zhang 2 Sihong Xie * 1 Hui Xiong 1
+
+## Abstract 
+
+Temporal graphs are ubiquitous in real-world ap-plications and Temporal Graph Networks (TGNs) have achieved superior predictive accuracy. Un-derstanding which historical events drive model predictions can enhance trustworthiness of TGNs. Existing explanation methods overlook the mem-ory module, the core component that records and updates node histories, leaving the influence of past events unexplored. To address this, we at-tribute TGNs predictions through the topology attribution tree and memory backtracking tree. The topology attribution tree captures the influ-ence of neighbors and their memory vectors, then the memory backtracking tree quantifies how his-torical events shape node memory vectors. We apply the LRP in TGNs, ensuring that the total contribution of events equals the model’s logits. Finally, top-k selection may be unfaithful due to the nonlinear mapping from logits to prob-abilities, we design optimization objectives to identify the important events. Experiments on nine temporal graph datasets, spanning node prop-erty prediction, link prediction tasks and graph classification tasks, show that our method pro-vides faithful explanations and outperforms state-of-the-art baselines. The code is available at https://github.com/yazhengliu/MemExplainer. 
+
+## 1. Introduction 
+
+Temporal Graph Networks (TGNs) (Rossi et al., 2020) have gained increasing attention in real-world applications such as fraud detection (Kim et al., 2024) and healthcare fore-
+
+> 1
+
+Artificial Intelligence Trust, The Hong Kong University of Sci-ence and Technology (Guangzhou) 2Key Laboratory of Trustwor-thy Distributed Computing and Service (MoE), Beijing University of Posts and Telecommunications. Correspondence to: Sihong Xie 
+
+<sihongxie@hkust-gz.edu.cn >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+casting (Hancox et al., 2024; Lin et al., 2025). TGNs take as input a temporal graph. A temporal graph can be repre-sented as a sequence of timestamped events on the graph. Each event is represented as ek = ( v, u, t k), indicating that source node v and destination node u have an interaction event at timestamp tk. In TGNs, each node maintains a memory vector to store its historical information. For ex-ample, in a social network, a node’s memory vector might represent the history of its interactions with other users, while in a recommendation system, it could store the user’s past preferences and activities. TGNs process temporal graphs in two stages: the memory module and the embedding module. In the memory module (Figure 1 (b)), events are processed in batches to improve computational efficiency. Target node updates its memory based on the received message. This message includes the source node memory, the destination node memory, and the event feature. The updated memory is passed to sub-sequent batches for further processing. In the embedding module (Figure 1 (c)), each node u obtains its neighboring events Nu[0 , t ] = {ek = ( v, u, t k)|ek ∈ E (t)}, where t
+
+is the current time and E(t) is the set of events observed before timestamp. The memory vectors are used to generate these neighboring event embeddings. The event embedding also includes the source node memory, the destination node memory and the event feature. Each node aggregates these neighboring event embeddings to form its own node em-bedding. To predict the presence of an edge between two target nodes, the embeddings of these nodes are used for the prediction. The memory and embedding modules enable TGN to capture both structural and temporal dependencies within the temporal graph and enhance prediction accuracy. Despite their strong predictive performance, TGNs remain black-box models. TGNs offer little transparency into how predictions depend on historical events. Enhancing ex-plainability is critical to improving the trustworthiness of TGNs and ensuring their safe deployment in high-stakes areas such as fraud detection and healthcare. Various ex-planation methods on static graph neural networks have been proposed, such as GNNExplainer (Ying et al., 2019), PGExplainer (Luo et al., 2020), and FlowX (Gui et al., 2023). These methods typically identify a small subset of 1arXiv:2607.07716v1 [cs.LG] 4 Jul 2026 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution (a) Temporal graph                 
+
+> t1
+> To predict
+> 3
+> 2
+> 1
+> t4
+> t3
+> t2 4
+> (b) TGNs-Memory module
+> Batch 1
+> 13
+> 12
+> t1
+> t2
+> (c) TGNs-Embedding module
+> 1
+> Memory
+> 2
+> 34
+> 1
+> Memory
+> 43
+> 21
+> Message
+> 3
+> 12e2
+> e1
+> Message
+> 4e4
+> e3 23
+> 3
+> 1
+> Memory
+> 43
+> 2
+> Batch 2
+> 23
+> 34
+> t3
+> t4
+> 1
+> Memory
+> 43
+> 21
+> Memory
+> 43
+> 2
+> Neighboring
+> events
+> 12
+> 34
+> t2
+> t4
+> Event
+> embedding
+> e4
+> e2 12
+> 34
+> Target node
+> embedding
+> 24
+
+̂
+
+ŷyLogits           
+
+> 1423
+> 2334
+> e1 e2 e3
+> Memory
+> vector
+> e4
+> Event
+> feature
+> 1234Node
+> Target node
+> embedding
+> Neighboring
+> events
+> 1
+> Memory
+> 43
+> 2
+> Memory
+> module
+> Spatial
+> Temporal
+> Explanation
+> Not explain
+> (d) Existing explanation methods
+> Logits
+> Spatial
+> Temporal
+> (e) Proposed framework
+> Topology
+> attribution
+> tree
+> Contributions
+> of neighbor
+> events
+> Memory
+> backtracking
+> tree
+> Contributions
+> of historical
+> events
+> Neighboring
+> events
+> 1
+> Memory
+> 43
+> 2Contributions
+> of memory
+> memories
+> Sum
+> Update
+> Update
+> Fixed
+> Equals
+
+Figure 1. Overview of TGNs and our explainability framework. ( a) Temporal graph: each node has a memory vector and each event has features. ( b) The memory module in TGNs: events are processed in batches. In the batch 1, the node 3 and 2 update their memory, because they receive the message from event e1 and e2. For event e1 = (1 , 3, t 1), the message is constructed from the memories of source node 1, destination node 3 and the feature of e1. The updated memory is passed to batch 2 for further processing. ( c) The embedding module in TGNs: for target nodes 2 and 4, the neighboring events are e2 and e4. The embedding of e4 is based on memories of nodes 3 and 4, alongside the event feature. The event embeddings are aggregated to generate embeddings for node 4, which are used for predictions. ( d)Existing explanation methods. Existing explanation methods fix the memories such that they ignore how historical events update the memory of node. As a result, they may obtain unfaithful explanations. ( e) The proposed framework: we construct a topology attribution tree to quantify the spatial contribution of neighboring events and the temporal contribution of the node memories (Section 4.2). Then we construct memory backtracking tree to track the long term impact of historical events on node memories (Section 4.3). The total contributions of the neighboring events and historical events equals the logits. 
+
+important edges, nodes, or subgraphs that contribute the most to the prediction on static graphs. There have been some recent attempts at TGNs explainability, such as T-GNNExplainer (Xia et al., 2022) and TempME (Chen & Ying, 2023). However, all of the above methods fix the final memory vector (Figure 1 (d)). Fixing the memory vector means they ignore how historical events update the memory of node. In TGNs, the target node embeddings capture both temporal information from node memories and spatial infor-mation from neighboring events. Fixing the memory vector thus restricts the explanation method to the topological struc-ture of the temporal graph, neglecting the critical role of the memory module. As a result, these explanation methods lead to inaccurate attributions and unfaithful explanations. To address the challenge of temporal graph explanations, we propose a framework that attributes the predictions of TGNs to neighboring events and historical events, consid-ering both spatial interactions among neighbors and the updates of node memories (Figure 1 (e)). First, we construct a topology attribution tree to quantify the spatial contribu-tion of neighboring events and the temporal contribution of the node memories. Then we construct memory backtrack-ing tree to track the long-term impact of historical events on the node memories. We apply Layer-wise Relevance Propa-gation (LRP) (Bach et al., 2015) method to the TGN model and ensure that the sum contributions of neighbor events and node memories equals the logits when constructing the topology attribution tree. In memory backtracking trees, the sum contributions of events equals the total memory contributions of all nodes. Thus, our method achieves con-servation, where the sum of all event contributions equals the logits. This conservation property allows us to derive KL divergence and formulate an optimization problem to se-lect important events as explanations. Experiments on nine temporal graph datasets, spanning node property prediction, link prediction, and graph classification demonstrate the ef-fectiveness of our method, which consistently outperforms four state-of-the-art baselines, highlighting the advantage of tracing node memories. A t-test between our method and the second-best baseline shows statistical significance in 77 % of cases for Fidelity KL and 74 % for Fidelity prob .2Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+## 2. Related work 
+
+GNNs Explainability Explainability methods for Graph Neural Networks can be broadly categorized into instance-level and model-level approaches (Yuan et al., 2022). Instance level explanation methods focus on explaining model predictions by identifying important subgraphs that strongly correlate with predictions. For example, the Gradient/Features-based techniques, such as CAM and GradCAM (Pope et al., 2019) identify important nodes us-ing gradients. Perturbation-based methods, such as GNNex-plainer (Ying et al., 2019), PGExplainer (Luo et al., 2020), learn edge masks by maximizing mutual information to ex-plain the predicted class distribution. Decomposition-based methods, such as GNN-LRP (Schnake et al., 2020), extend the original LRP (Bach et al., 2015) algorithm to GNNs and attribute the importance to graph walks. Surrogate-based methods, like GraphLime (Huang et al., 2020), build a surrogate model with kernel-based feature selection to provide node feature explanations. Model level explanation methods (Yuan et al., 2020) produce a high-level explana-tion about the general behaviors of GNNs. However, these methods are designed for static graphs and cannot explain temporal graph models. They fail to capture the temporal dependency mixed with the graph topology. 
+
+TGNs Explainability TGNNExplainer (Xia et al., 2022) is the first explainer tailored for TGNs, which relies on the MCTS algorithm to search for a combination of the explana-tory events. TempME (Chen & Ying, 2023) extracts the most interaction-related motifs based on the information bottleneck principle. Recent work (He et al., 2022) utilizes the probabilistic graphical model to generate explanations for discrete time series on the graph, leaving the continuous-time setting underexplored. However, these methods over-look the memory module in TGNs, which is responsible for maintaining and updating node states over time. As a result, they fail to capture how historical interactions accumulate in memory and directly shape future predictions, leaving the core mechanism of TGNs unexplained. 
+
+## 3. Preliminaries on TGNs 
+
+A temporal graph is defined as a function of timestamp 
+
+t, denoted by G(t) = {V (t), E(t)}, where V(t) and E(t)
+
+represent the set of nodes and events observed before times-tamp t. Each event ek = ( v, u, t k) ∈ E (t) indicates an interaction between source node v and destination node 
+
+u at timestamp tk, where tk < t . Let xu ∈ R1×dm and 
+
+xek ∈ R1×de denote feature vectors for node u and event 
+
+ek, respectively. In TGNs, each node u maintains a memory vector stu ∈ R1×dm at timestamp t. st− 
+
+> u
+
+∈ R1×dm denotes the memory vector of node u before timestamp t.Temporal Graph Networks (Rossi et al., 2020) can be viewed as an encoder-decoder framework. The encoder maps the temporal graph G(t) into time-aware node embeddings, while the decoder takes one or more embeddings to obtain task-specific predictions, such as node property prediction or link prediction. The memory of node is updated when-ever the node participates in an event. TGNs compute node embedding ztu ∈ Rdm in four steps: 
+
+mtu = fmessage 
+
+
+
+st− 
+
+> v
+
+, st− 
+
+> u
+
+, xek , t − tk,
+
+
+
+, (1) 
+
+¯mtu = fagg 
+
+ mt1 
+
+> u
+
+, . . . , mtb
+
+> u
+
+ , (2) 
+
+stu = fupdate 
+
+
+
+¯mtu, st−
+
+> u
+
+
+
+, (3) 
+
+ztu = X   
+
+> ek∈N nu([0 ,t ])
+
+femb 
+
+ stu, stv , xek , xu, xv
+
+ . (4) Here, the message function fmessage computes the message of destination node u based on the memory st− 
+
+> u
+
+, st− 
+
+> v
+
+, the event features xek , and the elapsed time t − tk. fmessage can be either identity map or MLP. If multiple messages are received in a batch, the message aggregator fagg combines these messages, either by selecting the most recent message or by averaging, and t1, · · · , t b ≤ t. The memory updater 
+
+fupdate updates the node’s memory, typically using an LSTM or GRU. Let Nu[0 , t ] = {ek|ek = ( v, u, t k) ∈ E (t)} de-note the neighborhood of node u in time interval tk and 
+
+N nu [0 , t ] denote the set of the most recent n interactions from Nu[0 , t ], where t is the current time. For each event, the embedding function femb combines the memory vectors of the target node and its neighbors, along with the associ-ated event and node features to produce an event-specific representation. femb can be implemented as a temporal graph attention or a graph sum function. The node embeddings are fed into an MLP for task-specific predictions. For link prediction, given two nodes v and 
+
+u at time t, the prediction score is obtained as ˆyv,u =
+
+σ(fmlp ([ ztv || ztu])) , where [· ∥ · ] denotes vector concatena-tion, fmlp is the multi-layer perceptron, and σ is the sig-moid function. For node property prediction, the embed-ding of a node u is mapped to its label distribution as : 
+
+ˆyu = softmax (fmlp ([ ztu])) . For graph classification, the av-erage pooling of ztu across all nodes in temporal graph G(t)
+
+produces a single vector representation for classification. 
+
+## 4. Method 
+
+4.1. Overview 
+
+The pipeline of our method is shown in Figure 1 (e), with the detailed process depicted in Figure 2. Taking link predic-tion as an example, given a temporal graph and a prediction between nodes u and v at time t, we proceed in three steps. Let Ttop (x) denote the topology attribution tree and the 
+
+Ctx ∈ R|E (t)|× dm represent the contributions of all events to ztx, where node x ∈ { u, v }. The Mtp0→u ∈ Rdm×dm
+
+3Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 1                  
+
+> Memory
+> 432
+> Neighboring
+> events
+> 12
+> 34
+> t2
+> t4
+> Topology attribution tree
+> 24
+> 2.5
+> e4 e2 1234
+> Neighboring
+> events
+> e4 e2 e1 e3
+> 0.1 0.5 00
+> Memory backtracking trees
+> 2
+> 12e2
+> e4
+> 4
+> 34
+> 31e1
+> 3
+> 32e3
+> 31e1 12e2
+> Memory
+> 0.2 0.8 00.9
+> 1234
+> Step 1
+> Step 2
+> Step 3
+> Historical events
+> e4 e2 e1 e3
+> 0.3 0.2 0.6 0.8
+> Step 4
+> Logits
+
+Figure 2. The detailed process of Figure 1 (e). Assuming the logits are 2.5, the numbers in red represent the contribution scores. The meaning of the different colored circles and squares is consistent with those in Figure 1. The number with red colors denote the contribution scores. The meanings of the different colored circles and squares are consistent with those in Figure 1. Given the node memories and neighboring events e2 and e4, we construct the topology attribution tree to attribute the logits to the memories of nodes 1, 2, 3, 4 and the features of neighboring events e2 and e4.For nodes 2, 3, 4, we construct the memory backtracking tree to attribute the contribution of node memories to the historical events 
+
+e1, e2, e3 and e4. In both trees, the parent node is the target node in the event, with three child nodes: the source node, the target node, and the event triggering the interaction. The total contributions from historical and neighboring events equal the logits. 
+
+represents the contribution of node p0’s memory vector to 
+
+ztu. First, we construct Ttop (u) and Ttop (v) and attribute the 
+
+ztu, ztv to the historical events and to the node memory vec-tors (Section 4.2). We prove that these contribution values satisfy 
+
+X
+
+> p0∈leaf (Ttop (x))
+
+1⊤Mtp0→x +1⊤Ctx = ztx, x ∈ { u, v } (5) Where leaf (Ttop (x)) represent the leaf nodes of Ttop (x) and 
+
+1⊤ represents the transpose of a vector of ones. Next, we further decompose the contributions of memory vectors Mtp0→u to the contributions of events Ctu through a memory backtracking tree, revealing which past interactions most strongly influence these vectors (Section 4.3). We also prove that the contribution values satisfy 
+
+1⊤Ctu = ztu, 1⊤Ctv = ztv (6) Finally, in the MLP function for link prediction, we compute the contribution of ztu and ztv to the final logits, update the 
+
+Ctu and Ctv , and obtain the total final contribution of events: 
+
+Ct = Ctu + Ctv , 1⊤Ct = logits (7) Using this conservation property, we derive the KL diver-gence and design objective functions to select the important events that explain the TGNs prediction (Section 4.4). 
+
+4.2. Spatial Decomposition via topology attribution tree 
+
+We construct the topology attribution tree and apply the Layer-wise Relevance Propagation (LRP) method (Bach et al., 2015) to Eq. (4), decomposing the target node embed-ding ztu into contributions from the target memory vector stu,the neighbor memory vector stv , and the feature vectors xu,
+
+xv , and xek . Next, we introduce the original LRP method. 4.2.1. O RIGINAL LRP METHOD 
+
+LRP attributes the prediction score to the input neurons. Let the activation of a neuron at layer l + 1 be hl+1 ∈ R,computed as hl+1 = f ([ hl
+
+> 1
+
+, . . . , h ln]) , where f may be a linear function or a composition of a linear function with a nonlinear activation such as ReLU. Given the relevance 
+
+Rl+1 ∈ R, LRP distributes it hl+1 to the inputs according to the following equation: 
+
+Rli = hliwli
+
+P 
+
+> i′
+
+hli′ wli′
+
+Rl+1 , (8) where wli is weight from the neuron hli to the neuron hl+1 .For a multi-layer network, LRP redistributes the relevance score from the output layer back to the input layer by recur-sively applying the Eq. (8). Let the final prediction logit be assigned as relevance score RL, where L denotes the output layer. The relevance of an input neuron h0 
+
+> i
+
+is then obtained by successively propagating through all intermediate layers, while preserving the conservation property: P 
+
+> i
+
+R0 
+
+> i
+
+= RL
+
+R0 
+
+> i
+
+= X
+
+> j,...,k
+
+h0 
+
+> i
+
+w0
+
+> i
+
+P 
+
+> i′
+
+h0 
+
+> i′
+
+w0
+
+> i′
+
+· · · hL−1 
+
+> k
+
+wL−1
+
+> k
+
+P 
+
+> k′
+
+hL−1 
+
+> k′
+
+wL−1
+
+> k′
+
+· R(L). (9) 
+
+Lemma 4.1. Let x ∈ R1×d1 , W ∈ Rd1×d2 and y =
+
+x · W ∈ R1×d2 . Suppose that the relevance contribution assigned to y is R(y) ∈ Rd2×d3 . Let · denote the ma-trix multiplication, diag( ·) denote the diagonal matrix, and 
+
+diag( ·)−1 be the inverse of the diagonal matrix. Using the LRP method, the relevance contribution assigned to x is obtained from the following formula and satisfies the con-servation property: 
+
+P = diag( x) · W · diag( y)−1, R(x) = P · R(y),
+
+1⊤ · R(x) = 1⊤ · R(y).
+
+The proof of Lemma 4.1 is in Appendix A.2. Lemma 4.1 represents the matrix form of LRP. The matrix P can be interpreted as a proportional matrix. The core of the LRP algorithm is to design rules to compute this proportional matrix P, ensuring that it satisfies the conservation property 
+
+1⊤ · P = 1⊤. Consequently, we have 1⊤ · R(x) = 1⊤ ·
+
+P · R(y) = 1⊤ · R(y). We will now proceed to derive the explicit expression for the proportional matrix P when the LRP method is applied to femb .4.2.2. LRP ON femb 
+
+The ht,l u denotes the node embedding for u in graph layer l
+
+and timestamp t, with ht, 0 
+
+> u
+
+= stu. For simplicity, we drop 4Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+the superscript t and write hlu
+
+> △
+
+= ht,l u . We use the temporal graph sum function as an example to illustrate how LRP attributes the logits of TGNs to stu, stv , xu, xv , and xek . The derivation for the graph attention function is in Appendix A.4, with the resulting formulas in Eq. (26). For the graph sum function, Eq. (4) becomes: 
+
+ˆhlu = X   
+
+> ek=( v,u,t k)∈N nu
+
+
+
+hl−1 
+
+> v
+
+∥xek ∥ ϕ(t − tk)
+
+
+
+Wl
+
+> 1
+
+˜hlu = ReLU (ˆhlu), hlu =
+
+
+
+hl−1 
+
+> u
+
+∥ ˜hlu
+
+
+
+Wl
+
+> 2
+
+. (10) The function ϕ(·) is a time encoding. Let dt denote the output dimension of ϕ(·). W2 = [ Al Bl] ∈ Rdm×2dm
+
+and Wl 
+
+> 1
+
+= [ Cl Dl El] ∈ Rdm×(dm+de+dt) are param-eters, where Al, Bl, Cl ∈ Rdm×dm , Dl ∈ Rde×dm and 
+
+El ∈ Rdt×dm . (· ∥ · ∥ · ) denotes vector concatenation. The final embedding is ztu = hLu ∈ R1×dm , where L is the number of layers. 
+
+Proposition 4.2. When the LRP method is applied to femb ,the proportional matrices are 
+
+P(˜ u) = diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1
+
+P(v) = diag  hl−1
+
+> v
+
+ · Cl · diag 
+
+ˆhlu
+
+−1
+
+· P(˜ u)
+
+P(ek) = diag( xek ) · Dl · diag 
+
+ˆhlu
+
+−1
+
+· P(˜ u)
+
+P(ϕ) = diag( ϕ(t − tk)) · El · diag 
+
+ˆhlu
+
+−1
+
+· P(˜ u)
+
+P(u) = diag  hl−1
+
+> u
+
+ · Al · diag  hlu
+
+−1 (11) 
+
+Let R = R  hlu
+
+, the contribution matrices are given by 
+
+R  hl−1
+
+> v
+
+ = P(v) · R, R  hl−1
+
+> u
+
+ = P(u) · RR = P(ek) · R, R (t − tk) = P(ϕ) · R (12) 
+
+For ek = ( v, u, t k) ∈ N nu , these contribution matrices satisfies 
+
+1⊤R  hlu
+
+ = 1⊤R  hl−1
+
+> u
+
+ + 1⊤ X
+
+> v
+
+R  hl−1
+
+> v
+
+ (13) 
+
++ 1⊤ X
+
+> ek
+
+R (ek) + 1⊤ X
+
+> tk
+
+R (t − tk)
+
+The contribution matrices R hl−1
+
+> v
+
+ and R hl−1
+
+> u
+
+ ∈
+
+Rdm×dm , R(xek ) ∈ Rde×dm and R(t − tk) ∈ Rdt×dm .Each matrix element represents the contribution of the i-th neuron in hl−1 
+
+> v
+
+, hl−1 
+
+> u
+
+, xek , ϕ (t−tk) to the j-th neuron in ztu,respectively. The proof is in Appendix A.3. The example of the Proposition 4.2 is in Figure 3. 4.2.3. T OPOLOGY ATTRIBUTION TREE 
+
+We construct the topology attribution tree through hierar-chical traversal, updating the contribution matrix at each 𝑹  𝒉 𝑢                                                  
+
+> 1=12
+> 23
+> 𝐏 𝑢 =0.10.1
+> 0.20.1
+> 𝐏 𝑣 =0.20.1
+> 0.30.5
+> 𝐏 𝑒 𝑘 =0.10.1
+> 𝐏 𝜙 =0.10.1
+> 𝑹 𝒉 𝑢
+> 0=0.30.5
+> 0.40.7
+> 𝑹 𝒉 𝑣
+> 0=0.40.7
+> 1.32.1
+> 𝑹 𝑒 𝑘 =0.30.5
+> 𝑹 𝑡 −𝑡 𝑘 =0.30.5
+> 11
+> sum sum
+> Eq. (11) 35
+> sum sum
+> Matrix multiplication
+> Using Eq. (12) Eq. (12)
+
+Figure 3. We obtain these proportional matrices according to the Proposition 4.2. Summing their elements column-wise results in a vector of ones. Based on this property, the total contribution of 
+
+R hl−1
+
+> v
+
+, R hl−1
+
+> u
+
+, R(xek ) and R(t − tk ) equals to R hlu
+
+.
+
+layer of the tree based on Eq. (12) and Eq. (26). In this process we attribute contributions to both the events and the node memories, as described in Algorithm 2. As outlined in Algorithm 2, we can compute the contribution matrix 
+
+Ctu, where each row corresponds to an event, and the row vector represents the contribution to ztu. Additionally, we ob-tain a set of matrices {Mtp0→u|p0 is a leaf node of Ttopo (u}.Here, Mtp0→u ∈ Rdm×dm denotes the contribution of node p0’s memory vector to ztu. By the conservation property (Proposition 4.2), the contribution values satisfy: P 
+
+> p0
+
+1⊤Mtp0→u + 1⊤Ctu = ztu.
+
+4.3. Temporal Decomposition via Memory Backtracking 
+
+In Algorithm 2, we obtain a set of the memory matrices 
+
+{Mtp0→u|p0 is a leaf node of Ttop (u)} and the event contri-bution matrix Ctu. For each Mtp0→u, we construct a mem-ory backtracking tree to attribute the contributions of node memory to the historical events responsible for updating the target node. In this process, we will update the Ctu. After the memory backtracking process, the contribution matrix satisfies 1⊤Ctu = ztu. We use Mtu→u as an example to demonstrate how to construct the memory backtracking tree and attribute the contributions to the historical events. 4.3.1. LRP ON fupdate 
+
+To illustrate the backtracking construction, we set fupdate 
+
+as a GRU. If fupdate is RNN function, the derivation is in Appendix A.6, with the resulting formulas in Eq. (30). For 
+
+fupdate as a GRU, Eq. (3) becomes: 
+
+rtu = σ  ¯mtuWr + st− 
+
+> u
+
+Ur + br
+
+ ,
+
+gtu = σ  ¯mtuWg + st− 
+
+> u
+
+Ug + bg
+
+ ,
+
+˜stu = tanh   ¯mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh) + bh
+
+ ,
+
+stu = (1 − gtu) ⊙ st− 
+
+> u
+
++ gtu ⊙ ˜stu.
+
+Where Wr , Wg , Wh, Ur , Ug , Uh, br , bg , bh are the pa-rameters in the GRU. 
+
+Proposition 4.3. Let diag denote the diagonalization op-
+
+5Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+erator that maps a vector to a diagonal matrix. Let 
+
+Lt = diag( ¯ mtu) · Wh · diag(˜ stu − bh)−1, Ft =diag 
+
+ (1 −gtu)⊙st−
+
+> u
+> stu
+
+
+
+, and Ht = diag( rtu ⊙ st− 
+
+> u
+
+) · Uh ·
+
+diag( ¯ mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh)) −1. When the LRP method is applied to fupdate , the proportional matrices are 
+
+P st−
+
+> u
+
+ = Ft + Ht · diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+
+
+,
+
+P  ¯mtu
+
+ = Lt · diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+
+
+,
+
+1⊤ = 1⊤P st−
+
+> u
+
+ + 1⊤P  ¯mtu
+
+ .
+
+Then, the contribution matrices are given by 
+
+R st−
+
+> u
+
+ = P(st− 
+
+> u
+
+) · R stu
+
+ ,
+
+R  ¯mtu
+
+ = P( ¯ mtu) · R stu
+
+ ,
+
+1⊤R stu
+
+ = 1⊤R st−
+
+> u
+
+ + 1⊤R  ¯mtu
+
+ .
+
+Then we decompose R( ¯ mtu) as 
+
+R  ¯mtu
+
+ = [ R st−
+
+> v
+
+ , R st−
+
+> u
+
+ , R(xek ) , R(t − tk)] .
+
+Where R(st− 
+
+> u
+
+) and R(st− 
+
+> v
+
+) ∈ Rdm×dm , R(xek ) ∈
+
+Rde×dm , and R(t − tk) ∈ Rdt×dm denote the contribu-tion of st− 
+
+> u
+
+, st− 
+
+> v
+
+, xek and ϕ(t − tk) to ztu, respectively. The proof is in Appendix A.5. The overview of proposition 4.3 is provided in Figure 7. we first decompose R(stu) into R(st− 
+
+> u
+
+) and R(˜ stu). Then, 
+
+R(˜ stu) is further decomposed into R(st− 
+
+> u
+
+) and R( ¯ mtu). Fi-nally, R( ¯ mtu) is attributed to R(st− 
+
+> v
+
+), R(st− 
+
+> u
+
+), R(t − tk),and R(xek ). The toy running example is in Appendix A.9. 4.3.2. M EMORY BACKTRACKING TREE 
+
+The memory backtracking tree is organized chronologically: the root corresponds to the target node’s memory at the pre-diction time, the first layer contains the most recent events that directly updated this memory, and deeper layers trace earlier historical events. According to the proposition 4.3, the contribution of each parent node in the tree can be recur-sively attributed to its child nodes. Figure 4 presents an example of constructing memory back-tracking trees. In Figure 4 (b), events are processed in batches, and memory updates are carried forward to sub-sequent batches. Figure 4 (c) shows the memory update process of nodes 2 and 3. For node 3, its memory is updated from st0 
+
+> 3
+
+after receiving the message from event e1, remains unchanged at t2, is updated again by event e3 to st3 
+
+> 3
+
+, and stays unchanged at t4. Node 2 follows a similar process. Figure 4 (d) shows the memory backtracking tree for node 3. Starting from the R(st4 
+
+> 3
+
+), we first trace it back to the most recent event e3, and obtain the tree in Figure 4 (d) (1). The 
+
+R(st2 
+
+> 3
+
+), R(st2 
+
+> 2
+
+) and R(e3) can be obtained according to the proposition 4.3. Then R(st2 
+
+> 3
+
+) is further traced back to event 
+
+e1 as shown in Figure 4 (d) (2), while R(st2 
+
+> 2
+
+) is traced back to event e2, as shown in Figure 4 (d) (3). By recursively expanding the tree in this way, we obtain the contributions of all relevant historical events. To trace contribution of node memory vectors, we record which events triggered updates. Let H(u, t ) = { ek =(v, u, t k) ∈ E (t) : tk < t ∧ Update (u, t k) }, where Update (u, t k) is true if and only if u’s memory is up-dated at time tk. For example, in Figure 4 (b), the mem-ory of node 3 is updated by events e1 and e3, thus, the 
+
+H(3 , t 4) = {e1 = (1 , 3, t 1), e 3 = (2 , 3, t 3)}. Based on the 
+
+H(u, t ), we construct memory backtracking trees and assign event contributions. The recursive procedure is given in Al-gorithm 5, where the maximum depth TL controls how far the backtracking proceeds: larger TL allows deeper tracing into historical events. 
+
+4.4. Selecting Important Events 
+
+We derive the KL divergence and formulate an optimization problem to select important events that faithfully explain the model’s behavior. For the link prediction task, the pre-dicted probability is ˆyv,u = σ(fmlp ([ ztv || ztu])) . Using the Algorithm 2 and Algorithm 5, we can compute the event contributions Ctu and Ctv . Then, for the MLP function used in link prediction, we compute the contributions according to Lemma 4.1 and update Ctu and Ctv . Due to the conser-vation property of Proposition 4.2 and Proposition 4.3, we have 1⊤Ctu + 1⊤Ctv = fmlp ([ ztv || ztu]) = yv,u . The final contribution matrix is Ct = Ctu + Ctv .For the link prediction, let p1 and p2 denote arbitrary pre-diction probabilities. The KL divergence between p1 and p2
+
+is defined as: KL (p2 ∥ p1) = σ(z2)( z2 − z1) − sp (z2) + sp (z1), (14) where sp (z) = 11+ e−z , σ is the sigmoid function. The derivation process is in Appendix A.7. Let E∗ ⊂ E (t) be the selected important events, and we aim to minimize the KL divergence between ˆyv,u 
+
+ E(t) and 
+
+ˆyv,u 
+
+ E∗. Let dc denote the number of events in Ct with non-zero contributions, and d ∈ { 0, 1}dc be the selection vector, where the element dl in d indicates whether the l-th event el is selected. We define the following problem: 
+
+d∗ = arg min  
+
+> d∈{ 0,1}dc ,
+> ∥d∥1=n
+
+−ˆyv,u 
+
+ E(t) dcX
+
+> l=1
+
+dlCtel + sp (
+
+> dc
+
+X
+
+> l=1
+
+dlCtel )
+
+(15) The derivation process is in Appendix A.7. By solving Eq. (15), we can obtain the most important events for the link prediction task. The Algorithm 1 shows the overall 6Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution (a) Temporal graph 
+
+t1 
+
+To predict 
+
+3
+
+2
+
+1
+
+t4 
+
+t3 
+
+t2 4
+
+(b) TGNs-Memory module 
+
+> Batch 1
+
+1 3t1 1           
+
+> Memory at t0
+> 2341
+> Message
+> 3e1
+> 1423
+> 2334
+> e1 e2 e3
+> Memory
+> vector
+> e4
+> Event
+> feature
+
+1 2 3 4Node 
+
+> Update
+
+(d) Memory backtracking trees  
+
+> 1
+> Memory at t1
+> 243
+> Batch 2
+
+1 2
+
+t2 1    
+
+> Memory at t1
+> 241
+> Message
+> 2e2
+> Update
+> 1
+> Memory at t2
+> 4332
+> Batch 3
+
+2 3
+
+t3 1    
+
+> Memory at t2
+> 4
+> Message
+> e3
+> Update
+> 1
+> Memory at t3
+> 4322233
+> Batch4
+
+3 4
+
+t4 1                                                                                                                                         
+
+> Memory at t3
+> 4
+> Message
+> e4
+> Update
+> 1
+> Memory at t3
+> 2233434
+> R(st4
+> 3)=[
+> 12
+> 34]
+> R(st4
+> 3)=[
+> 12
+> 34]
+> 3
+> R(st2
+> 2)=[
+> 00
+> 22]
+> R(st2
+> 2)=[
+> 00
+> 22]
+> 3
+> 32e3
+> R(e3)=2R(e3)=2R(st2
+> 3)=[
+> 11
+> 11]
+> R(st2
+> 3)=[
+> 11
+> 11]
+> 3
+> 32e3
+> 31e1
+> R(st0
+> 3)=[
+> 00
+> 00]
+> R(st0
+> 3)=[
+> 00
+> 00]
+> R(st0
+> 1)=[
+> 00
+> 00]
+> R(st0
+> 1)=[
+> 00
+> 00]R(e1)=4R(e1)=4
+> 1⊤R(e3)+1⊤R(st2
+> 3)+1⊤R(st2
+> 2)=1⊤R(st4
+> 3)1⊤R(e3)+1⊤R(st2
+> 3)+1⊤R(st2
+> 2)=1⊤R(st4
+> 3)1⊤R(e1)+1⊤R(st0
+> 1)+1⊤R(st0
+> 3)=1⊤R(st2
+> 3)1⊤R(e1)+1⊤R(st0
+> 1)+1⊤R(st0
+> 3)=1⊤R(st2
+> 3)
+> Decomposition of R(st4
+> 3)R(st4
+> 3)Decomposition of R(st2
+> 3)R(st2
+> 3)
+> Input
+> 31
+> Message
+> 3e1 33
+> Message
+> e3 2333
+> t0 t1 t2 t3 t4
+> 2221
+> Message
+> 2e2 22
+> t0 t1 t2 t3 t4
+> st0
+> 3
+> st0
+> 3st1
+> 3
+> st1
+> 3st2
+> 3
+> st2
+> 3st3
+> 3
+> st3
+> 3st4
+> 3
+> st4
+> 3
+> Memory Vector Update Process of Node 3
+> Memory Vector Update Process of Node 2
+> st0
+> 2
+> st0
+> 2st1
+> 2
+> st1
+> 2st2
+> 2
+> st2
+> 2st3
+> 2
+> st3
+> 2st4
+> 2
+> st4
+> 2
+
+(c) Memory vector update process of nodes 2 and 3                                                                                 
+
+> R(st2
+> 2)=[
+> 00
+> 22]
+> R(st2
+> 2)=[
+> 00
+> 22]
+> 3
+> 32e3
+> 31e1 12e2
+> R(st0
+> 1)=[
+> 00
+> 00]
+> R(st0
+> 1)=[
+> 00
+> 00]
+> R(st0
+> 2)=[
+> 00
+> 00]
+> R(st0
+> 2)=[
+> 00
+> 00]
+> R(e2)=4R(e2)=4
+> Decomposition of R(st2
+> 2)R(st2
+> 2)
+> 1⊤R(e2)+1⊤R(st0
+> 2)+1⊤R(st0
+> 1)=1⊤R(st2
+> 2)1⊤R(e2)+1⊤R(st0
+> 2)+1⊤R(st0
+> 1)=1⊤R(st2
+> 2)
+> Output
+> e3 R(e3)=2R(e3)=2
+> e2 R(e2)=4R(e2)=4
+
+R(e1) + R(e2) + R(e3) = 1⊤R(st4
+
+3 )R(e1) + R(e2) + R(e3) = 1⊤R(st4
+
+3 )     
+
+> e1 R(e1)=4R(e1)=4
+
+（1） （2） （3）
+
+Figure 4. The example of building a memory backtracking tree. 
+
+process of selecting important events for link prediction task. The node property prediction is in Appendix A.12 and Algorithm 3, while the graph classification task is in Appendix A.13 and Algorithm 4. 
+
+Algorithm 1 The overall framework for link prediction 
+
+1: Input : target interaction (v, u ), time t, and the max depth of memory backtracking tree TL
+
+2: Compute {Mtp0→u|p0 is a leaf node of Ttop (u)},
+
+{Mtp0→v |p0 is a leaf node of Ttop (v)}, Ctu, and Ctv
+
+using Algorithm 2. ▷ topology attribution 
+
+3: for each Mtp→u ∈ { Mtp0→u} do 
+
+4: Update Ctu using Algorithm 5 ▷ Memory attribution 
+
+5: end for 
+
+6: for each Mtp→v ∈ { Mtp0→v } do 
+
+7: Update Ctv using Algorithm 5 ▷ Memory attribution 
+
+8: end for 
+
+9: Update Ctu and Ctv using Lemma 4.1, and Ct = Ctu +
+
+Ctv
+
+10: Select important events E∗ using Eq. (15) 
+
+11: Output: The important events E∗
+
+4.5. Complexity Analysis Construct the topology attribution tree : if femb is the graph sum function, the complexity is O N · dm + 2 L ·
+
+B · n · dm). If the femb is the graph attention function, the complexity is O N · dm + 2 L · B · (n + n2) · dm).
+
+Construct the memory backtracking tree : the complexity is O 2TL · TL · dm · dm). Select the important events : the complexity is O d3
+
+c ). Where dm is the dimension of the memory vector, n is the number of most recent interactions considered, L is the number of graph layers, N = |V (t)| is the number of nodes, B is the batch size, TL is the depth of memory backtracking tree, and dc is the number of events in contribution matrix Ct
+
+## 5. Experiments 
+
+Datasets . We evaluate the effectiveness of our method, MemExplainer, on nine real-world temporal graph datasets: Wikipedia, Reddit, Enron and UCI (Hamilton et al., 2017; Jure, 2014; Poursafaei et al., 2022) for the link predic-tion task, tgbn-trade, tgbn-genre, and tgbn-reddit (Huang et al., 2023) for node property prediction, HMDB51 dataset (Kuehne et al., 2011) and Penn Action (Zhang et al., 2013) dataset for graph classification (human pose-based action classification) task. Detailed dataset statistics are provided in Appendix A.15. 
+
+Baselines . We compare the performance of MemExplainer with several baselines: TGNNExplainer (Xia et al., 2022), 
+
+TempME (Chen & Ying, 2023), GNNExplainer (Ying et al., 2019), and PGExplainer (Luo et al., 2020). The GN-NExplainer and PGExplainer are the explanation methods for static graph models. We adapt it for TGNs following the same setting in prior work (Xia et al., 2022). TempME intro-duces a graph generation approach to capture temporal mo-tifs for TGN predictions, while TGNNExplainer combines 7Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+a navigator with Monte Carlo Tree Search, guiding the sam-pling process to construct explanation subgraphs. We also include several ablation variants as baselines. w/o memory 
+
+uses only neighboring-event contributions (no memory back-tracking tree); w/o topology uses only historical-event con-tributions (no topology tree); w/o selection skips objective-based selection and directly returns the top-k events by accumulated contribution. 
+
+Experimental setup . In the graph classification (pose-based action classification) task, for each video, we first run YOLOPose (Maji et al., 2022) to detect human key-points and construct a skeleton graph whose nodes are body joints and whose edges follow the human kinematic struc-ture. This produces a sequence of skeleton graphs for each frame, and then we feed these skeleton graphs into TGN to predict the action label. Notably, in Penn Action dataset, we use labeled data instead of extracting it using YOLOPose. We set the maximum depth of the memory backtracking tree to 5. Given the target events, nodes or graphs, we apply Algorithm 1, Algorithm 3 or Algorithm 4 to identify the important events E∗.
+
+Evaluation metrics We evaluate performance using fidelity and sparsity. Let E(t) represent the original temporal events. Let E∗ denote the selected important events. The KL-based fidelity metrics are Fidelity KL = KL (ˆ yv,u (E(t)) ∥ˆyv,u (E∗)) 
+
+(link prediction) as defined in prior work (Liu et al., 2024). We use the probability-based fidelity metric: Fidelity prob =
+
+|ˆyv,u (E(t)) − ˆyv,u (E∗)| (link prediction) as defined in (Yuan et al., 2022). Lower values indicate better performance. Sparsity = |E ∗||E (t)| , where |E ∗| and |E (t)| denote the num-ber of events in E∗ and E(t). The metrics for node prop-erty prediction and graph classification are shown in Ap-pendix A.11. 
+
+Performance . We report the Fidelity KL and the Fidelity prob 
+
+results in Figures 5-6, respectively, when the femb is graph sum function. Appendix A.17 provides the mean and stan-dard deviation of these metrics in Tables 3 and 4. A t-test between our method and the second-best baseline shows sta-tistical significance in 77 % of cases for Fidelity KL and 74 %for Fidelity prob . In Figures 5-6, our method, MemExplainer, outperforms all baseline explainers across all datasets for both metrics, highlighting its ability to maintain high fidelity even with low sparsity. TempME can only capture temporal motifs and does not trace node memory vectors. TGNNEx-plainer relies on sampling; when many events are present, it only considers the sampled candidates, and if these have little influence, the resulting explanations have low fidelity. The performances of GNNExplainer and PGExplainer are poorer, as these methods are designed for static graphs and are not suitable for TGNs. 
+
+Running time . We partition the computation time into three components: topology time , for constructing the topology attribution tree and computing neighbor contributions; mem-ory time , for constructing the memory backtracking tree and computing contributions of historical events; and selec-tion time , for solving Eq. (15) or Eq. (33). In Appendix A.16, Figure 8 reports the average computation time on all datasets. When TL = 10 , the total running time takes at most 6 seconds, which is still acceptable. The details of running time is provided in Appendix A.16. 
+
+The performance of different femb and fupdate in TGNs. 
+
+In Figure 9 and Figure 10, we show the performance of Fidelity prob and Fidelity KL when the femb is graph attention model. In Figure 11 and Figure 12, we report Fidelity prob 
+
+and Fidelity KL for the setting where the memory updater 
+
+fupdate is implemented as an RNN. Our method, MemEx-plainer, significantly outperforms baseline explainers across all datasets for both metrics. 
+
+Sensitivity analysis . In Figure 13 and Figure 14, we report Fidelity prob and Fidelity KL when the number of events from neighboring samples is fixed to n = 20 . Our method, Mem-Explainer, achieve the best performance on both metrics across all datasets. We also perform a sensitivity analysis on the maximum depth of the memory backtracking tree, varying the depth from 2 to 10, while maintaining the same number of events for each target node or edge across all depths. The results for Fidelity KL and Fidelity prob are shown in Figures 15 and 16. For tgbn-trade and tgbn-genre datasets, two metrics initially decrease and then increase with depth. Deeper backtracking traces more historical events, but also enlarges the search space, complicating event identification and reducing fidelity. Enron and UCI datasets perform bet-ter at lower depths. The optimal depth varies across datasets due to their distinct characteristics. 
+
+Case study . We show the explanation results on pose-based action classification task. Table 5, Table 6, Table 7, and Table 8 show case studies for the pull-up, climb, sit-up, and run classes (in Appendix A.20). Our method typically se-lects a much smaller subset of edges per frame, which leads to more visualized frames under the same total edge budget. Across actions, our method highlights the task-relevant kine-matic chains: upper and lower limb chains for pull-ups, the hip–knee–ankle chain for running, the supporting limbs for climbing, and the torso–hip–knee chain for sit-ups. In con-trast, across all four actions, PGExplainer, GNNExplainer, and TGNNExplainer usually select most skeletal links in one frame, making it hard to see which joints actually drive the prediction. TempME selects edges misaligned with the key biomechanics of the movement. 
+
+## 6. Conclusions and Limitations 
+
+We study the problem of explaining predictions in TGNs. Existing methods fix the memory vector and fail to account 8Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+> 0.08
+> 0.10
+> 0.12
+> 0.15
+> Fidelity KL
+
+Wikipedia     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+
+Reddit     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.10
+> 0.15
+> 0.20
+
+Enron     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.04
+> 0.06
+> 0.08
+
+UCI     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.14
+> 0.16
+> 0.18
+> 0.20
+
+tgbn-trade     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> Fidelity KL
+
+tgbn-genre     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.50
+> 1.00
+> 1.50
+
+tgbn-reddit     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 2.20
+> 2.40
+> 2.60
+> 2.80
+
+HMDB51     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 1.50
+> 2.00
+> 2.50
+> 3.00
+
+Penn_Action MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 5. The performance of Fidelity kl . Each figure corresponds to a different dataset. Lower value indicates better performance. 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> Fidelity prob
+
+Wikipedia     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.20
+> 0.30
+> 0.40
+> 0.50
+
+Reddit     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+
+Enron     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+
+UCI     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.07
+> 0.07
+> 0.07
+> 0.07
+
+tgbn-trade     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.11
+> 0.11
+> 0.12
+> 0.12
+> Fidelity prob
+
+tgbn-genre     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+
+tgbn-reddit     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.62
+> 0.64
+> 0.66
+
+HMDB51     
+
+> 0.02 0.04 0.06 0.08 0.10
+> Sparsity
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+
+Penn Action MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 6. The performance of Fidelity prob . Each figure corresponds to a different dataset. Lower value indicates better performance. 
+
+for the temporal evolution of node memories. To address this, we construct a topology attribution tree to quantify the spatial contribution of neighboring events and the temporal contribution of the node memories. We construct memory backtracking tree to track the long-term impact of historical events on the node memories. We design an objective func-tion to select important events as explanations. Experiments show our method outperforms baselines across all datasets. One limitation is its computational cost on large temporal graphs, where the memory backtracking tree can become deep and wide, increasing runtime and memory usage. A practical solution is to limit the tree depth or prune branches with small relevance scores, which we leave for future work. 
+
+## Acknowledgements 
+
+Hui Xiong was supported in part by the National Key R&D Program of China (Grant No.2023YFF0725001), in part by the National Natural Science Foundation of China (Grant No.92370204), in part by the guangdong Basic and Applied Basic Research Foundation (Grant No.2023B1515120057), in part by the Key-Area Special Project of Guangdong Provincial Ordinary Universities(2024ZDZX1007). Sihong Xie was supported by the Department of Science and Tech-nology of Guangdong Province (2023CX10X079), National Key R&D Program of China (Grant No.2023YFF0725001), the Guangzhou-HKUST(GZ) Joint Funding Program (Grant No.2023A03J0008), and Education Bureau Guangzhou Municipality. Xi Zhang was supported by the National Key Research and Development Program (Grant No. 2023YFC3303800), and the Natural Science Foundation of China (No. 62372057). 
+
+## Impact Statement 
+
+Our paper is a general algorithmic contribution, and we do not foresee direct negative societal impacts. On the positive side, our method can be used to help users understand TGNs. 9Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+## References 
+
+Achtibat, R., Hatefi, S. M. V., Dreyer, M., Jain, A., Wiegand, T., Lapuschkin, S., and Samek, W. Attnlrp: attention-aware layer-wise relevance propagation for transformers. 
+
+arXiv preprint arXiv:2402.05602 , 2024. Bach, S., Binder, A., Montavon, G., Klauschen, F., M ¨uller, K.-R., and Samek, W. On pixel-wise explanations for non-linear classifier decisions by layer-wise relevance propagation. PloS one , 10(7):e0130140, 2015. Chen, J. and Ying, R. Tempme: Towards the explainability of temporal graph neural networks via motif discovery. 
+
+Advances in Neural Information Processing Systems , 36: 29005–29028, 2023. Gui, S., Yuan, H., Wang, J., Lao, Q., Li, K., and Ji, S. Flowx: Towards explainable graph neural networks via message flows. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2023. Hamilton, W., Ying, Z., and Leskovec, J. Inductive repre-sentation learning on large graphs. Advances in neural information processing systems , 30, 2017. Hancox, Z., Kingsbury, S. R., Clegg, A., Conaghan, P. G., and Relton, S. D. Developing the temporal graph con-volutional neural network model to predict hip replace-ment using electronic health records. In 2024 Interna-tional Conference on Machine Learning and Applications (ICMLA) , pp. 256–263. IEEE, 2024. He, W., Vu, M. N., Jiang, Z., and Thai, M. T. An explainer for temporal graph neural networks. In GLOBECOM 2022-2022 IEEE Global Communications Conference ,pp. 6384–6389. IEEE, 2022. Huang, Q., Yamada, M., Tian, Y., Singh, D., Yin, D., and Chang, Y. Graphlime: Local interpretable model ex-planations for graph neural networks. arXiv preprint arXiv:2001.06216 , 2020. Huang, S., Poursafaei, F., Danovitch, J., Fey, M., Hu, W., Rossi, E., Leskovec, J., Bronstein, M., Rabusseau, G., and Rabbany, R. Temporal graph benchmark for ma-chine learning on temporal graphs. Advances in Neural Information Processing Systems , 36:2056–2073, 2023. Jure, L. Snap datasets: Stanford large network dataset collection. Retrieved December 2021 from http://snap. stanford. edu/data , 2014. Kim, Y., Lee, Y., Choe, M., Oh, S., and Lee, Y. Temporal graph networks for graph anomaly detection in financial networks. arXiv preprint arXiv:2404.00060 , 2024. Kuehne, H., Jhuang, H., Garrote, E., Poggio, T., and Serre, T. Hmdb: a large video database for human motion recog-nition. In 2011 International conference on computer vision , pp. 2556–2563. IEEE, 2011. Kumar, S., Zhang, X., and Leskovec, J. Predicting dynamic embedding trajectory in temporal interaction networks. In Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining , pp. 1269–1278, 2019. Lin, K.-W., Kuo, Y.-C., Wang, H.-Y., and Tseng, Y.-J. Kat-gnn: A knowledge-augmented temporal graph neural network for risk prediction in electronic health records. 
+
+arXiv preprint arXiv:2511.01249 , 2025. Liu, Y., Zhang, X., and Xie, S. A differential geometric view and explainability of gnn on evolving graphs. arXiv preprint arXiv:2403.06425 , 2024. Luo, D., Cheng, W., Xu, D., Yu, W., Zong, B., Chen, H., and Zhang, X. Parameterized explainer for graph neural network. Advances in neural information processing systems , 33:19620–19631, 2020. Maji, D., Nagori, S., Mathew, M., and Poddar, D. Yolo-pose: Enhancing yolo for multi person pose estimation using object keypoint similarity loss. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 2637–2646, 2022. Panzarasa, P., Opsahl, T., and Carley, K. M. Patterns and dynamics of users’ behavior and interaction: Network analysis of an online community. Journal of the American Society for Information Science and Technology , 60(5): 911–932, 2009. Pope, P. E., Kolouri, S., Rostami, M., Martin, C. E., and Hoffmann, H. Explainability methods for graph convolu-tional neural networks. In CVPR , 2019. Poursafaei, F., Huang, S., Pelrine, K., and Rabbany, R. Towards better evaluation for dynamic link prediction. 
+
+Advances in Neural Information Processing Systems , 35: 32928–32941, 2022. Rossi, E., Chamberlain, B., Frasca, F., Eynard, D., Monti, F., and Bronstein, M. Temporal graph networks for deep learning on dynamic graphs. arXiv preprint arXiv:2006.10637 , 2020. Schnake, T., Eberle, O., Lederer, J., Sch ¨utt, S. N. K. T., M¨uller, K.-R., and Montavon, G. Higher-order explana-tions of graph neural networks via relevant walks. 2020. Shetty, J. and Adibi, J. The enron email dataset database schema and brief statistical report. Information sciences institute technical report, University of Southern Califor-nia , 4(1):120–128, 2004. 10 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Wu, H., Huang, A., and Sutherland, J. W. Layer-wise rel-evance propagation for interpreting lstm-rnn decisions in predictive maintenance. The International Journal of Advanced Manufacturing Technology , 118(3):963–978, 2022. Xia, W., Lai, M., Shan, C., Zhang, Y., Dai, X., Li, X., and Li, D. Explaining temporal graph models through an explorer-navigator framework. In The Eleventh Interna-tional Conference on Learning Representations , 2022. Ying, R., Bourgeois, D., You, J., Zitnik, M., and Leskovec, J. GNNExplainer: Generating Explanations for Graph Neural Networks. In NeurIPS , 2019. Yuan, H., Tang, J., Hu, X., and Ji, S. Xgnn: Towards model-level explanations of graph neural networks. 2020. Yuan, H., Yu, H., Gui, S., and Ji, S. Explainability in graph neural networks: A taxonomic survey. IEEE transactions on pattern analysis and machine intelligence , 45(5):5782– 5799, 2022. Zhang, W., Zhu, M., and Derpanis, K. G. From actemes to action: A strongly-supervised representation for detailed action understanding. In Proceedings of the IEEE inter-national conference on computer vision , pp. 2248–2255, 2013. 11 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+## A. Appendix 
+
+A.1. Notations 
+
+Table 1. Notations and their meanings 
+
+Notations Definitions and Descriptions 
+
+t, t k Timestamp 
+
+u, v Node 
+
+ek = ( v, u, t k ) Event 
+
+xu The feature vectors of node u
+
+xek The feature vectors of event ek
+
+ztv The node embedding for node u at timestamp t 
+
+stu Memory vector for node u at timestamp t
+
+Nu[0 , t ] = {ek |ek = ( v, u, t k ) ∈ E (t) The neighborhood of node u in time interval tk
+
+N nu [0 , t ] The set of the most recent n interactions from Nu[0 , t ]
+
+R
+
+
+
+ht,l −1
+
+> u
+
+
+
+∈ Rdm ×dm Each matrix element represents the contribution of i-th neuron in ht,l −1 
+
+> u
+
+to the j-th in ztu
+
+R
+
+
+
+ht,l −1
+
+> v
+
+
+
+∈ Rdm ×dm Each matrix element represents the contribution of i-th neuron in ht,l −1 
+
+> v
+
+to the j-th in ztu
+
+R xek
+
+ ∈ Rde ×dm Each matrix element represents the contribution of i-th neuron in xek to the j-th in ztu
+
+R(t − tk ) ∈ Rdt×dm Each matrix element represents the contribution of i-th neuron in ϕ(t − tk ) to the j-th in ztu
+
+Mtp0→u ∈ Rdm ×dm Each matrix element represents the contribution of i-th neurons in stp0 to the j-th in ztu
+
+Ctu ∈ R|E (t)|× dm Each matrix element represents the contribution of i-th events in E(t) to the j-th in ztu
+
+Ttop (u) The topology attribution tree of node u
+
+A.2. Proof of Lemma 4.1. 
+
+Proof. Let x = [ x1, · · · xd1 ] and y = [ y1, · · · yd2 ]. We first broadcast the x⊤ and y to align the shapes of W.
+
+diag( x) = 
+
+
+
+x1 0 · · · 00 x2 · · · 0
+
+... ... . . . ...
+
+0 0 · · · xd1
+
+ , diag( y)−1 =
+
+
+
+1
+
+y1 0 · · · 00 1
+
+y2 · · · 0
+
+... ... . . . ...
+
+0 0 · · · 1
+
+yd2
+
+ .
+
+Then, we can obtain the following equation: 
+
+diag( x)·W·diag( y)−1 =
+
+
+
+x1W1,1 . . . x1W1,d 2
+
+x2W2,1 . . . x2W2,d 2
+
+... . . . ...
+
+xd1 Wd1,1 . . . xd1 Wd1,d 2
+
+·
+
+
+
+1
+
+y1 0 · · · 00 1
+
+y2 · · · 0
+
+... ... . . . ...
+
+0 0 · · · 1
+
+yd2
+
+ =
+
+
+
+x1W1,1
+
+y1 . . . x1W1,d 2
+
+yd2
+
+x2W2,1
+
+y1 . . . x2W2,d 2
+
+yd2
+
+... . . . ...
+
+xd1 Wd1,1
+
+y1 . . . xd1 Wd1,d 2
+
+yd2
+
+
+
+(16) Let P = diag( x) · W · diag( y)−1, and y = x · W, then, 
+
+1⊤ · P = 1⊤ · diag( x) · W · diag( y)−1 =
+
+h P 
+
+> i
+
+xiWi, 1
+
+y1
+
+P 
+
+> i
+
+xiWi, 2
+
+y2 . . . 
+
+P 
+
+> i
+
+xiWi,d 2
+
+yd2
+
+i
+
+= 1⊤
+
+Finally, the relevance contribution satisfies the conservation property. 
+
+R(x) = P · R(y), 1⊤ · R(x) = 1⊤ · P · R(y) = 1⊤ · R(y)
+
+A.3. Proof of proposition 4.2 
+
+Proof. Let Wl
+
+2 =
+
+Al
+
+Bl
+
+
+
+∈ R2dm×dm , where Al, Bl ∈ Rdm×dm . Let R hl−1
+
+u
+
+ ∈ Rdm×dm and R
+
+˜hlu
+
+
+
+∈ Rdm×dm denote the contributions of hl−1
+
+u and ˜hlu to ztu, respectively. The element in the i-th row and j-th column of each matrix represents the contribution of the i-th neuron in hl−1
+
+u and ˜hlu to the j-th neuron in ztu, respectively. According to the Lemma 4.1, the matrices R hl−1
+
+u
+
+ and R
+
+˜hlu
+
+
+
+are given by the following equations. 12 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+R hl−1
+
+> u
+
+ = diag  hl−1
+
+> u
+
+ · Al · diag  hlu
+
+−1 · R hlu
+
+ ,
+
+R
+
+˜hlu
+
+
+
+= diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+ ,
+
+1⊤R hlu
+
+ = 1⊤R hl−1
+
+> u
+
+ + 1⊤R
+
+˜hlu
+
+
+
+(17) Where ⊙ denotes the element-wise multiplication, − represents element-wise division, and · denotes matrix multiplication. Similarly, let ˆhlu = P   
+
+> ek∈N nu([0 ,t ])
+
+
+
+hl−1 
+
+> v
+
+∥ xek ∥ ϕ(t − tk)
+
+
+
+Wl
+
+> 1
+
+. Let Wl 
+
+> 1
+
+=
+
+
+
+Cl
+
+Dl
+
+El
+
+ ∈ R(dm+de+dt)×dm , where Cl ∈
+
+Rdm×dm , Dl ∈ Rde×dm , El ∈ Rdt×dm . We apply LRP on the third equation in Eq. (10), then: 
+
+R hl−1
+
+> v
+
+ = diag  hl−1
+
+> v
+
+ · Cl · diag 
+
+ˆhlu
+
+−1
+
+· R
+
+ˆhlu
+
+
+
+R(xek ) = diag( xek ) · Dl · diag 
+
+ˆhlu
+
+−1
+
+· R
+
+ˆhlu
+
+
+
+R(t − tk) = diag( ϕ(t − tk)) · El · diag 
+
+ˆhlu
+
+−1
+
+· R
+
+ˆhlu
+
+
+
+1⊤R
+
+ˆhlu
+
+
+
+= X    
+
+> ek=( v,u,t k)∈N nu([0 ,t ])
+
+1⊤R hl−1
+
+> v
+
+ + 1⊤R(xek ) + 1⊤R(t − tk)
+
+For the softmax function, we use the identity relevance propagation rule, i.e. R
+
+ˆhlu
+
+
+
+= R
+
+˜hlu
+
+
+
+, Thus, 
+
+R hl−1
+
+> v
+
+ = diag  hl−1
+
+> v
+
+ · Cl · diag 
+
+ˆhlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R
+
+˜hlu
+
+
+
+,
+
+R(xek ) = diag( xek ) · Dl · diag 
+
+ˆhlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R
+
+˜hlu
+
+
+
+,
+
+R(t − tk) = diag( ϕ(t − tk)) · El · diag 
+
+ˆhlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R
+
+˜hlu
+
+
+
+.
+
+Thus, 
+
+1⊤R hlu
+
+ = 1⊤R hl−1
+
+> u
+
+ + X    
+
+> ek=( v,u,t k)∈N nu([0 ,t ])
+
+1⊤R hl−1
+
+> v
+
+ + 1⊤R(xek ) + 1⊤R(t − tk) . (18) 
+
+A.4. Derivation of applying LRP to femb , when femb is the graph attention function 
+
+If the femb is graph attention function, let ˆhlv = [ hl−1 
+
+> v
+
+∥xek ∥ ϕ(t − tk)] denote the neighbor embedding. Then, hl
+
+> neighbor
+
+is the set of embeddings of neighboring nodes at time step t and layer l, constructed by stacking ˆhlv for each ek =(v, u, t k) ∈ N nu [0 , t ]. The Eq. (4) becomes: 
+
+ˆhlv = [ hl−1 
+
+> v
+
+∥xek ∥ ϕ(t − tk)] , ht,l  
+
+> neighor
+
+=
+
+
+
+· · · 
+
+ˆhlv
+
+· · · 
+
+   
+
+> (v,u,t k)∈N nu[0 ,t ]
+
+, Kl = hl
+
+> neighor
+
+WlK ,
+
+Vl = Kl = hl
+
+> neighor
+
+WlK , ql =
+
+
+
+hl−1 
+
+> u
+
+∥ ϕ(0) 
+
+
+
+Wlq , Pl = ql(Kl)⊤
+
+√dm
+
+,
+
+ˆPl = softmax (Pl), Ol = ˆPlVl, ˜hlu = OlWlO , hlu =
+
+
+
+hl−1 
+
+> u
+
+∥ ˜hlu
+
+
+
+Wl 
+
+> 2
+
+(19) Where the dimensions are ˆhlv ∈ R1×(dm+de+dt), hl 
+
+> neighbor
+
+∈ Rn×(dm+de+dt), WlK ∈ R(dm+de+dt)×dm , Kl ∈ Rn×dm ,
+
+Vl ∈ Rn×dm , Wlq ∈ R(dm+dt)×dm , ql ∈ R1×dm , Pl ∈ R1×n, Ol ∈ R1×dm , WlO ∈ Rdm×dm , ˜hlu ∈ R1×dm , Wl 
+
+> 2
+
+∈
+
+R2dm×dm .13 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+According to the Lemma 4.1, we can obtain the following equation: 
+
+R hl−1
+
+> u
+
+ = diag  hl−1
+
+> u
+
+ · Al · diag  hlu
+
+−1 · R hlu
+
+ , R
+
+˜hlu
+
+
+
+= diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+ ,
+
+R Ol = diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· R
+
+˜hlu
+
+
+
+(20) Where R Ol ∈ R1×dm×dm denote the contribution to ztu.The matrix multiplication Ol = ˆPlVl is treated as a bilinear operation using the AttnLRP method (Achtibat et al., 2024). In this approach, when assigning contribution values to ˆPl, Vl is treated as a fixed parameters, and vice versa. Let 
+
+Ol 
+
+> ratio
+
+= diag 
+
+ ˆPl
+
+
+
+· Vl · diag  Ol−1 and Ol
+
+> ratio
+
+[i] denote the i-th row of Ol
+
+> ratio
+
+, we can obtain the following equations: 
+
+Ol 
+
+> ratio
+
+= diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 ∈ Rn×dm , R
+
+ ˆPl
+
+= 12 Ol 
+
+> ratio
+
+· R Ol
+
+Ol 
+
+> expanded
+
+=
+
+
+
+diag( Ol
+
+> ratio
+
+[1]) 
+
+· · · 
+
+diag( Ol
+
+> ratio
+
+[n]) 
+
+ ∈ Rn×dm×dm , R Vl = 12 Ol 
+
+> expanded
+
+· R Ol (21) Where diag denotes the diagonalization operator that maps a vector to a diagonal matrix. R Vl ∈ Rn×dm×dm , R
+
+ ˆPl
+
+
+
+∈
+
+R1×n×dm denote the contribution to ztu.We continue to decompose contribution of Vl. Let WlK =
+
+
+
+WlKC 
+
+WlKD 
+
+WlKE 
+
+ ∈ R(dm+de+dt)×dm , where WlKC ∈
+
+Rdm×dm , WlKD ∈ Rde×dm , WlKE ∈ Rdt×dm . Supposing that hl
+
+> neighbor
+
+[i] = ˆhlv , then 
+
+R hl−1
+
+> v
+
+ = diag  hl−1
+
+> v
+
+ · WlKC · diag  Vl[i]−1 ·  R Vl [i]
+
+R(xek ) = diag( xek ) · WlKD · diag  Vl[i]−1 ·  R Vl [i] , (22) 
+
+R(ϕ(t − tk)) = diag( ϕ(t − tk)) · WlKE · diag  Vl[i]−1 ·  R Vl [i] (23) We decompose contribution of ˆPl. For the softmax function, we use the identity propagation rule, i.e. R
+
+ ˆPl
+
+
+
+= R Pl.Similarly, we use the AttnLRP method to handle the matrix multiplication. Let Pl
+
+> ratio
+
+[i] denote the i-th row of Pl
+
+> ratio
+
+Pl 
+
+> ratio
+
+= diag  ql · (Kl)⊤ · diag  Pl−1 ∈ Rdm×n, R ql = 12√dm
+
+Pl 
+
+> ratio
+
+· R Pl
+
+Pl 
+
+> expanded
+
+=
+
+
+
+diag( Pl
+
+> ratio
+
+[1]) 
+
+· · · 
+
+diag( Pl
+
+> ratio
+
+[n]) 
+
+ ∈ Rdm×n×n, R Kl = 12√dm
+
+ Pl 
+
+> expanded
+
+· R Pl ⊤ (24) Where diag denotes the diagonalization operator that maps a vector to a diagonal matrix. R Kl ∈ Rn×dm×dm , R ql ∈
+
+R1×n×dm denote the contribution to ztu.Let Wlq =
+
+Wlqa 
+
+Wlqb 
+
+
+
+∈ R(dm+dt)×dm , where Wlqa ∈ Rdm×dm , Wlqb ∈ Rdt×dm . Supposing that hl
+
+> neighbor
+
+[i] = ˆhlv . Let 
+
+R hl−1
+
+> u
+
+ ∈ Rdm×dm , then we attribute the R ql and R Kl to hl−1 
+
+> v
+
+, xek and ϕ(t − tk):
+
+R hl−1
+
+> u
+
+ = diag  hl−1
+
+> u
+
+ · Wlqa · diag  ql−1 · R ql
+
+R(ϕ(0)) = diag( ϕ(0)) · Wlqb · diag  ql−1 · R ql
+
+R hl−1
+
+> v
+
+ = diag  hl−1
+
+> v
+
+ · WlKC · diag  Kl[i]−1 ·  R Kl [i]
+
+R(xek ) = diag( xek ) · WlKD · diag  Kl[i]−1 ·  R Kl [i]
+
+R(ϕ(t − tk)) = diag( ϕ(t − tk)) · WlKE · diag  Kl[i]−1 ·  R Kl [i] (25) 14 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+We suppose that the i-th element in N nu [0 , t ] is node v. We can obtain the contributions of hl−1 
+
+> u
+
+, hl−1 
+
+> v
+
+, xek , ϕ(t − tk) and 
+
+ϕ(0) to ztu, denoted as R hl−1
+
+> u
+
+ ∈ Rdm×dm , R hl−1
+
+> v
+
+ ∈ Rdm×dm , R(xek ) ∈ Rde×dm and R(ϕ(t − tk)) ∈ Rdt×dm :
+
+R(ϕ(0)) = 14√dm
+
+diag( ϕ(0)) · Wlqb · diag  ql−1 · diag  ql ·  Kl⊤ · diag  Pl−1
+
+· diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+
+
+R(xek ) = 14√dm
+
+diag( xek ) · WlKD · diag  Kl[i]−1 · diag  Kl[i] ·  ql⊤ ·  Pl[i]−1
+
+·
+
+
+
+diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+i
+
+> i, :
+
++ 12 diag( xek ) · WlKD · diag  Vl[i]−1 · diag  Vl[i] ·
+
+ ˆPl[i]Idm
+
+
+
+· diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+
+
+R(ϕ(t − tk)) = 14√dm
+
+diag( ϕ(t − tk)) · WlKE · diag  Kl[i]−1 · diag  Kl[i] ·  ql⊤ ·  Pl[i]−1
+
+·
+
+
+
+diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+i
+
+> i, :
+
++ 12 diag( ϕ(t − tk)) · WlKE · diag  Vl[i]−1 · diag  Vl[i] ·
+
+ ˆPl[i]Idm
+
+
+
+· diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+
+
+R hl−1
+
+> v
+
+ = 14√dm
+
+diag  hl−1
+
+> v
+
+ · WlKC · diag  Kl[i]−1 · diag  Kl[i] ·  ql⊤ ·  Pl[i]−1
+
+·
+
+
+
+diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+i
+
+> i, :
+
++ 12 diag  hl−1
+
+> v
+
+ · WlKC · diag  Vl[i]−1 · diag  Vl[i] ·
+
+ ˆPl[i]Idm
+
+
+
+· diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+
+
+R hl−1
+
+> u
+
+ = diag  hl−1
+
+> u
+
+ · Al · diag  hlu
+
+−1 · R hlu
+
+
+
++ 14√dm
+
+diag  hl−1
+
+> u
+
+ · Wlqa · diag  ql−1 · diag  ql ·  Kl⊤ · diag  Pl−1
+
+· diag 
+
+ ˆPl
+
+· Vl · diag  Ol−1 · diag  Ol · WlO · diag 
+
+˜hlu
+
+−1
+
+· diag 
+
+˜hlu
+
+
+
+· Bl · diag  hlu
+
+−1 · R hlu
+
+ (26) 15 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+A.5. Proof of proposition 4.3 
+
+Proof. If the fupdate is the GRU function, the Eq. (3) can be rewritten as Reset gate: rtu = σ  ¯mtuWr + st− 
+
+> u
+
+Utr + br
+
+ ,
+
+Update gate: gtu = σ  ¯mtuWg + st− 
+
+> u
+
+Ug + bg
+
+ ,
+
+Candidate state: ˜stu = tanh   ¯mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh) + bh
+
+ ,
+
+Updated state: stu = (1 − gtu) ⊙ st− 
+
+> u
+
++ gtu ⊙ ˜stu.
+
+Where, Wr , Wg , Wh, Ur , Ug , Uh, br , bg , bh are the parameters in the GRU. In GRU computation, multiplicative interactions occur when a gate neuron modulates a signal neuron, e.g., gtu[i] · st− 
+
+> u
+
+[i].Unlike linear mappings, such interactions pose challenges for relevance redistribution. A widely adopted strategy is the signal-take-all rule, which assigns all relevance to the signal neuron and none to the gate. This reflects the view that the gate controls the flow of information, but is not information itself (Wu et al., 2022). Thus, 
+
+R st−
+
+> u
+
+ = diag 
+
+ (1 − gtu) ⊙ st−
+
+> u
+
+stu
+
+
+
+· R stu
+
+, R ˜stu
+
+ = diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+
+
+· R stu
+
+
+
+1⊤R stu
+
+ = 1⊤R st−
+
+> u
+
+ + 1⊤R ˜stu
+
+ (27) We continue to decompose R(˜ stu) and let A = ¯ mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh):
+
+R  ¯mtu
+
+ = diag   ¯mtu
+
+ · Wh · diag( A)−1 · R ˜stu
+
+, R st−
+
+> u
+
+ = diag  rtu ⊙ st−
+
+> u
+
+ · Uh · diag( A)−1 · R ˜stu
+
+
+
+1⊤R ˜stu
+
+ = 1⊤R  ¯mtu
+
+ + 1⊤R st−
+
+> u
+
+ (28) Finally, 
+
+R st−
+
+> u
+
+ =
+
+
+
+diag 
+
+ (1 − gtu) ⊙ st−
+
+> u
+
+stu
+
+
+
++ diag  rtu ⊙ st−
+
+> u
+
+ · Uh · diag( A)−1 · diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+ 
+
+· R stu
+
+
+
+R  ¯mtu
+
+ = diag   ¯mtu
+
+ · Wh · diag( A)−1 · diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+
+
+· R stu
+
+ ,
+
+R  ¯mtu
+
+ = [ R st−
+
+> v
+
+ , R st−
+
+> u
+
+ , R(xek ) , R(t − tk)] 
+
+1⊤R stu
+
+ = 1⊤R st−
+
+> u
+
+ + 1⊤R  ¯mtu
+
+ = 1⊤R st−
+
+> u
+
+ + 1⊤R st−
+
+> v
+
+ + 1⊤R(xek ) + 1⊤R(t − tk) (29) Where diag( ·) denotes the diagonalization operator that maps a vector to a diagonal matrix, − represents element-wise division and · denotes matrix multiplication. R(st− 
+
+> u
+
+) ∈ Rdm×dm and R( ¯ mtu) ∈ R(2 dm+de+dt)×dm . Splitting R( ¯ mtu)
+
+column-wise: the first dm columns correspond to R(st− 
+
+> v
+
+) ∈ Rdm×dm , the next dm to 2dm columns to R(st− 
+
+> u
+
+) ∈ Rdm×dm ,the following de columns to R(xek ) ∈ Rde×dm , and the remaining columns to R(t − tk) ∈ Rdt×dm .
+
+A.6. Derivation of LRP Applied to RNN function 
+
+If the fupdate is the RNN function, the Eq. (3) can be rewritten as 
+
+stu = tanh   ¯mtuWh + st− 
+
+> u
+
+Uh + bh
+
+ ,
+
+where Wh, Uh, bh are the parameters in the RNN. Similarly, 
+
+R  ¯mtu
+
+ = diag   ¯mtu
+
+ · Wh · diag   ¯mtuWh + st− 
+
+> u
+
+Uh
+
+−1 · R stu
+
+ ,
+
+R st−
+
+> u
+
+ = diag  st−
+
+> u
+
+ · Uh · diag   ¯mtuWh + st− 
+
+> u
+
+Uh
+
+−1 · R stu
+
+ ,
+
+R  ¯mtu
+
+ =
+
+
+
+R(st− 
+
+> v
+
+)
+
+R(st− 
+
+> u
+
+)
+
+R(xek )
+
+R(ϕ(t − tk)) 
+
+ . (30) 16 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Where diag( ·) denotes the diagonalization operator that maps a vector to a diagonal matrix, − represents element-wise division and · denotes matrix multiplication. R(st− 
+
+> u
+
+) ∈ Rdm×dm and R( ¯ mtu) ∈ R(2 dm+de+dt)×dm . R(st− 
+
+> v
+
+) ∈ Rdm×dm ,
+
+R(st− 
+
+> u
+
+) ∈ Rdm×dm , R(xek ) ∈ Rde×dm , and R(ϕ(t − tk)) ∈ Rdt×dm denote the contribution of st− 
+
+> v
+
+, st− 
+
+> u
+
+, xek and ϕ(t−tk)
+
+to ztu, respectively. 
+
+A.7. The derivation of selecting important events 
+
+The derivation process of Eq. (14) is KL (p2 ∥ p1) = p2 log 
+
+ p2
+
+p1
+
+
+
++ (1 − p2) log 
+
+ 1 − p2
+
+1 − p1
+
+
+
+= σ(z2) ( z2 − sp (z2) − z1 − sp (z1)) +(1 − σ(z2)) ( −sp (z2) + sp (z1)) = σ(z2)( z2 − z1) − sp (z2) + sp (z1), (31) In Eq. (14), we derived the KL divergence between p2 and p1, where p1 and p2 are arbitrary probabilities obtained by applying the sigmoid function to logits. Now we let p2 be the predicted probability on the original dynamic graph, 
+
+p2 = ˆ yv,u (E(t)) = σ(z2), and p1 be the predicted probability after retaining only a subset of critical events and removing the others. Based on the event-contribution matrix Ct, we approximate the perturbed logit z1 as, z1 = Pdc 
+
+> l=1
+
+dl Ctel , where 
+
+dc is the number of candidate events, and d ∈ { 0, 1}dc is a selection vector whose entry dl indicates whether event el is selected. Substituting z1 into Eq. (14) gives KL (p2 ∥ p1) = σ(z2)( z2 − z1) − sp (z2) + sp (z1)=σ(z2)z2 − ˆyv,u 
+
+ E(t) dcX
+
+> l=1
+
+dlCtel − sp (z2) + sp (
+
+> dc
+
+X
+
+> l=1
+
+dlCtel )
+
+Since σ(z2)z2 and sp( z2) do not depend on d, they are constant with respect to the selection and can be dropped from the optimization objective. Minimizing the remaining KL term over d yields Eq. (15), which we use to select a small set of key events that best preserves the original prediction. 
+
+A.8. The example of Lemma 4.1 
+
+Let x = [1 , 2, 3] , W =
+
+1 2 34 5 67 8 9
+
+, and y = [30 , 36 , 42] , then 
+
+P =
+
+1 0 00 2 00 0 3
+
+ ·
+
+1 2 34 5 67 8 9
+
+ ·
+
+ 
+
+> 130
+
+0 00 136 00 0 142 
+
+ ≈
+
+0.03 0.05 0.07 0.27 0.28 0.28 0.70 0.67 0.65 
+
+ .
+
+Because 1⊤P = 1⊤, we have 
+
+1⊤ · R(x) = 1⊤ · P · R(y) = 1⊤ · R(y).
+
+A.9. The example of Proposition 4.3 
+
+Following the GRU equations, we first decompose R(stu) into R(st− 
+
+> u
+
+) and R(˜ stu). Then, R(˜ stu) is further decomposed into R(st− 
+
+> u
+
+) and R( ¯ mtu). Finally, R( ¯ mtu) is attributed to R(st− 
+
+> v
+
+), R(st− 
+
+> u
+
+), R(t − tk), and R(xek ). The overview of the decomposition is provided in Figure 7. We provide a toy running example when the fupdate is GRU function. Suppose that 
+
+st− 
+
+> v
+
+= [0 .4, 0.2] , st− 
+
+> u
+
+= [0 .1, 0.3] , xek = [0 .5] , and t − tk = [0 .6] . Then, 
+
+¯mtu = [ st− 
+
+> v
+
+∥st− 
+
+> u
+
+∥xek ∥t − tk] = [0 .4, 0.2, 0.1, 0.3, 0.5, 0.6] .
+
+The GRU parameters are 
+
+Wr =
+
+
+
+0.1 00 0.10.5 00 0.50.1 00 0.1
+
+
+
+, Wg =
+
+
+
+0.2 00 0.10.1 00 0.10.1 00 0.2
+
+
+
+, Wh =
+
+
+
+0.1 00 0.10.05 00 0.05 0.05 00 0.05 
+
+
+
+,
+
+17 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Figure 7. The overview of the LRP decomposition when the fupdate is GRU function 
+
+Ur = Ug = Uh =
+
+0.1 00 0.1
+
+
+
+, br = bg = bh = [0 , 0] , R(stu) = 
+
+1 23 4
+
+
+
+.
+
+Forward propagation: 
+
+rtu = [0 .526 , 0.531] , gtu = [0 .537 , 0.549] , ˜stu = [0 .075 , 0.080] , stu = [0 .086 , 0.179] .
+
+Calculation process: 
+
+(1) P1 = diag 
+
+ (1 − gtu) ⊙ st−
+
+> u
+
+stu
+
+
+
+=
+
+0.53 00 0.75 
+
+
+
+, P2 = diag 
+
+ gtu ⊙ ˜stu
+
+stu
+
+
+
+=
+
+0.47 00 0.25 
+
+
+
+, 1⊤P1 + 1⊤P2 = [1 , 1] .
+
+R(st− 
+
+> u
+
+) = P1 · R(stu) = 
+
+0.53 1.06 2.25 3
+
+
+
+, R(˜ stu) = P2 · R(stu) = 
+
+0.47 0.94 0.75 1
+
+
+
+, 1⊤R(stu) = 1⊤R(st− 
+
+> u
+
+) + 1⊤R(˜ stu).
+
+(2) P3 = diag   ¯mtu
+
+ · Wh · diag   ¯mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh)−1 =
+
+
+
+0.53 00 0.25 0.07 00 0.18 0.33 00 0.37 
+
+
+
+,
+
+P4 = diag  rtu ⊙ st−
+
+> u
+
+ · Uh · diag   ¯mtuWh + rtu ⊙ (st− 
+
+> u
+
+Uh)−1 =
+
+0.07 00 0.2
+
+
+
+, 1⊤P3 + 1⊤P4 = [1 , 1] .
+
+R( ¯ mtu) = P3 · R(˜ stu) = 
+
+
+
+0.25 0.50.18 0.25 0.03 0.06 0.14 0.19 0.16 0.31 0.28 0.37 
+
+
+
+, R(st− 
+
+> u
+
+) = P4 · R(˜ stu) = 
+
+0.03 0.06 0.15 0.2
+
+
+
+, 1⊤R(˜ stu) = 1⊤R( ¯ mtu) + 1⊤R(st− 
+
+> u
+
+).
+
+(3) R( ¯ mtu)( i, j ) represents the contribution of the i-th element in ¯mtu to the j-th column element of logits. 18 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Thus, 
+
+R(st− 
+
+> v
+
+) = 
+
+0.25 0.50.18 0.25 
+
+
+
+, R(st− 
+
+> u
+
+) = 
+
+0.03 0.06 0.14 0.19 
+
+
+
+,
+
+R(xek ) = [0 .16 , 0.31] , R(t − tk) = [0 .28 , 0.37] .
+
+The event contribution is 
+
+1⊤R(xek ) + 1⊤R(t − tk) = 1 .12 .
+
+The total contribution of st− 
+
+> u
+
+is 
+
+R(st− 
+
+> u
+
+) = 
+
+0.53 1.06 2.25 3
+
+
+
++
+
+0.03 0.06 0.15 0.2
+
+
+
++
+
+0.03 0.06 0.14 0.19 
+
+
+
+=
+
+0.59 1.18 2.54 3.39 
+
+
+
+,
+
+and 
+
+1⊤R(st− 
+
+> u
+
+) + 1⊤R(st− 
+
+> v
+
+) + 1⊤R(xek ) + 1⊤R(t − tk) = 1⊤R(stu).
+
+A.10. The Algorithm for constructing the topology attribution tree 
+
+Algorithm 2 demonstrates the construction of a topology attribution tree and the propagation of relevance contributions. 
+
+Algorithm 2 Construction of the topology attribution tree and relevance propagation 
+
+1: Input : target node u, node embedding ztu, number of layers L
+
+2: Initialize Ttop ← { (u, L )} as a tree with root node, set frontier ← { (u, L )}.
+
+3: Initialize contribution matrices: {Mtp0→u ∈ Rdm×dm ← 0, |p0 ∈ V (t)}
+
+4: Initialize contribution matrices: Ctu ∈ R|E (t)|× dm ← 0 for all events 
+
+5: pl is the node at the layer l and pl+1 is the node at the layer l + 1 .
+
+6: next ← ∅ 
+
+7: for l = L − 1 down to 0 do 
+
+8: for each tuple (pl+1 , l +1) ∈ frontier do 
+
+9: for each event el = ( pl, p l+1 , t l) ∈ N npl+1 [0 , t ] do 
+
+10: Insert (pl, l ) and (xel , l ) as children of (pl+1 , l +1) 
+
+11: next ← next ∪ { (pl, l )}
+
+12: if femb is graph sum function then 
+
+13: Compute R hlpl
+
+, R
+
+
+
+hl+1 
+
+> pl+1
+
+
+
+, R (xel ), and R (ϕ) via Eq. (12) 
+
+14: else if femb is graph attention function then 
+
+15: Compute R
+
+
+
+hl+1 
+
+> pl+1
+
+
+
+, R hlpl
+
+, R (xel ), and R (ϕ) via Eq. (26) 
+
+16: end if 
+
+17: Ctu[el] ← Ctu[el] + 1⊤R(xel ) + 1⊤R(ϕ(t−tl)) 
+
+18: if l=0 then 
+
+19: Mtp0→u ← Mtp0→u + R h0
+
+> p0
+
+
+
+20: end if 
+
+21: end for 
+
+22: end for 
+
+23: frontier ← next 
+
+24: next ← ∅ 
+
+25: end for 
+
+26: Output: Ttop (u), the contribution matrix Ctu, and {Mtp0→u|p0 is a leaf node of Ttop (u)}
+
+A.11. Evaluation metrics 
+
+Fidelity KL = KL (ˆ yu(E(t)) ∥ˆyu(E∗)) (node property prediction) and Fidelity KL = KL (ˆ y(E(t)) ∥ˆy(E∗)) (graph classification task) Fidelity prob : Fidelity prob = |ˆyv,u (E(t)) − ˆyv,u (E∗)| (link prediction) , Fidelity prob = |ˆyu(E(t)) − ˆyu(E∗)| (node property prediction) and Fidelity prob = |ˆy(E(t)) − ˆy(E∗)| (graph classification task) as defined in (Yuan et al., 2022). 19 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+A.12. The selection for node property prediction task. 
+
+Similarly, for the node property prediction, the predicted probability is ˆy = ˆ yu = softmax (fmlp (ztu)) . Let z denote the logits, and the contribution matrix of events is Ctu. The KL divergence is KL (ˆ y(E1(t)) ∥ˆy(E2(t))) = 
+
+> c
+
+X
+
+> k=1
+
+ˆyk(E2(t)) log[ ˆyk(E2(t)) ˆyk(E1(t)) ]=
+
+> c
+
+X
+
+> k=1
+
+ˆyk(E2(t))[ zk(E2(t)) − zk(E1(t))] − log( Z) = 
+
+> c
+
+X
+
+> k=1
+
+ˆyk(E2(t))∆ zk − log( Z), (32) where Z(Eτ (t)) = Pck=1 exp( zk(Eτ (t))) for τ = 1 , 2, and Z = Z(E2(t))  
+
+> Z(E1(t))
+
+. The objective function for node property prediction is: 
+
+d∗ = arg min  
+
+> d∈{ 0,1}dc ,∥d∥1=nc
+
+X
+
+> k=1
+
+−ˆyk(E(t)) 
+
+> |dc|
+
+X
+
+> l=1
+
+dlCtel
+
+ + log 
+
+> c
+
+X
+
+> k′=1
+
+exp 
+
+
+
+> |dc|
+
+X
+
+> l=1
+
+dlCtel
+
+ (33) Solving this equation yields the most important events for the node property prediction task. The Algorithm shows the overall process of selecting important layer edges for node property prediction task. 
+
+Algorithm 3 The overall framework for node property prediction 
+
+1: Input : target node u, time t, and the max depth of memory backtracking tree TL
+
+2: Compute Ttop (u), {Mtp0→u|p0 is a leaf node of Ttop (u)} and Ctu using Algorithm 2. ▷ topology attribution 
+
+3: for each Mtp→u ∈ { Mtp0→u|p0 is a leaf node of Ttop (u)} do 
+
+4: Update Ctu using Algorithm 5 ▷ Memory attribution 
+
+5: end for 
+
+6: Update Ctu using Lemma 4.1, and let Ctu → Ct
+
+7: Select important events E∗ using Eq. (33) 
+
+8: Output: The important events E∗
+
+A.13. The selection for graph classification prediction task. 
+
+For the graph classification task, the predicted probability is ˆy = [ˆ y1, · · · , ˆyc]. The contribution matrix of events to node u
+
+is Ct(u). The objective function for node property prediction is: 
+
+d∗ = arg min  
+
+> d∈{ 0,1}dc ,∥d∥1=nc
+
+X
+
+> k=1
+
+−ˆyk(E(t)) X
+
+> u∈V (t)
+> |dc|
+
+X
+
+> l=1
+
+dlCtel (u)
+
+ + log 
+
+> c
+
+X
+
+> k′=1
+
+exp 
+
+ X
+
+> u∈V (t)
+> |dc|
+
+X
+
+> l=1
+
+dlCtel (u)
+
+ (34) Solving this equation yields the most important events for the graph classification task. The Algorithm shows the overall process of selecting important layer edges for graph classification task. 
+
+Algorithm 4 The overall framework for graph classification task 
+
+1: Input : the node set V(t), time t, and the max depth of memory backtracking tree TL
+
+2: for u ∈ V (t) do 
+
+3: Compute Ttop (u), {Mtp0→u|p0 is a leaf node of Ttop (u)} and Ctu using Algorithm 2. ▷ topology attribution 
+
+4: for each Mtp→u ∈ { Mtp0→u|p0 is a leaf node of Ttop (u)} do 
+
+5: Update Ctu using Algorithm 5 ▷ Memory attribution 
+
+6: Ct(u) = Ctu
+
+7: end for 
+
+8: end for 
+
+9: Update Ct(u) using Lemma 4.1 
+
+10: Select important events E∗ using Eq. (34) 
+
+11: Output: The important events E∗
+
+20 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+A.14. The Algorithm for constructing the memory backtracking tree Algorithm 5 Construction of the memory backtracking tree and recursive relevance propagation  
+
+> 1:
+
+Input : target node u, node memory contributions Mtu→u ∈ Rdm×dm , time t, Ctuk ∈ R|E (t)|× dm , and the max depth TL 
+
+> 2:
+
+Initialize tree Tmemory ← { (u, t )} with root (u, t ) 
+
+> 3:
+
+procedure DFS (node: u, timestamp: t, layer: Tl, contribution matrix: R(stu))  
+
+> 4:
+
+if Tl ≥ TL then  
+
+> 5:
+
+return  
+
+> 6:
+
+end if  
+
+> 7:
+
+Let H(u, t ) = {e1, . . . , e m} sorted by t1 < · · · < t m ≤ t 
+
+> 8:
+
+if H(u, t ) = ∅ then  
+
+> 9:
+
+return  
+
+> 10:
+
+end if  
+
+> 11:
+
+for j = m down to 1 do  
+
+> 12:
+
+ej = ( vj , u, t j ) 
+
+> 13:
+
+Insert (vj , t j ), (u, t j ) and (ej , t j ) as children of (u, t ) in Tmemory  
+
+> 14:
+
+if fupdate is the GRU function then  
+
+> 15:
+
+Compute R
+
+
+
+stj −
+
+> vj
+
+
+
+, R
+
+
+
+stj −
+
+> u
+
+
+
+, R xej
+
+, and R(t − tj ) via Eq. (29)  
+
+> 16:
+
+else if fupdate is the RNN function then  
+
+> 17:
+
+Compute R
+
+
+
+stj −
+
+> vj
+
+
+
+, R
+
+
+
+stj −
+
+> u
+
+
+
+, R xej
+
+, and R(t − tj ) via Eq. (30)  
+
+> 18:
+
+end if  
+
+> 19:
+
+Ctu[ej ] ← Ctu[ej ] + 1⊤R(xej ) + 1⊤R(ϕ(t − tj ))  
+
+> 20:
+
+procedure DFS 
+
+
+
+node: vj , timestamp: tj , layer: Tl + 1 , contribution matrix: R(stj − 
+
+> vj
+
+)
+
+ 
+
+> 21:
+
+procedure DFS 
+
+
+
+node: u, timestamp: tj , layer: Tl + 1 , contribution matrix: R(stj − 
+
+> u
+
+)
+
+ 
+
+> 22:
+
+end for  
+
+> 23:
+
+end procedure  
+
+> 24:
+
+procedure DFS (node: u, timestamp: t, layer: 0, contribution matrix: Mtu→u) 
+
+> 25:
+
+Output: Tmemory (u, t ), contributions Ctu
+
+A.15. Dataset 
+
+We select several real-world temporal graph datasets for link prediction. These datasets cover a wide range of real-world applications and domains, including social networks, political networks, communication networks, etc. The brief introduction of the six datasets is listed as follows. Data statistics are given in Table 2 • Wikipedia (Kumar et al., 2019): A one-month interaction network with nodes as editors and pages, and edges as timestamped posting requests. • Reddit (Kumar et al., 2019): Records one-month activity in subreddits, with nodes as users/posts and edges as timestamped posts. Edge features are 172-dimensional LIWC vectors from edit texts. • Enron (Shetty & Adibi, 2004): Email interaction network of ENRON employees over three years, with no attributes. • UCI (Panzarasa et al., 2009): Unattributed social network among UCI students, tracking online forum posts with second-level timestamps. • tgbn-trade (Huang et al., 2023): International agriculture trade network between UN nations (1986-2016), with edges representing annual trade values. • tgbn-genre (Huang et al., 2023): Bipartite network between users and music genres, with edge weights denoting genre preferences. • tgbn-reddit (Huang et al., 2023): Interaction network between users and subreddits (2005-2019), with edges representing posts. 21 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+• HMDB51 (Kuehne et al., 2011): a large benchmark for human action recognition with 51 action categories and 6,766 annotated video clips collected from movies and web videos. We selected four categories: climbing, sit-ups, running, and pull-up, as the classification task. • Penn Action (Zhang et al., 2013): a large-scale collection designed for human action recognition in video. It contains over 2,300 video clips with 15 different action categories, including running, jumping, and kicking. Each video is annotated with action labels, start and end times, and multiple frames per action. 
+
+Table 2. The details of datasets. 
+
+Datasets Domains Nodes Links 
+
+Wikipedia Social 9,227 157,474 Reddit Social 10,984 672,447 Enron Communication 184 125,235 UCI Social 1,899 59,835 tgbn-trade trade 255 468,245 tgbn-genre interact. 1,505 17,858,395 tgbn-reddit social 11,766 27,174,118 
+
+A.16. Running time 
+
+We partition the computation time into three components: topology time , for constructing the topology attribution tree and computing neighbor contributions; memory time , for constructing the memory backtracking tree and computing contributions of historical events; and selection time , for solving Eq. (15) or Eq. (33). Figure 8 reports the average computation time on all datasets. Topology time is omitted for the enron, UCI, tgbn-trade, tgbn-genre and tgbn-reddit datasets because it accounts for less than 1% of the total runtime and is therefore not shown in the stacked bars. For link prediction, memory time is the dominant cost. It increases with the memory depth T but remains practical: when 
+
+T = 10 , constructing the memory backtracking tree and computing historical contributions takes at most 5 seconds. For node property prediction, selection time dominates because the output is higher-dimensional than in link prediction (where the logit is one-dimensional), making the final solving step more expensive. Even so, when T = 10 , event selection takes at most 3 seconds, which is still acceptable. 2 3 4 5 6 7 8 9 10                                           
+
+> The depth of memory backtracking tree
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Average Time (s)  Reddit
+> 2345678910
+> The depth of memory backtracking tree
+> 0
+> 2
+> 4
+> 6
+> Wikipedia
+> 2345678910
+> The depth of memory backtracking tree
+> 0
+> 2
+> 4
+> UCI
+> 2345678910
+> The depth of memory backtracking tree
+> 0
+> 1
+> 2
+> 3
+> Average Time (s)  tgbn-trade
+> 2345678910
+> The depth of memory backtracking tree
+> 0
+> 1
+> 2
+> 3
+> tgbn-genre
+> 2345678910
+> The depth of memory backtracking tree
+> 0.0
+> 0.5
+> 1.0
+> tgbn-reddit
+> Topology Time Memory Time Select Event Time
+
+Figure 8. Running time decomposition: each figure represents a dataset. The x-axis represents the depth of the memory backtracking tree, and the y-axis represents the running time. 
+
+22 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+A.17. The average and standard deviation of Fidelity prob and Fidelity KL .
+
+Tables 3 and 4 report the mean and standard deviation of Fidelity KL and Fidelity prob corresponding to Figures 5 and 6. We further performed a t-test between our method and the second-best baseline, and found statistically significant in 77% of the cases for Fidelity KL and in 74% of the cases for Fidelity prob .
+
+Table 3. The average and standard deviation of Fidelity KL under different sparsity level. ∗ indicates that our results are significantly different from the runner-up baseline under a t-test. 
+
+.Dataset Ratio MemExplainer TempME TGNNExplainer GNNExplainer PGExplainer w/o memory w/o topology w/o selection Wikipedia 0.02 0.059 ±0.113 ∗ 0.103 ±0.216 0.120 ±0.236 0.146 ±0.294 0.110 ±0.193 0.079 ±0.132 0.088 ±0.162 0.104 ±0.234 0.04 0.056 ±0.104 ∗ 0.095 ±0.186 0.124 ±0.235 0.141 ±0.280 0.105 ±0.188 0.079 ±0.142 0.083 ±0.168 0.098 ±0.239 0.06 0.058 ±0.114 0.090 ±0.182 0.128 ±0.270 0.142 ±0.307 0.105 ±0.192 0.077 ±0.142 0.070 ±0.142 0.094 ±0.236 0.08 0.059 ±0.116 0.081 ±0.158 0.119 ±0.265 0.150 ±0.313 0.107 ±0.189 0.072 ±0.133 0.070 ±0.143 0.091 ±0.226 0.10 0.060 ±0.119 0.077 ±0.149 0.123 ±0.251 0.146 ±0.337 0.120 ±0.237 0.072 ±0.142 0.068 ±0.140 0.088 ±0.221 Reddit 0.02 0.164 ±0.257 ∗ 0.341 ±0.501 0.494 ±0.553 0.436 ±0.534 0.534 ±0.570 0.359 ±0.439 0.583 ±0.628 0.285 ±0.378 0.04 0.158 ±0.252 ∗ 0.325 ±0.516 0.472 ±0.574 0.428 ±0.549 0.506 ±0.560 0.315 ±0.414 0.801 ±0.675 0.242 ±0.353 0.06 0.150 ±0.258 ∗ 0.316 ±0.584 0.445 ±0.555 0.418 ±0.547 0.474 ±0.542 0.303 ±0.407 0.942 ±0.665 0.219 ±0.331 0.08 0.139 ±0.253 ∗ 0.297 ±0.586 0.425 ±0.529 0.391 ±0.512 0.458 ±0.536 0.303 ±0.446 0.942 ±0.665 0.193 ±0.276 0.10 0.132 ±0.260 ∗ 0.264 ±0.509 0.397 ±0.480 0.387 ±0.527 0.439 ±0.529 0.291 ±0.410 0.942 ±0.665 0.176 ±0.286 UCI 0.02 0.060 ±0.095 ∗ 0.083 ±0.116 0.095 ±0.135 0.095 ±0.132 0.097 ±0.125 0.080 ±0.102 0.071 ±0.115 0.072 ±0.105 0.04 0.049 ±0.082 ∗ 0.077 ±0.117 0.096 ±0.141 0.097 ±0.143 0.094 ±0.135 0.073 ±0.098 0.075 ±0.114 0.059 ±0.101 0.06 0.044 ±0.078 0.069 ±0.104 0.095 ±0.146 0.095 ±0.150 0.095 ±0.148 0.069 ±0.095 0.084 ±0.105 0.052 ±0.095 0.08 0.041 ±0.079 0.066 ±0.102 0.092 ±0.143 0.094 ±0.149 0.093 ±0.144 0.070 ±0.096 0.089 ±0.109 0.048 ±0.097 0.10 0.039 ±0.076 0.064 ±0.095 0.093 ±0.145 0.092 ±0.147 0.094 ±0.150 0.074 ±0.096 0.095 ±0.108 0.041 ±0.081 Enron 0.02 0.073 ±0.160 ∗ 0.138 ±0.230 0.204 ±0.218 0.187 ±0.220 0.201 ±0.213 0.177 ±0.225 0.120 ±0.212 0.146 ±0.224 0.04 0.071 ±0.164 ∗ 0.122 ±0.225 0.196 ±0.225 0.183 ±0.219 0.201 ±0.215 0.177 ±0.227 0.101 ±0.212 0.129 ±0.228 0.06 0.070 ±0.140 ∗ 0.111 ±0.223 0.185 ±0.225 0.183 ±0.226 0.196 ±0.235 0.177 ±0.245 0.085 ±0.188 0.107 ±0.228 0.08 0.065 ±0.137 ∗ 0.105 ±0.229 0.183 ±0.228 0.181 ±0.228 0.195 ±0.236 0.180 ±0.245 0.078 ±0.214 0.101 ±0.260 0.10 0.070 ±0.143 0.100 ±0.227 0.180 ±0.230 0.179 ±0.228 0.197 ±0.237 0.184 ±0.251 0.076 ±0.215 0.099 ±0.261 tgbn-trade 0.02 0.153 ±0.063 0.165 ±0.052 0.203 ±0.071 0.198 ±0.067 0.197 ±0.065 0.155 ±0.059 0.171 ±0.066 0.181 ±0.063 0.04 0.143 ±0.055 ∗ 0.161 ±0.049 0.203 ±0.071 0.198 ±0.067 0.197 ±0.065 0.148 ±0.055 0.165 ±0.065 0.177 ±0.063 0.06 0.137 ±0.053 ∗ 0.158 ±0.046 0.203 ±0.071 0.197 ±0.066 0.196 ±0.064 0.142 ±0.055 0.158 ±0.060 0.173 ±0.061 0.08 0.130 ±0.048 ∗ 0.155 ±0.044 0.203 ±0.071 0.196 ±0.064 0.195 ±0.062 0.137 ±0.056 0.151 ±0.055 0.169 ±0.061 0.10 0.125 ±0.046 ∗ 0.152 ±0.044 0.203 ±0.071 0.196 ±0.063 0.193 ±0.059 0.131 ±0.057 0.144 ±0.055 0.166 ±0.061 tgbn-genre 0.02 0.638 ±0.133 ∗ 0.705 ±0.095 0.745 ±0.103 0.751 ±0.099 0.760 ±0.119 0.714 ±0.122 0.671 ±0.114 0.729 ±0.118 0.04 0.614 ±0.132 ∗ 0.687 ±0.101 0.751 ±0.103 0.751 ±0.097 0.754 ±0.119 0.709 ±0.123 0.656 ±0.120 0.721 ±0.124 0.06 0.604 ±0.133 ∗ 0.678 ±0.104 0.744 ±0.104 0.750 ±0.096 0.752 ±0.117 0.706 ±0.125 0.645 ±0.121 0.705 ±0.129 0.08 0.589 ±0.128 ∗ 0.666 ±0.107 0.738 ±0.107 0.749 ±0.094 0.752 ±0.117 0.694 ±0.126 0.628 ±0.121 0.700 ±0.129 0.10 0.577 ±0.125 ∗ 0.659 ±0.106 0.735 ±0.107 0.748 ±0.094 0.755 ±0.119 0.690 ±0.127 0.618 ±0.118 0.694 ±0.130 tgbn-reddit 0.02 0.682 ±0.414 ∗ 1.090 ±0.727 1.732 ±0.686 1.535 ±0.674 1.872 ±0.769 0.850 ±0.676 0.858 ±0.610 0.979 ±0.525 0.04 0.565 ±0.368 ∗ 0.967 ±0.714 1.722 ±0.721 1.693 ±0.721 1.871 ±0.766 0.773 ±0.659 0.734 ±0.577 0.912 ±0.491 0.06 0.470 ±0.325 ∗ 0.868 ±0.703 1.768 ±0.729 1.708 ±0.719 1.869 ±0.761 0.719 ±0.663 0.635 ±0.536 0.835 ±0.454 0.08 0.406 ±0.291 ∗ 0.788 ±0.695 1.825 ±0.755 1.722 ±0.722 1.834 ±0.745 0.672 ±0.651 0.548 ±0.504 0.799 ±0.447 0.10 0.341 ±0.254 ∗ 0.726 ±0.693 1.766 ±0.773 1.767 ±0.727 1.806 ±0.731 0.647 ±0.646 0.477 ±0.457 0.748 ±0.434 
+
+A.18. The performance of different femb and fupdate in TGNs 
+
+In Figure 9 and Figure 10, we show the performance of Fidelity prob and Fidelity KL when the femb is graph attention model. In Figure 11 and Figure 12, we report Fidelity prob and Fidelity KL for the setting where the memory updater fupdate is implemented as an RNN. Our method, MemExplainer, significantly outperform baseline explainers across all datasets for both metrics. 
+
+A.19. Sensitivity analysis 
+
+In Figure 13 and Figure 14, we report Fidelity prob and Fidelity KL when the number of events from neighboring samples is fixed to n = 20 . Our method, MemExplainer, outperforms all baseline methods across all datasets on both metrics. We conduct a sensitivity analysis on the maximum depth of the memory backtracking tree. On the Enron, UCI, tgbn-trade, and tgbn-genre datasets, we set the maximum depth of the memory backtracking tree from 2 to 10, selecting the same number of events for each target node or edge across all depths. The performance of FidelityKL and Fidelityprob is shown in Figures 15 and 16, respectively. As shown in these figures, in tgbn-trade and tgbn-genre datasets, Fidelity KL and Fidelity prob 
+
+23 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Table 4. The average and standard deviation of Fidelity prob under different sparsity level. ∗ indicates that our results are significantly different from the runner-up baseline under a t-test. 
+
+Dataset Ratio MemExplainer TempME TGNNExplainer GNNExplainer PGExplainer w/o memory w/o topology w/o selection Wikipedia 0.02 0.085 ±0.108 ∗ 0.122 ±0.144 0.131 ±0.150 0.144 ±0.164 0.129 ±0.142 0.106 ±0.114 0.110 ±0.127 0.116 ±0.147 0.04 0.084 ±0.105 ∗ 0.118 ±0.140 0.133 ±0.149 0.141 ±0.157 0.123 ±0.139 0.104 ±0.112 0.105 ±0.128 0.108 ±0.144 0.06 0.083 ±0.106 0.113 ±0.136 0.130 ±0.153 0.138 ±0.160 0.121 ±0.140 0.101 ±0.114 0.094 ±0.119 0.106 ±0.141 0.08 0.083 ±0.106 0.107 ±0.129 0.123 ±0.147 0.139 ±0.164 0.123 ±0.141 0.098 ±0.108 0.091 ±0.122 0.103 ±0.139 0.10 0.084 ±0.108 0.103 ±0.125 0.124 ±0.147 0.136 ±0.157 0.126 ±0.147 0.096 ±0.109 0.090 ±0.121 0.100 ±0.137 Reddit 0.02 0.181 ±0.173 ∗ 0.279 ±0.228 0.354 ±0.249 0.321 ±0.249 0.373 ±0.256 0.293 ±0.242 0.379 ±0.285 0.260 ±0.215 0.04 0.175 ±0.171 ∗ 0.264 ±0.229 0.335 ±0.252 0.312 ±0.252 0.357 ±0.255 0.268 ±0.231 0.474 ±0.300 0.232 ±0.203 0.06 0.169 ±0.167 ∗ 0.247 ±0.228 0.320 ±0.254 0.305 ±0.250 0.339 ±0.256 0.256 ±0.231 0.539 ±0.285 0.218 ±0.192 0.08 0.159 ±0.162 ∗ 0.232 ±0.224 0.310 ±0.253 0.292 ±0.248 0.330 ±0.256 0.248 ±0.234 0.539 ±0.285 0.204 ±0.183 0.10 0.152 ±0.158 ∗ 0.219 ±0.212 0.299 ±0.245 0.287 ±0.249 0.319 ±0.255 0.245 ±0.233 0.539 ±0.285 0.188 ±0.181 Enron 0.02 0.115 ±0.127 ∗ 0.192 ±0.133 0.252 ±0.141 0.234 ±0.144 0.250 ±0.141 0.226 ±0.151 0.180 ±0.121 0.203 ±0.133 0.04 0.111 ±0.124 ∗ 0.173 ±0.134 0.242 ±0.146 0.229 ±0.146 0.248 ±0.145 0.223 ±0.154 0.151 ±0.123 0.178 ±0.138 0.06 0.117 ±0.117 ∗ 0.159 ±0.131 0.231 ±0.147 0.226 ±0.152 0.240 ±0.149 0.219 ±0.159 0.135 ±0.116 0.150 ±0.137 0.08 0.104 ±0.118 ∗ 0.149 ±0.133 0.226 ±0.153 0.223 ±0.154 0.239 ±0.150 0.220 ±0.161 0.119 ±0.121 0.134 ±0.142 0.10 0.111 ±0.121 0.141 ±0.134 0.220 ±0.156 0.220 ±0.156 0.238 ±0.154 0.218 ±0.169 0.116 ±0.124 0.128 ±0.142 UCI 0.02 0.100 ±0.101 ∗ 0.127 ±0.116 0.135 ±0.121 0.136 ±0.122 0.140 ±0.120 0.125 ±0.104 0.111 ±0.112 0.115 ±0.108 0.04 0.086 ±0.091 ∗ 0.119 ±0.117 0.133 ±0.126 0.133 ±0.128 0.133 ±0.123 0.115 ±0.102 0.117 ±0.114 0.096 ±0.103 0.06 0.081 ±0.087 0.109 ±0.112 0.129 ±0.127 0.128 ±0.129 0.129 ±0.127 0.110 ±0.101 0.130 ±0.113 0.087 ±0.097 0.08 0.075 ±0.085 0.105 ±0.111 0.125 ±0.125 0.126 ±0.129 0.126 ±0.127 0.110 ±0.102 0.137 ±0.114 0.079 ±0.096 0.10 0.073 ±0.083 0.103 ±0.109 0.126 ±0.127 0.124 ±0.127 0.125 ±0.128 0.117 ±0.105 0.145 ±0.111 0.073 ±0.087 tgbn-trade 0.02 0.072 ±0.042 0.074 ±0.043 0.077 ±0.047 0.076 ±0.046 0.076 ±0.045 0.073 ±0.043 0.075 ±0.042 0.077 ±0.045 0.04 0.070 ±0.038 ∗ 0.073 ±0.042 0.077 ±0.047 0.076 ±0.046 0.076 ±0.045 0.072 ±0.043 0.074 ±0.041 0.076 ±0.045 0.06 0.069 ±0.037 ∗ 0.072 ±0.041 0.077 ±0.047 0.076 ±0.045 0.076 ±0.045 0.071 ±0.043 0.072 ±0.040 0.076 ±0.044 0.08 0.067 ±0.035 ∗ 0.072 ±0.040 0.077 ±0.047 0.076 ±0.045 0.076 ±0.044 0.070 ±0.043 0.071 ±0.037 0.075 ±0.044 0.10 0.066 ±0.034 ∗ 0.071 ±0.040 0.077 ±0.047 0.076 ±0.045 0.076 ±0.044 0.069 ±0.043 0.070 ±0.037 0.075 ±0.044 tgbn-genre 0.02 0.115 ±0.017 ∗ 0.118 ±0.017 0.119 ±0.017 0.119 ±0.017 0.120 ±0.018 0.118 ±0.018 0.117 ±0.017 0.119 ±0.018 0.04 0.114 ±0.017 ∗ 0.117 ±0.016 0.119 ±0.017 0.119 ±0.017 0.119 ±0.018 0.118 ±0.018 0.116 ±0.018 0.118 ±0.018 0.06 0.113 ±0.017 ∗ 0.117 ±0.016 0.119 ±0.017 0.119 ±0.017 0.119 ±0.018 0.118 ±0.018 0.115 ±0.018 0.118 ±0.018 0.08 0.113 ±0.016 ∗ 0.116 ±0.016 0.119 ±0.017 0.119 ±0.017 0.119 ±0.018 0.117 ±0.018 0.115 ±0.018 0.118 ±0.018 0.10 0.112 ±0.016 ∗ 0.116 ±0.016 0.118 ±0.017 0.119 ±0.017 0.119 ±0.018 0.117 ±0.018 0.114 ±0.018 0.117 ±0.018 tgbn-reddit 0.02 0.245 ±0.088 0.295 ±0.108 0.374 ±0.073 0.357 ±0.078 0.380 ±0.074 0.255 ±0.114 0.265 ±0.103 0.296 ±0.085 0.04 0.221 ±0.086 ∗ 0.276 ±0.113 0.371 ±0.076 0.368 ±0.078 0.380 ±0.073 0.239 ±0.118 0.243 ±0.103 0.287 ±0.084 0.06 0.199 ±0.082 ∗ 0.257 ±0.116 0.374 ±0.076 0.370 ±0.077 0.380 ±0.074 0.227 ±0.121 0.224 ±0.103 0.276 ±0.084 0.08 0.183 ±0.078 ∗ 0.241 ±0.120 0.377 ±0.075 0.371 ±0.076 0.379 ±0.074 0.216 ±0.123 0.204 ±0.103 0.270 ±0.085 0.10 0.165 ±0.073 ∗ 0.226 ±0.123 0.371 ±0.078 0.375 ±0.075 0.377 ±0.074 0.210 ±0.123 0.189 ±0.100 0.261 ±0.085 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.30 
+
+0.40 
+
+> Fidelity kl
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.30 
+
+0.40 
+
+Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.14 
+
+0.15 
+
+0.16 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.30 
+
+> Fidelity kl
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+1.20 
+
+1.40 
+
+1.60 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+1.00 
+
+2.00 
+
+3.00 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 9. The performance of Fidelity KL . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The femb is graph attention model. 
+
+24 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.25 
+
+> Fidelity prob
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.30 
+
+Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.22 
+
+0.23 
+
+0.24 
+
+0.25 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.07 
+
+0.08 
+
+0.09 
+
+> Fidelity prob
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.14 
+
+0.14 
+
+0.14 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+0.40 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 10. The performance of Fidelity prob . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The femb is graph attention model. 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Fidelity kl
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.30 
+
+0.40 
+
+0.50 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.48 
+
+0.50 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+0.40 
+
+> Fidelity kl
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.40 
+
+0.60 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.50 
+
+1.00 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 11. The performance of Fidelity KL . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The fupdate is RNN model. 
+
+25 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.12 
+
+0.15 
+
+> Fidelity prob
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.16 
+
+0.18 
+
+0.20 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.15 
+
+0.20 
+
+0.25 
+
+Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.46 
+
+0.47 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.08 
+
+0.10 
+
+> Fidelity prob
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.11 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 12. The performance of Fidelity prob . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The fupdate is RNN model. 
+
+initially decreases and then increases with increasing maximum depth. This trend occurs because deeper backtracking allows for more accurate tracing of historical events, resulting in more faithful explanations. However, this also increases the number of candidate explanation events, making the optimization problem more complex. The expanded search space complicates the identification of relevant events, leading to the decrease in fidelity. While on the Enron and UCI datasets, the lower depth can achieve better performance. The best performing on different datasets is different, which is due to the different characteristics of the datasets. The optimal maximum depth varies across different datasets, which can be attributed to the unique characteristics of each dataset. 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.20 
+
+0.40 
+
+0.60 
+
+> Fidelity kl
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.40 
+
+0.60 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+0.40 
+
+Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.18 
+
+0.20 
+
+0.22 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.15 
+
+0.20 
+
+0.25 
+
+> Fidelity kl
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+1.30 
+
+1.40 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.50 
+
+1.00 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 13. The performance of Fidelity KL . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The number of events from neighboring samples n
+
+is 20. 
+
+We conduct a sensitivity analysis on the maximum depth of the memory backtracking tree. On the Enron, UCI, tgbn-trade, and tgbn-genre datasets, we set the maximum depth of the memory backtracking tree from 2 to 10, selecting the same number of events for each target node or edge across all depths. The performance of FidelityKL and Fidelityprob is shown in 26 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.15 
+
+0.20 
+
+> Fidelity prob
+
+Wikipedia 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.25 
+
+0.30 
+
+0.35 
+
+Reddit 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+Enron 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.26 
+
+0.28 
+
+0.30 
+
+UCI 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.14 
+
+0.16 
+
+> Fidelity prob
+
+tgbn-trade 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.34 
+
+0.34 
+
+tgbn-genre 
+
+0.02 0.04 0.06 0.08 0.10 
+
+> Sparsity
+
+0.10 
+
+0.20 
+
+0.30 
+
+tgbn-reddit MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+w/o selection 
+
+w/o memory 
+
+w/o topology 
+
+Figure 14. The performance of Fidelity prob . Each figure corresponds to a different dataset. First and second rows represent link prediction and node property prediction, respectively. Lower value indicates better performance. The number of events from neighboring samples n
+
+is 20. 
+
+Figures 15 and 16, respectively. As shown in these figures, in tgbn-trade and tgbn-genre datasets, Fidelity KL and Fidelity prob 
+
+initially decreases and then increases with increasing maximum depth. This trend occurs because deeper backtracking allows for more accurate tracing of historical events, resulting in more faithful explanations. However, this also increases the number of candidate explanation events, making the optimization problem more complex. The expanded search space complicates the identification of relevant events, leading to the decrease in fidelity. While on the Enron and UCI datasets, the lower depth can achieve better performance. The best performing on different datasets is different, which is due to the different characteristics of the datasets. The optimal maximum depth varies across different datasets, which can be attributed to the unique characteristics of each dataset. 2 3 4 5 6 7 8 9 10                         
+
+> The depth of memory backtracking tree
+> 0.07
+> 0.08
+> 0.09
+> 0.10
+> 0.11
+> 0.12
+> 0.13
+> Fidelit yKL
+> Enron
+> 2345678910
+> The depth of memory backtracking tree
+> 0.05
+> 0.06
+> 0.07
+> 0.08
+> 0.09
+> UCI
+> 2345678910
+> The depth of memory backtracking tree
+> 0.14
+> 0.14
+> 0.15
+> 0.15
+> 0.15
+> 0.15
+> 0.15
+> 0.15
+> tgbn-trade
+> 2345678910
+> The depth of memory backtracking tree
+> 0.62
+> 0.64
+> 0.66
+> 0.68
+> 0.70
+> tgbn-genre
+
+Figure 15. Performance of Fidelity KL at different maximum depths of the memory backtracking tree, with each figure representing a different dataset. 
+
+A.20. Case study 
+
+We show the explanation results on pose-based action classification task. Table 8, Table 5, Table 6, and Table 7 show case studies for the pull-up, run, climb, and sit-up classes. For a fair comparison, all explanation methods operate on the same input sequence of skeleton graphs for each video. We also fix a global edge budget , i.e., the total number of key human-pose edges that each method can select. Since different methods select different explanation edges, these edges may appear on different frames, meaning the explanation results may not be frame-aligned across methods. 27 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 2 3 4 5 6 7 8 9 10                          
+
+> The depth of memory backtracking tree
+> 0.11
+> 0.12
+> 0.13
+> 0.14
+> 0.15
+> 0.16
+> 0.17
+> 0.18
+> Fidelit yprob
+> Enron
+> 2345678910
+> The depth of memory backtracking tree
+> 0.07
+> 0.08
+> 0.09
+> 0.10
+> 0.11
+> 0.12
+> UCI
+> 2345678910
+> The depth of memory backtracking tree
+> 0.07
+> 0.07
+> 0.07
+> 0.07
+> 0.07
+> 0.07 tgbn-trade
+> 2345678910
+> The depth of memory backtracking tree
+> 0.11
+> 0.12
+> 0.12
+> 0.12
+> tgbn-genre
+
+Figure 16. Performance of Fidelity prob at different maximum depths of the memory backtracking tree, with each figure representing a different dataset. 
+
+Our method typically select a much smaller subset of edges per frame, which leads to more visualized frames under the same total edge budget. For pull-ups, the yellow edges focus on the main kinematic chains (e.g., shoulder–elbow–wrist and hip–knee) during both lifting and lowering. For running, they concentrate on the lower limb chain (hip–knee–ankle) that drives forward motion, showing when the discriminative gait pattern appears. For climbing, our method mainly selects the supporting arm and leg that hold the body and control the center of mass, instead of uniformly highlighting the whole skeleton. For sit-ups, the selected edges lie along the torso–hip–knee chain, capturing how the upper body bends around relatively fixed legs. In contrast, across all four actions, PGExplainer, GNNExplainer, and TGNNExplainer usually select most skeletal links in one frame, making it hard to see which joints actually drive the prediction. Under a fixed edge budget, this behavior naturally yields fewer visualized frames. TempME often selects edges that are unstable over time and misaligned with the key biomechanics of the movement. The selected edges do not form a consistent pattern across frames. 
+
+Table 5. Visualization of explanation results for the pull-up action with different methods. Green nodes denote joint (bone) nodes, red edges denote original connections between joints, yellow edges denote the selected important edges, and each image corresponds to one frame in the video. 
+
+Methods Explanation results MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+28 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Table 6. Visualization of explanation results for the climbing action with different methods.Green nodes denote joint (bone) nodes, red edges denote original connections between joints, yellow edges denote the selected important edges, and each image corresponds to one frame in the video. 
+
+Methods Explanation results MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+29 Towards the Explainability of Temporal Graph Networks via Memory Backtracking and Topological Attribution 
+
+Table 7. Visualization of explanation results for the sit-ups action with different methods.Green nodes denote joint (bone) nodes, red edges denote original connections between joints, yellow edges denote the selected important edges, and each image corresponds to one frame in the video. 
+
+Methods Explanation results MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+Table 8. Visualization of explanation results for the running action with different methods.Green nodes denote joint (bone) nodes, red edges denote connections between joints, yellow edges denote the selected important edges, and each image corresponds to one frame. 
+
+Methods Explanation results MemExplainer 
+
+TempME 
+
+TGNNExplainer 
+
+GNNExplainer 
+
+PGExplainer 
+
+30

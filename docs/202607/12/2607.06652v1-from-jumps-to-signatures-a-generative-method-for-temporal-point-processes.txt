@@ -1,0 +1,3290 @@
+Title: From Jumps to Signatures: a Generative Method for Temporal Point Processes
+
+URL Source: https://arxiv.org/pdf/2607.06652v1
+
+Published Time: Thu, 09 Jul 2026 00:05:53 GMT
+
+Number of Pages: 44
+
+Markdown Content:
+# From Jumps to Signatures: a Generative Method for Temporal Point Processes 
+
+Niels Cariou-Kotlarek and Vasileios Lampos 
+
+Centre for Artificial Intelligence Department of Computer Science University College London {niels.kotlarek.23 , v.lampos }@ucl.ac.uk 
+
+## Abstract 
+
+Rough path signatures are a universal feature map for continuous paths and, via the expected signature, characterise path distributions. These guarantees do not directly extend to càdlàg paths of Temporal Point Processes (TPPs), limiting the use of signature methods for event sequences. Furthermore, neural TPP models, including recent generative approaches, optimise per-event objectives with no global sequence-level loss, while evaluation of variable-length event sequences lacks distributional discrepancy measures. This paper proposes a common path-wise framework for addressing these limitations. We introduce the interarrival embedding, a stable, injective lift from jump paths to continuous paths of bounded variation, extending signature methods to discrete event sequences. Our theoretical contributions give rise to S IG TPP, the first signature-based generative model for TPPs, trained using a path-level loss on complete trajectories. We further analyse the space of counting paths and derive 3 distributional discrepancies, providing mathematically justified tools for evaluating generative TPP models. Across syn-thetic and real-world datasets, S IG TPP achieves the best average rank based on 8 complementary metrics, outperforms or is within a standard error of the strongest baseline in 64% of the dataset-metric pairs, and according to a relative score, im-proves against every baseline by at least 19% on average. 
+
+Source code and datasets: github.com/Code-Cornelius/sigtpp 
+
+## 1 Introduction 
+
+Temporal Point Processes (TPPs) model discrete events occurring in continuous time [ 12 , 24 ]. They underpin applications across finance [ 3 ], seismology [ 14 ], information diffusion [ 25 ], and health [ 20 , 51 ]. Neural TPPs (NTPPs) parametrise the conditional or interarrival density with expressive neural networks [ 16 , 38 , 43 , 56 ], including continuous-time state-space architectures [ 5 ], and are often trained via log-likelihood maximisation. Yet, likelihood-based training introduces fundamental constraints [ 49 ]. It either restricts models to tractable likelihood families [ 48 ] or relies on expensive numerical approximations [ 38 , 43 ], limiting both expressiveness and scalability. This has led to a growing interest in alternative generative paradigms, such as diffusion-based methods [ 34 , 55 ], normalising flows [ 48 ], adversarial training [ 53 ], and reinforcement learning [ 29 ], with frameworks [ 31 ] unifying several of these perspectives. At the same time, the signature transform from rough path theory [ 19 , 37 ] has become central to time series modelling [ 6, 11 , 27 , 44 ]. Acting as a universal feature map, it encodes pathwise information into a tensor series up to tree-like equivalence [ 23 , 37 ], while the expected signature becomes a moment generating function on path space [7, 8], supporting generative models such as the Signature-Wasserstein GAN [30, 40]. Despite this activity, the current landscape has significant structural gaps. The prevailing training objectives are local as they decompose into a sum of per-event losses, each comparing one event to the 
+
+> Preprint under review (2026). arXiv:2607.06652v1 [cs.LG] 7 Jul 2026
+
+ground truth conditional on preceding events. This is also true for recent non-autoregressive models as they fit reverse denoising transitions [ 33 ], transport fields [ 26 ], or edit rates at sampled intermediate states [ 35 ], rather than directly minimising a single global discrepancy between generated and empirical trajectories. Consequently, global structural properties, such as autocorrelation, long-range inter-event dependencies, and joint timing distributions, receive no direct loss signal. Furthermore, the evaluation methods for generative TPP models are underdeveloped [ 39 , 49 ]. Negative log-likelihood (NLL) measures local conditional fit and is insensitive to global sequence structure. Low NLL does not preclude mode collapse, misspecified tails, or distorted inter-event dependencies [ 31 , 32 , 39 ]. 1-step-ahead pointwise metrics (e.g. mean absolute error) share this limitation and additionally favour underdispersed predictions [ 41 , 42 , 57 –59 ]. A practical shift towards sequence-level distributional losses, such as the maximum mean discrepancy (MMD) with a Gaussian kernel [ 34 , 48 ] and the Wasserstein-1 distance [ 33 , 35 ], has emerged, yet whether these losses define meaningful distances on the space of counting paths has not been theoretically established. Signatures would be a natural candidate to address the aforementioned shortcomings, as they handle naturally variable-length sequences. However, the determinacy and universal nonlinearity that underpin signature-based generative modelling [ 7, 8 , 23 ] are formulated for continuous paths of bounded variation. TPP sample paths are càdlàg step functions, on which these guarantees fail. This paper attempts to address these limitations with the following contributions: 1. We introduce the interarrival embedding, a stable, injective lift to continuous paths of bounded-variation, enabling signature methods on jump processes (Section 3.1). 2. Building on this embedding approach, we propose S IG TPP, a signature-based generative model for TPPs that replaces per-event objectives with a global signature loss on complete counting paths (Section 3.2). 3. We provide 3 theoretically grounded discrepancies on counting-path distributions, namely the energy ( E), Wasserstein-1 ( W1), and signature-Wasserstein-1 distances ( Sig -W1), for evaluating generative TPP models (Section 3.4). We also showcase the utility of other diagnostic metrics for NTPP evaluation, including moment and histogram-based summaries. 4. Using synthetic and real-world datasets, we demonstrate that S IG TPP is a strong generative model for TPPs. It achieves the best relative score on 7 out of the 8 metrics. S IG TPP achieves the best performance or is within a standard error of the strongest baseline in 64% of all metric-dataset pairs (Section 4). 
+
+## 2 Preliminaries 
+
+Temporal Point Processes [12 ]. Fix a finite horizon Tmax ∈ R>0. A realisation of a TPP on [0 ,T max )
+
+is a finite sequence of strictly increasing event times, 0 < t 1 < ··· < t m < T max . To define a metric on event sequences and study its topological properties, we work with the equivalent counting-path representation. Let N denote the set of nondecreasing, càdlàg functions η : [0 ,T max ] → N
+
+with η0 = 0 , ηTmax < ∞, unit jumps only, and no jump at Tmax . η and (tk)mk=1 are related by 
+
+ηt = # {k : tk ≤ t}. A TPP is an N -valued random variable N on a probability space (Ω ,F,P).The conditional intensity λ(t | H t) := lim ∆t↓0 ∆t−1 ENt+∆ t − Nt |H t
+
+, where Ht := σ(Ns : s < t ),characterises the instantaneous rate of events given history. We adopt the following boundary convention throughout, since the definition of Φ (Definition 4) and the stability theorem (Theorem 6) rely on the same augmented event grid. 
+
+Convention 1 (Boundary Convention) . For η ∈ N with event times 0 < t 1 < ··· < t m < T max , we augment the sequence by setting t0 := 0 and tm+1 := Tmax , and define the corresponding interarrival times τ0 := 0 , τk := tk − tk−1 where k = 1 ,...,m , and τm+1 := Tmax − tm.
+
+Rough Path Signatures [19 , 37 ]. The signature transform provides an injective representation, up to tree-like equivalence, of continuous paths of finite variation into the tensor algebra, T (( Rd)) . We restrict attention to continuous paths of bounded variation (as opposed to finite p-variation). 
+
+Definition 2 (Signature) . Let X : [0 ,T max ] → Rd be a continuous path of bounded variation. The signature of X, denoted by S(X), is defined as the infinite sequence of iterated integrals 
+
+S(X) = (1 ,S (X)1,S (X)2,... ), where S(X)k =
+
+Z 
+
+> 0<u 1<··· <u k<T max
+
+dXu1 ⊗ ··· ⊗ dXuk . (1) 
+
+SM (X) denotes the truncated signature of X of degree M , i.e. SM (X) = (1 ,S (X)1,...,S (X)M ).
+
+2Theorem 3 (Determinacy [ 7 ]) . Let X and Y two continuous random paths of bounded variation. If 
+
+E[S(X)] = E[S(Y )] and E[S(X)] has infinite radius of convergence, then X = Y in distribution. 
+
+## 3 Signature-based Generative TPPs (S IG TPP) 
+
+The signature transform is defined on continuous paths of bounded variation, whereas counting paths in N are càdlàg step functions. Our approach to addressing this rests on two components. First, we introduce a deterministic embedding Φ into the space C := C([0 ,T max ],R) of continuous functions on [0 ,T max ]. Φ maps a discrete event sequence to a continuous, piecewise-linear path on which the signature transform applies (Section 3.1). Then, we train the proposed S IG TPP on the Euclidean distance between the truncated expected signatures of the embedded model-generated and observed counting paths (Section 3.2). We also provide theoretical guarantees ensuring the signature loss reflects genuine discrepancies between counting-path distributions (Section 3.3), and we propose principled evaluation metrics for generative TPPs (Section 3.4). 
+
+3.1 The Interarrival Embedding Φ
+
+Definition 4 (Interarrival Embedding) . For η ∈ N with m events, let 0 =: t0 < t 1 < ··· < t m < t m+1 := 
+
+Tmax be the augmented grid and τk := tk − tk−1 the interarrival times. The interarrival embedding is the continuous, bounded-variation, piecewise-linear function x := Φ( η) ∈ C satisfying 
+
+x(tk) = τk for k = 0 ,...,m +1 , and 
+
+Φ( η)t = τk + t − tk
+
+tk+1 − tk
+
+ τk+1 − τk
+
+, where t ∈ [tk,t k+1 ], k = 0 ,...,m. (2) 0 1 2 3 4 5 6 7       
+
+> Time t
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Counting path ηtand embedding Φ
+> Counting path: t7→ηt
+> Embedding Φ( η)t
+> Grid points ( tk, τ k)
+
+Figure 1: Illustration of the interarrival em-bedding Φ (Definition 4) for a sampled Pois-son process with λ = 1 and Tmax = 7 .
+
+Equivalently, Φ( η) is the unique continuous function that is affine on every interarrival time and satisfies 
+
+Φ( η)tk = τk, k ≤m+1 . Figure 1 illustrates this on a Pois-son sample: the counting process (blue, càdlàg) records cumulative event counts, the marks (orange) record the duration of the most recent interarrival interval, and Φ( η)
+
+(green dashed line) is the piecewise-linear interpolant of this staircase on the augmented event grid. The embedded path is continuous and of bounded variation, satisfying the assumptions required by the signature transform, see Definition 2. In practice, we apply the signature trans-form not to Φ( η) alone but to the time-augmented curve 
+
+t 7 → (t, Φ( η)t) in R2. The time augmentation encodes both absolute event times and interarrival durations, the two standard input features of NTPPs [ 16 , 31 ], in a sin-gle curve. Theoretically, it removes tree-like components from the path, so that the signature is injective [ 23 ]. Note that other interpolation schemes are possible (e.g. step function), but linear interpolation is the standard choice in signature-based methods [ 6], and it is the simplest scheme yielding continuous paths. The stability of the map Φ and a constructive inverse Ψ := Φ −1 are established in Theorem 6. 
+
+3.2 Model Optimisation 
+
+Our goal is to train a parametric generator μθ whose output distribution faithfully reproduces the unknown data distribution ν, without specifying a parametric intensity model. A natural loss between distributions μθ and ν is the Wasserstein-1 distance used in Wasserstein GAN models [ 53 ], expressible via Kantorovich-Rubinstein duality as 
+
+W1(μθ ,ν ) = sup  
+
+> ∥f∥Lip ≤1
+
+Ex∼μθ
+
+f (x) − Ey∼ν
+
+f (y). (3) Approximating the supremum over 1-Lipschitz functions often requires training a neural network discriminator with gradient penalties or weight clipping. This adversarial procedure can lead to training instability and convergence issues [ 2], especially when modelling TPPs [ 53 ]. Recent work on generative modelling of continuous paths proposes replacing the adversarial discriminator with a signature-based metric, denoted by Sig -W1 [ 30 , 40 ]. By leveraging the universal nonlinearity 3N ∼ μθTime t            
+
+> ηtE[ηt]ΦTime t
+> Φ( η)tE[Φ( η)t]SM
+> S1
+> S2
+> SM
+> ESig -W(M)1(μθ,ν )
+> TM R2
+> ∇θbackpropagation through μθ
+
+Figure 2: S IG TPP’s optimisation. A counting path sampled from μθ is embedded with Φ to a continuous path, mapped to its truncated signature in T M (R2), and summarised by its expectation under the model. The loss ( Sig -W1) compares this against the expected signature of the embedded targets’ paths, opposed to the usual per-event loss. Loss gradient flows back through μθ .signature property, any 1-Lipschitz test function can be approximated by a linear functional on the signature. Consequently, the optimisation over the infinite-dimensional function space reduces to a linear operation on the (truncated for numerical purposes) tensor algebra T M (Rd). Given that TPP sample paths are càdlàg step functions, we first lift them with the interarrival embedding Φ and then apply the signature loss on the embedded path space. Hence, the loss for optimising the proposed model, S IG TPP, is given by: 
+
+Sig -W(M )1 (μθ ,ν ) := ENθ ∼μθ
+
+SM (Φ( Nθ ))  − EN ∼ν
+
+SM (Φ( N ))  
+
+> 2
+
+. (4) Here ∥·∥ 2 denotes the ℓ2 norm on the truncated tensor algebra T M (R2). The training procedure is summarised in Figure 2. The expected signature under the data measure ν is precomputed once on the training set; each gradient step requires only computing signatures under μθ .SIG TPP is a 1-step autoregressive generator that follows the standard NTPP design [ 31 ]. A single-layer LSTM encodes the history of tunable hidden size ( H) with h0. Each log-interarrival time is first mapped to a 64-dimensional learnable trigonometric embedding and processed recurrently to produce the history state hi. The decoder is a shallow perceptron and predicts log τi+1 from the recurrent state 
+
+hi, the current cumulative time and an exogenous noise variable ε ∼ log(Exp(1)) .
+
+3.3 Theoretical Guarantees 
+
+To analyse the stability of the embedding Φ and to quantify discrepancies between counting-path distributions, we propose to work with the following metric. 
+
+Definition 5 (Counting Path Metric) . We define the pathwise TPP metric between two counting processes η,ξ ∈ N on [0 ,T max ) by dN (η,ξ ) := R Tmax  
+
+> 0
+
+|ηt − ξt| dt.
+
+Given that counting paths are càdlàg, distinct event sets η̸ = ξ yield paths that differ on an interval of positive Lebesgue measure. Hence, dN (η,ξ ) = 0 implies η = ξ, and dN is a genuine metric on N
+
+(see also Proposition S3). As shown in Appendix A.3, dN coincides with the Wasserstein-1 distance between event-time point measures padded with Dirac masses at Tmax . This result puts the optimal-transport perspective of Xiao et al. [53] on a rigorous footing, yielding a genuine metric on N . The space N is not a linear subspace of L1([0 ,T max ]) . The difference ηt − ξt is signed, scalar multiples of counting paths are not counting paths, and the sum or difference of two counting paths need not have unit jumps. The metric structure is the natural level at which to study stability. Consequently, standard tools from linear and functional analysis are not directly available. Most notably, there is no differentiable structure on which to apply an inverse function theorem, no open mapping theorem to promote a continuous bijection to a bi-Lipschitz one, and no compact embedding to fall back on since event counts are unbounded. We therefore work throughout with L1-type metrics on both N
+
+and C, which is also natural for signature-based losses that are computed through integrals. Hence, the embedding chain from counting paths to the tensor algebra is given by: 
+
+(N ,d N ) Φ
+
+−→ (C,d 1) t7→ (t ,Φ( η)t)
+
+−−−−−−−−→ C([0 ,T max ],R2) Signature 
+
+−−−−−−→ T (( R2)) , (5) where N is equipped with a metric dN and (C,d 1) denotes the space of continuous paths [0 ,T max ]→R
+
+equipped with the L1 metric d1(x,y ) := R Tmax  
+
+> 0
+
+|x(t) − y(t)| dt. Theorem 6 establishes that Φ is Lipschitz and injective, with a controlled inverse under mild assumptions. The Lipschitz bound ensures that the signature loss (Eq. 4) inherits regularity from the data distribution. Closeness in 4counting-path space implies closeness of expected signatures. Injectivity guarantees that no event information is lost in the embedding, which is what allows Sig -W(M )1 to separate distinct laws on N .Finally, the Hölder bound gives the converse direction under a mild separation assumption that is satisfied by any temporal data recorded at finite precision. 
+
+Theorem 6 (Stability of the Embedding; full proofs in Appendix B) . The embedding Φ : ( N ,d N ) →
+
+(C,d 1) satisfies the following properties: 1. Lipschitz continuity. For all η,ξ ∈ N , d1
+
+ Φ( η),Φ( ξ) ≤ 5 · Tmax · dN (η,ξ ). Hence, it is continu-ous and measurable (Appendix B.1, Theorem S11) . The constant 5 is not tight but sufficient. 2. Bijection. Φ is injective on N , hence a bijection Φ : N ∼
+
+−→ Φ( N ). The inverse Ψ := Φ −1 is recovered constructively by a level-set recursion (Appendix B.2, Theorem S16) .Moreover, on counting paths whose interarrival times τ1,...,τ m+1 (Convention 1) are bounded below by any fixed δ > 0, the inverse Ψ is Hölder continuous of exponent 1/2 (see also Appendix B.3, Theorem S29) .
+
+3.4 Evaluation Metrics for Counting-Path Distributions 
+
+Evaluating generative TPPs requires discrepancy measures between distributions on N . Current practice borrows tools from continuous-data settings, e.g. MMD with Gaussian kernels [ 34 , 48 ] or 
+
+W1 on event times [ 33 , 35 ], without verifying that these are valid distances on counting-path space. We show that the metric dN gives rise to mathematically valid distributional discrepancies on N .Throughout this section, uppercase P,Q ∈ P 1(N ) denote probability distributions over counting paths 
+
+N with finite first dN -moment. The metric dN acts at the path level, while the distribution-level discrepancies E, W1, and Sig -W(M )1 introduced in this section act with dN as ground cost. 
+
+Energy distance ( E). The energy distance ( E) is a standard metric induced by an underlying distance function [ 21 , 50 ], see Appendix C. Nonnegativity of E requires that (N ,d N ) be of negative type [ 50 ]. The map η 7 → (t 7 → ηt) is an isometry from (N ,d N ) into L1([0 ,T max ]) , which is of negative type, and the property is inherited by subspaces (Appendix A.1). Hence D := √E is a well-defined discrepancy. We further show in Appendix A.4 that dN is not of strong negative type, so D is a pseudometric rather than a metric. For the purpose of ranking models, this is sufficient. 
+
+Wasserstein-1 distance ( W1). Since (N ,d N ) is a metric space, the Wasserstein-1 distance [ 46 , 52 ]is a well-defined metric on P1(N ). We recall its definition in Appendix C. 
+
+Signature discrepancy ( Sig -W1). The loss Sig -W(M )1 (Eq. 4) can also be used as an evaluation metric in the continuous setting and we adapt it to TPPs with our embedding. Since Φ is injective and measurable (Theorem 6), distinct laws P̸ = Q on N induce distinct pushforwards Φ♯P̸ = Φ ♯Q.If these pushforward laws satisfy the moment condition of Theorem 3, then the expected signature determines the law, and hence Eη∼P [S(Φ( η))] ̸ = Eξ∼Q[S(Φ( ξ))] . Consequently, for any such pair 
+
+P̸ = Q, there exists a finite truncation level M such that Sig -W(M )1 (P,Q ) > 0. For each fixed M ,
+
+Sig -W(M )1 , being an ℓ2 distance between expected truncated signatures, is symmetric and satisfies the triangle inequality, and is therefore a pseudometric. 
+
+Pointwise Losses. As mentioned in the introduction, pointwise losses fail in a quantifiable, easily reproducible way on the very benchmarks the community uses to evaluate generative TPPs. For an interarrival distribution P with finite first moment, MAE is minimised by ˆτ = median( P ) and MSE by ˆτ = E[P ] [21 ]. Both optima are Dirac measures. Neither can, in principle, distinguish a calibrated generative model from a deterministic regressor. See Table S3 for an empirical confirmation. 
+
+## 4 Experimental Results 
+
+We evaluate S IG TPP on controlled synthetic regimes and real-world tasks. We assess performance across multiple axes, from path-level distributional fidelity to moment structure, and examine the reliability of pointwise metrics as evaluation criteria. We further study the dependence of S IG TPP on the signature truncation degree and its generation cost relative to baselines. 54.1 Datasets, Baselines, and Evaluation Metrics 
+
+We use 9 datasets in total, 4 synthetic and 5 real-world. Table S1 and Figures S2-S10 summarise their basic characteristics. The synthetic corpus covers the canonical regimes of TPP modelling: Poisson process (PS), inhomogeneous Poisson (IP), univariate Hawkes process (H1), and 3-dimensional Hawkes process (H3). The real-world corpus encompasses datasets from prior work [ 35 , 54 ], namely Earthquake (EQ), Stack Overflow (SO), Taobao (TB), Taxi (TX), and Yelp (YLP). We compare S IG TPP against 5 baselines spanning the main paradigms for generative TPP modelling. We focus on autoregressive baselines that have a neural architecture similar to S IG TPP (similar amount of parameters) to make comparisons fair. These include the denoising diffusion probabilistic model (DDPM) and variational autoencoder (VAE) [ 31 ], the Wasserstein GAN (WGAN) [ 53 ], and a maximum-likelihood Gamma fit [ 9 , 10 ] as a parametric reference (G AMMA ). To isolate the contribution of distributional modelling, we also include D ETER [ 31 ], a deterministic regressor whose predictive law is a Dirac measure and which by construction cannot capture distributional structure. We evaluate the goodness-of-fit along the following axes: pathwise discrepancies via E (energy distance) and W1 under our proposed metric dN , signature-based discrepancy via Sig -W1, pointwise probabilistic accuracy via the continuous ranked probability score (CRPS), marginal and temporal structure via histograms of interarrival times ( Llog( τ )) and intensity ( Lλ), pairwise correlation discrepancy (PCD), and autocorrelation discrepancy (ACD) across sequence components. Lower is better for all reported metrics. Metric definitions and a more expansive justification for their appropriateness are deferred to Appendix C. Results in tables report the mean test performance of each model, with standard errors in parentheses, computed as the sample standard deviation over 100 
+
+bootstrap replicate estimates. For each dataset, hyperparameters are selected on the validation split using a rank-based aggregate criterion over the validation diagnostics. The criterion sums within-dataset ranks across the ranked validation metrics. During training, checkpoints are selected by the validation Llog( τ ). The aggregate rank criterion is used only for model selection and is not reported as a performance measure. Since evaluation metrics can differ substantially in scale across datasets, we report the relative score computed as a 2-step process (see also [ 1 , 13 , 22 ]). First, we compute, for each model, a relative score defined as the ratio between the model’s score and that of a baseline model, here D ETER . We then aggregate these relative scores across tasks using the geometric mean [17], which is the appropriate summary statistic for multiplicative relative comparisons, and make the model ordering independent of the choice of the baseline (see Appendix C.4). 
+
+4.2 Recovering Known Synthetic Processes 
+
+We first use synthetic point processes with known data-generating mechanisms to evaluate S IG TPP. Table 1 presents the discrepancy metrics E and W1 under dN , Sig -W1, CRPS, Llog( τ ), Lλ, ACD, and PCD. Our first observation is that S IG TPP improves distributional fidelity on N relative to the strongest existing baselines (see also Section 3.4). S IG TPP obtains the lowest E and W1 on all datasets (or 3 out of 4 for Sig -W1). The relative score of our model is the lowest under E, W1 and 
+
+Sig -W1, and, compared to the second-best model (VAE), S IG TPP improves the performance by 86% ,
+
+18% and 39% , respectively (see Figure S11 and Table S6). These gains are consistent with S IG TPP’s training objective, which targets the joint temporal law rather than local event-level behaviour. However, it is also striking that while S IG TPP improves the distributional fit, it underperforms on the CRPS (by approximately 6.5% compared to VAE and DDPM). This suggests that optimising a path-level distributional objective favours global distributional alignment, but does not necessarily improve conditional calibration relative to methods trained directly with conditional losses. Nev-ertheless, a number of summary-statistic discrepancies indicate that S IG TPP remains competitive. 
+
+Llog( τ ),L λ,ACD , and PCD exhibit larger sampling variability, and many methods yield overlapping standard errors. S IG TPP is either the best method or within a standard error of the best baseline in 13 out of 16 metric-dataset pairs: in 3(+1) /4 datasets for Llog( τ ), 2(+1) /4 for Lλ, 0(+2) /4 for ACD, and 1(+3) /4 for PCD, where the number in parentheses denotes outcomes within a standard error of the best. When ranking methods separately for each dataset and metric, S IG TPP has the best average rank of 2.0, followed by VAE with an average rank of 2.4 (Table S5). Figure 3(a) showcases this interpretation for H3, a representative challenging synthetic task. The QQ plot shows that S IG TPP matches the empirical interarrival-time distribution, including the upper tail where 6Table 1: Performance comparison of S IG TPP against other methods on synthetic TPP tasks (PS, IP, H1, H3) using several discrepancy metrics (see Appendix C for metric definitions). Values report standard error in parentheses over 100 bootstrap replicates. Lower is better (↓). The best result for each dataset and metric pair is bolded , and the second-best is underlined. Model PS IP H1 H3 PS IP H1 H3 
+
+> E (×10 -3)
+
+SIG TPP 0.60 (0.95) 0.53 (0.35) 0.75 (0.30) 1.16 (1.61) 
+
+> W1 ( ×10 -2)
+
+5.31 (0.20) 6.44 (0.10) 2.84 (0.12) 10.04 (0.50) VAE 2.77 (2.03) 6.48 (1.82) 5.89 (1.28) 6.56 (2.98) 5.86 (0.42) 7.65 (0.38) 4.24 (0.30) 11.36 (0.84) DDPM 5.16 (2.55) 11.24 (1.92) 2.02 (0.68) 6.64 (4.13) 6.82 (0.43) 9.44 (0.40) 3.24 (0.23) 12.20 (0.99) WGAN 6.30 (2.15) 3.75 (1.08) 15.38 (1.89) 11.52 (4.67) 6.87 (0.45) 7.42 (0.31) 6.29 (0.36) 12.08 (0.92) DETER 330 (13.3) 85.0 (3.20) 229 (5.87) 640 (25.4) 28.3 (0.65) 16.9 (0.30) 21.7 (0.24) 54.6 (1.11) GAMMA 4.88 (3.00) 21.48 (3.16) 11.83 (1.40) 16.30 (3.99) 6.39 (0.55) 9.34 (0.42) 5.54 (0.26) 13.86 (1.10) 
+
+> Sig -W1 (×10 -5)
+
+SIG TPP 1.96 (2.04) 1.53 (1.14) 11.88 (7.33) 1.10 (0.80) CRPS  (×10 -1) 4.61 (0.08) 3.04 (0.03) 10.78 (0.10) 2.54 (0.03) VAE 2.62 (1.79) 2.18 (0.97) 71.19 (8.12) 0.71 (0.60) 4.60 (0.08) 2.99 (0.03) 9.29 (0.11) 2.33 (0.03) DDPM 42.9 (13.1) 7.52 (1.87) 37.3 (11.9) 2.25 (1.19) 4.74 (0.08) 3.13 (0.03) 9.20 (0.11) 2.22 (0.03) WGAN 39.4 (12.3) 8.41 (2.95) 116 (12.8) 0.64 (0.58) 4.53 (0.08) 2.95 (0.03) 9.46 (0.11) 2.36 (0.03) DETER 62.5 (12.7) 9.40 (2.00) 172 (11.9) 1.08 (0.39) 6.29 (0.11) 4.25 (0.03) 12.82 (0.15) 3.23 (0.04) GAMMA 5.66 (4.17) 30.3 (5.33) 218 (17.3) 0.57 (0.36) 4.60 (0.08) 3.18 (0.03) 9.76 (0.11) 2.40 (0.03) 
+
+> Lλ (×10 -2)
+
+SIG TPP 3.26 (0.45) 2.47 (0.33) 3.42 (0.33) 3.08 (0.47) 
+
+> Llog( τ ) (×10 -2)
+
+2.92 (0.58) 1.89 (0.40) 2.71 (0.33) 2.33 (0.49) VAE 3.38 (0.46) 3.97 (0.36) 8.07 (0.58) 2.21 (0.40) 4.32 (0.56) 4.90 (0.43) 4.01 (0.44) 4.16 (0.42) DDPM 4.71 (0.64) 7.35 (0.48) 5.03 (0.50) 4.11 (0.57) 7.48 (0.73) 5.09 (0.43) 4.03 (0.39) 4.23 (0.55) WGAN 7.28 (0.67) 5.70 (0.45) 12.80 (0.62) 3.25 (0.49) 6.68 (0.75) 2.96 (0.39) 6.16 (0.36) 3.67 (0.47) DETER 12.6 (0.71) 12.1 (0.48) 13.9 (0.49) 4.16 (0.51) 60.8 (5.26) 48.1 (3.45) 70.5 (2.33) 66.6 (6.25) GAMMA 3.15 (0.45) 11.66 (0.47) 5.93 (0.54) 3.38 (0.41) 2.88 (0.65) 3.19 (0.39) 6.48 (0.45) 3.06 (0.64) ACD  (×10 -2) SIG TPP 1.40 (0.45) 1.30 (0.23) 2.08 (0.28) 1.54 (0.42) PCD  (×10 -2) 7.40 (0.52) 6.07 (0.42) 6.17 (0.41) 8.35 (0.41) VAE 1.39 (0.42) 0.92 (0.21) 1.29 (0.22) 1.95 (0.45) 7.47 (0.53) 5.98 (0.43) 6.00 (0.42) 8.35 (0.41) DDPM 1.47 (0.48) 1.46 (0.27) 1.53 (0.27) 3.81 (0.45) 7.53 (0.52) 6.05 (0.41) 6.06 (0.41) 8.47 (0.42) WGAN 1.47 (0.45) 2.65 (0.29) 1.43 (0.27) 1.52 (0.38) 7.49 (0.52) 5.97 (0.43) 6.72 (0.42) 8.67 (0.40) DETER 49.3 (0.53) 32.78 (0.29) 39.38 (0.28) 63.36 (0.45) 96.5 (0.43) 96.9 (0.17) 97.4 (0.30) 97.9 (0.22) GAMMA 1.34 (0.42) 1.81 (0.29) 2.81 (0.28) 6.18 (0.45) 7.41 (0.53) 6.28 (0.40) 6.39 (0.41) 8.78 (0.41) VAE and DDPM deviate visibly. The qualitative summaries in Figure S13 further demonstrate that S IG TPP captures the overall intensity profile, as well as the correlation and autocorrelation structures. These visual diagnostics are consistent with the favourable Llog( τ ) and Lλ results, since the former reflects interarrival time fit and the latter agreement in the intensity shape. Overall, across all synthetic metric-dataset pairs, S IG TPP is best in 17 /32 cases and within a standard error of the best in another 8/32 cases, making it competitive in about 80% of them. This is confirmed by the relative score where S IG TPP has the best score on 5 out of 8 metrics, the second lowest on 2, and is only outperformed when looking at CRPS. In pairwise comparisons against each baseline, averaged over datasets and metrics, S IG TPP outperforms WGAN by 52% , VAE by 34% , and DDPM by 48% .
+
+4.3 Real-World Tasks 
+
+We now focus our empirical analysis on real-world tasks under the same discrepancy metrics. The results are enumerated in Table 2 and, again, indicate strong performance for S IG TPP (see Table S6). It achieves the best W1 and Sig -W1 on 4/5 datasets. This is confirmed by the relative scores, for which it obtains the lowest E, W1, and Sig -W1 among all models. The second-best model on 0 2 4 6               
+
+> 0
+> 2
+> 4
+> 6
+> Sampled Quantiles
+> SigTPP
+> 0246
+> Target Quantiles
+> WGAN
+> 0246
+> DDPM 0246
+> 0
+> 2
+> 4
+> 6
+> Sampled Quantiles
+> VAE
+> 0246
+> Target Quantiles
+> DETER
+> 0246
+> GAMMA
+
+(a) 0 20         
+
+> 10 −3
+> 10 −1
+> PDF
+> Target
+> 020
+> SigTPP
+> 020
+> WGAN
+> 020
+> DDPM
+> Interarrival Time 050
+> 0.0
+> 1.0
+> 1.9
+> Intensity  Target
+> 050
+> SigTPP
+> 050
+> WGAN
+> 050
+> DDPM
+> Time
+
+(b) 
+
+Figure 3: (a) Quantile-quantile (QQ) plots (generated vs. reference sample quantiles on x-axis and y-axis, respectively) for all models on synthetic H3. (b) Empirical fit on the real-world task SO for SIG TPP, WGAN, and DDPM. Top: histogram estimates of the interarrival times density p(x) on a logarithmic scale. Bottom: empirical intensity functions ˆλ(t) from the same sequences. 7Table 2: Performance comparison of S IG TPP against other methods on real-world TPP tasks (EQ, SO, TB, TX, YLP) using several discrepancy metrics (see Appendix C for metric definitions). Values report standard error in parentheses over 100 bootstrap replicates. Lower is better (↓). The best result for each dataset and metric pair is bolded , and the second-best is underlined. 
+
+Model EQ SO TB TX YLP EQ SO TB TX YLP 
+
+> E (×10 -3)
+
+SIG TPP 32.2 (0.67) 7.33 (1.15) 515 (25.3) 79.02 (2.98) 50.04 (10.7) 
+
+> W1 (×10 -2)
+
+2.93 (0.04) 6.34 (0.41) 58.24 (2.40) 8.03 (0.17) 15.17 (1.07) 
+
+VAE 38.6 (0.76) 13.18 (2.39) 535 (23.7) 81.15 (2.94) 36.09 (24.0) 3.05 (0.05) 7.55 (0.55) 59.05 (2.34) 8.15 (0.24) 15.92 (2.76) 
+
+DDPM 24.0 (0.59) 19.78 (5.59) 463 (21.2) 80.70 (3.24) 57.56 (22.1) 3.07 (0.06) 10.11 (1.18) 53.44 (2.20) 8.14 (0.27) 20.06 (1.77) 
+
+WGAN 30.2 (0.83) 66.85 (8.19) 510 (25.0) 78.33 (2.81) 86.45 (29.1) 3.01 (0.04) 13.82 (0.62) 57.61 (2.64) 8.05 (0.22) 22.50 (3.19) 
+
+DETER 49.8 (1.00) 612 (25.61) 958 (32.3) 161 (5.46) 2394 (89.5) 3.96 (0.06) 42.9 (0.90) 86.0 (2.48) 14.1 (0.40) 143.1 (3.70) 
+
+GAMMA 35.8 (0.65) 31.3 (3.62) 539 (23.3) 85.7 (2.88) 246 (43.2) 3.11 (0.05) 10.99 (0.67) 60.41 (2.16) 8.78 (0.26) 35.62 (4.08) 
+
+> Sig -W1 (×10 -5)
+
+SIG TPP 361 (34.0) 0.97 (0.27) 0.28 (0.26) 0.70 (0.44) 0.73 (0.88) 
+
+> CRPS  (×10 -1)
+
+5.54 (0.12) 5.34 (0.09) 0.58 (0.02) 1.13 (0.02) 3.06 (0.12) 
+
+VAE 17.9 (8.20) 3.80 (0.52) 0.65 (0.44) 6.85 (1.53) 1.02 (1.05) 5.10 (0.12) 4.65 (0.09) 0.36 (0.01) 1.05 (0.02) 2.73 (0.12) 
+
+DDPM 1501 (63) 2.44 (0.44) 7.49 (1.74) 8.88 (1.77) 1.66 (1.05) 4.80 (0.11) 4.54 (0.09) 0.34 (0.01) 1.12 (0.02) 2.77 (0.11) 
+
+WGAN 498 (40.1) 3.19 (0.50) 1.57 (0.69) 3.27 (0.96) 0.96 (1.00) 5.79 (0.12) 5.00 (0.10) 0.36 (0.01) 1.15 (0.02) 2.93 (0.11) 
+
+DETER 130 (13.3) 3.41 (0.46) 49.7 (4.45) 24.5 (2.82) 7.78 (0.61) 6.98 (0.17) 6.51 (0.13) 0.42 (0.01) 1.49 (0.02) 3.66 (0.15) 
+
+GAMMA 571 (38.1) 6.61 (0.80) 12.2 (3.44) 3.04 (1.15) 10.37 (1.38) 6.15 (0.09) 4.91 (0.08) 0.37 (0.01) 1.15 (0.02) 3.19 (0.11) 
+
+> Lλ (×10 -2)
+
+SIG TPP 18.8 (1.08) 7.9 (0.63) 5.3 (0.91) 3.6 (0.90) 14.5 (1.12) 
+
+> Llog( τ ) (×10 -2)
+
+9.3 (0.91) 2.5 (0.52) 11.0 (0.55) 9.7 (0.45) 5.3 (1.85) 
+
+VAE 12.8 (1.13) 9.3 (0.69) 10.2 (1.09) 4.3 (0.68) 7.3 (1.02) 8.5 (0.64) 7.4 (0.74) 5.8 (0.52) 5.1 (0.49) 4.0 (0.78) 
+
+DDPM 19.2 (0.61) 9.2 (0.64) 6.2 (1.04) 3.2 (0.63) 17.0 (1.11) 11.9 (0.75) 7.1 (0.80) 10.9 (0.67) 5.0 (0.52) 6.5 (0.79) 
+
+WGAN 23.5 (1.12) 13.3 (0.79) 3.8 (0.86) 3.6 (0.86) 15.2 (1.13) 9.3 (0.55) 6.5 (0.67) 8.9 (0.60) 7.8 (0.44) 6.7 (1.23) 
+
+DETER 21.6 (1.10) 11.5 (0.60) 41.6 (3.31) 18.0 (1.33) 25.3 (0.93) 32.9 (1.97) 72.6 (3.56) 80.9 (1.98) 56.9 (6.67) 45.5 (1.62) 
+
+GAMMA 27.2 (1.12) 11.5 (0.60) 16.1 (1.08) 7.1 (0.73) 31.8 (1.20) 10.0 (0.83) 5.7 (0.75) 15.1 (1.26) 4.9 (0.41) 13.2 (0.85) 
+
+> ACD  (×10 -2)
+
+SIG TPP 2.52 (0.53) 2.52 (0.49) 1.02 (0.28) 2.38 (0.41) 4.28 (0.61) 
+
+> PCD  (×10 -2)
+
+5.58 (0.42) 10.35 (0.27) 5.90 (0.25) 5.98 (0.23) 13.02 (0.68) 
+
+VAE 3.60 (0.75) 3.94 (0.51) 2.53 (0.40) 2.42 (0.43) 2.44 (0.49) 6.10 (0.54) 10.50 (0.30) 5.84 (0.27) 5.98 (0.22) 12.31 (0.70) 
+
+DDPM 10.9 (0.76) 5.36 (0.51) 1.40 (0.35) 2.62 (0.44) 3.35 (0.60) 12.47 (0.79) 11.12 (0.33) 5.86 (0.25) 6.03 (0.22) 12.80 (0.68) 
+
+WGAN 1.45 (0.46) 4.85 (0.51) 2.11 (0.38) 3.25 (0.45) 5.59 (0.46) 6.96 (0.45) 10.80 (0.30) 5.83 (0.26) 6.31 (0.22) 13.19 (0.69) 
+
+DETER 62.5 (0.76) 54.8 (0.51) 74.2 (0.41) 60.7 (0.50) 64.40 (0.62) 70.32 (0.81) 57.64 (0.35) 94.9 (0.34) 43.4 (0.31) 72.50 (0.80) 
+
+GAMMA 16.9 (0.76) 8.02 (0.51) 2.91 (0.41) 3.52 (0.47) 4.62 (0.61) 18.80 (0.81) 11.86 (0.34) 5.85 (0.27) 6.25 (0.22) 13.33 (0.69) 
+
+real-world tasks is VAE, which is outperformed on geometric average by 6% across all metrics and datasets. The contrast with the synthetic setting is informative. Synthetic data is generated by a known mechanism, so distributional recovery is assessed under correct specification. The real-world datasets instead combine heterogeneous trajectories, variable observation windows, and latent contextual effects, so the empirical path distribution is only an approximation to a single data-generating law. This makes path-level comparison intrinsically harder and likely explains why the gains of S IG TPP are smaller and less uniform than in the synthetic experiments. Among the distributional metrics, W1 appears to be the most stable across datasets, showing the smallest inter-model variability and the most consistent advantage for S IG TPP. The remaining summary-statistic discrepancies provide a more nuanced comparison. As on the synthetic datasets, Llog( τ ), Lλ, ACD, and PCD exhibit larger sampling variability, and several methods have overlapping standard errors. Across these metrics, S IG TPP is the best method in 7/20 metric-dataset pairs and lies within a standard error of the best method in an additional 3/20 cases, covering half of all pairs. Thus, although CRPS consistently favours the conditional baselines, with S IG TPP trailing VAE, WGAN, and DDPM by 19% , 11% , and 21% , respectively, it remains competitive on real-world data. Aggregating across datasets and metrics provides a similar qualitative conclusion. In pairwise comparisons, S IG TPP improves over WGAN by 25% , VAE by 6% , and DDPM by 30% . It has the lowest relative score on 5 out of 8 metrics and is second-best on 2, being outperformed only on CRPS. Figure 3(b) supports this interpretation on SO, a commonly studied task in the literature. The interarrival times PDF shows that S IG TPP captures the overall distribution shape without overweighting the tail as DDPM does. The intensity profile is also captured accurately. Appendix Figures S14-S18 provide dataset-level qualitative comparisons of the 6 models and further illustrate these trends. Average ranks corroborate these observations (Table S5). S IG TPP achieves the best average rank of 2.25 , followed by VAE ( 2.45 ). Relative scoring reaffirms these outcomes (see Figure S12). Overall, the real-world results mirror the synthetic results, but with smaller margins and greater dataset-level variability. The persistence of improvements in W1, Sig -W1, pairwise comparisons, and average ranks suggests that the signature-based objective continues to provide useful distributional alignment under misspecification. We provide the relative score plot in Figure 4 for a comparison across all datasets. 8Finally, Table S3 illustrates why pointwise errors are not suitable primary metrics for generative TPP evaluation. The deterministic baseline D ETER outputs a single prediction for each event time and is therefore directly optimised for pointwise accuracy rather than distributional fidelity. Although it performs poorly on most path-level and distributional metrics, in some cases by several orders of magnitude, it achieves rank 1.0 on MAE, outperforming every distributional model on every synthetic dataset. Even when using the optimal-predictor variants MAE med and MSE mean (see definitions in Appendix C), D ETER remains highly competitive, with average ranks of 2.4 on real-world tasks and 3.5 on synthetic tasks for MAE med , despite producing no predictive distribution. These results show that MAE and MSE on event times primarily assess point prediction quality, not generative quality. Hence, we do not use them as metrics for generative TPP evaluation, and instead recommend path-level distributional distances. For forecasting-focused tasks, longer-horizon predictive metrics may also be appropriate. 
+
+4.4 Ablation of the Signature Degree 
+
+Table 3: Ablation over signature truncation level M on TX and SO. Lower is better (↓) for all metrics.                                                       
+
+> E(×10 −3)W1(×10 −2)Sig -W1(×10 −5)CRPS ( ×10 −1)
+> M2356235623562356TX 91.54 77.81 78.29 75.60 8.984 7.832 7.759 7.881 0.451 2.299 0.855 3.376 1.278 1.264 1.177 1.180 SO 12.91 9.68 4.63 3.64 6.552 7.190 5.671 5.369 0.149 0.308 0.856 0.489 5.371 5.352 5.357 6.164
+
+We isolate in Table 3 the effect of the signature truncation order M on TX and SO, 2 datasets with different statistical properties and sizes (see Table S1). Although the number of signature coordinates grows as O(dM ), increasing M gives dataset-dependent gains. On TX, most of the improvement occurs from M = 2 to M = 3 ; larger values produce only small changes in W1 and CRPS. On SO, higher orders improve energy distance and W1, but this comes at the cost of worse CRPS at M = 6 .Thus, larger truncation orders can improve global distributional matching, but they do not uniformly improve calibration or all evaluation metrics. To understand that better, note that increasing M changes the set of coordinates used for training rather than simply refining the same discrepancy. Low-order coordinates often dominate the signature scale, while higher-order iterated integrals decay factorially for bounded-variation paths, despite the exponential growth in their number [ 37 ]. Consequently, large M can introduce weakly varying or poorly conditioned features, increasing estimation noise without necessarily improving the learned path distribution. This is consistent with the dead-degree statistics in Table S4. Overall, the ablation supports M = 3 for the evaluation and suggests that using a degree higher than 8 does not yield further performance. 
+
+## 5 Conclusion 
+
+This paper introduces a common pathwise framework for generative modelling and evaluation of TPPs. The interarrival embedding Φ provides a stable, injective lift from càdlàg counting paths to continuous bounded-variation paths (Theorem 6), making signature-based tools applicable to discrete Average E W1 Sig -W1 CRPS Lλ Llog( τ ) ACD PCD 0.00 0.25 0.50 0.75 
+
+> Relative Score
+> All
+> Model
+> SigTPP VAE WGAN DDPM Gamma
+
+Figure 4: Relative scores with respect to D ETER , on all datasets (see Table S6 for the actual values). The leftmost group shows the average relative score across all metrics, followed by the metric-wise scores for each metric (see Appendix C for metric definitions). A lower score is better. 9event sequences. Building on Φ, S IG TPP optimises a global signature Wasserstein loss on whole paths, rather than a sum of local conditional losses. The same counting-path metric dN supports the energy distance ( E), W1, as well as Sig -W1 through the embedding. It also clarifies a practical failure mode of pointwise evaluation: MAE can reward deterministic regressors even when they fail to capture distributional variation. Across 9 datasets, S IG TPP achieves the best average rank on 6 of 8 evaluation criteria, best average relative score on 7 of them, and outperforms the other baselines by at least 19% on average across metrics. The gains are largest on pathwise distributional criteria, while diffusion and variational baselines remain competitive on marginal calibration. The limitations of our work are discussed in Appendix E. 
+
+## Acknowledgements 
+
+NCK is supported by EPSRC grants EP/T517793/1 and EP/W524335/1. VL would like to thank all levels of support from grant EP/X031276/1 (EPSRC) and the SOFAIR Lab (UKRI). 
+
+## References 
+
+[1] Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Olek-sandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Hao Wang, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, and Yuyang Wang. Chronos: Learning the Language of Time Series. Transactions on Machine Learning Research , 2024. [2] Martin Arjovsky and Léon Bottou. Towards Principled Methods for Training Generative Adversarial Networks. In Proceedings of the 5th International Conference on Learning Representations , 2017. [3] Emmanuel Bacry, Iacopo Mastromatteo, and Jean-François Muzy. Hawkes Processes in Finance. Market Microstructure and Liquidity , 1(1), 2015. [4] J. Bretagnolle, D. Dacunha-Castelle, and J. L. Krivine. Lois stables et espaces Lp. In Symposium on Probability Methods in Analysis , pages 48–54, 1967. doi: 10.1007/BFb0061106. [5] Yuxin Chang, Alex James Boyd, Cao Xiao, Taha Kass-Hout, Parminder Bhatia, Padhraic Smyth, and Andrew Warrington. Deep Continuous-Time State-Space Models for Marked Event Sequences. In 
+
+Advances in Neural Information Processing Systems , 2025. [6] Ilya Chevyrev and Andrey Kormilitzin. A Primer on the Signature Method in Machine Learning , pages 3–64. Springer, 2026. [7] Ilya Chevyrev and Terry Lyons. Characteristic Functions of Measures on Geometric Rough Paths. The Annals of Probability , 44(6):4049–4082, 2016. [8] Ilya Chevyrev and Harald Oberhauser. Signature Moments to Characterize Laws of Stochastic Processes. 
+
+Journal of Machine Learning Research , 23(176):7928–7969, 2022. [9] Andrea Coletta, Aymeric Moulin, Svitlana Vyetrenko, and Tucker Balch. Learning to simulate realistic limit order book markets from data as a World Agent. In Proceedings of the Third ACM International Conference on AI in Finance , pages 428–436, 2022. [10] Rama Cont, Mihai Cucuringu, Jonathan Kochems, and Felix Prenzel. Limit Order Book Simulation with Generative Adversarial Networks. SSRN working paper 4512356 , 2023. [11] Christa Cuchiero, Francesca Primavera, and Sara Svaluto-Ferro. Universal approximation theorems for continuous functions of càdlàg paths and Lévy-type signature models. Finance and Stochastics , 29(2): 289–342, 2025. [12] Daryl J. Daley and David Vere-Jones. An Introduction to the Theory of Point Processes: Volume I: Elementary Theory and Methods . Springer, 2003. [13] Abhimanyu Das, Weihao Kong, Rajat Sen, and Yichen Zhou. A Decoder-Only Foundation Model for Time-Series Forecasting. In Proceedings of the 41st International Conference on Machine Learning , pages 10148–10167, 2024. [14] Kelian Dascher-Cousineau, Oleksandr Shchur, Emily E. Brodsky, and Stephan Günnemann. Using Deep Learning for Flexible and Scalable Earthquake Forecasting. Geophysical Research Letters , 50(17): e2023GL103909, 2023. [15] Michel Marie Deza and Monique Laurent. Geometry of Cuts and Metrics . Springer, 1997. [16] Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. Recurrent Marked Temporal Point Processes: Embedding Event History to Vector. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 1555–1564, 2016. [17] Philip J. Fleming and John J. Wallace. How Not to Lie with Statistics: The Correct Way to Summarize Benchmark Results. Communications of the ACM , 29(3):218–221, 1986. [18] Gerald B. Folland. Real Analysis: Modern Techniques and Their Applications . Wiley, 1999. 
+
+10 [19] Peter K. Friz and Nicolas B. Victoir. Multidimensional Stochastic Processes as Rough Paths: Theory and Applications . Cambridge University Press, 2010. [20] Álvaro Gajardo and Hans-Georg Müller. Point process models for COVID-19 cases and deaths. Journal of Applied Statistics , 50(11-12):2294–2309, 2023. [21] Tilmann Gneiting and Adrian E Raftery. Strictly Proper Scoring Rules, Prediction, and Estimation. Journal of the American Statistical Association , 102(477):359–378, 2007. [22] Nate Gruver, Marc Finzi, Shikai Qiu, and Andrew Gordon Wilson. Large Language Models Are Zero-Shot Time Series Forecasters. In Advances in Neural Information Processing Systems , 2023. [23] Ben Hambly and Terry Lyons. Uniqueness for the Signature of a Path of Bounded Variation and the Reduced Path Group. Annals of Mathematics , 171(1):109–167, 2010. [24] Alan G. Hawkes. Spectra of Some Self-Exciting and Mutually Exciting Point Processes. Biometrika , 58 (1):83–90, 1971. [25] William Hua, Hongyuan Mei, Sarah Zohar, Magali Giral, and Yanxun Xu. Personalized Dynamic Treatment Regimes in Continuous Time: A Bayesian Approach for Optimizing Clinical Decisions with Timing. Bayesian Analysis , 17(3):849–878, 2022. [26] Gavin Kerrigan, Kai Nelson, and Padhraic Smyth. EventFlow: Forecasting Temporal Point Processes with Flow Matching. In Proceedings of the 29th International Conference on Artificial Intelligence and Statistics , 2026. [27] Patrick Kidger, Patric Bonnier, Imanol Perez Arribas, Cristopher Salvi, and Terry Lyons. Deep Signature Transforms. In Advances in Neural Information Processing Systems , pages 3082–3092, 2019. [28] Diederik P. Kingma and Jimmy Ba. Adam: A Method for Stochastic Optimization. In Proceedings of the 3rd International Conference on Learning Representations , 2015. [29] Shuang Li, Shuai Xiao, Shixiang Zhu, Nan Du, Yao Xie, and Le Song. Learning Temporal Point Processes via Reinforcement Learning. In Advances in Neural Information Processing Systems , pages 10804–10814, 2018. [30] Shujian Liao, Hao Ni, Marc Sabate-Vidales, Lukasz Szpruch, Magnus Wiese, and Baoren Xiao. Sig-Wasserstein GANs for Conditional Time Series Generation. Mathematical Finance , 34(2):622–670, 2024. [31] Haitao Lin, Lirong Wu, Guojiang Zhao, Pai Liu, and Stan Z. Li. Exploring Generative Neural Temporal Point Process. Transactions on Machine Learning Research , 2022. [32] Haitao Lin, Cheng Tan, Lirong Wu, Zhangyang Gao, Zicheng Liu, and Stan Z. Li. An Extensive Survey With Empirical Studies on Deep Temporal Point Processes. IEEE Transactions on Knowledge and Data Engineering , 37(4):1599–1619, 2025. [33] David Lüdke, Marin Biloš, Oleksandr Shchur, Marten Lienen, and Stephan Günnemann. Add and Thin: Diffusion for Temporal Point Processes. In Advances in Neural Information Processing Systems , pages 56784–56801, 2023. [34] David Lüdke, Enric Rabasseda Raventós, Marcel Kollovieh, and Stephan Günnemann. Unlocking Point Processes through Point Set Diffusion. In Proceedings of the 13th International Conference on Learning Representations , 2025. [35] David Lüdke, Marten Lienen, Marcel Kollovieh, and Stephan Günnemann. Edit-Based Flow Match-ing for Temporal Point Processes. In Proceedings of the 14th International Conference on Learning Representations , 2026. [36] Russell Lyons. Distance covariance in metric spaces. The Annals of Probability , 41(5):3284–3305, 2013. [37] Terry J. Lyons, Michael Caruana, and Thierry Lévy. Differential Equations Driven by Rough Paths: École d’Été de Probabilités de Saint-Flour XXXIV - 2004 . Springer, 2007. [38] Hongyuan Mei and Jason M. Eisner. The Neural Hawkes Process: A Neurally Self-Modulating Multivariate Point Process. In Advances in Neural Information Processing Systems , pages 6754–6764, 2017. [39] Sumantrak Mukherjee, Mouad Elhamdi, George Mohler, David A. Selby, Yao Xie, Sebastian Vollmer, and Gerrit Grossmann. Neural Spatiotemporal Point Processes: Trends and Challenges. Transactions on Machine Learning Research , 2025. [40] Hao Ni, Lukasz Szpruch, Marc Sabate-Vidales, Baoren Xiao, Magnus Wiese, and Shujian Liao. Sig-Wasserstein GANs for Time Series Generation. In Proceedings of the Second ACM International Confer-ence on AI in Finance , 2021. [41] Maya Okawa, Tomoharu Iwata, Takeshi Kurashima, Yusuke Tanaka, Hiroyuki Toda, and Naonori Ueda. Deep Mixture Point Processes: Spatio-temporal Event Prediction with Rich Contextual Information. In 
+
+Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining ,pages 373–383, 2019. [42] Maya Okawa, Tomoharu Iwata, Yusuke Tanaka, Takeshi Kurashima, Hiroyuki Toda, and Hisashi Kashima. Context-aware spatio-temporal event prediction via convolutional Hawkes processes. Machine Learning ,111(8):2929–2950, 2022. [43] Takahiro Omi, Naonori Ueda, and Kazuyuki Aihara. Fully Neural Network Based Model for General Temporal Point Processes. In Advances in Neural Information Processing Systems , pages 2120–2129, 2019. 
+
+11 [44] Imanol Perez Arribas, Guy M. Goodwin, John R. Geddes, Terry Lyons, and Kate E. A. Saunders. A signature-based machine learning model for distinguishing bipolar disorder and borderline personality disorder. Translational Psychiatry , 8(274), 2018. [45] Romain Pic, Clément Dombry, Philippe Naveau, and Maxime Taillardat. Proper scoring rules for multivari-ate probabilistic forecasts based on aggregation and transformation. Advances in Statistical Climatology, Meteorology and Oceanography , 11(1):23–58, 2025. [46] Aaditya Ramdas, Nicolás García Trillos, and Marco Cuturi. On Wasserstein Two-Sample Testing and Related Families of Nonparametric Tests. Entropy , 19(2):47, 2017. [47] I. J. Schoenberg. Metric Spaces and Positive Definite Functions. Transactions of the American Mathemati-cal Society , 44(3):522–536, 1938. [48] Oleksandr Shchur, Nicholas Gao, Marin Biloš, and Stephan Günnemann. Fast and Flexible Temporal Point Processes with Triangular Maps. In Advances in Neural Information Processing Systems , pages 73–84, 2020. [49] Oleksandr Shchur, Ali Caner Türkmen, Tim Januschowski, and Stephan Günnemann. Neural Temporal Point Processes: A Review. In Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence , pages 4585–4593, 2021. [50] Gábor J. Székely and Maria L. Rizzo. Energy statistics: A class of statistics based on distances. Journal of Statistical Planning and Inference , 143(8):1249–1272, 2013. [51] Bjørnar Vassøy, Massimiliano Ruocco, Eliezer de Souza da Silva, and Erlend Aune. Time is of the Essence: A Joint Hierarchical RNN and Point Process Model for Time and Item Predictions. In Proceedings of the Twelfth ACM International Conference on Web Search and Data Mining , pages 591–599, 2019. [52] Cédric Villani. Optimal Transport: Old and New . Springer, 2009. [53] Shuai Xiao, Mehrdad Farajtabar, Xiaojing Ye, Junchi Yan, Xiaokang Yang, Le Song, and Hongyuan Zha. Wasserstein Learning of Deep Generative Point Process Models. In Advances in Neural Information Processing Systems , pages 3247–3257, 2017. [54] Siqiao Xue, Xiaoming Shi, Zhixuan Chu, Yan Wang, Hongyan Hao, Fan Zhou, Caigao Jiang, Chen Pan, James Y. Zhang, Qingsong Wen, Jun Zhou, and Hongyuan Mei. EasyTPP: Towards Open Bench-marking Temporal Point Processes. In Proceedings of the 12th International Conference on Learning Representations , 2024. [55] Yuan Yuan, Jingtao Ding, Chenyang Shao, Depeng Jin, and Yong Li. Spatio-Temporal Diffusion Point Processes. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 3173–3184, 2023. [56] Qiang Zhang, Aldo Lipani, Omer Kirnap, and Emine Yilmaz. Self-Attentive Hawkes Process. In 
+
+Proceedings of the 37th International Conference on Machine Learning , pages 11183–11193, 2020. [57] Zihao Zhou and Rose Yu. Automatic Integration for Spatiotemporal Neural Point Processes. In Advances in Neural Information Processing Systems , pages 50237–50253, 2023. [58] Zihao Zhou, Xingyi Yang, Ryan Rossi, Handong Zhao, and Rose Yu. Neural Point Process for Learning Spatiotemporal Event Dynamics. In Proceedings of the 4th Annual Learning for Dynamics and Control Conference , pages 777–789, 2022. [59] Shixiang Zhu, Shuang Li, Zhigang Peng, and Yao Xie. Imitation Learning of Neural Spatio-Temporal Point Processes. IEEE Transactions on Knowledge and Data Engineering , 34(11):5391–5402, 2022. 
+
+12 Appendix A A Pathwise Metric on Counting Paths 
+
+A.1 Distances induced by the Pathwise Metric on Counting Paths Definition S1 (Metric of Negative Type) . A metric space (X,d ) is of negative type if, for every n ∈ N,all points x1,...,x n ∈ X, and all real coefficients a1,...,a n ∈ R satisfying Pni=1 ai = 0 , the following inequality holds: nX
+
+> i,j =1
+
+aiaj d(xi,x j ) ≤ 0. (S1) Geometrically, a metric d is of negative type if and only if the metric space (X, √d) can be embedded isometrically into a Hilbert space [ 47 ], i.e. if there exists a map Φ : X → H into a Hilbert space H
+
+such that 
+
+d(x,y ) = ∥Φ( x) − Φ( y)∥2 
+
+> H
+
+. (S2) 
+
+Proposition S2 (L1 is of Negative Type [ 4, 15 , 36 ]) . Let (Ω ,F,μ ) be a measure space. Then the metric space (L1(μ),∥·∥ L1 ) is of negative type. Equivalently, for all f1,...,f n ∈ L1(μ) and all 
+
+a1,...,a n ∈ R such that P 
+
+> i
+
+ai = 0 , we have 
+
+> n
+
+X
+
+> i,j =1
+
+aiaj ∥fi − fj ∥L1 ≤ 0. (S3) 
+
+Proposition S3 (Subspace Inheritance [ 4, 15 ]) . Let (X,d ) be a metric space of negative type, and let 
+
+Y ⊂ X. Then the restricted metric space (Y,d |Y ×Y ) is also of negative type. 
+
+Theorem S4 (Negative Type Property) . The metric space (N ,d N ) is of negative type. Proof. Identifying each η ∈ N with its counting path t 7 → ηt gives an isometric embedding of (N ,d N )
+
+into L1([0 ,T max ]) , since dN (η,ξ ) = ∥η − ξ∥L1 . Proposition S2 states that L1 is of negative type, and Proposition S3 shows that negative type is inherited by subspaces. Therefore, (N ,d N ) is of negative type. 
+
+A.2 Direct Integration 
+
+We begin with the following exact discrete formulation of dN for efficient computation. 
+
+Proposition S5 (Discrete Computation) . Let η,ξ ∈ N with event times (tk)mk=1 and (sk)nk=1 . Assum-ing without loss of generality that m ≤ n, the distance is given by 
+
+dN (η,ξ ) = 
+
+> m
+
+X
+
+> k=1
+
+|tk − sk| + ( n − m)Tmax −
+
+> n
+
+X
+
+> k=m+1
+
+sk . (S4) 
+
+Proof. We prove the discrete expression from the integral representation, as written in Eq. S4. Assuming m ≤ n, we prove that 
+
+dN (η,ξ ) = 
+
+> m
+
+X
+
+> i=1
+
+|ti − si| + ( n − m)Tmax −
+
+> n
+
+X
+
+> i=m+1
+
+si . (S5) Let 
+
+f (t) := ηt − ξt, I(Tmax ) := 
+
+Z Tmax 
+
+> 0
+
+|ηt − ξt| dt =
+
+Z Tmax 
+
+> 0
+
+|f (t)| dt. (S6) 
+
+f records the imbalance between the number of events of η and ξ that have occurred up to time t: it is constant between event times and changes by +1 whenever some ti is crossed and by −1 whenever some sj is crossed. Pairing events by rank and setting ti := + ∞ for i = m+1 ,...,n (the process η
+
+has no further events), we may write 
+
+f (t) = ηt − ξt =
+
+> n
+
+X
+
+> i=1
+
+ 1{t≥ti} −1{t≥si}
+
+.
+
+13 The i-th summand equals +1 for t ∈ [ti,s i) and −1 for t ∈ [si,t i); in either case its magnitude is the indicator of [ti ∧ si, t i ∨ si). Since both (ti) and (si) are nondecreasing, two summands of opposite sign cannot be nonzero at the same t: if term k contributes +1 and term l contributes −1 with k < l ,then sl ≤ t < s k contradicts sk ≤ sl (and symmetrically for k > l ). Hence at every t the nonzero summands share a common sign, so the absolute value passes through the sum, 
+
+|f (t)| =
+
+> n
+
+X
+
+> i=1
+
+1{t≥ti} −1{t≥si} =
+
+> n
+
+X
+
+> i=1
+
+1[ti∧si,t i∨si)(t). (S7) Splitting off the unpaired indices i > m , for which ti = + ∞ and hence [ti ∧ si, t i ∨ si) ∩ [0 ,T max ] = [si,T max ], gives, for all t ∈ [0 ,T max ],
+
+|f (t)| =
+
+> m
+
+X
+
+> i=1
+
+1[ti∧si,t i∨si)(t) + 
+
+> n
+
+X
+
+> j=m+1
+
+1[sj ,T max ](t). (S8) The first sum counts rank-paired times (ti,s i), for which exactly one of the two events has occurred by time t, while the second sum accounts for the unpaired events sj with j > m . Integrating both sides of Eq. S8, we obtain 
+
+I(Tmax ) = 
+
+> m
+
+X
+
+> i=1
+
+(ti ∨ si − ti ∧ si) + 
+
+> n
+
+X
+
+> j=m+1
+
+(Tmax − sj )=
+
+> m
+
+X
+
+> i=1
+
+|ti − si| + ( n − m)Tmax −
+
+> n
+
+X
+
+> j=m+1
+
+sj = dN (η,ξ ) , (S9) which establishes Eq. S4 for m ≤ n. The case m > n follows by symmetry. 
+
+A.3 Optimal Transport Interpretation 
+
+Let η,ξ ∈ N with event times (tk)mk=1 and (sk)nk=1 respectively. For the optimal transport argument, associate to each the point measure μ := Pmk=1 δtk and ν := Pnk=1 δsk . We write δTmax for the Dirac measure at Tmax , and use (·)+ = max( ·,0) .We establish that the Wasserstein distance [ 46 ] for the deterministic measures with anchor points at 
+
+Tmax is indeed the L1 distance between the respective counting processes: 
+
+W1(˜ μ, ˜ν) = 
+
+Z Tmax 
+
+> 0
+
+|ηt − ξt| dt, (S10) where, assuming that ηTmax = m,ξ Tmax = n,
+
+˜μ := μ + ( n − m)+δTmax , ˜ν := ν + ( m − n)+δTmax . (S11) This establishes the correspondence between our definition and the optimal transport interpretation. 
+
+Proof. By construction, both padded measures have equal total mass. Since their supports are contained in [0 ,T max ], both ˜μ and ˜ν have finite first moments. By [ 52 ] and generalising to finite positive measures of equal mass and finite first moment: 
+
+W1(˜ μ, ˜ν) ≜ inf 
+
+> γ∈Γ(˜ μ, ˜ν)
+
+Z
+
+> R×R
+
+|x − y|γ(d x, dy) = 
+
+Z
+
+> R
+
+|F˜μ(t) − F˜ν (t)| dt. (S12) For t < T max , no padded atoms have appeared. Hence, F˜μ(t) = ˜ μ(( −∞ ,t ]) = μ(( −∞ ,t ]) = ηt, and analogously, F˜ν (t) = ξt. Thus, 
+
+|F˜μ(t) − F˜ν (t)| =
+
+|ηt − ξt|, t ∈ [0 ,T max ),
+
+0, t / ∈ [0 ,T max ). (S13) Therefore, we get the equality 
+
+W1(˜ μ, ˜ν) = 
+
+Z
+
+> R
+
+|F˜μ(t) − F˜ν (t)| dt =
+
+Z Tmax 
+
+> 0
+
+|ηt − ξt| dt. (S14) 14 A.4 Counterexample for Strong Negative Type 
+
+The TPP distance is of negative type but not of strong negative type. Consider four realised TPPs with two events each: 
+
+ξ1 = (0 ,2) , ξ2 = (1 ,3) , ξ3 = (0 ,3) , and ξ4 = (1 ,2) . (S15) Then, with coefficients a1 = a2 = 1 and a3 = a4 = −1 (such that P 
+
+> i
+
+ai = 0 ) one has 
+
+> 4
+
+X
+
+> i,j =1
+
+aiaj dN (ξi,ξ j ) = 2 dN (ξ1,ξ 2) + 2 dN (ξ3,ξ 4)
+
+− 2 ·  dN (ξ1,ξ 3) + dN (ξ1,ξ 4) + dN (ξ2,ξ 3) + dN (ξ2,ξ 4)
+
+= 2 · 2 + 2 · 2 − 2(1 + 1 + 1 + 1) = 0 , (S16) with the ξi not all equal, which violates strong negative type. In general, L1 spaces are of negative type but not of strong negative type [36]. 
+
+## B Proofs of Theorem 6 
+
+Following the notation of Theorem 6, we prove the following statements. 1. The map Φ is Lipschitz (Theorem S11). 2. The map Φ is injective on N , hence a bijection between N and its image Φ( N ) (Theo-rem S16). 3. The inverse map Ψ = Φ |−1 
+
+> N
+
+is continuous on Φ( Nδ ) for each δ > 0; more precisely, it satisfies a 12 -Hölder bound on the separated subset Φ( Nδ ) defined in Appendix B.3 (Theorem S29). Continuity fails on all of Φ( N ); see Remark S17. 
+
+B.1 Φ is Lipschitz Lemma S6 (Affine L1 Bound) . Let a < b and let h : [ a,b ] → R be an affine function. Then 
+
+Z ba
+
+|h(t)|dt ≤ b − a
+
+2
+
+ |h(a)| + |h(b)|. (S17) 
+
+Proof. The composition of a convex function with an affine function is convex. Since t 7 → | h(t)| is the composition of the convex function |·| with the affine function h, it is convex on [a,b ]. Every convex function on an interval is bounded above by the chord through its endpoint values: 
+
+|h(t)| ≤ b − tb − a |h(a)| + t − ab − a |h(b)| , t ∈ [a,b ]. (S18) Integrating over [a,b ] gives the result. We recall that a right-continuous function of bounded variation induces a Lebesgue–Stieltjes (total variation) measure |Dy |; see, e.g., Folland [18], Sections 1.5 and 3.5. 
+
+Lemma S7 (Bounded Variation Time-Warp Inequality) . Let y : [0 ,T max ] → R be (continuous 1 and) of bounded variation, with total variation TV( y) := TV( y; [0 ,T max ]) . Let λ : [0 ,T max ] → [0 ,T max ]
+
+be measurable and set ∥λ − Id ∥∞ := sup t∈[0 ,T max ] |λ(t) − t|. Then 
+
+∥y(λ(t)) − y(t)∥L1 ≤ 2∥λ − Id ∥∞ TV( y). (S19) 
+
+Proof. Let |Dy | denote the total variation measure of y, i.e. the Lebesgue–Stieltjes measure associ-ated with the total variation function TV( y; [0 ,t ]) . For any a,b ∈ [0 ,T max ],
+
+|y(b) − y(a)| ≤ | Dy | [a ∧ b, a ∨ b]. (S20) 
+
+> 1Continuity is not required for the proof but makes the argument cleaner, and we do not require a more general statement for our proofs.
+
+15 Set δ := ∥λ − Id ∥∞ (smaller than or equal to Tmax ). For each t ∈ [0 ,T max ] we have λ(t) ∈ [t − δ, t +
+
+δ] ∩ [0 ,T max ], so that [t ∧ λ(t), t ∨ λ(t)] ⊆ [t − δ, t + δ] ∩ [0 ,T max ]. By monotonicity of measures, 
+
+|y(λ(t)) − y(t)| ≤ | Dy | [t ∧ λ(t), t ∨ λ(t)]  ≤ | Dy | [t − δ, t + δ] ∩ [0 ,T max ]. (S21) Integrating over [0 ,T max ] and writing the right-hand side as a double integral, 
+
+Z Tmax 
+
+> 0
+
+|y(λ(t)) − y(t)|dt ≤
+
+Z Tmax 
+
+> 0
+
+Z
+
+> [0 ,T max ]
+
+1{| u−t|≤ δ} |Dy |(d u)d t. (S22) The integrand is nonnegative and jointly measurable (the set {(t,u ) : |u − t| ≤ δ} is closed in R2), so Tonelli’s theorem gives the desired inequality 
+
+Z Tmax 
+
+> 0
+
+|y(λ(t)) − y(t)| dt ≤
+
+Z
+
+> [0 ,T max ]
+
+Z Tmax 
+
+> 0
+
+1{| u−t|≤ δ} dt
+
+
+
+|Dy |(d u)
+
+≤
+
+Z
+
+> [0 ,T max ]
+
+2δ |Dy |(d u) = 2 δ TV( y). (S23) 
+
+Lemma S8 (Interarrival Telescoping Bound) . Let 0 = t0 < t 1 < ··· < t m < t m+1 = Tmax and 0 = 
+
+s0 < s 1 < ··· < s n < s n+1 = Tmax be two augmented grids (in the sense of Convention 1) with m ≤ n.Define the interarrival times 
+
+τk := tk − tk−1, k = 1 ,...,m +1 , ςk := sk − sk−1, k = 1 ,...,n +1 , (S24) 
+
+and set τ0 := ς0 := 0 . Extend the shorter grid by padding: ti := Tmax for i = m+1 ,...,n , so that both sequences (ti)ni=1 and (si)ni=1 have the same length. Then the first m+2 interarrival differences are controlled by the event-time differences: 
+
+> m+1
+
+X
+
+> k=0
+
+|τk − ςk| ≤ 2
+
+> n
+
+X
+
+> i=1
+
+|ti − si| . (S25) 
+
+Proof. For k = 1 ,...,m +1 , the telescoping identity 
+
+τk − ςk = ( tk − tk−1) − (sk − sk−1) = ( tk − sk) − (tk−1 − sk−1) (S26) implies, by the triangle inequality, 
+
+|τk − ςk| ≤ | tk − sk| + |tk−1 − sk−1| . (S27) Summing over k = 1 ,...,m +1 yields 
+
+> m+1
+
+X
+
+> k=1
+
+|τk − ςk| ≤ 
+
+> m+1
+
+X
+
+> k=1
+
+|tk − sk| +
+
+> m
+
+X
+
+> k=0
+
+|tk − sk| . (S28) Since τ0 = ς0 = 0 and t0 = s0 = 0 , the boundary terms vanish. Noting that all summands are non-negative, we obtain 
+
+> m+1
+
+X
+
+> k=0
+
+|τk − ςk| ≤ 2
+
+> m+1
+
+X
+
+> k=1
+
+|tk − sk| ≤ 2
+
+> n
+
+X
+
+> k=1
+
+|tk − sk| . (S29) In the above, when m = n, the sum includes the extra term |tn+1 − sn+1 | = Tmax − Tmax = 0 .
+
+Lemma S9 (Grid Mismatch Controlled by a Time-Change) . Let ξ ∈ N with n events and augmented grid 0 = s0 < s 1 < ··· < s n+1 = Tmax , and let y = Φ( ξ) ∈ C be the piecewise-linear interpolant through (sk,ς k)n+1  
+
+> k=0
+
+, where ς0 := 0 and ςk := sk − sk−1 for k = 1 ,...,n +1 are the interarrival times (Convention 1). Let 0 = t0 < t 1 < ··· < t m+1 = Tmax be a second augmented grid with m ≤ n. Define: (a) the piecewise-linear map λ : [0 ,T max ] → [0 ,s m+1 ] by λ(tk) = sk for k = 0 ,...,m +1 , affine on each [tk,t k+1 ];(b) the re-gridded interpolant ˜y on the t-grid: ˜y(tk) := ςk for k = 0 ,...,m +1 , affine between nodes. Extend the shorter grid by padding ti := Tmax for i = m + 1 ,...,n . Then: 
+
+16 (i) ˜y(t) = y(λ(t)) for all t ∈ [0 ,T max ].(ii) ∥˜y − y∥L1 ≤ 4Tmax ∥λ − Id ∥∞.(iii) ∥λ − Id ∥∞ ≤ Pnk=1 |tk − sk|.Consequently, 
+
+∥˜y − y∥L1 ≤ 4Tmax 
+
+> n
+
+X
+
+> k=1
+
+|tk − sk| . (S30) 
+
+Proof. Part (i): Identity ˜y = y ◦ λ. Fix k ∈ { 0,...,m } and t ∈ [tk,t k+1 ]. Since the grids are strictly increasing, tk+1 − tk > 0,k ≤ m and sk+1 − sk > 0,k ≤ n. The fact that the grid is strictly increasing also ensures that on the interval [tk,t k+1 ], the map λ is strictly increasing and affine with λ(tk) = sk
+
+and λ(tk+1 ) = sk+1 , hence 
+
+λ [tk,t k+1 ] = [ sk,s k+1 ], (S31) so in particular λ(t) ∈ [sk,s k+1 ] and y(λ(t)) is given by the k-th linear piece of y.By definition of ˜y,
+
+˜y(t) = ςk + ςk+1 − ςk
+
+tk+1 − tk
+
+(t − tk). (S32) Since λ is linear on [tk,t k+1 ],
+
+λ(t) = sk + sk+1 − sk
+
+tk+1 − tk
+
+(t − tk), equivalently λ(t) − sk
+
+sk+1 − sk
+
+= t − tk
+
+tk+1 − tk
+
+. (S33) Substituting this into the expression for y on [sk,s k+1 ] yields 
+
+y(λ(t)) = ςk + ςk+1 − ςk
+
+sk+1 − sk
+
+ λ(t) − sk
+
+ = ςk + ςk+1 − ςk
+
+tk+1 − tk
+
+(t − tk) = ˜ y(t), (S34) which proves (i). 
+
+Part (ii): L1-bound via Lemma S7. The map λ : [0 ,T max ] → [0 ,T max ] is piecewise linear, hence measurable and y is piecewise linear hence continuous and of bounded variation, so all hypotheses of Lemma S7 are fulfilled. Eq. S19 together with Part (i) gives 
+
+∥˜y − y∥L1 = ∥y ◦ λ − y∥L1 ≤ 2TV( y) ∥λ − Id ∥∞ . (S35) Since y is piecewise linear with nodes ς0 = 0 , ςk ≥ 0, and Pn+1  
+
+> k=1
+
+ςk = Tmax ,
+
+TV( y) = 
+
+> n
+
+X
+
+> k=0
+
+|ςk+1 − ςk| ≤ 
+
+> n
+
+X
+
+> k=0
+
+(ςk+1 + ςk) ≤ 2
+
+> n+1
+
+X
+
+> k=1
+
+ςk = 2 Tmax . (S36) This yields (ii): 
+
+∥˜y − y∥L1 ≤ 4Tmax ∥λ − Id ∥∞ . (S37) 
+
+Part (iii): Control of the time change. Since t 7 → λ(t) − t is affine on each interval [tk,t k+1 ], the function |λ(t) − t| is convex on each such interval. Therefore, its maximum over [0 ,T max ] is attained at a node. Because all terms are nonnegative, we may bound the maximum by the sum 
+
+∥λ − Id ∥∞ = max  
+
+> 0≤k≤m+1
+
+|sk − tk| ≤ 
+
+> m+1
+
+X
+
+> k=0
+
+|sk − tk|. (S38) The term at k = 0 vanishes since s0 = t0 = 0 . Finally, using the padding convention ti := Tmax for 
+
+i = m+1 ,...,n , the sum Pni=1 |ti −si| contains all nonzero terms |sk −tk| for k = 1 ,...,m +1 ; when 
+
+m = n, the omitted endpoint term is |tn+1 − sn+1 | = 0 . It also contains additional nonnegative terms for i = m + 2 ,...,n . Hence, 
+
+∥λ − Id ∥∞ ≤
+
+> m+1
+
+X
+
+> k=1
+
+|sk − tk| ≤ 
+
+> n
+
+X
+
+> i=1
+
+|ti − si|, (S39) which proves (iii). 17 Conclusion. Combining (ii) and (iii) gives 
+
+∥˜y − y∥L1 ≤ 4Tmax 
+
+> n
+
+X
+
+> i=1
+
+|ti − si|. (S40) 
+
+Remark S10 (On the Map λ). When m < n , the map λ satisfies λ(Tmax ) = sm+1 < T max , so λ is not surjective onto [0 ,T max ]. It aligns the grids only up to the (m + 1) -th node and compresses the remaining time [sm+1 ,T max ] to the single point λ(Tmax ). When m = n, λ is a bijection of [0 ,T max ].
+
+Theorem S11 (Global Lipschitz continuity of Φ). Equip N with dN and C with d1(x, y ) := 
+
+R Tmax  
+
+> 0
+
+|x(t) − y(t)|dt. Then Φ : ( N ,d N ) → (C,d 1) is globally Lipschitz: 
+
+d1
+
+ Φ( η),Φ( ξ) ≤ 5Tmax dN (η,ξ ) for all η,ξ ∈ N . (S41) 
+
+Proof. Let η ∈ N have m events at times (tk)mk=1 and ξ ∈ N have n events at times (sk)nk=1 , with 
+
+m ≤ n (WLOG by symmetry of dN ). Write x := Φ( η), y := Φ( ξ).Construct the re-gridded interpolant ˜y on the t-grid with nodal values ˜y(tk) := ςk for k = 0 ,...,m +1 ,as in Lemma S9. By the triangle inequality, 
+
+∥x − y∥L1 ≤ ∥ x − ˜y∥L1
+
+| {z }
+
+> (I): vertical
+
++ ∥˜y − y∥L1
+
+| {z }
+
+> (II): horizontal
+
+. (S42) 
+
+Bound (I): Vertical mismatch (same grid, different nodal values). On each [tk,t k+1 ], x − ˜y is affine. By Lemma S6, Z tk+1 
+
+> tk
+
+|x(t) − ˜y(t)|dt ≤ ∆k
+
+2
+
+ |τk − ςk| + |τk+1 − ςk+1 |, (S43) where ∆k := tk+1 − tk. Summing over k = 0 ,...,m , each |τj − ςj | appears with coefficient at most 
+
+Tmax /2 (since ∆j−1 + ∆ j ≤ Tmax ). Hence 
+
+∥x − ˜y∥L1 ≤ Tmax 
+
+2
+
+> m+1
+
+X
+
+> k=0
+
+|τk − ςk| ≤ Tmax 
+
+> n
+
+X
+
+> k=1
+
+|tk − sk| = Tmax dN (η,ξ ) , (S44) where the second inequality applies Lemma S8. 
+
+Bound (II): Horizontal mismatch (different grids). Recall that y = Φ( ξ) is the piecewise–linear interpolant on the grid 0 = s0 < s 1 < ··· < s n+1 = Tmax with nodal values y(sk) = ςk, and that ˜y is the piecewise–linear interpolant on 0 = t0 < t 1 < ··· < t m+1 = Tmax with the same nodal values ˜y(tk) = ςk
+
+for k = 0 ,...,m +1 .Define the piecewise-linear increasing map λ : [0 ,T max ] → [0 ,T max ] by λ(tk) = sk for k = 0 ,...,m +1 ,linear on each [tk,t k+1 ]. λ is the unique increasing piecewise-linear map sending until index m each knot tk to sk. Then Lemma S9 gives ˜y(t) = y(λ(t)) for all t and 
+
+∥˜y − y∥L1 ≤ 4Tmax 
+
+> n
+
+X
+
+> k=1
+
+|tk − sk| = 4 Tmax dN (η,ξ ) . (S45) 
+
+Conclusion. Combining Eq. S42 with Bounds (I) and (II): 
+
+d1
+
+ Φ( η),Φ( ξ) ≤ (1 + 4) Tmax dN (η,ξ ) = 5 Tmax dN (η,ξ ) . (S46) 
+
+Remark S12 (Sharpness of the Lipschitz Constant) . The constant 5Tmax in Theorem S11 is not sharp. Several intermediate bounds (notably max ≤ P in Lemma S9(iii)) are deliberately coarse. The structurally relevant feature is the linear scaling O(Tmax ), which is natural: the L1 metrics on both spaces integrate over [0 ,T max ].
+
+B.2 Φ is a Bijection Definition S13 (Backshift Transform) . For x ∈ C , the backshift transform of x is 
+
+fx(t) := t − x(t), t ∈ [0 ,T max ]. (S47) 18 Figure S1: Recovery of event times with f by iterative level-hitting. Here, the TPP η is constructed artificially with times tk = [1 ,3,7,8] , interarrival times τk = [1 ,2,4,1] , and Tmax = 10 . Starting from 
+
+t0 = 0 , each event time is obtained as tk = inf {t > t k−1 : f (t) = tk−1}. Horizontal dashed lines denote thresholds tk−1, and vertical dashed lines mark the corresponding hit times tk. The figure illustrates the constructive recovery underlying the bijectivity of Φ.When x = Φ( η) for some η ∈ N with event times 0 < t 1 < ··· < t m < T max and interarrival times 
+
+τk = tk − tk−1 (Convention 1), the key observation is that fx(tk) = tk − τk = tk−1. That is, fx maps each event time to its predecessor. This is the basis for the level-set recovery of Lemma S14. 
+
+Lemma S14 (Level-Set Recovery) . Let η ∈ N have event times 0 < t 1 < ··· < t m < T max , augmented by t0 := 0 and tm+1 := Tmax (Convention 1), interarrival times τk := tk − tk−1, and set x := Φ( η).If m = 0 then fx ≡ 0 on [0 ,T max ]; assume henceforth m ≥ 1. Then the backshift transform fx(t) = 
+
+t − x(t) satisfies the following properties. (i) fx is continuous and piecewise-linear on [0 ,T max ].(ii) fx(0) = 0 , fx(tk) = tk−1 for k = 1 ,...,m , and fx(Tmax ) = tm.(iii) fx ≡ 0 on [0 ,t 1].(iv) fx is strictly increasing on [t1,T max ].(v) For k = 1 ,...,m , tk = sup {t ∈ (tk−1,T max ) : fx(t) = tk−1}.Proof. (i) Since x ∈ C is continuous and piecewise-linear on the grid (tk)m+1  
+
+> k=0
+
+and the map t 7 → t is linear, their difference fx inherits the same properties. 
+
+(ii) At each event time tk,
+
+x(tk) = τk = tk − tk−1 , (S48) hence 
+
+fx(tk) = tk − τk = tk−1 . (S49) At the origin, x(0) = τ0 = 0 , so fx(0) = 0 .
+
+(iii) On [0 ,t 1], x has slope equal to 1 by definition and is linear with x(0) = 0 . So x(t) = t and fx ≡ 0.
+
+(iv) On each [tk,t k+1 ] for k = 1 ,...,m , the function fx is affine with 
+
+fx(tk+1 ) − fx(tk) = tk − tk−1 = τk > 0, (S50) where strict positivity follows from simplicity of η (i.e. τk > 0 for k = 1 ,...,m ). Since fx is affine and strictly increasing on each subinterval and continuous across nodes, it is strictly increasing on all of [t1,T max ].
+
+(v) For k =1 : by (iii), fx ≡0 on [0 ,t 1], and by (iv), fx >0 on (t1,T max ]. Hence {t∈(0 ,T max ): fx(t)= 0}=(0 ,t 1] and sup= t1. For k ≥2: by (iv), fx is strictly increasing on [tk−1,T max ]⊂[t1,T max ]. Since 
+
+fx(tk) = tk−1 and fx is strictly increasing on this interval, tk is the unique solution of fx(t) = tk−1
+
+in [tk−1,T max ], hence the supremum. 19 Lemma S15 (Inverse Recovery) . For x ∈ Φ( N ), define the sequence (tk)k≥0 by 
+
+t0 := 0 , tk := sup t ∈ (tk−1,T max ) : fx(t) = tk−1 , k ≥ 1, (S51) 
+
+and let m ≥ 0 be the first index for which the level set {t ∈ (tm,T max ) : fx(t) = tm} is empty or has supremum equal to Tmax . Then: (i) The recovered sequence satisfies 0 < t 1 < t 2 < ··· < t m < T max and m < ∞; moreover m = 0 
+
+if and only if x(t) = t for all t, the embedding of the eventless path. (ii) The map Ψ : Φ( N ) → N defined by 
+
+Ψ( x)t := # {k ∈ { 1,...,m } : tk ≤ t}, (S52) 
+
+is a well-defined element of N .(iii) If x = Φ( η) for some η ∈ N with event times (sk)nk=1 , then m = n and tk = sk for k = 1 ,...,n ;equivalently, Ψ(Φ( η)) = η.Proof. Fix η ∈ N with event times 0 < s 1 < ··· < s n < T max , augmented by s0 := 0 and sn+1 := Tmax 
+
+(Convention 1), interarrival times ςk := sk −sk−1, and set x:=Φ( η). If n=0 , then x(t)= t and fx ≡0,so the index-0 level set is (0 ,T max ), whose supremum is Tmax : the recursion stops immediately with 
+
+m = 0 and Ψ( x) ≡ 0 = η. Assume henceforth n ≥ 1.We show by induction that the recursion in Eq. S51 recovers tk = sk for every k; well-definedness of 
+
+Ψ is then immediate. 
+
+Part (i): Strict monotonicity and finiteness. Base case ( k = 1 ). On [0 , s 1], the path x interpo-lates linearly from (0 ,0) to (s1,ς 1) = ( s1,s 1), hence x(t) = t and fx(t) = 0 for all t ∈ [0 ,s 1]. By Lemma S14(iv), fx is strictly increasing on [s1,T max ], so fx(t) > 0 for all t > s 1. Therefore 
+
+{t ∈ (0 ,T max ) : fx(t) = 0 } = (0 ,s 1], (S53) and the supremum yields t1 = s1.
+
+Inductive step. Assume tj = sj for all j ≤ k − 1. By Lemma S14, the equation fx(t) = sk−1 has a unique solution in (sk−1,T max ), namely sk. Hence tk = sup {sk} = sk, and in particular tk > t k−1.For each k = 1 ,...,n the level set has supremum sk < T max , so the stopping rule does not trigger before index n.
+
+Termination. It remains to show that no time is recorded after tn = sn. By Lemma S14(ii) to (iv), 
+
+fx ≤ fx(sn) = sn−1 < s n on [0 ,s n], and fx is strictly increasing on [sn,T max ] with fx(Tmax ) = sn;hence fx(t) < s n for every t ∈ (sn,T max ). The level set {t ∈ (sn,T max ) : fx(t) = sn} is therefore empty, and the recursion terminates with m = n < ∞.
+
+Part (ii): Well-definedness of Ψ( x). By (i), the sequence (tk)mk=1 is finite and strictly increasing. The process defined in Eq. S52 is therefore nondecreasing, càdlàg, has unit jumps only, satisfies 
+
+Ψ( x)0 = 0 , and has Ψ( x)Tmax = m < ∞. Hence Ψ( x) ∈ N . When m = 0 , Ψ( x) ≡ 0 is the eventless path, which lies in N trivially. 
+
+Theorem S16 (Bijective Embedding) . The following identities hold. (i) Ψ ◦ Φ = Id N .(ii) Φ ◦ Ψ = Id Φ( N ).In particular, Φ : N → Φ( N ) is a bijection with inverse Ψ.Proof. We continue with the notation of the previous lemmas. First we prove Ψ◦Φ = Id N . Let η ∈ N 
+
+have event times (tk)mk=1 . Lemma S15 shows that applying the recursion to x = Φ( η) recovers all event times exactly, with no extra times. Therefore, 
+
+Ψ(Φ( η)) t = # {k ∈ { 1,...,m } : tk ≤ t} = ηt , t ∈ [0 ,T max ]. (S54) Next we prove Φ ◦ Ψ = Id Φ( N ). Let x ∈ Φ( N ), so x = Φ( η) for some η ∈ N with event times (tk)mk=1 .By the previous statement, Ψ( x) recovers exactly these event times. Reapplying Φ yields the same piecewise-linear interpolation through (tk,τ k), hence Φ(Ψ( x)) = x.The maps Φ and Ψ are therefore mutual inverses, and Φ : N → Φ( N ) is a bijection. 20 B.3 Ψ is Continuous on Each Sieve Φ( Nδ )
+
+Hölder stability of the inverse. Fix δ > 0 and let 
+
+Nδ := η ∈ N : τk ≥ δ for all k = 1 ,...,m + 1 , (S55) where m = ηTmax and τ1,...,τ m+1 are the interarrival times (Convention 1). The separation parameter δ excludes near-simultaneous events, which cause the embedding’s slopes to become indistinguishable. In practice, temporal data recorded at finite precision satisfies η ∈ N δ
+
+for some resolution-dependent δ. The Lipschitz bound and bijectivity hold without any separation assumption. 
+
+Remark S17 (Separation is necessary) . The inverse Ψ is not continuous on all of Φ( N ), so the sieve 
+
+Nδ cannot be dispensed with. Let η ∈ N have event times 0 < t 1 < ··· < t m < T max (possibly m = 0 ,with the convention t1 := Tmax ), and for 0 < h < t 1 let η(h) ∈ N have event times {h,t 1,...,t m}. Then 
+
+dN
+
+ η(h),η  = Tmax −h, while Φ( η(h)) − Φ( η) ∞ ≤ h, so d1
+
+ Φ( η(h)),Φ( η) ≤ Tmax h → 0 as h ↓ 0.Hence Φ( η(h)) → Φ( η) in (C,d 1) while dN
+
+ η(h),η  → Tmax , and Ψ admits no modulus of continuity at any point of Φ( N ). On Nδ this construction is unavailable: it forces the first interarrival time 
+
+τ1 = h < δ .
+
+Lemma S18 (Quantitative Bounds for fx on the Sieve) . Let δ > 0, Mδ := Tmax /δ . Let η ∈ N δ
+
+have m ≥ 1 events, and write (tk)m+1  
+
+> k=0
+
+for its augmented event-time grid and (τk)m+1  
+
+> k=0
+
+for the corresponding interarrival times (Convention 1), and set x := Φ( η), fx(t) := t − x(t). Then on each interval [tk,t k+1 ], k = 1 ,...,m , the function fx is affine with slope 
+
+rk := τk
+
+τk+1 
+
+∈ M −1 
+
+> δ
+
+, M δ
+
+. (S56) 
+
+In particular, fx is Mδ -Lipschitz on [0 ,T max ].Proof. Fix k ∈ { 1,...,m }. By construction, x = Φ( η) is affine on [tk,t k+1 ] with values x(tk) = τk
+
+and x(tk+1 ) = τk+1 . Its slope is (τk+1 − τk)/τ k+1 , so fx = id − x is affine on [tk,t k+1 ] with slope 
+
+1 − τk+1 − τk
+
+τk+1 
+
+= τk
+
+τk+1 
+
+. (S57) Since η ∈ N δ , every interarrival time lies in [δ,T max ], giving rk = τk/τ k+1 ∈ [δ/T max ,T max /δ ] = [1 /M δ ,M δ ].Finally, fx is continuous and piecewise affine. On [0 ,t 1] the slope is 0; on each subsequent piece it is 
+
+rk ≤ Mδ . Hence fx is Mδ -Lipschitz. 
+
+Proposition S19 (Restricted Invertibility of the Backshift Transform on the Sieve) . Let δ > 0,
+
+Mδ := Tmax /δ . Let η ∈ N δ have m ≥ 1 events, and write (tk)m+1  
+
+> k=0
+
+for its augmented event-time grid (Convention 1), and set x := Φ( η), fx(t) := t − x(t). Then: (i) The restriction fx [t1,T max ] : [ t1,T max ] → [0 ,t m] is a continuous, strictly increasing bijection. (ii) Its inverse Fx :=  fx [t1,T max ]
+
+−1 satisfies, for all u,v ∈ [0 ,t m],
+
+|Fx(u) − Fx(v)| ≤ Mδ |u − v| . (S58) 
+
+Proof. By Lemma S18, fx is affine on each [tk,t k+1 ] (k = 1 ,...,m ) with strictly positive slope 
+
+rk ≥ M −1 
+
+> δ
+
+. In particular, fx is continuous and strictly increasing on [t1,T max ], hence a bijection onto 
+
+[fx(t1), f x(Tmax )] .It remains to identify the endpoints. By Convention 1, τ1 = t1 − t0 = t1 and τm+1 = tm+1 − tm =
+
+Tmax − tm. Since x = Φ( η) interpolates the nodes (tk,τ k), we have x(t1) = τ1 = t1 and x(Tmax ) = 
+
+x(tm+1 ) = τm+1 = Tmax − tm. Therefore, 
+
+fx(t1) = t1 − x(t1) = 0 , fx(Tmax ) = Tmax − x(Tmax ) = tm , (S59) so the range is exactly [0 ,t m].On each image interval fx([ tk,t k+1 ]) , the inverse Fx is affine with slope 1/r k ≤ Mδ . Since Fx is continuous and piecewise-affine on a compact interval with all slopes at most Mδ , it is globally 
+
+Mδ -Lipschitz. 21 Lemma S20 (L1–L∞ Interpolation for Lipschitz functions) . Let h : [0 ,T max ] → R be L-Lipschitz with h(0) = 0 and L > 0. Then 
+
+∥h∥2 
+
+> ∞
+
+≤ 4L ∥h∥1 , (S60) 
+
+where ∥h∥1 := R Tmax  
+
+> 0
+
+|h(t)|dt and ∥h∥∞ := max t∈[0 ,T max ] |h(t)|.Proof. Let M := ∥h∥∞ and choose t∗ ∈ [0 ,T max ] with |h(t∗)| = M ; if M = 0 the claim is trivial, so assume M > 0. Since h(0) = 0 and h is L-Lipschitz, M = |h(t∗) − h(0) | ≤ Lt ∗, so t∗ ≥ M/L .Consequently, the interval [t∗ − M/ (2 L), t ∗] has length M/ (2 L) and is contained in [0 ,T max ]. For t
+
+in this interval, the Lipschitz bound gives 
+
+|h(t)| ≥ | h(t∗)| − L|t − t∗| ≥ M − L · M
+
+2L = M
+
+2 . (S61) Therefore 
+
+∥h∥1 ≥
+
+Z t∗
+
+> t∗−M/ (2 L)
+
+|h(t)|dt ≥ M
+
+2 · M
+
+2L = M 2
+
+4L . (S62) 
+
+Proposition S21 (Sup-norm Control) . Let η,ξ ∈ N δ and set x := Φ( η), y := Φ( ξ), g := x − y. Assume 
+
+Mδ := Tmax /δ ≥ 2; when Mδ < 2, the sieve Nδ contains at most the eventless path, so the only available pair is x = y and the bounds below are trivial. (i) Each of x and y is (Mδ −1) -Lipschitz on [0 ,T max ], and g satisfies g(0)= 0 and is 2( Mδ −1) -Lipschitz. (ii) ∥g∥∞ ≤ 2p2( Mδ − 1) d1(x,y ) ≤ 2p2Mδ d1(x,y ).Proof. We treat three cases according to the event counts of η and ξ.
+
+Case 1: Both η and ξ have zero events. Then x(t) = y(t) = t for all t ∈ [0 ,T max ], so g ≡ 0 and both claims hold trivially. 
+
+Case 2: Both η and ξ have at least one event. Let m ≥ 1 denote the event count of η, with augmented grid 0 = t0 < t 1 < ··· < t m < t m+1 = Tmax and interarrival times τk := tk − tk−1.
+
+Part (i): Lipschitz bound. By Convention 1, x(0) = τ0 = 0 and y(0) = ς0 = 0 , so g(0) = 0 .We show x = Φ( η) is (Mδ − 1) -Lipschitz. For k ≥ 1, the slope of x on [tk,t k+1 ] is 
+
+αk := τk+1 − τk
+
+τk+1 
+
+= 1 − τk
+
+τk+1 
+
+. (S63) Since η ∈ N δ , every interarrival time lies in [δ,T max ], so τk/τ k+1 ∈ [M −1 
+
+> δ
+
+,M δ ] and hence 
+
+|αk| ≤ max  |1 − M −1 
+
+> δ
+
+|, |1 − Mδ | = Mδ − 1. (S64) For k = 0 , the slope is α0 = τ1/τ 1 = 1 . Since m ≥ 1, we have Tmax ≥ (m + 1) δ ≥ 2δ, so Mδ ≥ 2 and 
+
+|α0| = 1 ≤ Mδ − 1.Thus x is (Mδ − 1) -Lipschitz on [0 ,T max ]. The same argument applies to y (which also has ≥ 1
+
+event), so y is (Mδ − 1) -Lipschitz. Their difference g is therefore 2( Mδ − 1) -Lipschitz. 
+
+Case 3: Exactly one of η, ξ has zero events. Without loss of generality, suppose η has m = 0 events and ξ has n ≥ 1 events. Then x(t) = Φ( η)( t) = t for all t ∈ [0 ,T max ], so x has constant slope 1. Since 
+
+ξ has n ≥ 1 events, Tmax ≥ (n + 1) δ ≥ 2δ, so Mδ ≥ 2. Therefore |1| = 1 ≤ Mδ − 1, and x is (Mδ − 1) -Lipschitz. The function y = Φ( ξ) has n ≥ 1 events in Nδ , so by the slope analysis in Case 2 (applied to ξ), y is also (Mδ − 1) -Lipschitz. Since g(0) = x(0) − y(0) = 0 − 0 = 0 and g is the difference of two (Mδ − 1) -Lipschitz functions, g is 2( Mδ − 1) -Lipschitz. This establishes Part (i). 
+
+Part (ii): Sup-norm bound (all cases). In all cases, Part (i) gives that g is L-Lipschitz with L =2( Mδ − 1) > 0 (recall Mδ ≥ 2) and g(0) = 0 . By Lemma S20, 
+
+∥g∥2 
+
+> ∞
+
+≤ 4L ∥g∥1 = 8( Mδ − 1) d1(x,y ). (S65) Taking square roots and using Mδ − 1 ≤ Mδ gives both bounds. 22 Lemma S22 (Separation of Distinct-Count Images) . Assume Mδ ≥ 2. Since the m+1 interarrival times of any η ∈ N δ with m events are each at least δ and sum to Tmax , we have (m + 1) δ ≤ Tmax ,i.e. m ≤ Mδ − 1; as m is an integer, m ≤ ⌊ Mδ ⌋ − 1. For n ∈ { 0,..., ⌊Mδ ⌋ − 1}, let N (n) 
+
+> δ
+
+:= {η ∈Nδ : ηTmax = n} denote the subset of Nδ with exactly n events. Each such class is nonempty (the equispaced grid tk = kδ , k = 1 ,...,n , is admissible because (n + 1) δ ≤ ⌊ Mδ ⌋δ ≤ Tmax ), and these classes partition Nδ . For each pair m̸ = n in {0,..., ⌊Mδ ⌋ − 1},
+
+d1
+
+
+
+Φ( N (m) 
+
+> δ
+
+),Φ( N (n) 
+
+> δ
+
+)
+
+
+
+> 0. (S66) 
+
+Consequently, 
+
+dmin (δ) := min  
+
+> m,n ∈{ 0,..., ⌊Mδ⌋− 1}
+> m̸=n
+
+d1
+
+
+
+Φ( N (m) 
+
+> δ
+
+),Φ( N (n) 
+
+> δ
+
+)
+
+
+
+> 0. (S67) 
+
+Proof. Fix n ∈ { 0,..., ⌊Mδ ⌋ − 1}. Identify N (n) 
+
+> δ
+
+with the subset of Rn
+
+n
+
+(t1,...,t n) ∈ [0 ,T max ]n : tk − tk−1 ≥ δ for k = 1 ,...,n, T max − tn ≥ δ
+
+o
+
+, t0 = 0 , (S68) and equip N (n) 
+
+> δ
+
+with the subspace topology inherited from Rn. The defining constraints are finite intersections of closed half-spaces, hence the set is closed in the compact cube [0 ,T max ]n. Therefore 
+
+N (n) 
+
+> δ
+
+is compact (the case n = 0 being trivial). Furthermore, on N (n) 
+
+> δ
+
+, dN coincides with the 
+
+ℓ1 distance between vectors, and so do their topologies. Φ being Lipschitz with respect to dN
+
+(Theorem S11), the restriction on N (n) 
+
+> δ
+
+is continuous. Thus, Φ( N (n) 
+
+> δ
+
+) is compact in (C,d 1).Injectivity of Φ implies that Φ( N (m) 
+
+> δ
+
+) ∩ Φ( N (n) 
+
+> δ
+
+) = ∅ for m̸ = n.The continuous function (x,y ) 7 → d1(x,y ) attains its minimum on the compact product of the two images Φ( N (m) 
+
+> δ
+
+) × Φ( N (n) 
+
+> δ
+
+). Since the sets are disjoint, this minimum is strictly positive. Since the index set {0,..., ⌊Mδ ⌋ − 1} is finite and, by Mδ ≥ 2, contains at least the two indices 0 and 1, the minimum in the definition of dmin (δ) is taken over a finite, nonempty collection of strictly positive quantities. This yields dmin (δ) > 0.
+
+Remark S23. The lemma shows that under the minimal spacing condition, the event count becomes a topologically stable feature of the embedding, as distinct counts are separated by a strictly positive 
+
+d1-distance. 
+
+Corollary S24 (Count stability) . Assume Mδ ≥ 2 and let η,ξ ∈ N δ satisfy d1
+
+ Φ( η),Φ( ξ) < d min (δ),the separation constant of Lemma S22. Then η and ξ have the same number of events. Proof. This is immediate from Lemma S22: if the event counts differed, then Φ( η) and Φ( ξ) would lie in distinct image sets whose d1-distance is at least dmin (δ).
+
+Lemma S25 (Base-Case Perturbation) . Let η,ξ ∈ N δ share event count m ≥ 1, with first event times 
+
+t1 and s1, respectively. Set x := Φ( η), y := Φ( ξ), ϵ := ∥x − y∥∞, and Mδ := Tmax /δ . Then 
+
+|s1 − t1| ≤ Mδ ϵ. (S69) 
+
+Proof. Assume s1 ≥ t1 (the reverse case follows by symmetry). By level-set recovery, fx(t1) = 0 and 
+
+fy (s1) = 0 . Since fx has slope ≥ 1/M δ on [t1,T max ] (Lemma S18), 
+
+fx(s1) ≥ fx(t1) + 1 
+
+> Mδ
+
+(s1 − t1) = 1 
+
+> Mδ
+
+|s1 − t1|. (S70) Furthermore, |fx(s1) − fy (s1)| = |fx(s1) − 0| = fx(s1) ≤ ∥ fx − fy ∥∞ = ∥x − y∥∞ = ϵ.
+
+Lemma S26 (Recursive Error Propagation) . Let η,ξ ∈ N δ share event count m ≥ 1, with augmented event-time grids (tk)m+1  
+
+> k=0
+
+and (sk)m+1  
+
+> k=0
+
+, respectively. Set x := Φ( η), y := Φ( ξ), and ϵ := ∥x − y∥∞.Suppose ϵ < δ , and Mδ := Tmax /δ . Then for every k = 2 ,...,m ,
+
+|sk − tk| ≤ Mδ |sk−1 − tk−1| + Mδ ϵ. (S71) 
+
+Proof. By Proposition S19, the restricted inverses Fx := ( fx|[t1,T max ])−1 and Fy := ( fy |[s1,T max ])−1
+
+are Mδ -Lipschitz, and the event times satisfy tk = Fx(tk−1), sk = Fy (sk−1) for k ≥ 2.23 Step 1: tk ≥ s1. Suppose for contradiction that tk < s 1. Then fy (tk) = 0 (since fy ≡ 0 on [0 ,s 1]), while by Lemma S14 fx(tk) = tk−1 ≥ t1 ≥ δ. But ∥fx − fy ∥∞ = ϵ < δ , a contradiction. 
+
+Step 2: tk−1 ∈ [0 , s m]. Since fx(Tmax ) = tm and fy (Tmax ) = sm, we have |sm − tm| = |(fx −
+
+fy )( Tmax )| ≤ ϵ. The δ-separation of η gives tk−1 ≤ tm − δ. Combining: 
+
+tk−1 ≤ tm − δ < t m − ϵ ≤ sm , (S72) where the second inequality uses ϵ < δ and the third uses sm ≥ tm − ϵ. In other words tk−1 ∈ [0 ,s m]
+
+as required to evaluate Fy (tk−1).
+
+Step 3: Bounding |Fy (tk−1) − Fx(tk−1)|. By Step 1, Fx(tk−1) = tk ≥ s1. Since tk−1 ∈ [0 ,s m]
+
+(Step 2), Fy (tk−1) is well-defined and lies in [s1,T max ] (the range of Fy ). Thus both Fy (tk−1) and 
+
+Fx(tk−1) lie in [s1,T max ], where fy has slope at least M −1 
+
+> δ
+
+, so 
+
+M −1 
+
+> δ
+
+|Fy (tk−1) − Fx(tk−1)| ≤ | fy (Fy (tk−1)) − fy (Fx(tk−1)) |. (S73) Since fy (Fy (tk−1)) = tk−1 = fx(Fx(tk−1)) and |fx(Fx(tk−1)) −fy (Fx(tk−1)) | ≤ ∥ x − y∥∞ = ϵ, we obtain |Fy (tk−1) − Fx(tk−1)| ≤ Mδ ϵ.
+
+Step 4: Triangle inequality. 
+
+|sk − tk| = |Fy (sk−1) − Fx(tk−1)|≤ | Fy (sk−1) − Fy (tk−1)|
+
+| {z } 
+
+> ≤Mδ|sk−1−tk−1|
+
++|Fy (tk−1) − Fx(tk−1)|
+
+| {z } 
+
+> ≤Mδϵ
+
+≤ Mδ |sk−1 − tk−1| + Mδ ϵ. (S74) 
+
+Lemma S27 (Large-Perturbation Regime) . Let η,ξ ∈ N δ share event count m ≥ 1, and set x := Φ( η),
+
+y := Φ( ξ). Suppose ∥x − y∥∞ ≥ δ. Then 
+
+dN (η,ξ ) ≤ m√8M 3/2 
+
+> δ
+
+d1(x,y )1/2 . (S75) 
+
+Proof. Since both measures have m events in [0 ,T max ), the discrete representation gives the trivial bound dN (η,ξ ) ≤ mT max . By Proposition S21, d1(x,y ) ≥ ϵ2/(8 Mδ ) ≥ δ2/(8 Mδ ). Hence 
+
+dN (η,ξ ) ≤ mT max ·
+
+pd1(x,y )
+
+pd1(x,y ) ≤ mT max ·√8Mδ d1(x,y )1/2
+
+δ = m√8M 3/2 
+
+> δ
+
+d1(x,y )1/2 . (S76) 
+
+Proposition S28 (Same-Count Hölder Bound) . Let η,ξ ∈ N δ have the same event count m ≥ 0. Set 
+
+x := Φ( η), y := Φ( ξ), ϵ := ∥x − y∥∞, and Mδ := Tmax /δ . Then 
+
+dN (η,ξ ) ≤ Cm(Mδ )ϵ, Cm(Mδ ) := M 2 
+
+> δ
+
+(M mδ − 1) (Mδ − 1) 2 , (S77) 
+
+and consequently 
+
+dN (η,ξ ) ≤ 2√2Cm(Mδ )M 1/2 
+
+> δ
+
+d1(x,y )1/2 ≤ 4M m+3 
+
+> δ
+
+(Mδ − 1) 2 d1(x,y )1/2 . (S78) 
+
+Proof. The case m = 0 is trivial. Assume m ≥ 1; then Mδ ≥ m + 1 ≥ 2. Write (tk)m+1  
+
+> k=0
+
+and (sk)m+1 
+
+> k=0
+
+for the augmented event-time grids of η and ξ (Convention 1). 
+
+Step 1: ϵ < δ . Set ak := |sk − tk|. The boundary convention gives a0 = 0 , and Lemmas S25 and S26 yield 
+
+ak ≤ Mδ ak−1 + Mδ ϵ, k = 1 ,...,m. (S79) Unrolling from a0 = 0 ,
+
+ak ≤ Mδ ϵ
+
+> k−1
+
+X
+
+> j=0
+
+M jδ = Mδ (M kδ − 1) 
+
+Mδ − 1 ϵ, k = 1 ,...,m. (S80) 24 By Eq. S4, because both processes share the same event count, dN (η,ξ ) = Pmk=1 ak. Summing: 
+
+> m
+
+X
+
+> k=1
+
+ak ≤ Mδ ϵMδ − 1
+
+> m
+
+X
+
+> k=1
+
+(M kδ − 1) = Mδ ϵMδ − 1
+
+ Mδ (M mδ − 1) 
+
+Mδ − 1 − m
+
+
+
+≤ M 2 
+
+> δ
+
+(M mδ − 1) (Mδ − 1) 2 ϵ, (S81) where the penultimate step drops the term −m < 0. Substituting ϵ ≤ 2p2Mδ d1(x,y ) ≤
+
+4Mδ
+
+pd1(x,y ) (Proposition S21) into Eq. S77 yields Eq. S78. The final constant relaxes M mδ − 1
+
+to M mδ for a cleaner closed form. 
+
+Step 2: ϵ ≥ δ. We first verify that Eq. S77 continues to hold in this regime. Since both processes have 
+
+m events, Eq. S4 gives the trivial bound dN (η,ξ ) ≤ mT max , while 
+
+Cm(Mδ )ϵ ≥ Cm(Mδ )δ = Mδ (M mδ − 1) (Mδ − 1) 2 Tmax ≥ mT max , (S82) where the last inequality uses M mδ −1  
+
+> Mδ−1
+
+= 1 + Mδ + ··· + M m−1 
+
+> δ
+
+≥ m together with Mδ  
+
+> Mδ−1
+
+≥ 1. Hence Eq. S77 holds unconditionally. We now establish Eq. S78 in this regime. For m ≥ 1 and ϵ ≥ δ, by Lemma S27, dN (η,ξ ) ≤
+
+m√8 M 3/2 
+
+> δ
+
+d1(x, y )1/2. Since (Mδ − 1) 2 ≤ M 2 
+
+> δ
+
+, it suffices to show m√8 ≤ 4 M m−1/2 
+
+> δ
+
+, i.e., 
+
+m ≤ √2M m−1/2 
+
+> δ
+
+. We verify this by induction on m:• Base case m = 1 : need 1 ≤ √2M 1/2 
+
+> δ
+
+, which holds since Mδ ≥ 2.• Inductive step : if m ≤ √2M m−1/2 
+
+> δ
+
+, then (m+1) ≤ 2m ≤ 2√2M m−1/2 
+
+> δ
+
+≤ √2M m+1 /2 
+
+> δ
+
+for 
+
+Mδ ≥ 2, where the last inequality uses 2M −1 
+
+> δ
+
+≤ 1.Thus, the constant holds for all m ≥ 1 and when Mδ ≥ 2. Hence Eqs. S77 and S78 hold in both cases, completing the proof. 
+
+Theorem S29 (Hölder stability of Φ−1). Let δ > 0 and Mδ := Tmax /δ , and assume Mδ ≥ 2; when 
+
+Mδ < 2, the sieve Nδ contains at most the eventless path and the statement holds trivially for any 
+
+κ > 0. There exists a constant κ = κ(δ,T max ) > 0 such that for all η,ξ ∈ N δ ,
+
+dN (η,ξ ) ≤ κd 1
+
+ Φ( η),Φ( ξ)1/2 . (S83) 
+
+Explicitly, one may take 
+
+κ = max 
+
+ 4M ⌊Mδ ⌋+2 
+
+> δ
+
+(Mδ − 1) 2 , ⌊Mδ ⌋Tmax 
+
+pdmin (δ)
+
+
+
+, (S84) 
+
+where dmin (δ) > 0 is the separation constant from Lemma S22. Since dmin (δ) is obtained by a compactness argument and is not quantified, we make no claim on the growth rate of κ as δ ↓ 0.Proof. Let m and n denote the event counts of η and ξ, and set x := Φ( η), y := Φ( ξ).
+
+Case 1: m = n. Proposition S28 gives dN (η,ξ ) ≤ Crec d1(x,y )1/2 with Crec := 4 M ⌊Mδ ⌋+2  
+
+> δ
+
+/(Mδ −
+
+1) 2, using m = n ≤ ⌊ Mδ ⌋ − 1 (Lemma S22) together with Mδ ≥ 2 to bound M m+3  
+
+> δ
+
+≤ M ⌊Mδ ⌋+2  
+
+> δ
+
+;when m = 0 , dN (η,ξ ) = 0 and the bound is trivial. 
+
+Case 2: m̸ = n. By Lemma S22, d1(x,y ) ≥ dmin (δ) > 0. Moreover, both event counts are at most 
+
+⌊Mδ ⌋ − 1 (Lemma S22), so Proposition S5 gives dN (η,ξ ) ≤ max( m,n )Tmax ≤ ⌊ Mδ ⌋Tmax . Hence 
+
+dN (η,ξ ) ≤ ⌊ Mδ ⌋Tmax = ⌊Mδ ⌋Tmax 
+
+pdmin (δ)
+
+pdmin (δ) ≤ ⌊Mδ ⌋Tmax 
+
+pdmin (δ) d1(x,y )1/2 . (S85) Taking κ := max  Crec , ⌊Mδ ⌋Tmax /pdmin (δ) completes the proof. 
+
+Remark S30 (Sharpening the constant via a slope-gap condition) . The exponential dependence on m
+
+in Proposition S28 is an artefact of the recursive error propagation ak ≤ Mδ ak−1 + Mδ ϵ. If one 
+
+25 additionally requires that consecutive slopes of fx differ by at least some fixed γ > 0 (a slope-gap condition), a local, non-recursive argument gives the bound 
+
+γ
+
+4⌊Mδ ⌋ dN (η,ξ )2 ≤ d1
+
+ Φ( η),Φ( ξ). (S86) 
+
+This yields κ = O(p⌊Mδ ⌋/γ ). The argument goes along the following lines. When two breakpoint grids are shifted by ak, interlacing ensures that on a neighbourhood of each tk, one embedding has a kink while the other is linear; the slope-gap condition γ guarantees this kink has opening 
+
+≥ γ, producing an L1 contribution greater or equal to γ/ 4 a2
+
+> k
+
+. Since the neighbourhoods are disjoint (spacing larger than δ, shifts smaller or equal to δ/ 4), the contributions sum independently and Cauchy–Schwarz converts Pa2 
+
+> k
+
+≥ dN (η,ξ )2 /⌊Mδ ⌋. No error propagation occurs, hence the polynomial dependence. 
+
+## C Metrics 
+
+We evaluate generative TPP models along several complementary axes. Each metric targets a distinct structural property of the process, and together they provide a comprehensive picture of model quality. For all metrics a lower value is better. 
+
+C.1 Theory-Motivated Metrics 
+
+We define and theoretically justify 3 theory-motivated metrics in Section 3.4. We recall them briefly here and describe their empirical estimators. Throughout this section, we assume access to NP real samples η(1) ,...,η (NP ) ∼ P and NQ generated samples bξ(1) ,..., bξ(NQ) ∼ Q.
+
+Signature Wasserstein-1 ( Sig -W1). Sig -W1 measures discrepancy between path distributions through their expected truncated signatures, capturing higher-order temporal-dependence structure. It serves simultaneously as our training objective for S IG TPP and as an evaluation metric. Replacing the population expectations in Eq. 4 by sample means yields 
+
+\Sig -W1(M )
+
+(P,Q ) = 1
+
+NPNPX
+
+> i=1
+
+SM Φ( η(i)) − 1
+
+NQNQ
+
+X
+
+> i=1
+
+SM Φ( bξ(i))
+
+> 2
+
+. (S87) We report results at truncation order 3 with unscaled signature components; during training, signature features are standardised (common setting in linear regressions). 
+
+Energy Distance ( E). The energy distance is defined as 
+
+E := 2 · E
+
+h
+
+dN
+
+
+
+N, eN
+
+i 
+
+− E
+
+h
+
+dN
+
+
+
+N,N ′i 
+
+− E
+
+h
+
+dN
+
+ eN , eN ′i 
+
+, P,Q ∈ P 1(N ), (S88) with N,N ′ ∼ P and eN , eN ′ ∼ Q independent [ 21 , 50 ]. The energy distance is a distribution-level discrepancy on P1(N ,d N ) that compares the average inter-sample distance between P and Q against the within-distribution distances. Its empirical estimator is 
+
+bE(P,Q ) = 2
+
+NP NQ
+
+X
+
+> i,j
+
+dN
+
+
+
+η(i), bξ(j)
+
+− 1
+
+NP (NP − 1) 
+
+X
+
+> i̸=i′
+
+dN
+
+
+
+η(i),η (i′)
+
+− 1
+
+NQ(NQ − 1) 
+
+X 
+
+> j̸=j′
+
+dN
+
+bξ(j), bξ(j′)
+
+.
+
+(S89) Although E ≥ 0 at the population level (since dN is of negative type), the empirical estimator bE(P,Q )
+
+can take small negative values in finite samples, especially when P and Q are close. We compute it on batches of 2,000 sequences so that all pairwise distances fit in memory. Remark that E reduces to the CRPS [ 45 ] in the univariate case, providing a natural score for unconditional generation that handles variable-length sequences. 
+
+Wasserstein-1 ( W1). Since (N ,d N ) is a metric space, the Wasserstein-1 distance [46, 52] 
+
+W1 (P,Q ) := inf 
+
+> π∈Π( P,Q )
+
+Z
+
+> N ×N
+
+dN (N,N ′) d π(N,N ′), (S90) where Π( P,Q ) denotes the set of couplings of P and Q, is a well-defined metric on P1(N ). W1 lifts the path-level metric dN to a metric between distributions. It is the minimum cost of transporting 26 generated mass onto real mass, with per-pair cost dN . With empirical measures μ = 1
+
+> NP
+
+PNP 
+
+> i=1
+
+δη(i)
+
+and ν = 1
+
+> NQ
+
+PNQ 
+
+> j=1
+
+δbξ(j) , it is estimated by solving 
+
+cW1(μ,ν ) = min 
+
+> π∈Π( μ,ν )
+> NP
+
+X
+
+> i=1
+> NQ
+
+X
+
+> j=1
+
+πij dN
+
+
+
+η(i), bξ(j)
+
+, (S91) where Π( μ,ν ) denotes the set of couplings between μ and ν. As for the energy distance, we solve this linear program exactly on batches of 2,000 sequences, chosen so the full cost matrix fits in memory. 
+
+Continuous Ranked Probability Score (CRPS). CRPS evaluates the calibration and sharpness of 1-step-ahead predictive distributions over interarrival times. For each true event at position l
+
+in sequence n, the model defines a predictive distribution Fn,l conditional on the true past. We approximate it by the empirical cumulative distribution function bFn,l of the S Monte Carlo samples 
+
+bT:,n,l . We report the per-event average 
+
+CRPS = 1
+
+PNseq  
+
+> n=1
+
+ℓnNseq 
+
+X
+
+> n=1
+> ℓn
+
+X
+
+> l=1
+
+CRPS   bFn,l , Tn,l 
+
+, (S92) with the standard energy-form definition for a sample y
+
+CRPS( bF ,y ) = EX∼ bF
+
+|X − y| − 12 EX,X ′∼ bF
+
+|X − X′|, (S93) where X,X ′ are i.i.d. draws from bF .
+
+Scaling. For comparability across datasets with different time horizons, we report bE/T 2max (resp. 
+
+cW1/T 2max ) in all tables. The remaining metrics operate at the per-event level on interarrival times. Let Nseq denote the number of evaluation sequences and ℓn the (unpadded) length of sequence n,and write ℓmax = max n ℓn. We collect interarrivals in T ∈ RNseq ×ℓmax and S Monte Carlo samples of generated interarrivals in bT ∈ RS×Nseq ×ℓmax , where entries beyond each sequence’s true length are set to NaN . All estimators below use pairwise deletion of NaN entries (per-lag for autocorrelations). We write Tn,l for the l-th interarrival of sequence n and bT:,n,l ∈ RS for the vector of S Monte Carlo predictions at position (n,l ).
+
+C.2 Heuristic Metrics 
+
+The following metrics target specific structural properties, second-order temporal dependence and marginal distributional shape, without formal guarantees. They are adapted from Ni et al. [40] to the TPP setting. 
+
+Pairwise Correlation Discrepancy (PCD). PCD assesses whether the model reproduces second-order dependence across event positions: it compares the Pearson correlation matrix of interarrival times at different positions in real vs. generated samples, catching models whose marginals are correct but whose cross-position structure is not. Writing T:,p for the vector of position-p interarrivals across the Nseq sequences (and likewise, we slice 1 Monte Carlo sample bT0,:,p ), let 
+
+ρp,q = Corr  T:,p , T:,q 
+
+, bρp,q = Corr   bT0,:,p , bT0,:,q 
+
+, (S94) denote the Pearson correlations, computed by pairwise deletion of NaN entries. Then 
+
+PCD = 1
+
+|V| 
+
+X
+
+> (p,q )∈V
+
+|ρp,q − bρp,q | , (S95) where V collects position pairs (p,q ) with 1 ≤ p < q ≤ ℓ⋆ for which both correlations are well-defined. To stabilise estimation, we restrict ℓ⋆ to the largest prefix length such that every position p ≤ ℓ⋆ retains at least 50 valid (non-padded) samples in both T and bT .
+
+Autocorrelation Discrepancy (ACD). ACD probes the temporal memory of the process, how strongly an interarrival depends on those a few events earlier. For lag τ ≥ 1, let AC τ (T ) denote the lag-τ
+
+sample autocorrelation of interarrivals, computed by pooling all valid pairs (Tn,l , Tn,l +τ ) across sequences (with NaN -padded positions excluded), and define AC τ ( bT ) analogously by slicing one Monte Carlo sample. We restrict to short lags, where temporal dependence is most informative and estimation is most reliable: we set τmax = 5 in general, and τmax = 10 on long-sequence datasets 27 (ℓmax ≥ 100 ). We report 
+
+ACD = 1
+
+τmax 
+
+X 
+
+> τ≤τmax
+
+AC τ (T ) − AC τ ( bT ) . (S96) 
+
+Histogram Distances ( Llog( τ ), Lλ). These metrics compare marginal distributional shape at two complementary levels: Llog( τ ) targets the interarrival times density (how long between events?) and 
+
+Lλ the event-count density on [0 ,T max ] (when do events happen?). Both are L1 distances between empirical histograms computed on B shared bins. B in our setting follows a cube-root heuristic 
+
+2n1/3. For Llog( τ ), let bptrue and bpgen be histogram estimators of the marginal density of u = log τ ,where τ is an interarrival time, on bins covering the empirical range of log τ in T :
+
+Llog( τ ) =
+
+Z
+
+|bptrue (u) − bpgen (u)| du, u = log τ . (S97) For Lλ, let bλemp true and bλemp gen be histogram estimators of the empirical event rate per unit time on 
+
+[0 ,T max ] (distinct from the conditional intensity used elsewhere in the paper): 
+
+Lλ =
+
+Z Tmax 
+
+> 0
+
+bλemp true (s) − bλemp gen (s) ds. (S98) 
+
+C.3 1-Step-Ahead Point Estimates (MAE) 
+
+MAE and MSE evaluate the accuracy of 1-step-ahead point predictions of interarrival times. For each true event at position l in sequence n, the model defines a predictive distribution Fn,l conditional on the true past, from which we draw the S Monte Carlo samples bT:,n,l ∈ RS already used for CRPS. The natural point predictors are the median of Fn,l for MAE and its mean for MSE, which we estimate by their sample counterparts 
+
+bxMAE  
+
+> n,l
+
+= median   bT:,n,l 
+
+, bxMSE  
+
+> n,l
+
+= 1
+
+S
+
+> S
+
+X
+
+> s=1
+
+bTs,n,l . (S99) We report the per-event averages 
+
+MAE med = 1
+
+PNseq  
+
+> n=1
+
+ℓnNseq 
+
+X
+
+> n=1
+> ℓn
+
+X
+
+> l=1
+
+bxMAE  
+
+> n,l
+
+− T n,l , MSE mean = 1
+
+PNseq  
+
+> n=1
+
+ℓnNseq 
+
+X
+
+> n=1
+> ℓn
+
+X
+
+> l=1
+
+ bxMSE  
+
+> n,l
+
+− T n,l 
+
+2 .
+
+(S100) The sample median used in bxMAE  
+
+> n,l
+
+is a consistent but finite-S biased plug-in for the population median of Fn,l ; we take S large enough that this bias is negligible relative to the sequence-level Monte Carlo error. We also report the 1-step-ahead forecasting error: 
+
+\MAE = 1
+
+PNseq  
+
+> n=1
+
+ℓnNseq 
+
+X
+
+> n=1
+> ℓn
+
+X
+
+> l=1
+
+1
+
+S
+
+> S
+
+X
+
+> s=1
+
+bTs,n,l − T n,l 
+
+!
+
+. (S101) 
+
+C.4 Relative Score 
+
+Let s(i) 
+
+> A
+
+denote the score of model A on dataset i ∈ { 1,...,D }, and s(i)ref the score of a fixed reference model. The normalised score of model A is the geometric mean of per-dataset ratios: 
+
+¯sA =
+
+> D
+
+Y
+
+> i=1
+
+s(i)
+
+> A
+
+s(i)ref 
+
+! 1
+
+> D
+
+= exp 1
+
+D
+
+> D
+
+X
+
+> i=1
+
+log s(i)
+
+> A
+
+s(i)ref 
+
+!
+
+. (S102) A value ¯sA < 1 indicates that A outperforms the reference on average. Crucially, comparing two models A and B via the ratio of their normalised scores is independent of the choice of reference :
+
+¯sA
+
+¯sB
+
+=
+
+ Q  
+
+> i
+
+s(i) 
+
+> A
+
+/s (i)ref 
+
+1/D 
+
+ Q  
+
+> i
+
+s(i) 
+
+> B
+
+/s (i)ref 
+
+1/D =
+
+> D
+
+Y
+
+> i=1
+
+s(i)
+
+> A
+
+s(i)
+
+> B
+
+! 1
+
+> D
+
+, (S103) where the s(i)ref cancel [17]. 28 Table S1: Dataset statistics. K denotes the number of event types (marks).                                                                                                       
+
+> Dataset K# Events # Sequences Seq. Length Train Val Test Train Val Test Min Mean Max PS 314293 4796 4837 1200 400 400 212.0 24 IP 345232 14916 14944 3000 1000 1000 215.0 31 H1 157846 19432 19397 6000 2000 2000 29.7 39 H3 339357 12915 13061 1200 400 400 11 32.7 70 EQ 746358 6212 13845 3000 400 900 115.4 17 TB 17 72183 11272 27955 1300 200 500 27 55.7 63 TX 10 50454 7204 14420 1400 200 400 35 36.0 37 SO 22 88766 25266 26015 1401 401 401 38 63.6 100 YLP 110542 3550 3531 191 63 65 355.2 107
+
+## D Information about Datasets 
+
+We evaluate on 4 synthetic and 5 real-world datasets, spanning memoryless, time-varying, and self-exciting generative regimes. All synthetic datasets are split 60 %/20 %/20 % into training, validation, and test sets; real-world datasets use the splits described below. 0 2 4 6 8 10 12 
+
+> Time
+> 0
+> 5
+> 10
+> 15
+> Samples
+
+(a) 0 2 4 6 8 10 12      
+
+> Time
+> 0.00
+> 0.05
+> Intensity
+> 02468
+> Interarrival Time
+> 10 −2
+> 10 0
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S2: Diagnostics for the Poisson dataset (PS). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 
+
+Homogeneous Poisson (PS). We generate 2,000 event sequences from a homogeneous Poisson process on [0 ,T ] with horizon T = 12 and constant rate λ = 1 . Equivalently, interarrival times are sampled i.i.d. from Exp(1) .
+
+Inhomogeneous Poisson (IP). We generate 5,000 sequences from an inhomogeneous Poisson process on [0 ,T ] with T = 10 and piecewise-constant intensity 
+
+λ(t) = 1 + 1t≥T / 2 . (S104) Thus, the rate is 1 on the first half of the window and 2 on the second half. Sequences are simulated using the Lewis–Ogata thinning algorithm with upper bound ¯λ = 2 .29 0 2 4 6 8 10 
+
+> Time
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Samples
+
+(a) 0 2 4 6 8 10 
+
+Time    
+
+> 0.00
+> 0.05
+> 0.10
+> Intensity
+> 0246
+
+Interarrival Time  
+
+> 10 −3
+> 10 −1
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S3: Diagnostics for the inhomogeneous Poisson dataset (IP). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 0 5 10 15 20 
+
+> Time
+> 0
+> 5
+> 10
+> 15
+> 20
+> Samples
+
+(a) 0 5 10 15 20 
+
+Time     
+
+> 0.00
+> 0.02
+> 0.04
+> Intensity
+> 0510 15 20
+
+Interarrival Time  
+
+> 10 −3
+> 10 −1
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S4: Diagnostics for the Hawkes dataset (H1). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 30 0.0 2.5 5.0 7.5 10 .0 12 .5 15 .0
+
+> Time
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Samples
+
+(a) 0.0 2.5 5.0 7.5 10 .0 12 .5 15 .0
+
+Time    
+
+> 0.00
+> 0.05
+> Intensity
+> 0246
+
+Interarrival Time  
+
+> 10 −3
+> 10 −1
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S5: Diagnostics for the 3-dimensional Hawkes dataset (H3). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 0 20 40 60 80 
+
+> Time
+> 0
+> 5
+> 10
+> 15
+> Samples
+
+(a) 0 20 40 60 
+
+Time     
+
+> 0.00
+> 0.05
+> 0.10
+> Intensity
+> 0510 15 20
+
+Interarrival Time  
+
+> 10 −3
+> 10 −1
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S6: Diagnostics for the earthquake dataset (EQ). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 31 0 20 40 60 
+
+> Time
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Samples
+
+(a) 0 10 20 30 40 50 60 
+
+Time     
+
+> 0.00
+> 0.01
+> 0.02
+> Intensity
+> 0510 15 20
+
+Interarrival Time  
+
+> 10 −3
+> 10 0
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S7: Diagnostics for the Stack Overflow dataset (SO). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 0.0 2.5 5.0 7.5 10 .0 12 .5
+
+> Time
+> 0
+> 20
+> 40
+> 60
+> Samples
+
+(a) 0 2 4 6 8 10 12 
+
+Time      
+
+> 0.00
+> 0.25
+> 0.50
+> Intensity
+> 0.00.20.40.60.81.0
+
+Interarrival Time  
+
+> 10 −2
+> 10 0
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S8: Diagnostics for the Taobao dataset (TB). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 32 0 5 10 15 20 
+
+> Time
+> 0
+> 10
+> 20
+> 30
+> Samples
+
+(a) 0 5 10 15 20 
+
+Time       
+
+> 0.0
+> 0.1
+> Intensity
+> 0123456
+
+Interarrival Time  
+
+> 10 −3
+> 10 −1
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S9: Diagnostics for the Taxi dataset (TX). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 0 5 10 15 20 25 
+
+> Time
+> 0
+> 20
+> 40
+> 60
+> 80
+> Samples
+
+(a) 0 5 10 15 20 
+
+Time       
+
+> 0.00
+> 0.05
+> 0.10
+> Intensity
+> 0246810 12
+
+Interarrival Time  
+
+> 10 −2
+> 10 0
+> PDF
+
+(b) 0 2 4 6 8 10 
+
+> Lag
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Autocorrelation
+
+(c) Index Index  
+
+> −1.0
+> −0.50.00.51.0
+
+(d) 
+
+Figure S10: Diagnostics for the dataset Yelp (YLP). (a) Representative sample paths from the dataset. (b) Empirical temporal summaries. Top: intensity function. Bottom: interarrival times PDF. (c) Empirical autocorrelation of interarrival times. (d) Correlation structure between interarrival times. 33 Univariate Hawkes (H1). We generate 10 ,000 sequences from a univariate Hawkes process with exponential kernel, 
+
+λ(t | H t) = μ + α X
+
+> ti<t
+
+βe −β(t−ti) , (S105) using μ = 0 .3, α = 0 .4, β = 1 .0, and horizon T = 20 . Simulation is performed with the tick library. Since α < 1, the process is stationary. This setting introduces temporal clustering through self-excitation and tests whether a model can capture history-dependent intensities. 
+
+Multivariate Hawkes (H3). We generate 2,000 sequences from a 3-dimensional Hawkes process with exponential kernels using tick . The baseline intensities are μk = 0 .5 for all k, the decay parameters are βkℓ = 1 for all pairs (k,ℓ ), and the excitation matrix is 
+
+A =
+
+0.5 0.1 0.00.1 0.0 0.00.0 0.0 0.1
+
+!
+
+, (S106) with horizon T = 15 . The 3 component streams are merged into a single time-ordered event sequence, and the source dimension is used as a categorical mark ( K = 3 ). This dataset evaluates a model’s ability to capture both cross-excitation across dimensions and mark-dependent intensity structure. 
+
+Real-World Datasets Taxi (NYC TLC). Time-stamped taxi pick-up and drop-off events in New York City [ 54 ], partitioned by borough and action type into K = 10 event categories ( 5 boroughs × 2 actions). The subset comprises 2,000 randomly sampled drivers with a mean sequence length of 36 events. The standard EasyTPP train/validation/test split is used. 
+
+Stack Overflow. A dataset of user-interaction events on Stack Overflow, where event types correspond to distinct awarded-badge categories [54]. The standard EasyTPP train/validation/test split is used. 
+
+Taobao. User click sequences on the Taobao shopping platform, collected between 25 November and 3 December 2017 [ 54 ]. Item categories are ranked by frequency; the most frequent are retained and all remaining categories are merged into a single other class, yielding K = 17 event types. The subset comprises the 2,000 most active users with a mean sequence length of 56 events. The standard EasyTPP train/validation/test split is used. 
+
+Earthquake. Time-stamped seismic events recorded across the Conterminous United States from 1996 to 2023, derived from the USGS catalogue [ 54 ]. The standard EasyTPP train/validation/test split is used. 
+
+Yelp-Mississauga (YLP). This real-world dataset, taken from the EDITPP benchmark, contains user check-in event sequences for businesses in the city of Mississauga during 2018. Following the EDITPP convention, it is treated as an unmarked temporal point process ( K = 1 ), where each sequence consists only of ordered check-in times. 
+
+D.1 Training Details Optimisation . All experiments were optimised using the Adam optimiser [ 28 ], with learning rates tailored to each specific task. The choice of learning rate was determined via grid search on the respective validation set. 
+
+Code Availability . The complete source code is available at 
+
+github.com/Code-Cornelius/sigtpp .
+
+Software Environment . All numerical experiments were conducted on a system running Ubuntu 24.04.4 LTS with Python 3.8 and PyTorch 1.12.1+cu116. CUDA was available through PyTorch, with cuDNN version 8302. 
+
+Hardware Infrastructure. The machine was equipped with 3 NVIDIA L40S GPUs, each with 46,068 MiB of VRAM, using NVIDIA driver version 580.126.09 and compute capability 8.9. The system was powered by dual AMD EPYC 9354 32-core processors, providing 128 CPU threads in total, with a maximum CPU frequency of 3.80 GHz. It had 755 GiB of RAM and NVMe SSD storage, consisting of one 11.6 TB drive and four 3.5 TB drives. We adapted the code of Lin et al. [31] for some of the baselines (WGAN), correcting several bugs; our implementation consequently deviates from the original. 34 Hyperparameter tuning: 
+
+Table S2: Hyperparameter search grid for all models. † Fixed value, not searched. Model Hyperparameter Values WGAN Generator LR ηG 10 −4, 5 · 10 −5, 10 −5
+
+Discriminator LR ηD 10 −2, 10 −3, 10 −4
+
+Hidden size 16 , 32 
+
+Lipschitz reg. λ 10 −2, 10 −3, 10 −4
+
+DETER Learning rate η 10 −2, 10 −4
+
+Hidden size 8, 16 , 32 
+
+GAMMA Learning rate η 1, 10 −2, 10 −4
+
+VAE Learning rate η 10 −2, 10 −3, 10 −4
+
+Hidden size 16 , 32 
+
+Latent dimension 8, 16 
+
+Reconstruction weight 0.01 , 0.1, 1, 10 
+
+KL annealing epochs † 50 
+
+Free bits † 0.1
+
+DDPM Learning rate η 10 −3, 10 −4, 10 −5
+
+Hidden size 16 , 32 
+
+Diffusion steps T 10 , 50 , 100 
+
+Batch size 1024 , 4096 , 30000 
+
+SIG TPP Generator LR ηG 10 −3, 5 · 10 −4, 10 −4
+
+Hidden size 16 , 32 
+
+Signature degree † 8
+
+Teacher forcing True, False Terminal anchor free, residual Detach cumulative channel True, False 
+
+Notes on S IG TPP hyperparameters. The terminal anchor controls how the endpoint of each path is handled before computing the signature. The theoretical analysis uses the Φ-embedded representation on a fixed compact domain, which is the setting covered by the stability results. In the implementation, we evaluate two path representations during validation. The residual setting uses the Φ-based terminal anchor, while the free setting computes signatures directly over the observed variable-length interval ending at the last cumulative time. Both options are included in the search because the preferred representation is dataset-dependent. The teacher forcing flag controls the training mode of the generator. Because the generator is trained on full observed sequences, it can be conditioned on ground-truth past events at each step (teacher forcing, True ), or it can consume its own previously generated inter-arrival times autoregressively ( False ). Teacher forcing typically stabilises early training, while the autoregressive mode better matches the inference regime. Finally, the detach cumulative channel flag controls whether the cumulative-time channel (the t coordinate of the path fed to the signature) is detached from the automatic differentiation graph during training; this prevents gradients from flowing back through the time axis of the path, which can stabilise training when the cumulative channel dominates the gradient signal. 35 Table S3: Performance comparison of S IG TPP against various baselines on synthetic TPP tasks (PS, IP, H1, H3) and real-world TPP tasks (EQ, SO, TB, TX, YLP). We report MAE, MAE med , and MSE mean (see Appendix C for metric definitions). Values report standard error in parentheses over 100 bootstrap replicates. Lower is better (↓). The best result for each dataset and metric pair is bolded ,and the second-best is underlined. 
+
+Model PS IP H1 H3 EQ SO TB TX YLP MAE ( ×10 −1) MAE ( ×10 −1)SIG TPP 9.25 (0.08) 6.01 (0.03) 23.21 (0.16) 4.90 (0.04) 11.34 (0.21) 10.26 (0.17) 1.01 (0.02) 2.26 (0.02) 5.33 (0.17) 
+
+VAE 8.88 (0.08) 5.61 (0.03) 18.59 (0.12) 4.50 (0.04) 9.57 (0.19) 8.78 (0.14) 0.67 (0.01) 2.00 (0.02) 4.88 (0.14) 
+
+DDPM 10.77 (0.08) 6.91 (0.03) 20.87 (0.12) 4.99 (0.04) 15.02 (0.29) 11.19 (0.16) 0.71 (0.01) 2.16 (0.02) 6.04 (0.16) 
+
+WGAN 8.90 (0.08) 5.73 (0.03) 18.29 (0.14) 4.47 (0.04) 13.08 (0.19) 8.97 (0.12) 0.71 (0.01) 2.25 (0.02) 5.26 (0.15) 
+
+DETER 6.29 (0.11) 4.25 (0.03) 12.82 (0.15) 3.23 (0.04) 6.98 (0.17) 6.51 (0.13) 0.42 (0.01) 1.49 (0.02) 3.66 (0.15) 
+
+GAMMA 9.15 (0.08) 6.52 (0.03) 19.60 (0.11) 4.83 (0.03) 14.20 (0.09) 10.08 (0.08) 0.71 (0.01) 2.16 (0.02) 6.55 (0.11) 
+
+MAE med (×10 −1) MAE med (×10 −1)SIG TPP 6.37 (0.11) 4.22 (0.04) 14.28 (0.14) 3.38 (0.04) 7.51 (0.16) 7.18 (0.12) 0.68 (0.02) 1.49 (0.02) 3.97 (0.14) 
+
+VAE 6.35 (0.11) 4.18 (0.04) 12.52 (0.15) 3.18 (0.04) 6.92 (0.17) 6.40 (0.12) 0.42 (0.01) 1.38 (0.02) 3.68 (0.14) 
+
+DDPM 6.46 (0.11) 4.28 (0.04) 11.94 (0.16) 3.04 (0.04) 6.14 (0.15) 6.20 (0.13) 0.40 (0.01) 1.49 (0.02) 3.59 (0.15) 
+
+WGAN 6.28 (0.11) 4.13 (0.04) 12.72 (0.16) 3.21 (0.04) 7.55 (0.17) 6.68 (0.12) 0.42 (0.01) 1.49 (0.02) 3.78 (0.14) 
+
+DETER 6.29 (0.11) 4.25 (0.03) 12.82 (0.15) 3.23 (0.04) 6.98 (0.17) 6.51 (0.13) 0.42 (0.01) 1.49 (0.02) 3.66 (0.15) 
+
+GAMMA 6.33 (0.11) 4.37 (0.04) 13.06 (0.15) 3.27 (0.04) 8.16 (0.13) 6.64 (0.11) 0.43 (0.01) 1.49 (0.02) 3.91 (0.16) 
+
+MSE mean (×10 −1) MSE mean (×10 −1)SIG TPP 8.31 (0.34) 3.86 (0.08) 56.40 (0.93) 2.83 (0.09) 16.80 (0.78) 13.02 (0.39) 0.27 (0.01) 0.88 (0.05) 9.53 (0.79) 
+
+VAE 8.27 (0.35) 3.68 (0.09) 41.53 (0.97) 2.42 (0.08) 14.73 (0.74) 9.88 (0.37) 0.16 (0.01) 0.82 (0.05) 7.71 (0.74) 
+
+DDPM 9.05 (0.32) 4.11 (0.09) 43.15 (0.99) 2.25 (0.08) 15.47 (0.63) 9.78 (0.34) 0.15 (0.01) 0.83 (0.05) 8.26 (0.77) 
+
+WGAN 8.10 (0.34) 3.62 (0.08) 42.59 (0.98) 2.46 (0.08) 18.20 (0.99) 11.42 (0.39) 0.16 (0.01) 0.90 (0.05) 8.55 (0.71) 
+
+DETER 8.84 (0.40) 3.66 (0.07) 45.13 (1.16) 2.65 (0.09) 16.94 (0.83) 12.02 (0.49) 0.17 (0.01) 0.93 (0.06) 9.32 (0.81) 
+
+GAMMA 8.29 (0.35) 4.18 (0.09) 44.51 (1.00) 2.54 (0.08) 18.94 (0.65) 10.85 (0.34) 0.16 (0.01) 0.90 (0.05) 9.65 (0.77) Average E W1 Sig -W1 CRPS Lλ Llog( τ ) ACD PCD 0.00 0.25 0.50 0.75 
+
+> Relative Score
+> Synthetic
+> Model
+> SigTPP VAE DDPM WGAN Gamma
+
+Figure S11: Relative scores with respect to D ETER , on synthetic datasets, plotting values reported in Table S6. The leftmost group shows the average relative score across all metrics, followed by the metric-wise scores for all 8 metrics, see Appendix C. Bars compare the different models. Lower is better. Average E W1 Sig -W1 CRPS Lλ Llog( τ ) ACD PCD 0.00 0.25 0.50 0.75 
+
+> Relative Score
+> Real
+> Model
+> SigTPP VAE WGAN DDPM Gamma
+
+Figure S12: Relative scores with respect to D ETER , on real-world datasets, plotting values reported in Table S6. The leftmost group shows the average relative score across all metrics, followed by the metric-wise scores for all 8 metrics, see Appendix C. Bars compare the different models. Lower is better. 36 Table S4: First inactive signature degree M all per dataset, defined as the first degree m for which all 
+
+Dm coordinates have empirical standard deviation below 10 −8 across the training set. 
+
+Dataset PS IP H1 H3 EQ SO TB TX YLP 
+
+M all 8 8 >8 6 >8 6 6 7 6
+
+Table S5: Average ranks by metric comparing the neural models S IG TPP, VAE, DDPM, and WGAN, aggregated over synthetic datasets, real-world datasets, and all datasets. Values report the mean rank and standard deviation over datasets in parentheses. Lower is better (↓). Best mean ranks for each metric and split are bolded , and second best are underlined. 
+
+Metric SIG TPP  
+
+> (Synth: 2.03, Real: 2.25, All: 2.15)
+
+VAE  
+
+> (Synth: 2.38, Real: 2.45, All: 2.42)
+
+DDPM  
+
+> (Synth: 3.59, Real: 2.88, All: 3.19)
+
+WGAN 
+
+> (Synth: 3.41, Real: 3.17, All: 3.28)
+
+Synth. Real All Synth. Real All Synth. Real All Synth. Real All 
+
+E 1.0 (0.0) 2.2 (0.8) 1.7 (0.9) 2.5 (0.6) 3.2 (1.6) 2.9 (1.3) 3.3 (1.0) 2.2 (1.1) 2.7 (1.1) 4.0 (1.4) 2.8 (1.6) 3.3 (1.6) 
+
+W1 1.0 (0.0) 1.4 (0.9) 1.2 (0.7) 2.5 (0.6) 3.0 (1.0) 2.8 (0.8) 3.8 (1.3) 2.8 (1.1) 3.2 (1.2) 3.8 (1.5) 3.0 (1.4) 3.3 (1.4) 
+
+Sig -W1 2.0 (2.0) 1.4 (0.9) 1.7 (1.4) 2.5 (0.6) 3.0 (1.6) 2.8 (1.2) 4.0 (1.8) 4.2 (1.5) 4.1 (1.5) 3.5 (1.0) 3.0 (0.7) 3.2 (0.8) 
+
+CRPS 4.3 (1.0) 4.2 (1.3) 4.2 (1.1) 2.3 (0.5) 1.6 (0.6) 1.9 (0.6) 2.8 (2.1) 1.4 (0.6) 2.0 (1.5) 2.0 (1.2) 3.6 (0.6) 2.9 (1.2) 
+
+Lλ 1.5 (0.6) 1.8 (0.5) 1.7 (0.5) 2.5 (1.3) 2.6 (1.5) 2.6 (1.3) 3.8 (1.3) 2.6 (1.1) 3.1 (1.3) 4.0 (1.2) 3.6 (2.0) 3.8 (1.6) 
+
+Llog( τ ) 1.3 (0.5) 3.0 (1.6) 2.2 (1.5) 3.3 (1.0) 2.2 (1.8) 2.7 (1.5) 4.5 (1.0) 3.4 (1.1) 3.9 (1.2) 3.3 (1.0) 3.0 (1.0) 3.1 (0.9) 
+
+ACD 2.8 (1.0) 1.6 (0.9) 2.1 (1.1) 1.8 (1.0) 2.4 (1.1) 2.1 (1.1) 3.5 (0.6) 3.0 (1.0) 3.2 (0.8) 3.3 (2.1) 3.2 (1.5) 3.2 (1.6) 
+
+PCD 2.5 (1.3) 2.4 (1.7) 2.4 (1.4) 1.8 (1.0) 1.6 (0.6) 1.7 (0.7) 3.3 (1.3) 3.4 (0.9) 3.3 (1.0) 3.5 (1.7) 3.2 (1.5) 3.3 (1.5) 
+
+Table S6: Geometric relative scores against D ETER by metric for S IG TPP, VAE, DDPM, WGAN, and GAMMA , aggregated over synthetic datasets, real-world datasets, and both simultaneously. Lower is better (↓). Best values within each metric and split are bolded , and second best are underlined . The final row is the geometric average across metrics and datasets. 
+
+Metric SIG TPP VAE DDPM WGAN GAMMA 
+
+Synth. Real All Synth. Real All Synth. Real All Synth. Real All Synth. Real All 
+
+E 0.003 0.134 0.024 0.020 0.148 0.061 0.021 0.155 0.064 0.032 0.228 0.095 0.047 0.257 0.121 
+
+W1 0.204 0.339 0.270 0.249 0.359 0.305 0.259 0.392 0.326 0.288 0.430 0.360 0.300 0.466 0.383 
+
+Sig -W1 0.138 0.104 0.118 0.226 0.149 0.180 0.705 0.626 0.660 0.687 0.284 0.421 0.663 0.808 0.740 CRPS 0.768 0.894 0.835 0.720 0.751 0.737 0.723 0.740 0.733 0.721 0.807 0.767 0.746 0.832 0.793 
+
+Lλ 0.313 0.387 0.352 0.406 0.382 0.393 0.534 0.418 0.466 0.665 0.425 0.519 0.538 0.752 0.648 
+
+Llog( τ ) 0.040 0.121 0.074 0.071 0.109 0.090 0.083 0.143 0.112 0.076 0.141 0.107 0.060 0.162 0.104 ACD 0.035 0.037 0.036 0.030 0.046 0.038 0.042 0.059 0.051 0.038 0.049 0.044 0.057 0.092 0.074 PCD 0.071 0.117 0.094 0.071 0.118 0.094 0.072 0.139 0.104 0.074 0.125 0.099 0.074 0.155 0.111 Avg. 0.081 0.174 0.124 0.122 0.185 0.154 0.157 0.247 0.202 0.168 0.231 0.201 0.177 0.330 0.250 
+
+37 0 5      
+
+> 10 −2
+> 10 0
+> PDF
+> Target
+> 05
+> SigTPP
+> 05
+> WGAN
+> 05
+> DDPM
+> 05
+> VAE
+> 05
+> DETER
+> 05
+> GAMMA
+> Interarrival Time
+
+(a) 0 10       
+
+> 0.0
+> 2.1
+> 4.2
+> 6.2
+> Intensity  Target
+> 010
+> SigTPP
+> 010
+> WGAN
+> 010
+> DDPM
+> 010
+> VAE
+> 010
+> DETER
+> 010
+> GAMMA
+> Time
+
+(b) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Index
+
+(c) 1 2 3 4 5   
+
+> Lags
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(d) 
+
+Figure S13: Qualitative evaluation on H3. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Empirical intensity functions ˆλ(t) estimated from the same sequences. (c) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (d) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 38 0 20       
+
+> 10 −3
+> 10 −1
+> PDF
+> Target
+> 020
+> SigTPP
+> 020
+> WGAN
+> 020
+> DDPM
+> 020
+> VAE
+> 020
+> DETER
+> 020
+> GAMMA
+> Interarrival Time
+
+(a) 0 5 10 15                
+
+> 0
+> 5
+> 10
+> 15
+> Sampled Quantiles  SigTPP
+> 0510 15
+> WGAN
+> 0510 15
+> DDPM
+> 0510 15
+> VAE
+> 0510 15
+> DETER
+> 0510 15
+> GAMMA
+> Target Quantiles
+
+(b) 0 50       
+
+> 0.0
+> 1.8
+> 3.6
+> Intensity  Target
+> 050
+> SigTPP
+> 050
+> WGAN
+> 050
+> DDPM
+> 050
+> VAE
+> 050
+> DETER
+> 050
+> GAMMA
+> Time
+
+(c) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> Index
+
+(d) 1 2 3 4 5   
+
+> Lags
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(e) 
+
+Figure S14: Qualitative evaluation on EQ. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Quantile-quantile (QQ) plots. Each subplot shows empirical quantiles of generated samples ( x-axis) against the reference quantiles of the data (y-axis); the red dashed line is the identity y = x. (c) Empirical intensity functions ˆλ(t) estimated from the same sequences. (d) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (e) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 39 0 10 20             
+
+> 10 −2
+> 10 0
+> PDF
+> Target
+> 010 20
+> SigTPP
+> 010 20
+> WGAN
+> 010 20
+> DDPM
+> 010 20
+> VAE
+> 010 20
+> DETER
+> 010 20
+> GAMMA
+> Interarrival Time
+
+(a) 0 10      
+
+> 0
+> 5
+> 10
+> 15
+> Sampled Quantiles  SigTPP
+> 010
+> WGAN
+> 010
+> DDPM
+> 010
+> VAE
+> 010
+> DETER
+> 010
+> GAMMA
+> Target Quantiles
+
+(b) 0 50       
+
+> 0.0
+> 1.0
+> 1.9
+> 2.9
+> Intensity  Target
+> 050
+> SigTPP
+> 050
+> WGAN
+> 050
+> DDPM
+> 050
+> VAE
+> 050
+> DETER
+> 050
+> GAMMA
+> Time
+
+(c) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Index
+
+(d) 1 2 3 4 5   
+
+> Lags
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(e) 
+
+Figure S15: Qualitative evaluation on SO. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Quantile-quantile (QQ) plots. Each subplot shows empirical quantiles of generated samples ( x-axis) against the reference quantiles of the data (y-axis); the red dashed line is the identity y = x. (c) Empirical intensity functions ˆλ(t) estimated from the same sequences. (d) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (e) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 40 0 1      
+
+> 10 −2
+> 10 0
+> PDF
+> Target
+> 01
+> SigTPP
+> 01
+> WGAN
+> 01
+> DDPM
+> 01
+> VAE
+> 01
+> DETER
+> 01
+> GAMMA
+> Interarrival Time
+
+(a) 0 1     
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> Sampled Quantiles  SigTPP
+> 01
+> WGAN
+> 01
+> DDPM
+> 01
+> VAE
+> 01
+> DETER
+> 01
+> GAMMA
+> Target Quantiles
+
+(b) 0 10       
+
+> 0.0
+> 38.5
+> 76.9
+> Intensity  Target
+> 010
+> SigTPP
+> 010
+> WGAN
+> 010
+> DDPM
+> 010
+> VAE
+> 010
+> DETER
+> 010
+> GAMMA
+> Time
+
+(c) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> Index
+
+(d) 1 2 3 4 5   
+
+> Lags
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(e) 
+
+Figure S16: Qualitative evaluation on Taobao. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Quantile-quantile (QQ) plots. Each subplot shows empirical quantiles of generated samples ( x-axis) against the reference quantiles of the data (y-axis); the red dashed line is the identity y = x. (c) Empirical intensity functions ˆλ(t) estimated from the same sequences. (d) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (e) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 41 0 5      
+
+> 10 −2
+> 10 0
+> PDF
+> Target
+> 05
+> SigTPP
+> 05
+> WGAN
+> 05
+> DDPM
+> 05
+> VAE
+> 05
+> DETER
+> 05
+> GAMMA
+> Interarrival Time
+
+(a) 0.0 2.5 5.0          
+
+> 0
+> 2
+> 4
+> Sampled Quantiles  SigTPP
+> 0.02.55.0
+> WGAN
+> 0.02.55.0
+> DDPM
+> 0.02.55.0
+> VAE
+> 0.02.55.0
+> DETER
+> 0.02.55.0
+> GAMMA
+> Target Quantiles
+
+(b) 0 20       
+
+> 0.0
+> 2.7
+> 5.4
+> 8.2
+> Intensity  Target
+> 020
+> SigTPP
+> 020
+> WGAN
+> 020
+> DDPM
+> 020
+> VAE
+> 020
+> DETER
+> 020
+> GAMMA
+> Time
+
+(c) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> Index
+
+(d) 1 2 3 4 5   
+
+> Lags
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(e) 
+
+Figure S17: Qualitative evaluation on Taxi. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Quantile-quantile (QQ) plots. Each subplot shows empirical quantiles of generated samples ( x-axis) against the reference quantiles of the data (y-axis); the red dashed line is the identity y = x. (c) Empirical intensity functions ˆλ(t) estimated from the same sequences. (d) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (e) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 42 0 10       
+
+> 10 −1
+> 10 1
+> PDF
+> Target
+> 010
+> SigTPP
+> 010
+> WGAN
+> 010
+> DDPM
+> 010
+> VAE
+> 010
+> DETER
+> 010
+> GAMMA
+> Interarrival Time
+
+(a) 0 5 10           
+
+> 0
+> 5
+> 10
+> Sampled Quantiles  SigTPP
+> 0510
+> WGAN
+> 0510
+> DDPM
+> 0510
+> VAE
+> 0510
+> DETER
+> 0510
+> GAMMA
+> Target Quantiles
+
+(b) 0 20       
+
+> 0.0
+> 4.0
+> 8.0
+> 12.0
+> Intensity  Target
+> 020
+> SigTPP
+> 020
+> WGAN
+> 020
+> DDPM
+> 020
+> VAE
+> 020
+> DETER
+> 020
+> GAMMA
+> Time
+
+(c) Index      
+
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Index
+
+(d) 1 2 3 4 5   
+
+> Lags
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ∆ACF
+> Interarrival times τ
+> SigTPP WGAN DDPM VAE DETER GAMMA
+> ∆Target
+
+(e) 
+
+Figure S18: Qualitative evaluation on Yelp. The top row shows S IG TPP, WGAN, and DDPM; the bottom row shows VAE, D ETER , and G AMMA . (a) Histogram estimates of the interarrival times density p(x) on a logarithmic scale; the leftmost panel shows the target distribution, the others the distributions of samples generated by each model. (b) Quantile-quantile (QQ) plots. Each subplot shows empirical quantiles of generated samples ( x-axis) against the reference quantiles of the data (y-axis); the red dashed line is the identity y = x. (c) Empirical intensity functions ˆλ(t) estimated from the same sequences. (d) Absolute Pearson correlation-matrix differences for the first 20 indices. Each heatmap entry shows the absolute difference between the empirical correlation of two sequence components in the generated samples and in the reference data. (e) Absolute autocorrelation error for 
+
+5 lags. Each curve shows the difference between the ACF of the indicated model and the empirical ACF of the reference process, so that the target corresponds to the horizontal line at zero. 43 E Limitations 
+
+A primary limitation of our approach is the computational cost of the truncated signature transform, whose feature dimension scales exponentially with the truncation depth M and polynomially with the path dimension d. This may hinder direct extension to high-dimensional or marked TPPs. Second, our current embedding relies on a linear interpolation lift. While effective in practice, this lift introduces an artificial continuous transition at jump times and is therefore not fully faithful to the jump structure of the process. Third, our theoretical analysis relies on a determinacy property of the pushforward law of the temporal point process under the embedding, but such determinacy conditions are already difficult to verify in practice even for continuous processes, and we do not investigate them further here. Finally, our theoretical bounds are preliminary and likely conservative: the constants are loose, and a sharper characterisation of the embedding remains open. A better understanding of how the required truncation degree depends on the nature of the temporal point process, together with the relationship between moment conditions and the law of the process, are promising directions for future work. 44
