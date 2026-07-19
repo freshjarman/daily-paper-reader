@@ -1,0 +1,654 @@
+Title: Reachability-Aware Pretraining for Efficient Target-Oriented Path Exploration in Temporal Knowledge Graph Reasoning
+
+URL Source: https://arxiv.org/pdf/2607.14886v1
+
+Published Time: Fri, 17 Jul 2026 01:45:24 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+## Reachability-Aware Pretraining for Efficient Target-Oriented Path Exploration in Temporal Knowledge Graph Reasoning 
+
+Chien-Liang Liu 1 and Tsao-Lun Chen 2,3 
+
+> 1
+
+Artificial Intelligence Research Center, Chang Gung University, 
+
+> 2
+
+Graduate Institute of Oral Biology, National Taiwan University, 
+
+> 3
+
+Electrical Engineering, National Taiwan University of Science and Technology 
+
+liucl@cgu.edu.tw , r14450024@ntu.edu.tw 
+
+Abstract 
+
+Temporal Knowledge Graph (TKG) reason-ing under the extrapolation setting focuses on forecasting future time-stamped events (facts) from historical data in a temporal knowledge graph. Existing approaches, reinforcement learning (RL)-based multi-hop reasoning meth-ods are prominent for TKG reasoning because they produce human-interpretable predictions via explicit multi-hop path tracing. How-ever, during RL training, rewards are typi-cally sparse, and exploration is highly inef-ficient due to the vast, time-evolving action space. These issues hinder efficient train-ing and often limit overall performance. To address these challenges, we propose RAP-TOR (Reachability-Aware Pretraining for Ef-ficient Target-OR iented Path Exploration), a self-supervised pretraining method that injects a reachability-aware inductive bias to the agent. By learning to estimate the reachability of can-didate actions to the target entity, RAPTOR reduces exploration over unpromising paths and provides a strong initialization for down-stream RL fine-tuning. Experimental results on the ICEWS14, ICEWS05-15, and ICEWS18 datasets demonstrate that RAPTOR pretraining markedly improves the training efficiency and consistently outperforms conventional base-lines, establishing it as an effective approach for enhancing RL-based multi-hop reasoning methods for TKG reasoning. 
+
+1 Introduction 
+
+Temporal Knowledge Graphs (TKGs) have emerged as a pivotal graph-based data structure for modeling dynamic relationships that evolve over time. Formally, a TKG is composed of events, and each event is represented in a quadruple (subject, relation, object, timestamp). Compared to static knowledge graphs, TKGs incorporate the tempo-ral information, enabling systems to capture how events change over time. As a result, TKGs have been widely used in downstream applications, such 
+
+Figure 1: Example of multi-hop reasoning in TKGs. 
+
+as recommendation systems (Hu et al., 2024) and question answering (Saxena et al., 2021; Liu et al., 2023). In this work, we focus on TKG reasoning un-der the extrapolation setting, where the goal is to answer a query (eq, r q, ?, t q) by predicting the missing entity using only events with timestamps 
+
+t < t q. Prior work has proposed a variety of ap-proaches for this task (Zhu et al., 2021; Jin et al., 2020; Li et al., 2021a); however, these methods are typically less interpretable because they do not explicitly expose the underlying reasoning pro-cess. In contrast, multi-hop reasoning methods (Sun et al., 2021; Bai et al., 2021; Zheng et al., 2023; Tao et al., 2021) output explicit temporal paths as evidence, which can reveal why a predic-tion is made and provide human-checkable support-ing events. As shown in Figure 1, given a query 
+
+(COVID19 , occur_at , ?, 2022-10-17 ), a multi-hop reasoner predicts the missing object by outputting a path that starts from the subject entity (" COVID19 ") and ends at the predicted entity (e.g., " Restaurant A"). However, multi-hop reasoning methods comes 1arXiv:2607.14886v1 [cs.AI] 16 Jul 2026 with a major optimization challenge. At each time step, the agent must choose from a large set of timestamped outgoing edges, and the number of possible trajectories grows exponentially with the hop budget. Moreover, TKG reasoning usually in-corporates temporal validity (e.g., non-decreasing timestamps) so the action space is not only large but also time-dependent : an outgoing edge at one entity may become invalid due to timestamp constraints. As a result, most sampled trajectories terminate without receiving a reward, leading to sparse ter-minal rewards and slow, unstable reinforcement learning (RL) training. To address this, we propose RAPTOR , to the best of our knowledge the first self-supervised pretraining method tailored for RL-based multi-hop reasoning on TKGs. RAPTOR injects a 
+
+reachability-aware inductive bias into the agent by pretraining the policy to estimate whether each can-didate action can reach the target entity within the hop budget while satisfying temporal constraints. This pretraining objective directly mitigates the wasted exploration problem: unreachable actions (i.e., those with no temporally valid path to the tar-get entity within K steps) are down-weighted early, so the subsequent RL phase focuses on feasible parts of the graph. Our contributions: (i) we introduce areachability-based self-supervised task for tem-poral multi-hop reasoning, (ii) we design an efficient labeling procedure to construct reacha-bility supervision under temporal constraints, and (iii) we demonstrate consistent improvements in both convergence speed and final accuracy on ICEWS14, ICEWS05-15, and ICEWS18. 
+
+2 Related works 
+
+2.1 Multi-hop Reasoning on Static Knowledge Graphs 
+
+Multi-hop reasoning on static knowledge graphs is often trained with RL, but it typically suffers from sparse terminal rewards and large action spaces. To improve exploration, prior work introduces denser guidance before or during RL. DeepPath (Xiong et al., 2017) mines paths between source and tar-get entities using bidirectional breadth-first search (BFS) and then pretrains the agent via supervised imitation of these paths, which increases the proba-bility of sampling rewarding trajectories during RL. Multi-hop KG (Lin et al., 2018) performs reward shaping with embedding-based scores, assigning soft rewards to non-target entities to provide more informative feedback. SSRL (Ma et al., 2025) uses BFS-derived label to identify actions with high-expected-return at each state and pretrains the pol-icy to encourage efficient exploration. However, these methods do not consider temporal constraints and thus cannot be applied to TKG reasoning. 
+
+2.2 Temporal Knowledge Graph Reasoning 
+
+Unlike static knowledge graphs, TKGs attach timestamps to events, which leads to different set-tings (interpolation and extrapolation) in TKG rea-soning. The interpolation setting aims to predict missing object entity at historical records (Leblay and Chekol, 2018; García-Durán et al., 2018; Lacroix et al., 2020; Goel et al., 2020). In con-trast, the extrapolation setting focuses on forecast-ing future events using past observations; in this work, we adopt the extrapolation setting. Previous works explore diverse modeling paradigms for ex-trapolation. For example, Han et al. (2021) studies explainable TKG reasoning by providing human-interpretable rationales, while Jin et al. (2020); Li et al. (2021a) model temporal dynamics with re-current and relational GNN architectures. CyGNet (Zhu et al., 2021) further adopts a generative fore-casting framework to predict future events from historical sequences. 
+
+2.3 Multi-hop Reasoning on Temporal Knowledge Graphs 
+
+Similar to knowledge graph reasoning, multi-hop reasoning on TKGs is typically trained with RL, but it must additionally satisfy temporal constraints. As a result, the agent operates in a time-dependent action space, which makes RL optimization chal-lenging under sparse rewards. As a basic RL for-mulation, TAgent (Tao et al., 2021) applies the multi-hop agent framework to TKGs without us-ing additional auxiliary signals. Prior work has also attempted to improve training efficiency; for example, TITer (Sun et al., 2021) incorporates time-shaped rewards, TPath (Bai et al., 2021) adds a path reward, and DREAM (Zheng et al., 2023) lever-ages demonstration paths with adversarial imitation learning. However, these techniques introduce ad-ditional guidance during RL training, meaning the agent must learn effective exploration behaviors on the fly, which can increase the reliance on careful signal design due to the potential interference with other training objectives. 23 Preliminaries 
+
+3.1 Temporal Knowledge Graphs 
+
+A TKG is a collection of time-stamped events, de-noted by graph G = ( E, R, T , Q), where E, R,
+
+T , and Q represent the sets of entities, relations, timestamps, and events, respectively. The set of events Q ⊆ E × R × E × T contains quadruples 
+
+(es, r, e o, t ), representing a relation r between en-tity es and entity eo at timestamp t. In this work, the notation t < ˆt denotes that timestamp t pre-cedes ˆt (i.e., the event at t occurs earlier than the one at ˆt). Following Liu et al. (2022); Sun et al. (2021), we augment the TKG with inverse edges. For each quadruple (es, r, e o, t ) ∈ Q , we add a correspond-ing inverse quadruple (eo, r −1, e s, t ) to the graph, where r−1 denotes the inverse relation of r.
+
+3.2 Temporal Path 
+
+We define a temporal path as a sequence of quadru-ples that is temporally valid. Following the settings in Sun et al. (2021); Han et al. (2021); Lin et al. (2023), a temporal path is considered valid only if the timestamps of consecutive quadruples follow a non-decreasing order. Formally, a temporal path of length n is denoted as a sequence of quadruples: 
+
+ (ei−1, r i, e i, t i)ni=1 ,
+
+where ti−1 ≤ ti, ∀i ∈ { 1, . . . , n }. (1) where t0 is the initial timestamp, e0 represents the source entity, and (ei−1, r i, e i, t i) ∈ Q represents the i-th quadruple in the path. 
+
+3.3 Problem Formulation 
+
+Given a graph G and a query q = ( eq, r q, ?, t q),the goal of TKG reasoning is to infer the missing object entity oq. As mentioned in Section 1, we focus on the extrapolation setting. In this setting, for a query at timestamp tq, the model is restricted to accessing historical events that occurred before the query timestamp. Formally, the set of available historical events H is defined as: 
+
+H = {(es, r, e o, t ) ∈ Q | t < t q} (2) Accordingly, we train the model to estimate the conditional probability of candidate entities and maximize the likelihood of the ground-truth entity 
+
+oq given q and H:
+
+max  
+
+> θ
+
+P (oq | eq, r q, t q, H) (3) Specifically, RL-based multi-hop reasoning methods typically formulate the reasoning task as a Markov Decision Process (MDP). We cast the prediction process as a sequential decision-making task, where the agent starts at eq and reaches the target oq after executing consecutive actions, as illustrated in Figure 1. 
+
+3.4 Reinforcement Learning Framework 
+
+In RL phase, we formulate the prediction process as a MDP. The MDP process is represented by a 4-tuple (S, A, P, R ), where S, A, P and R denote the state space, action space, transition function, and reward function, respectively. Each component is elaborated as follows. 
+
+3.4.1 States 
+
+The state s ∈ S is defined as a 5-tuple 
+
+(ξ, k, e k, t k, v k). Here, ξ = ( eq, r q, t q) is the query information. The scalar k ∈ { 0, . . . , K } denotes the time step in the MDP and also the current path length, where K is the maximum path length. The pair (ek, t k) denotes the current entity and times-tamp. Finally, vk = {e0, . . . , e k} is the set of vis-ited entities. At initialization, we set e0 = eq,
+
+t0 = 0 , and v0 = {e0}. We reindex timestamps by shifting the earliest time to 0, so t0 = 0 cor-responds to the earliest timestamp in the graph. Therefore, the initial state is (ξ, 0, e 0, t 0, v 0).
+
+3.4.2 Actions 
+
+The action space A is defined as a set of all possible actions. The set of candidate actions As ⊆ A is dependent on the current state s. In practice, As
+
+corresponds to outgoing edges from ek. To encour-age efficiency and non-redundant exploration, we enforce the path to be a simple path by masking ac-tions that revisit previously visited entities, except the self-loop action S TOP . Specifically, we define 
+
+As = {(e′, r ′, t ′) | (ek, r ′, e ′, t ′) ∈ Q, t k ≤ t′ <tq, e ′̸ ∈ vk} ∪ { STOP }. The self-loop action S TOP 
+
+= ( rstop , e k, t k) allow agent to stay in place. 
+
+3.4.3 Transition 
+
+The environment updates the state according to the action selected by the agent. The transition function P : S × A → S is defined as follows. Given a state s and an action a = ( e′, r ′, t ′) ∈ As,the next state s′ is 
+
+s′ = P (s, a ) = ( ξ, k + 1 , e k+1 , t k+1 , v k+1 ),
+
+3where ek+1 = e′, tk+1 = t′, and the visited-entity set is updated as vk+1 = vk ∪ { e′}. If k = K, the episode terminates without taking the K-th action. 
+
+3.4.4 Rewards 
+
+The agent receives a terminal reward R = 1 if the episode terminates at the ground-truth answer entity oq, and 0 otherwise: 
+
+R =
+
+(
+
+1, if episode terminates at oq,
+
+0, otherwise , (4) We train the policy and value networks using the actor-critic algorithm; full optimization details are provided in Appendix C. 
+
+4 Methodology 
+
+We propose RAPTOR, a reachability-aware pre-training framework for temporal multi-hop reason-ing. The overall pretraining pipeline (Figure 2) consists of two stages: (i) constructing reachability supervision under temporal constraints via a reach-able entity labeling algorithm, (ii) pretraining the policy to identify the candidate actions that can reach the target entity oq within the hop budget. After pretraining, we fine-tune the pretrained agent with RL. In this section, we describe the policy network, the reachable-entity labeling algorithm, and the self-supervised pretraining objective. 
+
+4.1 Policy Network 
+
+We use a simple policy network with an LSTM path encoder and MLP heads to evaluate RAPTOR. We concatenate the path, query, and step embeddings, then pass the combined vector through a two-layer MLP to form a state representation. This state vector is used to score each candidate action. The detailed architecture is described as follows. Given a state s = ( ξ, k, e k, t k, v k) and the candi-date set As, the actor outputs a probability distribu-tion πθ(· | s) over the candidate actions in As, and the critic estimates Vϕ(s).
+
+Embeddings. We represent each entity e with a static embedding Emb E (e) ∈ Rde . For relations, we use time-conditioned embeddings. Following Sun et al. (2021), we define a temporal encoding 
+
+τ (∆ t) = cos( w∆t + b), (5) where w, b ∈ Rdt are learnable parameters and 
+
+∆t = tq − t.Given a relation r with timestamp t and query time tq, we map r to its static embedding Emb R(r)
+
+and form a time-conditioned relation embedding by concatenation: 
+
+r(r, ∆t) = [Emb R(r); τ (∆ t)] ∈ Rdr . (6) For action a = ( e′, r ′, t ′), we construct the ac-tion embedding as 
+
+a(a) = e′; r(r′, t q − t′) ∈ Rda , (7) where da = de + dr. We also introduce a static step embedding Emb step (k) ∈ Rdstep to encode the time step and provide the information of remaining hop budget. 
+
+Temporal path encoding. We encode the tem-poral path into an embedding using a single-layer LSTM. At time step k, we have an ordered se-quence of taken actions {a0, a 1, . . . , a k−1}. For each action ai in this sequence, we construct its ac-tion embedding ai = a(ai) as described in Eq. (7) .When k = 0 , there is no executed action yet, so we introduce a learnable initial action input, denoted ainit . We then define the input sequence as 
+
+{ainit , a 0, . . . , a k−1} and use the LSTM to update the temporal path embedding as follows: 
+
+h0 = LSTM( ainit , hinit ),
+
+hi+1 = LSTM( ai, hi), ∀i ∈ { 0, . . . , k − 1}.
+
+(8) where hinit ∈ Rda is initialized as a learnable vec-tor. 
+
+State vector. To construct the state vector, we first concatenate the embeddings of the query entity, query relation, temporal path, and time step to form 
+
+u =
+
+h
+
+Emb E (es); r(rq, 0); hk; Emb step (k)
+
+i
+
+. (9) We then project u to Rda with a two-layer MLP to obtain s:
+
+s = MLP( u)= Whead σ(Whidden u + bhidden ) + bhead , (10) where σ(·) denotes ReLU , and s ∈ Rda matches the dimensionality of the action embeddings. 
+
+Action scoring. At time step k, we score each candidate action by measuring the similarity be-tween the state vector s and the embedding of the corresponding action. Specifically, for each 
+
+a ∈ As, we define its logit as 
+
+z(a) = ⟨s, a(a)⟩. (11) 4Figure 2: Overview of RAPTOR, where the maximum path length is set to 2 for illustration. 
+
+We then obtain the action distribution by applying a softmax over the logits of all candidate actions: 
+
+πθ(a | s) = exp ( z(a)) 
+
+P 
+
+> a′∈As
+
+exp ( z(a′)) . (12) 
+
+Value estimation. In addition, we learn a critic to estimate the expected return from the current state. Given u at time step k, the critic applies a two-layer MLP to produce a prediction of scalar value: 
+
+Vϕ(u) = MLP crt (u) ∈ R, (13) which serves as an estimate of the expected cumula-tive return used for advantage computation during training. 
+
+4.2 Reachable Entity Labeling 
+
+To label candidate actions during self-supervised pretraining, we perform reachable entity labeling 
+
+for all (oq, t q) pairs in the training set. For each pair, we run a backward BFS from oq to find en-tities that can reach oq within the hop limit while respecting temporal constraints. The procedure is summarized in Algorithm 1. Given a graph G, a training example 
+
+(eq, r q, o q, t q), max path length K, and max in-edges N , we initialize a queue with (oq, t q, v, 0) ,where v is the visited set (initialized as {oq}) and the hop count is 0. We then repeatedly dequeue a tuple (ecur , t cur , v cur , ℓ ) and examine its incoming edges. For each incoming edge (e′, r ′, e cur , t ′), we discard it if e′ has been visited or if t′ > t cur which violates temporal constraints. To reduce compu-tation, we keep only the top-N incoming edges with the largest timestamps using SelectTopN . If 
+
+e′ passes these checks, it is reachable: we update the visited set, enqueue (e′, t ′, v new , ℓ + 1) , and record (entity , latest timestamp , hop distance ) =(e′, t ′, ℓ + 1) in L. To avoid duplicate records for the same entity at the same hop distance from oq, IsLatest checks whether t′ is the latest timestamp associated with e′ at that hop distance, and RemoveEarlier removes any existing record of 
+
+e′ with an earlier timestamp at that hop distance. 
+
+Algorithm 1 Reachable Entity Labeling 
+
+Input training example (eq, r q, o q, t q), graph G =(E, R, T , Q), maximum path length K, maximum number of incoming edges N
+
+Output The reachable entities list L of pair (oq, t q) 
+
+> 1:
+
+queue ← Queue ()  
+
+> 2:
+
+L ← ∅  
+
+> 3:
+
+ENQUEUE (queue , (oq, t q, v = {oq}, 0) ) 
+
+> 4:
+
+while queue is not empty do  
+
+> 5:
+
+(ecur , t cur , v cur , ℓ ) ← Dequeue (queue ) 
+
+> 6:
+
+if ℓ ≥ K then  
+
+> 7:
+
+continue  
+
+> 8:
+
+end if  
+
+> 9:
+
+Nin ← { (e′, t ′) | (e′, r ′, e cur , t ′) ∈ Q , t′ ≤
+
+tcur } 
+
+> 10:
+
+Npruned ← SelectTopN (Nin , N, key = t′) 
+
+> 11:
+
+for all (e′, t ′) ∈ N pruned do  
+
+> 12:
+
+if e′ /∈ vcur then  
+
+> 13:
+
+vnew ← vcur ∪ { e′} 
+
+> 14:
+
+Enqueue( queue ,(e′, t ′, v new , ℓ + 1) ) 
+
+> 15:
+
+if IsLatest (e′, t ′, ℓ, L ) then  
+
+> 16:
+
+L ← RemoveEarlier (e′, ℓ, L ) 
+
+> 17:
+
+L ← L ∪ { (e′, t ′, ℓ + 1) } 
+
+> 18:
+
+end if  
+
+> 19:
+
+end if  
+
+> 20:
+
+end for  
+
+> 21:
+
+end while  
+
+> 22:
+
+return L
+
+54.3 Self-Supervised Pretraining 
+
+The goal of this self-supervised pretraining is to push the predicted score of reachable actions to-ward 1 and unreachable actions toward 0. For a training example (eq, r q, o q, t q), we first construct the reachable entity list L for the pair (oq, t q). At time step k, each candidate action a = ( e′, r ′, t ′) ∈
+
+As is labeled as reachable if L contains a tuple 
+
+(e′, ¯t, ¯h) such that t′ ≤ ¯t and K − k > ¯h; other-wise, it is labeled as unreachable. This produces a binary label y(a) ∈ { 0, 1} for each candidate action. We then train the policy network to align with y
+
+using a binary cross-entropy loss. The reachability of each candidate action is estimated by applying a sigmoid function to its logit: 
+
+ˆy(a) = sigmoid  z(a), ∀a ∈ As, (14) where ˆy(a) is the predicted reachability of action a.The self-supervised loss at time step k is defined as 
+
+LSL (θ) = − 1
+
+|As|
+
+X
+
+> a∈As
+
+h
+
+y(a) log ˆ y(a)+(1 − y(a)) log(1 − ˆy(a)) 
+
+i
+
+.
+
+(15) During pretraining, we transition to the next time step k + 1 by sampling from the output distribution over reachable actions, and repeat this process until reaching the maximum path length. The overall self-supervised loss for an episode is 
+
+Lep SL (θ) = E
+
+"K−1X
+
+> k=0
+
+L(k)SL (θ)
+
+#
+
+. (16) We optimize the policy network by minimizing 
+
+Lep SL (θ) with stochastic gradient descent. 
+
+5 Experiments 
+
+5.1 Experimental Setup 
+
+We describe the datasets, evaluation metrics, and baselines in this section; implementation details are provided in Appendix B. 
+
+5.1.1 Datasets 
+
+We evaluate RAPTOR on three standard TKG benchmarks: ICEWS14, ICEWS05-15 (Li et al., 2021b), and ICEWS18 (Jin et al., 2020). All are derived from ICEWS and cover events in 2014, 2005–2015, and 2018; statistics are reported in Appendix A (Table 2). Following prior work, we split each dataset into train/validation/test sets by timestamp. 
+
+5.1.2 Evaluation Metrics 
+
+We use the following two common metrics in TKG reasoning to evaluate performance: • Mean Reciprocal Rank (MRR) : The average of the reciprocal ranks of the ground-truth entities. • Hits@k : The proportion of test queries for which the ground-truth entity appears in the top-k predictions. We report Hits@1, Hits@3, and Hits@10. Prior work suggests that the time-aware filtered setting (Sun et al., 2021; Han et al., 2021) is more appropriate than the standard filtered setting (He et al., 2021) or the raw setting (Gao et al., 2022), because it filters only quadruples that occur at the same timestamp as the query when computing ranks. Therefore, we adopt the time-aware filtered setting for evaluation in all experiments. 
+
+5.1.3 Baseline Methods 
+
+We compare our method with several conventional baselines, including xERTE (Han et al., 2021), TLogic (Liu et al., 2022), CyGNet (Zhu et al., 2021), RE-NET (Jin et al., 2020), and RE-GCN (Li et al., 2021a). We also compare with prior multi-hop reasoning methods. To make the comparison focused and fair, we keep model capacity comparable and empha-size differences in training procedures rather than architectural choices; the compared agents mainly use LSTM and MLP components. Specifically, we include TITer (Sun et al., 2021), TAgent (Tao et al., 2021), TPath (Bai et al., 2021), and our ablated variant trained without RAPTOR pretraining (de-noted as Pure-RL). To align with our setting, we additionally report a TITer variant with the maxi-mum action size set to 150 (denoted as TITer-150). Aside from these two in-house baselines, the re-maining results are taken from previous work (Li et al., 2022; Zheng et al., 2023). 
+
+5.2 Experimental Results 
+
+The results are summarized in Table 1. RL-RAPTOR consistently outperforms Pure-RL across all datasets, highlighting the benefit of reachability pretraining. Compared with prior multi-hop reason-ing methods, RL-RAPTOR achieves higher scores on most metrics, suggesting that RAPTOR helps the agent learn better multi-hop reasoning strate-gies during RL. Among the extrapolation base-lines, RL-RAPTOR achieves the best performance 6Table 1: Experimental results on ICEWS14, ICEWS05-15, and ICEWS18 under the time-aware filtered setting. The best and second-best results are highlighted in bold and underlined , respectively. ∗ indicates that RL-RAPTOR achieves statistically significant improvements compared with Pure-RL ( p-value < 0.05 ).                                                                                                                                           
+
+> Model ICEWS14 ICEWS05-15 ICEWS18 MRR Hits@1 Hits@3 Hits@10 MRR Hits@1 Hits@3 Hits@10 MRR Hits@1 Hits@3 Hits@10 xERTE 40.02 32.06 44.63 56.17 46.62 37.84 52.31 63.92 29.31 21.03 33.51 46.48 TLogic 42.5 33.2 47.6 60.3 47.0 36.2 53.1 67.4 29.6 20.4 33.6 48.1 CyGNet 35.05 25.73 39.01 53.55 36.81 26.61 41.63 56.22 24.93 15.90 28.28 42.61 RE-NET 36.93 26.83 39.51 54.78 43.32 33.43 47.77 63.06 28.81 19.05 32.44 47.51 RE-GCN 40.39 30.66 44.96 59.21 48.03 37.33 53.85 68.27 30.58 21.01 34.34 48.75
+> Tpath 38.9 29.4 42.5 54.6 45.7 36.8 51.6 63.8 27.4 21.1 31.3 42.8 TAgent 39.1 30.7 43.2 55.2 45.1 36.3 51.0 63.4 27.2 20.1 30.7 42.3 TITer 40.87 32.28 45.45 57.10 47.69 37.95 52.92 65.81 29.98 22.05 33.46 44.83 TITer-150 41.16 32.99 46.17 57.21 47.68 38.57 53.36 65.51 29.30 21.62 33.31 44.77 Pure-RL 42.41 33.78 47.58 59.46 47.74 38.24 53.50 66.54 29.87 21.64 33.79 46.85 RL-RAPTOR 42.86 *34.37 *47.93 *59.49 48.04 *38.51* 53.90 *66.79* 30.25* 21.92* 34.3* 47.45*
+
+on ICEWS14 and ICEWS05-15 on most metrics, while ranking second on ICEWS18 behind RE-GCN. Although Hits@10 is not the best on any of the three datasets, RAPTOR still demonstrates strong and stable improvements over competitive baselines overall. 
+
+5.2.1 Training Efficiency Analysis 
+
+We compare training efficiency using validation MRR, Hits@k, and the RL reward curve against Pure-RL and TITer-150. Figure 3 shows that RL-RAPTOR converges earlier and achieves better per-formance on most metrics. RL-RAPTOR remains best overall and the advantage is more pronounced on harder datasets such as ICEWS18, particularly in MRR. For Hits@k, RL-RAPTOR is stronger on Hits@1 and Hits@3 across most datasets and attains better score early while staying stable. TITer-150 sur-passes RL-RAPTOR in Hits@1 on ICEWS05-15 late in training but declines in Hits@3 and Hits@10 as reward increases, suggesting a shift toward a few high-probability paths. By contrast, RL-RAPTOR maintains stronger Hits@3 and Hits@10 later in training, indicating a more robust action-selection policy. Overall, RAPTOR pretraining improves both training efficiency and final performance, and reaches an early-stage MRR that exceeds the final performance of other baselines. 
+
+5.3 Ablation Studies 
+
+To assess RAPTOR pretraining, we conduct an ablation study on ICEWS14 and vary the number of pretraining epochs (10, 20, 30, 40, 50). All other hyperparameters in the subsequent RL fine-tuning stage are kept the same as in Appendix B. Figure 4 reports the average training reward curve and validation MRR bar chart. 
+
+5.3.1 Analysis of training efficiency and performance 
+
+The reward curves show that longer pretraining benefits the RL stage: models pretrained for more epochs start at higher reward levels, improving sam-ple efficiency. Without pretraining, reward growth is substantially slower. For example, with only 10 epochs of RAPTOR pretraining, the average reward exceeds 0.325 after 50 epochs (60 total epochs in-cluding pretraining), whereas Pure-RL needs more than 100 epochs to reach the same level. These results suggest that RAPTOR pretraining steers the agent toward more promising actions and acceler-ates learning during RL. For validation MRR, using more pretraining epochs leads to higher MRR in the early stage of RL training. Although this gap gradually nar-rows as RL training proceeds, even 10 pretrain-ing epochs already yield a clear improvement over no pretraining, and increasing the number of pre-training epochs further strengthens this advantage. Overall, these results suggest that RAPTOR pro-vides a better initialization, improving both training efficiency and final performance. 
+
+6 Conclusion 
+
+We propose RAPTOR, a self-supervised pretrain-ing method for multi-hop TKG reasoning. By in-jecting reachability signals, RAPTOR helps the model filter infeasible actions before RL fine-tuning. We also introduce a reachable entity la-7100 200 300 400                                                
+
+> 0.275
+> 0.280
+> 0.285
+> 0.290
+> 0.295
+> 0.300
+> 0.305
+> 0.310
+> ICEWS18
+> MRR
+> 100 200 300 400
+> 0.190
+> 0.195
+> 0.200
+> 0.205
+> 0.210
+> 0.215
+> 0.220
+> 0.225
+> Hits@1
+> 100 200 300 400
+> 0.320
+> 0.325
+> 0.330
+> 0.335
+> 0.340
+> 0.345
+> 0.350
+> Hits@3
+> 100 200 300 400
+> 0.455
+> 0.460
+> 0.465
+> 0.470
+> 0.475
+> 0.480
+> Hits@10
+> 0100 200 300 400
+> 0.10
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.20
+> 0.22
+> Reward
+> 100 200 300 400
+> 0.40
+> 0.42
+> 0.44
+> 0.46
+> 0.48
+> ICEWS05
+> 100 200 300 400
+> 0.35
+> 0.36
+> 0.37
+> 0.38
+> 0.39
+> 0.40
+> 100 200 300 400
+> 0.44
+> 0.46
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> 100 200 300 400
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0100 200 300 400
+> 0.225
+> 0.250
+> 0.275
+> 0.300
+> 0.325
+> 0.350
+> 0.375
+> 0.400
+> 100 200 300 400
+> Epoch
+> 0.34
+> 0.36
+> 0.38
+> 0.40
+> 0.42
+> 0.44
+> ICEWS14
+> 100 200 300 400
+> Epoch
+> 0.29
+> 0.30
+> 0.31
+> 0.32
+> 0.33
+> 0.34
+> 0.35
+> 0.36
+> 100 200 300 400
+> Epoch
+> 0.38
+> 0.40
+> 0.42
+> 0.44
+> 0.46
+> 0.48
+> 0.50
+> 100 200 300 400
+> Epoch
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0100 200 300 400
+> Epoch
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> Pure-RL RL-RAPTOR TITer-150
+
+Figure 3: Training efficiency analysis: reward curves during RL training phases on ICEWS14, ICEWS05-15, and ICEWS18 datasets. The shaded areas represent the standard deviation across five random seeds. 0 100 200 300 400    
+
+> RL Epoch
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> Average Reward
+> Average Training Reward
+> 0 Pretrained Epochs
+> 10 Pretrained Epochs
+> 20 Pretrained Epochs
+> 30 Pretrained Epochs
+> 40 Pretrained Epochs
+> 50 Pretrained Epochs
+> 0-100 100-200 200-300 300-400
+> RL Epoch Range
+> 0.300
+> 0.325
+> 0.350
+> 0.375
+> 0.400
+> 0.425
+> 0.450
+> Average MRR
+> Average MRR by Epoch Range
+> 0 Pretrained Epochs
+> 10 Pretrained Epochs
+> 20 Pretrained Epochs
+> 30 Pretrained Epochs
+> 40 Pretrained Epochs
+> 50 Pretrained Epochs
+
+Figure 4: Ablation study on the number of self-supervised pretraining epochs. The left figure shows the training reward and the right figure shows the validation MRR curve during RL fine-tuning. 
+
+beling algorithm to identify reachable entities with timestamps and hop distances. Experiments on three benchmarks show improved training effi-ciency and final performance over conventional baselines. We hope RAPTOR encourages further advances in self-supervised TKG reasoning. 
+
+7 Limitations 
+
+We acknowledge several limitations of this study. First, RAPTOR is currently developed for RL-based multi-hop reasoning frameworks, and its applicability to other paradigms remains underex-plored. Second, the reachable entity labeling stage introduces extra preprocessing cost, which may become non-trivial for larger-scale TKGs. Third, due to the limited availability of fully open-source RL-based multi-hop TKG baselines, we use a com-mon and relatively simple backbone to ensure fair and reproducible comparisons. We identify two important and feasible directions for future work: improving the efficiency of the reachable label-ing stage, and evaluating RAPTOR with stronger model backbones and more advanced RL training strategies. 
+
+References 
+
+Luyi Bai, Wenting Yu, Mingzhuo Chen, and Xiangnan Ma. 2021. Multi-hop reasoning over paths in tempo-ral knowledge graphs using reinforcement learning. 
+
+Applied Soft Computing , 103:107144. Yifu Gao, Linhui Feng, Zhigang Kan, Yi Han, Linbo Qiao, and Dongsheng Li. 2022. Modeling precur-sors for temporal knowledge graph reasoning via auto-encoder structure. In Proceedings of the Thirty-First International Joint Conference on Artificial In-telligence, IJCAI-22 , pages 2044–2051. International Joint Conferences on Artificial Intelligence Organi-zation. Main Track. Alberto García-Durán, Sebastijan Dumanˇ ci´ c, and Math-ias Niepert. 2018. Learning sequence encoders for temporal knowledge graph completion. In Proceed-ings of the 2018 Conference on Empirical Methods in Natural Language Processing , pages 4816–4821, Brussels, Belgium. Association for Computational Linguistics. 
+
+8Rishab Goel, Seyed Mehran Kazemi, Marcus Brubaker, and Pascal Poupart. 2020. Diachronic embedding for temporal knowledge graph completion. Proceedings of the AAAI Conference on Artificial Intelligence ,34(04):3988–3995. Zhen Han, Peng Chen, Yunpu Ma, and Volker Tresp. 2021. Explainable subgraph reasoning for forecast-ing on temporal knowledge graphs. In International Conference on Learning Representations .Yongquan He, Peng Zhang, Luchen Liu, Qi Liang, Wenyuan Zhang, and Chuang Zhang. 2021. Hip net-work: Historical information passing network for ex-trapolation reasoning on temporal knowledge graph. In Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence, IJCAI 2021, Vir-tual Event / Montreal, Canada, 19-27 August 2021 ,pages 1915–1921. Hengchang Hu, Wei Guo, Xu Liu, Yong Liu, Ruiming Tang, Rui Zhang, and Min-Yen Kan. 2024. User behavior enriched temporal knowledge graphs for se-quential recommendation. In Proceedings of the 17th ACM International Conference on Web Search and Data Mining , WSDM ’24, page 266–275, New York, NY, USA. Association for Computing Machinery. Woojeong Jin, Meng Qu, Xisen Jin, and Xiang Ren. 2020. Recurrent event network: Autoregressive struc-ture inferenceover temporal knowledge graphs. In 
+
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) ,pages 6669–6683, Online. Association for Computa-tional Linguistics. Timothée Lacroix, Guillaume Obozinski, and Nicolas Usunier. 2020. Tensor decompositions for temporal knowledge base completion. In International Con-ference on Learning Representations .Julien Leblay and Melisachew Wudage Chekol. 2018. Deriving validity time in knowledge graph. In Com-panion Proceedings of the The Web Conference 2018 ,WWW ’18, page 1771–1776, Republic and Canton of Geneva, CHE. International World Wide Web Con-ferences Steering Committee. Zixuan Li, Zhongni Hou, Saiping Guan, Xiaolong Jin, Weihua Peng, Long Bai, Yajuan Lyu, Wei Li, Jiafeng Guo, and Xueqi Cheng. 2022. HiSMatch: Historical structure matching based temporal knowledge graph reasoning. In Findings of the Association for Com-putational Linguistics: EMNLP 2022 , pages 7328– 7338, Abu Dhabi, United Arab Emirates. Association for Computational Linguistics. Zixuan Li, Xiaolong Jin, Wei Li, Saiping Guan, Jiafeng Guo, Huawei Shen, Yuanzhuo Wang, and Xueqi Cheng. 2021a. Temporal knowledge graph reasoning based on evolutional representation learning. Zixuan Li, Xiaolong Jin, Wei Li, Saiping Guan, Jiafeng Guo, Huawei Shen, Yuanzhuo Wang, and Xueqi Cheng. 2021b. Temporal knowledge graph reason-ing based on evolutional representation learning. In 
+
+Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Infor-mation Retrieval , SIGIR ’21, page 408–417, New York, NY, USA. Association for Computing Machin-ery. Qika Lin, Jun Liu, Rui Mao, Fangzhi Xu, and Erik Cambria. 2023. TECHS: Temporal logical graph net-works for explainable extrapolation reasoning. In 
+
+Proceedings of the 61st Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 1281–1293, Toronto, Canada. Association for Computational Linguistics. Xi Victoria Lin, Richard Socher, and Caiming Xiong. 2018. Multi-hop knowledge graph reasoning with reward shaping. In Proceedings of the 2018 Con-ference on Empirical Methods in Natural Language Processing , pages 3243–3253, Brussels, Belgium. Association for Computational Linguistics. Yonghao Liu, Di Liang, Mengyu Li, Fausto Giunchiglia, Ximing Li, Sirui Wang, Wei Wu, Lan Huang, Xi-aoyue Feng, and Renchu Guan. 2023. Local and global: Temporal question answering via informa-tion fusion. In Proceedings of the Thirty-Second International Joint Conference on Artificial Intel-ligence, IJCAI-23 , pages 5141–5149. International Joint Conferences on Artificial Intelligence Organi-zation. Main Track. Yushan Liu, Yunpu Ma, Marcel Hildebrandt, Mitchell Joblin, and Volker Tresp. 2022. Tlogic: Temporal logical rules for explainable link forecasting on tem-poral knowledge graphs. Proceedings of the AAAI Conference on Artificial Intelligence , 36(4):4120– 4127. Ying Ma, Owen Burns, Mingqiu Wang, Gang Li, Nan Du, Laurent El Shafey, Liqiang Wang, Izhak Shafran, and Hagen Soltau. 2025. Knowledge graph reasoning with self-supervised reinforcement learning. IEEE Transactions on Audio, Speech and Language Pro-cessing , 33:1508–1519. Apoorv Saxena, Soumen Chakrabarti, and Partha Taluk-dar. 2021. Question answering over temporal knowl-edge graphs. In Proceedings of the 59th Annual Meeting of the Association for Computational Lin-guistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers) , pages 6663–6676, Online. Association for Computational Linguistics. Haohai Sun, Jialun Zhong, Yunpu Ma, Zhen Han, and Kun He. 2021. TimeTraveler: Reinforcement learn-ing for temporal knowledge graph forecasting. In 
+
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing , pages 8306–8319, Online and Punta Cana, Dominican Re-public. Association for Computational Linguistics. Ye Tao, Ying Li, and Zhonghai Wu. 2021. Tempo-ral link prediction via reinforcement learning. In 
+
+9ICASSP 2021 - 2021 IEEE International Confer-ence on Acoustics, Speech and Signal Processing (ICASSP) , pages 3470–3474. Wenhan Xiong, Thien Hoang, and William Yang Wang. 2017. DeepPath: A reinforcement learning method for knowledge graph reasoning. In Proceedings of the 2017 Conference on Empirical Methods in Nat-ural Language Processing , pages 564–573, Copen-hagen, Denmark. Association for Computational Lin-guistics. Shangfei Zheng, Hongzhi Yin, Tong Chen, Quoc Viet Hung Nguyen, Wei Chen, and Lei Zhao. 2023. Dream: Adaptive reinforcement learning based on attention mechanism for temporal knowledge graph reasoning. In Proceedings of the 46th International ACM SIGIR Conference on Research and Devel-opment in Information Retrieval , SIGIR ’23, page 1578–1588, New York, NY, USA. Association for Computing Machinery. Cunchao Zhu, Muhao Chen, Changjun Fan, Guangquan Cheng, and Yan Zhang. 2021. Learning from history: Modeling temporal knowledge graphs with sequen-tial copy-generation networks. In Thirty-Fifth AAAI Conference on Artificial Intelligence, AAAI 2021, Thirty-Third Conference on Innovative Applications of Artificial Intelligence, IAAI 2021, The Eleventh Symposium on Educational Advances in Artificial In-telligence, EAAI 2021, Virtual Event, February 2-9, 2021 , pages 4732–4740. AAAI Press. 
+
+A Dataset Statistics 
+
+Our datasets are aligned with Li et al. (2022) and Zheng et al. (2023); the dataset statistics are shown in Table 2. 
+
+B Implementation Details 
+
+In our experiments, the entity and relation embed-ding dimensions are set to 128 , with a temporal component of size dt = 48 in the relation embed-ding. The step embedding dimension is dstep = 32 ,and the maximum path length is K = 3 for all datasets. Before self-supervised pretraining, we perform reachable-entity labeling with hop limit K
+
+and retain the top-N = 200 reachable entities. We use RAPTOR to pretrain the agent for 40 epochs and then fine-tune with RL for 400 epochs. During RL, the initial entropy coefficient is β0 =0.01 with exponential decay factor ζ = 0 .9, and the discount factor is γ = 0 .95 . We use a batch size of 512 in both phases and optimize with Adam at a learning rate of 10 −3. At each time step, we keep the top-150 candidate actions sorted by timestamp during both pretraining and RL. For checkpoint selection, we evaluate every 20 epochs using beam search with beam size 100 and select the checkpoint with the best validation per-formance. All experiments use five random seeds, and we report the mean across seeds. 
+
+C Actor-Critic Optimization Details 
+
+We train the policy (actor) and value (critic) net-works using an actor-critic algorithm. The actor parameterizes a stochastic policy πθ(a | s), while the critic estimates the state value Vϕ(s). The value function serves as a baseline to estimate the ex-pected return from s and reduces the variance of policy gradients. For time step k ∈ { 0, . . . , K − 1} in an episode, we compute the discounted return at time step k as 
+
+gk = γ(K−1) −kR, (17) where γ ∈ (0 , 1] is the discount factor. The advan-tage is defined by 
+
+Adv k = gk − Vϕ(s). (18) We update the actor by maximizing the expected advantage: 
+
+Lactor (θ) = E
+
+"K−1X
+
+> k=0
+
+log πθ(ak | s) Adv k
+
+#
+
+. (19) The critic is trained by minimizing the squared error between the predicted value and return: 
+
+Lcritic (ϕ) = E
+
+"K−1X
+
+> k=0
+
+(Vϕ(s) − gk)2
+
+#
+
+. (20) In addition, we incorporate an entropy regular-ization term to encourage exploration: 
+
+Lentropy (θ) = E
+
+"K−1X
+
+> k=0
+
+H(πθ(· | s)) 
+
+#
+
+, (21) where H(·) denotes the entropy of the action distri-bution. The overall objective is 
+
+max  
+
+> θ
+
+Lactor (θ) + βn Lentropy (θ), min  
+
+> ϕ
+
+Lcritic (ϕ),
+
+(22) where βn is an entropy coefficient at training epoch 
+
+n. We apply an exponential decay schedule βn =
+
+β0ζ n with decay factor ζ ∈ (0 , 1) . We optimize θ
+
+and ϕ jointly using stochastic gradient descent. 10 Table 2: Dataset statistics. 
+
+Dataset #Entities #Relations #Train #Valid #Test Time granularity ICEWS14 7,128 230 74,845 8,514 7,371 1 Day ICEWS05-15 10,094 251 368,868 46,302 46,159 1 Day ICEWS18 23,033 256 373,018 45,995 49,545 1 Day 
+
+D Disclosure of AI Use 
+
+The authors used GitHub Copilot as a coding assis-tant during implementation. ChatGPT and Gemini were used during manuscript preparation for writ-ing support, including improving clarity, grammar, and phrasing. These tools were not used to generate the core scientific contributions, make research de-cisions, or determine the experimental results. All methods, experiments, analyses, and conclusions were developed, verified, and approved by the au-thors, who take full responsibility for the content of the paper. 11

@@ -1,0 +1,535 @@
+Title: A Foundation Model for Multimodal Event Sequences in Financial Applications
+
+URL Source: https://arxiv.org/pdf/2607.09955v1
+
+Published Time: Tue, 14 Jul 2026 00:20:46 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# A Foundation Model for Multimodal Event Sequences in Financial Applications 
+
+# Nikita Rusakov ∗
+
+Sber Moscow, Russian Federation nanrusakov@gmail.com 
+
+# Vladislav Meshkov ∗
+
+Sber Moscow, Russian Federation vladmeshkov160@gmail.com 
+
+# Konstantin Zorin ∗
+
+Sber Moscow, Russian Federation kostya.zorin.2003.ri@gmail.com 
+
+# Gleb Zaripov ∗
+
+Sber Moscow, Russian Federation gleb.zar.030@gmail.com 
+
+# Alexander Uglov ∗
+
+Sber Moscow, Russian Federation skilletthebest25@gmail.com 
+
+# Alexey Vasilev 
+
+Sber AI Lab Moscow, Russian Federation alexxl.vasilev@yandex.ru 
+
+# Anton Klenitskiy 
+
+Sber AI Lab Moscow, Russian Federation antklen@gmail.com 
+
+## Abstract 
+
+Predictive modeling is a core component of modern financial ser-vices, where a wide range of tasks are traditionally addressed using separate models trained on manually engineered tabular features. This task-specific approach limits reuse and makes it difficult to fully exploit heterogeneous data sources such as transaction his-tories and digital interaction signals. In this paper, we present an approach based on pretraining a foundation transformer model on multimodal sequences of user events. Events from multiple data sources are unified into a single chronological sequence, enabling early fusion of heterogeneous modalities and learning of general-purpose representations via a next-event prediction objective. These representations are combined with existing engineered user fea-tures, on top of which lightweight neural models are trained for multiple downstream tasks. The proposed system outperforms tra-ditional task-specific models while reducing development overhead. The approach was deployed in production at one of the biggest banks in Eastern Europe, resulting in measurable improvements in business metrics. 
+
+## CCS Concepts 
+
+• Information systems → Data mining ; • Computing method-ologies → Neural networks ; Learning latent representations .
+
+## Keywords 
+
+foundation models; multimodal event sequences; self-supervised learning; transactional data; financial applications  
+
+> ∗Authors contributed equally to the paper
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD ’26, Jeju Island, Republic of Korea
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2259-2/2026/08 https://doi.org/10.1145/3770855.3818311
+
+ACM Reference Format: 
+
+Nikita Rusakov, Vladislav Meshkov, Konstantin Zorin, Gleb Zaripov, Alexan-der Uglov, Alexey Vasilev, and Anton Klenitskiy. 2026. A Foundation Model for Multimodal Event Sequences in Financial Applications. In Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD ’26), August 09–13, 2026, Jeju Island, Republic of Korea. ACM, New York, NY, USA, 9 pages. https://doi.org/10.1145/3770855.3818311 
+
+## 1 Introduction 
+
+Machine learning is a core component of modern financial services, supporting a wide range of predictive tasks such as risk assessment, fraud detection, product recommendations, and customer analyt-ics [ 1, 3, 11 , 30 , 35 ]. In large financial institutions, these tasks are typically addressed by building separate models for each use case, trained on manually engineered features derived from user transac-tion histories and digital interaction data. While this task-specific approach has demonstrated strong performance in individual ap-plications, it leads to significant duplication of effort, limited reuse of learned representations, and increasing system complexity as the number of predictive tasks grows. A key limitation of this paradigm is its inability to fully leverage the scale and richness of available data [ 3 , 35 ]. In practice, user be-havior is recorded across multiple heterogeneous sources, including financial transactions, online interactions, communications, and other behavioral signals, each characterized by different structures and temporal dynamics [ 20 ]. Large financial institutions collect massive volumes of such event-level data over long time horizons. Transforming these multimodal event streams into task-specific tabular features requires substantial manual effort and often leads to information loss. As a result, only a fraction of the available data is effectively utilized, and insights learned for one task are difficult to transfer or reuse across others. To address these challenges, we explore an approach based on pretraining of a transformer-based foundation model on sequences of user events [ 3, 7, 13 , 22 , 35 ]. The model is trained in a self-supervised manner to learn general-purpose representations from large-scale heterogeneous data that can be reused across multiple arXiv:2607.09955v1 [cs.LG] 10 Jul 2026 KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Nikita Rusakov et al. 
+
+downstream tasks. Events from different data sources are unified into a single chronological sequence, enabling early fusion of mul-timodal signals, and the model is pretrained using a next-event prediction objective. The pretrained model serves as a shared rep-resentation backbone: its embeddings are frozen and combined with existing engineered user features, on top of which lightweight task-specific tabular neural models are trained for individual appli-cations. We evaluate the proposed approach across multiple real-world fi-nancial prediction tasks at Sber, one of the biggest banks in Eastern Europe, serving more than 100 million customers. In our experi-ments, we demonstrate that self-supervised pretraining and the use of multiple data modalities consistently improve predictive per-formance compared to traditional task-specific models. We further analyze the impact of different fusion strategies and study scaling behavior with respect to model size and sequence length under industrial inference constraints. The proposed system has been deployed in production, resulting in measurable improvements in business metrics while reducing model development time and overall system complexity. 
+
+## 2 Related Work 2.1 Foundation models for user behavior modeling and recommendation systems 
+
+Several recent industrial works explore pretrained transformer-based models for modeling user behavior. These approaches focus on learning reusable user representations from sequences of user actions, which can be applied across multiple downstream tasks. Pinnerformer [ 23 ] introduces a transformer-based model trained on user actions to produce high-quality user embeddings that can be used for many recommendation tasks at Pinterest. TransAct [ 33 ]proposes a hybrid ranking framework that combines short-term user interests captured by a transformer-based real-time sequential model with long-term user representations computed offline using PinnerFormer. Finally, PinFM [ 4] explicitly adopts the foundation model paradigm and pretraining-finetuning approach for user activ-ity modeling at Pinterest. The authors pretrain a sequential model on massive user activity sequence data collected across multiple applications. Downstream ranking models reuse the pretrained transformer and embedding tables, which are further fine-tuned with application-specific data and features. ARGUS [ 14 ] studies the scalability of autoregressively pretrained transformer models for recommendations. The model is pretrained on user histories using next-item and feedback prediction objectives and then fine-tuned for various ranking tasks. The work demonstrates that this approach scales effectively across a wide range of transformer sizes. DV365 [ 18 ] focuses on encoding extremely long user histories into compact user embeddings. The proposed offline foundational model precomputes user representations from long behavior sequences, which are then shared across a large number of downstream models, improving performance across corresponding tasks. Universal behavioral modeling was also the focus of the RecSys Challenge 2025 [ 5]. The goal was to learn task-independent user representations from rich multi-event user logs such as purchases, cart additions, page visits, and search queries, which are applicable across different downstream tasks, including churn prediction, prod-uct propensity, and category propensity prediction. The work [ 28 ]proposes a contrastive learning approach with a transformer model pretrained to maximize agreement between representations of past and future segments of the same user’s behavior, while pushing apart representations of different users. Another solution [ 19 ] is based on pretraining a large transformer model using the next-event prediction objective, where several attributes of the next event are predicted jointly. The paper [ 16 ] proposes learning universal rep-resentations using a sequential autoencoder that reconstructs the whole user history from the user embedding. Beyond the RecSys Challenge, several other works also explore pretraining approaches for user behavior modeling [8, 17, 32]. 
+
+## 2.2 Representation learning from transaction sequences for financial applications 
+
+Autoregressive pretraining and contrastive learning are among the most widely used approaches for representation learning on trans-actional data [ 2, 21 , 27 ]. Early work on learning general-purpose embeddings from user transaction histories primarily relied on re-current neural networks. CoLES [ 1] represents an example of the contrastive learning paradigm for event sequence modeling. The method learns embeddings for subsequences of user event histories by encouraging representations of subsequences from the same user to be similar, while pushing apart representations of different users. Embeddings learned from transaction datasets are shown to be effective for downstream financial tasks. NPPR [ 30 ] follows an autoregressive pretraining approach, training an RNN-based model on large corpora of transaction sequences using a combination of next-transaction prediction and past reconstruction objectives. The authors demonstrate the success of the next-event prediction task for financial applications. More recent works apply transformer-based autoregressive pre-training to large-scale transactional datasets [ 3, 7 , 35 ]. For example, TREASURE [ 35 ] introduces a transformer foundation model specif-ically designed for transaction data. The model is pretrained using next-transaction prediction along with an auxiliary objective cap-turing current transaction network signals. In nuFormer [ 3], the authors investigate transformer-based representation learning for transaction data with both textual and structured attributes. The authors propose a tokenization scheme where each transaction is represented by multiple tokens and pretrain causal transformers using the standard next-token prediction objective. An end-to-end fine-tuning approach is introduced to combine learned user embed-dings with existing tabular features for downstream financial tasks. Another line of work explores the use of large language models for transactional data [10, 24, 26, 29]. In summary, prior work has demonstrated the effectiveness of pretrained sequential models for user behavioral modeling and transaction-based financial applications. Existing approaches either focus on non-financial user interaction data or model transaction sequences in isolation. In contrast, our work addresses the practical setting of large-scale financial systems, where the data is inher-ently multimodal, since user behavior is observed across multiple heterogeneous data sources. A Foundation Model for Multimodal Event Sequences in Financial Applications KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+## 3 Problem Formulation 
+
+We consider the problem of learning general-purpose user repre-sentations from large-scale, heterogeneous behavioral data in a financial system. User behavior is recorded across multiple data sources, each capturing complementary aspects of user activity. For a given user 𝑢 , each modality 𝑚 from a set of available modalities 
+
+𝑀 produces a temporal sequence of events 
+
+𝑆 (𝑚 ) 
+
+> 𝑢
+
+= [𝑒 (𝑚 ) 
+
+> 𝑢 1
+
+, 𝑒 (𝑚 ) 
+
+> 𝑢 2
+
+, . . . ].
+
+Events from different modalities are heterogeneous in structure and attributes, but share a common timeline. A key challenge is to integrate these heterogeneous sequences into a unified repre-sentation. Existing approaches typically rely on either late fusion, in which each modality is modeled independently, or early fusion, which merges events from all modalities into a single chronological sequence. While late fusion limits cross-modal temporal interac-tions, early fusion requires a unified event representation that can handle heterogeneous inputs. In addition to raw event sequences, production systems rely on a rich set of engineered user features f𝑢 ∈ 𝑅 𝐾 . These features encode domain knowledge, have strong predictive value in existing tabular models, and are already deeply integrated into downstream pipelines. A practical solution should therefore complement, rather than replace them. The learned representations should apply to diverse downstream business tasks without task-specific adaptation. In practical set-tings, this task set is not fixed in advance, is typically large, and evolves over time, since new tasks may emerge as business ob-jectives change. Training and maintaining a separate sequence model for each task is therefore computationally expensive and operationally impractical. To summarize, our objective is to learn a universal user embedding function 
+
+Φcore : {𝑆 (1) 
+
+> 𝑢
+
+, . . . , 𝑆 (𝑀 ) 
+
+> 𝑢
+
+} → z𝑢 ∈ R𝐷 ,
+
+such that: 
+
+• z𝑢 captures behavioral patterns and temporal dynamics across all modalities; 
+
+• the embedding is task-independent and can be reused across diverse downstream objectives; 
+
+• Φcore can be frozen after pretraining, enabling lightweight downstream models to be trained efficiently on top of (z𝑢 , f𝑢 )
+
+without fine-tuning the core model. 
+
+## 4 Approach 
+
+We adopt an early fusion strategy to capture cross-modal interac-tions in user behavior better. Events from all available data sources are merged into a single chronological sequence, and we pretrain a transformer-based sequence encoder on top of it using the next-event prediction objective. This pretrained encoder serves as a shared representation backbone: its parameters are frozen and reused without fine-tuning across all downstream tasks. For down-stream applications, the sequence embedding z𝑢 is combined with existing engineered features f𝑢 . Features f𝑢 are processed by a sep-arate transformer-based tabular model, whose output embedding is concatenated with the sequence embedding. A lightweight MLP head is added to predict the final objective. The following sections describe the components of this pipeline in detail. 
+
+## 4.1 Pretrained Sequence Encoder 
+
+We use a three-stage architecture to process heterogeneous, mul-timodal event sequence data. The architecture consists of an Em-bedding Layer , an Event Encoder , and a Transformer Backbone , as shown in Figure 1. 
+
+4.1.1 Embedding Layer. Events are represented by a set of numeri-cal and categorical attributes. The embedding layer maps individual event attributes into a common embedding dimension, producing fixed-size representations that are later combined at the event level. For numerical attributes, we first apply z-score normalization: 
+
+˜𝑥 num = 𝑥 num − 𝜇 num 
+
+𝜎 num 
+
+,
+
+where 𝑥 num ∈ R denotes a raw numerical value, and 𝜇 num and 𝜎 num 
+
+are the corresponding mean and standard deviation. The normalized value is then projected into a 𝑑 -dimensional embedding space using a learnable linear transformation: 
+
+anum = wnum · ˜𝑥 num + bnum ,
+
+where wnum ∈ R𝑑 and bnum ∈ R𝑑 are learnable parameters. Categorical attributes are mapped using learnable embedding tables with the same embedding dimension 𝑑 .
+
+4.1.2 Event Encoder: heterogeneous attribute fusion. A key chal-lenge in modeling heterogeneous event data is that different event types are characterized by different sets of attributes. For example, a transaction event may include amount, location, and category attributes, whereas a clickstream event may contain application section, device type, and related metadata. The proposed Event Encoder addresses this heterogeneity by padding, modeling intra-event interactions between attributes, and aggregating them into a single fixed-size event representation. 
+
+Padding. Each event 𝑒 is represented by a variable-length set of attributes, where the number of attributes depends on the modality. After embedding each attribute into R𝑑 , the set is padded to a fixed attribute dimension 𝑁 attr , allowing events of different types to be stacked into a tensor of fixed shape for batch training. Formally, each event is represented as a matrix 
+
+A𝑒 = [a1, a2, . . . , a𝑁 attr ] ∈ R𝑁 attr ×𝑑 ,
+
+where a𝑖 ∈ R𝑑 is the embedding of 𝑖 -th attribute, and padded positions correspond to missing attributes and are masked during subsequent computations. Here, 𝑁 attr denotes the total number of unique attributes among all events used to form a representation. 
+
+Intra-event self-attention across attributes. To capture dependen-cies between attributes and to identify the most informative ones, we apply self-attention along the attribute dimension. This mech-anism is conceptually related to intra-feature attention used in TP-BERTa [34]. Given the attribute matrix A𝑒 , we compute 
+
+A′ 
+
+> 𝑒
+
+= Attn (A𝑒 ) = Softmax 
+
+ QK ⊤
+
+√𝑑 
+
+
+
+V,
+
+where Q, K, V ∈ R𝑁 attr ×𝑑 are learned linear projections of A𝑒 . Atten-tion scores corresponding to padded positions are masked before KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Nikita Rusakov et al. 
+
+Figure 1: Pretrained sequence model architecture. The sequential processing of heterogeneous user events (transactions, clicks, communications) via an event encoder and a shared Transformer backbone, followed by event-specific predictive heads that jointly model multiple target attributes for each next-event type. 
+
+the softmax operation so that missing attributes do not influence the resulting representations. 
+
+Event aggregation. The refined attribute representations are ag-gregated into a single event-level embedding by pooling over the attribute dimension, followed by LayerNorm: 
+
+e = LayerNorm 1
+
+Í𝑁 attr  
+
+> 𝑖 =1
+
+𝑚 𝑖 𝑁 attr ∑︁ 
+
+> 𝑖 =1
+
+𝑚 𝑖 a′
+
+> 𝑖
+
+!
+
+,
+
+where a′ 
+
+> 𝑖
+
+∈ R𝑑 denotes the attribute representation after self-attention ( 𝑖 -th row of A′ 
+
+> 𝑒
+
+), and 𝑚 𝑖 ∈ { 0, 1} is a binary mask in-dicating non-padding positions. The normalization ensures that padding does not affect the aggregated representation. Finally, we concatenate event embeddings to construct the event sequence: 
+
+X = [e1, e2, . . . , e𝑇 ] ∈ R𝑇 ×𝑑 ,
+
+where 𝑇 is the number of events in the sequence. This yields a homogeneous sequence representation despite heterogeneous event attribute structure. 
+
+4.1.3 Transformer Backbone: sequence modeling. The sequence of event embeddings is processed by a causal transformer back-bone that closely follows the GPT-2 architecture [ 25 ]. It consists of masked multi-head self-attention and position-wise feedforward layers with residual connections and layer normalization, enabling autoregressive modeling of event sequences. The output of the final transformer layer produces contextual-ized representations for each event in the sequence. The final user representation zseq is obtained by mean pooling over the temporal dimension of these outputs. 
+
+4.1.4 Pretraining objective. The model is trained using a next-event prediction objective. Given the hidden state (the output of the last transformer layer) h𝑡 ∈ R𝑑 corresponding to the event at position 𝑡 ,the model predicts the attributes of the subsequent event at position 
+
+𝑡 + 1.For each categorical attribute 𝑐 of the next event, we apply a lin-ear projection followed by a softmax to obtain a vector of predicted probabilities for all categories: 
+
+ˆp(𝑐 )  
+
+> 𝑡 +1
+
+= Softmax 
+
+
+
+𝑊 (𝑐 ) 
+
+> cat
+
+h𝑡 + b(𝑐 )
+
+> cat
+
+
+
+,
+
+where 𝑊 (𝑐 ) 
+
+> cat
+
+∈ R𝐶 𝑐 ×𝑑 , b(𝑐 ) 
+
+> cat
+
+∈ R𝐶 𝑐 , and 𝐶 𝑐 denotes the number of categories for the categorical attribute 𝑐 .For each numerical attribute 𝑛 , we use a linear projection to obtain a scalar prediction: 
+
+ˆ𝑦 (𝑛 ) 
+
+> 𝑡 +1
+
+= w(𝑛 )
+
+> num
+
+h𝑡 + 𝑏 (𝑛 )
+
+> num
+
+,
+
+where w(𝑛 ) 
+
+> num
+
+∈ R𝑑 and 𝑏 (𝑛 ) 
+
+> num
+
+∈ R.The training loss combines cross-entropy (CE) losses for cate-gorical attributes and mean squared error (MSE) losses for numeri-cal attributes. For each position 𝑡 , the loss is computed only over attributes actually present in the next event, ignoring missing at-tributes associated with other modalities. Let C𝑡 +1 and N𝑡 +1 denote the sets of observed categorical and numerical attributes of the event at 𝑡 + 1. The loss at position 𝑡 is defined as: 
+
+L𝑡 =∑︁   
+
+> 𝑐 ∈ C 𝑡 +1
+
+CE 
+
+
+
+y(𝑐 ) 
+
+> 𝑡 +1
+
+, ˆp(𝑐 ) 
+
+> 𝑡 +1
+
+
+
++∑︁  
+
+> 𝑛 ∈ N 𝑡 +1
+
+MSE 
+
+
+
+𝑦 (𝑛 )
+
+> 𝑡 +1
+
+, ˆ𝑦 (𝑛 )
+
+> 𝑡 +1
+
+
+
+,
+
+where y(𝑐 ) 
+
+> 𝑡 +1
+
+is the one-hot target for categorical attribute 𝑐 , and 𝑦 (𝑚 )
+
+> 𝑡 +1
+
+is the target value for numerical attribute 𝑛 . The final objective aggregates L𝑡 over all valid positions in a sequence. 
+
+## 4.2 Tabular Model 
+
+We apply a transformer-based neural network for tabular data, hereafter referred to as TabNN , to process engineered user-level features and produce a tabular embedding for downstream predic-tion. The tabular representation is constructed from two types of input features: categorical and numerical. The model architecture is illustrated in Figure 2. A Foundation Model for Multimodal Event Sequences in Financial Applications KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+4.2.1 Input preprocessing. Numerical features undergo a two-stage normalization procedure. First, a signed logarithmic transform is applied to reduce skewness: 𝑥 ′ = sign (𝑥 ) · log (1 + | 𝑥 |) . The result is then standardized using the mean ( 𝜇 ) and standard deviation ( 𝜎 )calculated from the training data: ˜𝑥 = (𝑥 ′ − 𝜇 )/( 𝜎 + 𝜀 ), where 𝜀 > 0
+
+is a small constant added for numerical stability. 
+
+Figure 2: Schematic overview of the proposed downstream model architecture. The pipeline integrates a frozen sequen-tial model with a tabular Transformer. Sequential events are encoded into embeddings and refined via an MLP adapter. Simultaneously, the tabular Transformer processes both cat-egorical and numerical engineered features, and its output is aggregated. In the end, two representations are concatenated, and a task-specific head is added. 
+
+4.2.2 Embedding Layer. Each numerical feature is associated with a trainable vector w𝑗  
+
+> num
+
+∈ R𝑑 emb , which is scaled by the corresponding normalized feature value: 
+
+e𝑗  
+
+> num
+
+= w𝑗  
+
+> num
+
+· ˜𝑥 𝑗 ,
+
+where ˜𝑥 𝑗 ∈ R denotes the normalized value of the 𝑗 -th numerical feature. The total number of numerical features is denoted by 𝑁 num .For each categorical feature, a trainable embedding table is learned, assigning a vector of dimension 𝑑 emb to each category. Let us denote the embedding of the 𝑗 -th categorical feature as e𝑗 
+
+> cat
+
+,and the number of categorical features is 𝑁 cat .
+
+4.2.3 Concatenation & Noise Injection. All feature embeddings are concatenated into a single sequence: 
+
+Econcat = [e1
+
+> cat
+
+, . . . , e𝑁 cat  
+
+> cat
+
+, e1
+
+> num
+
+, . . . , e𝑁 num  
+
+> num
+
+].
+
+To improve robustness and provide regularization, a small random noise vector is added to each embedding in the sequence during training. 
+
+4.2.4 Transformer Processing. The resulting sequence of feature embeddings is processed by a Transformer encoder. Each layer ap-plies multi-head self-attention across the feature dimension , allowing the model to learn interactions between different user features. 
+
+4.2.5 Weighted Aggregation. The sequence of feature representa-tions H = [h1, h2, . . . , h𝑁 total ] from the final Transformer layer is aggregated into a single fixed-size vector ztab using a weighted sum with learnable weights 𝜶 ∈ R𝑁 total :
+
+ztab =
+
+> 𝑁 total
+
+∑︁ 
+
+> 𝑖 =1
+
+𝛼 𝑖 · h𝑖 ,
+
+where 𝑁 total = 𝑁 num + 𝑁 cat is the total number of features. 
+
+## 4.3 Downstream pipeline 
+
+For downstream tasks, the final user representation is obtained by combining embeddings from the sequential and tabular models, as il-lustrated in Figure 2. The sequential user embedding is first adapted to the target dimensionality using a lightweight MLP adapter con-sisting of two linear layers with LayerNorm, SeLU activation[ 15 ], and dropout: 
+
+z′ 
+
+> seq
+
+= MLP adapter (zseq ).
+
+The adapted sequential embedding z′ 
+
+> seq
+
+is then concatenated with the tabular embedding ztab produced by TabNN: 
+
+z𝑢 = [z′
+
+> seq
+
+, ztab ].
+
+The combined representation z𝑢 is passed to a task-specific head (e.g., a linear layer or MLP) for final prediction: 
+
+ˆ𝑦 = Head task (z𝑢 ).
+
+To adapt the system to a particular downstream task, the pre-trained sequential encoder is kept frozen . Training is performed only on the parameters of the TabNN and the MLP adapter, as well as the task-specific head. This approach ensures that task-relevant patterns are extracted from the aggregate features, while the large, general-purpose sequential embedding provides a stable, information-rich foundation. As a baseline for evaluating the contribution of the pretrained sequential model, we use the same TabNN architecture trained solely on engineered features with the corresponding task-specific head, without incorporating the sequential embedding z′
+
+> seq
+
+. In ad-dition, for ablation analysis, we consider a complementary setting in which only the sequential embedding z′ 
+
+> seq
+
+is used together with a task-specific head, excluding the tabular embedding ztab .
+
+## 4.4 Design Choices 
+
+4.4.1 Pretraining objective. The choice of the next-event prediction (NEP) objective for pretraining the sequential model is motivated by prior work demonstrating the effectiveness of next-step predic-tion for learning transferable representations from behavioral se-quences [ 3, 14 , 30 , 35 ]. In addition, we empirically evaluated several alternative self-supervised objectives, including CoLES [ 1], masked language modeling (MLM), and DeTPP [ 12 ], and NEP yielded the strongest performance. KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Nikita Rusakov et al. 
+
+4.4.2 Tabular model architecture. The described tabular processing pipeline was selected through extensive evaluation on our propri-etary datasets. We benchmarked several state-of-the-art approaches, including standard Feed-Forward Neural Networks, Deep & Cross Network v2 (DCNv2) [ 31 ], and the recently proposed TabM model [ 9]. Our architecture is closely related to the FT-Transformer [ 6]but differs in the choice of activation functions and the order of normalization operations. In our experiments, the selected TabNN architecture outperformed other approaches across multiple tasks. 
+
+## 5 Offline Experiments 
+
+We evaluate the proposed approach through a series of offline experiments, including comparison with a strong feature-based baseline, analysis of scaling behavior, assessment of self-supervised pretraining, and ablations on input modalities and fusion design. 
+
+## 5.1 Experimental Setup 
+
+5.1.1 Datasets. We use three behavioral data domains to construct multimodal sequential inputs for foundation model pretraining: 
+
+• Transactions (Txn): financial operations (debits, credits, trans-fers) represented by attributes including transaction amount, category, and timestamp. 
+
+• Clickstream (Click): time-ordered sequences of user interac-tions within the bank’s mobile application, including visited application sections and associated timestamps. 
+
+• Communications (Comm): records of customer interactions with the bank, including chat and call-center requests, push notifications, emails, and product applications. Their feature composition and sequence statistics are summa-rized in Table 1. All datasets cover 2 years. 
+
+Table 1: Feature set statistics by data domain. Seq. length/year denotes the length of a customer event sequence per year. Statistic Txn Click Comm 
+
+Mean seq. length/year 717 273 115 Median seq. length/year 489 43 87 # Numerical features 1 0 0# Categorical features 7 1 5# Unique category values 945 230 159 Events (billions) 160 30 20 In addition to sequential event data, we use a set of pre-existing tabular user features available in the production system. For each user and month, these features are basically computed by aggre-gating raw behavioral signals over predefined temporal windows aligned with the given month and include both numerical and cate-gorical variables. No additional feature construction is performed as part of this work. 
+
+5.1.2 Tasks and evaluation. We evaluate the proposed approach on four downstream binary classification tasks (Task 1–Task 4), each predicting customer response to communications for a specific bank product, a key business objective for customer engagement. Performance is measured using ROC AUC on a held-out test set. All experiments are conducted on the same set of tasks and metrics, and we additionally report the average ROC AUC across all tasks for each configuration. 
+
+5.1.3 Pretrained model configurations. We consider multiple con-figurations of the pretrained sequence encoder to analyze the effect of model scale on downstream performance. Specifically, we study three model sizes that vary in depth, width, and maximum context length: 
+
+• 2M parameters (small) : 6 layers, 4 attention heads, hidden size 128, context length 256 
+
+• 8M parameters (medium) : 8 layers, 6 attention heads, hid-den size 256, context length 1024 
+
+• 42M parameters (large) : 12 layers, 6 attention heads, hid-den size 512, context length 2048 Unless stated otherwise, we use the medium-sized 8M configuration as the default pretrained backbone in our experiments. 
+
+5.1.4 Pretraining setup. We train the sequence encoder using a batch size of 32 with gradient accumulation over 16 steps, dropout rate of 0.15, and the AdamW optimizer (learning rate 10 −3, weight decay 10 −2, 𝜖 = 10 −4). We apply a cosine learning-rate schedule with 10,000 warmup steps and train the model for 2-10 epochs depending on the model size. Gradient clipping with a maximum norm of 1.0 is applied throughout training. Training is distributed across 4–32 NVIDIA A100 80GB GPUs using Distributed Data Parallel (DDP). The best model checkpoint is selected based on validation loss. 
+
+5.1.5 Downstream training setup. All downstream tabular models are trained using a fixed set of hyperparameters across all exper-iments. Specifically, we use a batch size of 4096, an embedding dimension of 𝑑 emb = 64 , three transformer layers with four atten-tion heads, a learning rate of 0.004 , weight decay of 0.01 , 6,000 warmup steps. Models are trained for 40 epochs. Training is distributed across 4 NVIDIA A100 80GB GPUs using Distributed Data Parallel (DDP). For evaluation, we select the model checkpoint with the best validation performance and report the corresponding test-set metric. 
+
+## 5.2 Comparison with a Feature-Based Baseline 
+
+We first compare the proposed approach against a strong baseline built on hand-engineered user features that are widely used in our production systems. They have been developed and refined over an extended period of time and capture domain knowledge accu-mulated across multiple teams and use cases. As a result, models trained on these features present a highly competitive baseline that is difficult to outperform. Even relatively small improvements in terms of ROC AUC translate into measurable gains in business value. Table 2 reports results on four downstream prediction tasks, as well as the average performance across all tasks. We consider three variants of input representation: hand-engineered features, frozen embeddings produced by a pretrained model with 42M parame-ters, and a combination of pretrained embeddings and engineered features. When used in isolation, pretrained embeddings can out-perform or underperform engineered features depending on the A Foundation Model for Multimodal Event Sequences in Financial Applications KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+task. However, their combination is consistently better than feature-based baseline, leading to an average ROC AUC improvement of 0.009. 
+
+Table 2: Comparison of pretrained model (42M large) with previously used approach based on engineered features. 
+
+Approach Task 1 Task 2 Task 3 Task 4 Avg Engineered features 0.681 0.732 0.891 0.866 0.792 Pretrained model 0.704 0.727 0.872 0.846 0.787 Pretrained + features 0.705 0.742 0.892 0.864 0.801 
+
+## 5.3 Scaling Properties 
+
+We further investigate the scaling properties of the pretrained model to assess whether increasing model size leads to performance im-provements, as observed in other domains and prior work on foun-dation models [3, 14, 35]. 
+
+5.3.1 Scaling model capacity. We compare three model sizes (2M, 8M, and 42M) and evaluate each in isolation and in combination with TabNN operating on engineered features. Table 3 reports the average ROC AUC across all downstream tasks. As expected, larger models achieve higher ROC AUC, and adding TabNN yields consis-tent improvements at every scale. Since engineered features already capture a substantial amount of relevant information, increasing the capacity of the pretrained model has a smaller effect in the combined setting (from 0.792 to 0.801 when scaling from 2M to 42M) compared to using pretrained embeddings alone (from 0.750 to 0.787). Notably, improvements over the feature-based baseline (0.792) become significant only at a sufficient model scale. While further increasing model size could potentially lead to additional gains, practical constraints in the production environ-ment currently limit the feasibility of deploying larger models. We therefore choose the 42M configuration as a reasonable trade-off between performance and operational cost. 
+
+Table 3: The effect of the pretrained model size on the aver-age ROC AUC metric with and without TabNN operating on engineered features. 
+
+Model Scale Pretrained only Pretrained + TabNN (features) 2M small 0.750 0.792 8M medium 0.774 0.796 42M large 0.787 0.801 
+
+5.3.2 Effect of context length scaling. We additionally study the effect of scaling only context length using the medium-sized (8M) model, varying the maximum sequence length from 256 to 1024 events. As shown in Table 4, longer user histories consistently improve ROC AUC across all four tasks, indicating that the model benefits from access to extended temporal context. 
+
+Table 4: The effect of the transformer context length on the ROC AUC metric for various tasks. The results are shown for the 8M medium model. 
+
+Context length Task 1 Task 2 Task 3 Task 4 Avg. 256 0.696 0.717 0.886 0.862 0.790 512 0.698 0.725 0.886 0.859 0.792 1024 0.702 0.727 0.887 0.864 0.795 
+
+## 5.4 Impact of pretraining 
+
+To analyze the effect of self-supervised pretraining, we compare our approach against the same model architecture trained end-to-end in a supervised manner to directly predict downstream labels from user histories and engineered features. Table 5 shows that self-supervised pretraining consistently outperforms supervised train-ing across all four downstream tasks, with an average ROC AUC improvement of 0.004. The largest gain is observed on Task 1, while Tasks 2–4 exhibit smaller but stable improvements. This behavior is expected in the considered data regime, where the amount of labeled data available for downstream tasks is substantially smaller than the unlabeled data used for pretraining. 
+
+Table 5: Comparison of the ROC AUC metric for self-supervised pretraining and supervised learning on the down-stream tasks with the same architecture from scratch. The results are shown for the 8M medium model. 
+
+Method Task 1 Task 2 Task 3 Task 4 Avg Pretrained 0.693 0.736 0.891 0.859 0.795 
+
+Supervised 0.684 0.733 0.886 0.858 0.791 As a result, a single pretrained backbone can be reused across multiple downstream tasks in a frozen form, reducing model devel-opment and maintenance costs while simultaneously improving predictive quality. 
+
+## 5.5 Contribution of Multiple Behavioral Modalities 
+
+We analyze the contribution of different input data sources, using a model trained on Transactions (Txn-only) as a baseline, since it is the primary and most informative data source for the consid-ered downstream tasks. Table 6 compares three configurations: a Txn-only model, a model combining Transactions and Communi-cations (Txn + Comm), and a model that additionally incorporates Clickstream (Txn + Comm + Click), which corresponds to our final multimodal setup. As expected, the impact of additional modalities varies across tasks, reflecting differences in the relevance of behavioral signals for each prediction objective. Nevertheless, multimodal models match or outperform the Txn-only baseline across all tasks and achieve the strongest gains on Task 2, where the Txn + Comm + Click con-figuration outperforms the Txn-only model by more than 0.01 ROC AUC. These results indicate that communication and clickstream data provide complementary signals beyond transactional data. KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Nikita Rusakov et al. 
+
+Table 6: The impact of combining different data sources on the ROC AUC metric. The results are shown for the 8M medium model. 
+
+Data sources Task 1 Task 2 Task 3 Task 4 Avg Txn 0.690 0.729 0.886 0.861 0.792 Txn + Comm 0.688 0.732 0.889 0.862 0.793 Txn + Comm + Click 0.690 0.741 0.890 0.862 0.796 
+
+## 5.6 Comparison of Fusion Strategies 
+
+We compare the early fusion strategy adopted in our main exper-iments with two late fusion approaches for combining heteroge-neous sequential modalities. In the first late fusion variant (Late fusion with hiddens), we pretrain separate sequential encoders for each modality, extract their hidden representations, and concatenate them before passing the resulting representation to the downstream model together with standard tabular features. In the second variant (Late fusion with scores), we again pretrain separate sequential encoders, but pair each of them with its own downstream model. The resulting prediction scores are then combined using a logistic regression layer trained on top of the individual model outputs. In contrast, the early fusion model uses a single multimodal sequential encoder that jointly processes all modalities and pro-duces a shared representation, which is subsequently consumed by a downstream model. Table 7 shows that early fusion achieves the highest ROC AUC on three of the four tasks (Task1, Task3, Task4), with noticeable gains on Task 1 and Task 4 and comparable performance to the best late fusion variant on Task2 and Task 3. On average across all four tasks, early fusion delivers the best overall performance. 
+
+Table 7: Comparison of the ROC AUC metric for different fusion strategies. The results are shown for the 8M medium model. 
+
+Method Task 1 Task 2 Task 3 Task 4 Avg Late fusion (hiddens) 0.687 0.740 0.892 0.866 0.796 Late fusion (scores) 0.689 0.731 0.889 0.859 0.792 Early fusion 0.691 0.739 0.892 0.868 0.797 
+
+## 6 Online Results 
+
+We evaluated the proposed approach in A/B tests on core banking products, where communications were delivered through three channels: push notifications, SMS, and telemarketing. As the target online metric, we used the Net Present Value (NPV), and we report the relative improvement of the treatment group over the control group: 
+
+Δ = NPV treat − NPV ctrl 
+
+NPV ctrl 
+
+.
+
+Model scores produced by our approach were consumed by an existing production optimizer. For each client–product–channel candidate, a proxy for expected incremental profit was computed as score × NPV. The optimizer then built a communication plan that maximizes total NPV subject to business constraints (e.g., channel capacity limits, contact policies). For online evaluation, we deployed the proposed model for 6 core products (out of more than 40 products offered by the company). These products were selected based on the highest historical NPV, as they contribute the most to total revenue and provide sufficient traffic for statistically reliable A/B evaluation. We report the impact on total NPV across all products because the optimizer jointly allo-cates limited contact capacity across competing offers, so changes in scores for a subset of products can shift exposure and revenue among the remaining products. As the control group, we used the production Gradient Boosting Decision Trees (GBDT) models de-ployed at the time of the experiment. The treatment group used the proposed architecture, while keeping all remaining business rules and operational constraints unchanged. Clients were randomly as-signed to control and treatment groups, with approximately 10% of the total client base in the treatment group and the remaining pop-ulation in the control group. Statistical significance was assessed using a t-test with a significance level of 0.05, and the experiment duration (2 months) was chosen to ensure sufficient power given the variability of NPV. Across products and communication channels, the proposed architecture achieved an average +1% uplift in total NPV relative to the GBDT baseline. While the absolute uplift value may appear modest, it corresponds to a substantial absolute revenue gain at the system scale. Following successful A/B testing, we transitioned the production scoring pipelines for the evaluated products to the proposed approach, which has since been adopted as the default scoring model. 
+
+## 7 Conclusion 
+
+In this work, we introduced a foundation model for multimodal behavioral data that jointly leverages transactional histories, click-stream signals, and communication events. The proposed approach is based on pretraining a transformer-based sequence encoder on unified event sequences and reusing it as a frozen shared repre-sentation backbone across diverse downstream tasks. Extensive offline experiments demonstrate the effectiveness of the proposed approach. The proposed system has been successfully deployed at scale in production and validated through online A/B testing, resulting in measurable improvements in business metrics and con-firming the practical value of foundation models for large-scale financial applications. 
+
+## References           
+
+> [1] Dmitrii Babaev, Nikita Ovsov, Ivan Kireev, Maria Ivanova, Gleb Gusev, Ivan Nazarov, and Alexander Tuzhilin. 2022. CoLES: Contrastive Learning for Event Sequences with Self-Supervision. In Proceedings of the 2022 International Confer-ence on Management of Data . 1190–1199. [2] Alexandra Bazarova, Maria Kovaleva, Ilya Kuleshov, Evgenia Romanenkova, Alexander Stepikin, Aleksandr Yugay, Dzhambulat Mollaev, Ivan Kireev, Andrey Savchenko, and Alexey Zaytsev. 2025. Learning Transactions Representations for Information Management in Banks: Mastering Local, Global, and External Knowledge. International Journal of Information Management Data Insights 5, 1 (2025), 100323. [3] DT Braithwaite, Misael Cavalcanti, R Austin McEver, Hiroto Udagawa, Daniel Silva, Rohan Ramanath, Felipe Meneses, Arissa Yoshida, Evan Wingert, Matheus Ramos, et al .2025. Your Spending Needs Attention: Modeling Financial Habits with Transformers. arXiv preprint arXiv:2507.23267 (2025).
+
+A Foundation Model for Multimodal Event Sequences in Financial Applications KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+[4] Xiangyi Chen, Kousik Rajesh, Matthew Lawhon, Zelun Wang, Hanyu Li, Haomiao Li, Saurabh Vishwas Joshi, Pong Eksombatchai, Jaewon Yang, Yi-Ping Hsu, et al .2025. PinFM: Foundation Model for User Activity Sequences at a Billion-scale Visual Discovery Platform. In Proceedings of the Nineteenth ACM Conference on Recommender Systems . 381–390. [5] Jacek Dabrowski, Maria Janicka, Lukasz Sienkiewicz, Gergely Stomfai, Diet-mar Jannach, Francesco Barile, Marco Polignano, Claudio Pomo, and Abhishek Srivastava. 2025. RecSys Challenge 2025: Universal Behavioral Profiles for Rec-ommender Systems. In Proceedings of the Nineteenth ACM Conference on Recom-mender Systems . 1389–1393. [6] Huangliang Dai, Shixun Wu, Hairui Zhao, Jiajun Huang, Zizhe Jian, Yue Zhu, and Haiyang Hu. 2025. FT-Transformer: Resilient and Reliable Transformer with End-to-End Fault Tolerant Attention. doi:10.48550/arXiv.2504.02211 [7] Yingtong Dou, Zhimeng Jiang, Tianyi Zhang, Mingzhi Hu, Zhichao Xu, Shub-ham Jain, Uday Singh Saini, Xiran Fan, Jiarui Sun, Menghai Pan, et al . 2025. TransactionGPT. arXiv preprint arXiv:2511.08939 (2025). [8] Jiahui Gong, Jingtao Ding, Fanjin Meng, Chen Yang, Hong Chen, Zuojian Wang, Haisheng Lu, and Yong Li. 2025. BehaveGPT: A Foundation Model for Large-scale User Behavior Modeling. arXiv preprint arXiv:2505.17631 (2025). [9] Yury Gorishniy, Akim Kotelnikov, and Artem Babenko. 2025. TabM: Advancing Tabular Deep Learning with Parameter-Efficient Ensembling. In The Thirteenth International Conference on Learning Representations . https://openreview.net/ forum?id=Sd4wYYOhmY [10] Yue Guo, Wentao Zhang, Xiaojun Zhang, Vincent W Zheng, and Yi Yang. 2025. Efficient Multi-Expert Tabular Language Model for Banking. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 .2271–2281. [11] Sanjeev Jha, Montserrat Guillen, and J Christopher Westland. 2012. Employing transaction aggregation strategy to detect credit card fraud. Expert systems with applications 39, 16 (2012), 12650–12657. [12] Ivan Karpukhin and Andrey Savchenko. 2024. Detecting the Future: All-at-Once Event Sequence Forecasting with Horizon Matching. arXiv preprint arXiv:2408.13131 (2024). [13] Ivan Karpukhin and Andrey Savchenko. 2025. HT-Transformer: Event Sequences Classification by Accumulating Prefix Information with History Tokens. arXiv preprint arXiv:2508.01474 (2025). [14] Kirill Khrylchenko, Artem Matveev, Sergei Makeev, and Vladimir Baikalov. 2025. Scaling Recommender Transformers to One Billion Parameters. arXiv preprint arXiv:2507.15994 (2025). [15] Günter Klambauer, Thomas Unterthiner, Andreas Mayr, and Sepp Hochreiter. 2017. Self-Normalizing Neural Networks. arXiv:1706.02515 [cs.LG] https://arxiv. org/abs/1706.02515 [16] Anton Klenitskiy, Artem Fatkulin, Daria Denisova, Anton Pembek, and Alexey Vasilev. 2025. Encode Me If You Can: Learning Universal User Representations via Event Sequence Autoencoding. In Proceedings of the Recommender Systems Challenge 2025 . 26–30. [17] Can Liu, Yuncong Gao, Li Sun, Jinghua Feng, Hao Yang, and Xiang Ao. 2022. User Behavior Pre-training for Online Fraud Detection. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 3357–3365. [18] Wenhan Lyu, Devashish Tyagi, Yihang Yang, Ziwei Li, Ajay Somani, Karthikeyan Shanmugasundaram, Nikola Andrejevic, Ferdi Adeputra, Curtis Zeng, Arun K Singh, et al . 2025. DV365: Extremely Long User History Modeling at Instagram. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 . 4717–4727. [19] Sergei Makeev, Alexandr Andreev, Vladimir Baikalov, Vladislav Tytskiy, Aleksei Krasilnikov, and Kirill Khrylchenko. 2025. Blending Sequential Embeddings, Graphs, and Engineered Features: 4th Place Solution in RecSys Challenge 2025. In Proceedings of the Recommender Systems Challenge 2025 . 21–25. [20] Dzhambulat Mollaev, Ivan Kireev, Mikhail Orlov, Alexander Kostin, Ivan Karpukhin, Maria Postnova, Gleb Gusev, and Andrey Savchenko. 2025. Multi-modal Banking Dataset: Understanding Client Needs through Event Sequences. In Proceedings of the 34th ACM International Conference on Information and Knowl-edge Management . 6476–6480. [21] Viktor Moskvoretskii, Dmitry Osin, Egor Shvetsov, Igor Udovichenko, Maxim Zhelnin, Andrey Dukhovny, Anna Zhimerikina, and Evgeny Burnaev. 2024. MLEM: Generative and Contrastive Learning as Distinct Modalities for Event Sequences. arXiv preprint arXiv:2401.15935 (2024). [22] Maxim Ostroukhov, Ruslan Mikhailov, Vladimir Iashin, Artem Sokolov, Andrei Akshonov, Vitaly Protasov, Dmitrii Beloborodov, Vince Mullin, Roman Yokunda Enzmann, Georgios Kolovos, et al . 2026. PRAGMA: Revolut Foundation Model. 
+
+arXiv preprint arXiv:2604.08649 (2026). [23] Nikil Pancha, Andrew Zhai, Jure Leskovec, and Charles Rosenberg. 2022. Pinner-Former: Sequence Modeling for User Representation at Pinterest. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining .3702–3712. [24] Gustavo Polleti, Marlesson Santana, and Eduardo Fontes. 2025. Open Banking Foundational Model: Learning Language Representations from Few Financial Transactions. arXiv preprint arXiv:2511.12154 (2025). [25] Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever. 2019. Language Models are Unsupervised Multitask Learners. OpenAI 
+
+(2019). https://cdn.openai.com/better-language-models/language_models_are_ unsupervised_multitask_learners.pdf Accessed: 2024-11-15. [26] Natraj Raman, Sumitra Ganesh, and Manuela Veloso. 2024. Scalable Rep-resentation Learning for Multimodal Tabular Transactions. arXiv preprint arXiv:2410.07851 (2024). [27] Artem Sakhno, Ivan Kireev, Dmitrii Babaev, Maxim Savchenko, Gleb Gusev, and Andrey Savchenko. 2025. PyTorch-Lifestream: Learning Embeddings on Discrete Event Sequences. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence . 11104–11108. [28] Yuki Sawada, Rintaro Hasegawa, Yuhi Nagatsuma, Shugo Takei, Kazuhito Yonekawa, and Hiromu Auchi. 2025. Toward Universal User Representations: Contrastive Learning with Transformers and Embedding Ensembles. In Proceed-ings of the Recommender Systems Challenge 2025 . 51–55. [29] Aleksei Shestov, Omar Zoloev, Maksim Makarenko, Mikhail Orlov, Egor Fadeev, Ivan Kireev, and Andrey Savchenko. 2025. LLM4ES: Learning user embeddings from event sequences via large language models. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management . 5238–5242. [30] Piotr Skalski, David Sutton, Stuart Burrell, Iker Perez, and Jason Wong. 2023. To-wards a Foundation Purchasing Model: Pretrained Generative Autoregression on Transaction Sequences. In Proceedings of the Fourth ACM International Conference on AI in Finance . 141–149. [31] Ruoxi Wang, Rakesh Shivanna, Derek Cheng, Sagar Jain, Dong Lin, Lichan Hong, and Ed Chi. 2021. DCN V2: Improved Deep & Cross Network and Practical Lessons for Web-scale Learning to Rank Systems. 1785–1797. doi:10.1145/3442381.3450078 [32] Ziming Wang, Qianru Wu, Baolin Zheng, Junjie Wang, Kaiyu Huang, and Yanjie Shi. 2023. Sequence As Genes: An User Behavior Modeling Framework for Fraud Transaction Detection in E-commerce. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 5194–5203. [33] Xue Xia, Pong Eksombatchai, Nikil Pancha, Dhruvil Deven Badani, Po-Wei Wang, Neng Gu, Saurabh Vishwas Joshi, Nazanin Farahpour, Zhiyuan Zhang, and An-drew Zhai. 2023. TransAct: Transformer-based Realtime User Action Model for Recommendation at Pinterest. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 5249–5259. [34] Jiahuan Yan, Bo Zheng, Hongxia Xu, Yiheng Zhu, Danny Z. Chen, Jimeng Sun, Jian Wu, and Jintai Chen. 2024. Making Pre-trained Language Models Great on Tabular Prediction. arXiv:2403.01841 [cs.CL] https://arxiv.org/abs/2403.01841 [35] Chin-Chia Michael Yeh, Uday Singh Saini, Xin Dai, Xiran Fan, Shubham Jain, Yujie Fan, Jiarui Sun, Junpeng Wang, Menghai Pan, Yingtong Dou, et al . 2025. TREASURE: A Transformer-Based Foundation Model for High-Volume Transac-tion Understanding. arXiv preprint arXiv:2511.19693 (2025).
