@@ -1473,6 +1473,24 @@
     );
   }
 
+  function renderFeedbackQuickButton() {
+    return (
+      '<button type="button" class="dpr-sidebar-quick dpr-sidebar-feedback-btn" data-sidebar-feedback aria-label="打开反馈" title="打开反馈">' +
+      '<span class="dpr-sidebar-quick-label"><span class="dpr-sidebar-quick-icon" aria-hidden="true">💬</span>反馈</span>' +
+      '</button>'
+    );
+  }
+
+  function renderSidebarHeader(homeHref, tutorialHref, homeLabel, tutorialLabel) {
+    return (
+      '<header class="dpr-sidebar-header">' +
+      renderQuickLink('dpr-sidebar-quick-home', homeHref, '🏠', homeLabel) +
+      renderQuickLink('dpr-sidebar-quick-tutorial', tutorialHref, '📖', tutorialLabel) +
+      renderFeedbackQuickButton() +
+      '</header>'
+    );
+  }
+
   function renderSidebarFooterControls(collapsed) {
     var collapseLabel = collapsed ? '展开侧边栏' : '收起侧边栏';
     return (
@@ -1513,6 +1531,17 @@
     }, 100);
   }
 
+  function openFeedbackPanel() {
+    try {
+      if (window.DPRFeedback && typeof window.DPRFeedback.open === 'function') {
+        window.DPRFeedback.open();
+        return true;
+      }
+    } catch (e) {}
+    dispatchNamedEvent('dpr-open-feedback');
+    return false;
+  }
+
   function renderShell(root) {
     var homeHref = (state.model.home && state.model.home.href) || '#/';
     var tutorialHref = (state.model.tutorial && state.model.tutorial.href) || '#/tutorial/README';
@@ -1523,10 +1552,7 @@
     root.innerHTML =
       '<button type="button" class="dpr-sidebar-mobile-toggle" aria-label="切换侧边栏">' +
       '<span></span><span></span><span></span></button>' +
-      '<header class="dpr-sidebar-header">' +
-      renderQuickLink('dpr-sidebar-quick-home', homeHref, '🏠', homeLabel) +
-      renderQuickLink('dpr-sidebar-quick-tutorial', tutorialHref, '📖', tutorialLabel) +
-      '</header>' +
+      renderSidebarHeader(homeHref, tutorialHref, homeLabel, tutorialLabel) +
       '<div class="dpr-sidebar-toolbar">' +
       '  <div class="dpr-sidebar-search-wrap">' +
       '    <span class="dpr-sidebar-search-icon" aria-hidden="true">🔍</span>' +
@@ -2268,6 +2294,15 @@
         openSettingsPanel();
         return;
       }
+      var feedbackBtn = e.target.closest('.dpr-sidebar-feedback-btn');
+      if (feedbackBtn) {
+        e.preventDefault();
+        openFeedbackPanel();
+        if (isOverlaySidebarViewport()) {
+          toggleMobile(false);
+        }
+        return;
+      }
       var axisToggle = e.target.closest('.dpr-sidebar-axis-toggle');
       if (axisToggle) {
         var axisGroup = axisToggle.getAttribute('data-axis-toggle');
@@ -2579,11 +2614,14 @@
         resolveCurrentPaperHrefForRender: resolveCurrentPaperHrefForRender,
         updatePaperTitleOverflowMarks: updatePaperTitleOverflowMarks,
         renderQuickLink: renderQuickLink,
+        renderFeedbackQuickButton: renderFeedbackQuickButton,
+        renderSidebarHeader: renderSidebarHeader,
         renderSidebarFooterControls: renderSidebarFooterControls,
         applySidebarCollapsed: applySidebarCollapsed,
         toggleSidebarCollapsed: toggleSidebarCollapsed,
         syncResponsiveSidebarMode: syncResponsiveSidebarMode,
         openSettingsPanel: openSettingsPanel,
+        openFeedbackPanel: openFeedbackPanel,
       },
     };
   }
