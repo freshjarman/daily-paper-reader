@@ -1546,7 +1546,7 @@
     var homeHref = (state.model.home && state.model.home.href) || '#/';
     var tutorialHref = (state.model.tutorial && state.model.tutorial.href) || '#/tutorial/README';
     var homeLabel = (state.model.home && state.model.home.label) || '首页';
-    var tutorialLabel = (state.model.tutorial && state.model.tutorial.label) || '使用教程';
+    var tutorialLabel = (state.model.tutorial && state.model.tutorial.label) || '教程';
     var filterAllActive = state.filter === 'all' ? 'is-active' : '';
     var filterUnreadActive = state.filter === 'unread' ? 'is-active' : '';
     root.innerHTML =
