@@ -471,6 +471,11 @@
   }
 
   // ---------- 数据解析 ----------
+  function normalizeTutorialLabel(label) {
+    var text = String(label || '').trim();
+    return !text || text === '使用教程' ? '教程' : text;
+  }
+
   // 把 docs/_sidebar.md 文本解析成 model
   // 结构：
   //   - 行 "* Daily Papers" 进入日报分组
@@ -547,6 +552,7 @@
           if (!model.home && (top.href === '#/' || /\/$/.test(top.href))) {
             model.home = top;
           } else if (!model.tutorial) {
+            top.label = normalizeTutorialLabel(top.label);
             model.tutorial = top;
           }
         }
@@ -1485,7 +1491,7 @@
     return (
       '<header class="dpr-sidebar-header">' +
       renderQuickLink('dpr-sidebar-quick-home', homeHref, '🏠', homeLabel) +
-      renderQuickLink('dpr-sidebar-quick-tutorial', tutorialHref, '📖', tutorialLabel) +
+      renderQuickLink('dpr-sidebar-quick-tutorial', tutorialHref, '📖', normalizeTutorialLabel(tutorialLabel)) +
       renderFeedbackQuickButton() +
       '</header>'
     );

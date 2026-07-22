@@ -4,21 +4,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTICE_FILES = (
-    ROOT / "docs" / "_home_notice.md",
     ROOT / "docs_init" / "_home_notice.md",
-    ROOT / "docs" / "README.md",
     ROOT / "docs_init" / "README.md",
 )
 
 HOME_README_FILES = (
-    ROOT / "docs" / "README.md",
     ROOT / "docs_init" / "README.md",
 )
 
 PROMO_FILES = (
-    ROOT / "docs" / "_home_promo.md",
     ROOT / "docs_init" / "_home_promo.md",
-    ROOT / "docs" / "README.md",
     ROOT / "docs_init" / "README.md",
 )
 
@@ -78,13 +73,12 @@ def test_home_promo_uses_the_shared_panel_structure():
         assert "QQ群" in content and "583867967" in content, path
 
 
-def test_home_panel_modules_stay_in_sync_with_init_templates():
-    assert (ROOT / "docs" / "_home_notice.md").read_text(encoding="utf-8") == (
-        ROOT / "docs_init" / "_home_notice.md"
-    ).read_text(encoding="utf-8")
-    assert (ROOT / "docs" / "_home_promo.md").read_text(encoding="utf-8") == (
-        ROOT / "docs_init" / "_home_promo.md"
-    ).read_text(encoding="utf-8")
+def test_home_panel_modules_are_embedded_in_the_init_homepage():
+    readme = (ROOT / "docs_init" / "README.md").read_text(encoding="utf-8")
+    notice = (ROOT / "docs_init" / "_home_notice.md").read_text(encoding="utf-8").strip()
+    promo = (ROOT / "docs_init" / "_home_promo.md").read_text(encoding="utf-8").strip()
+    assert notice in readme
+    assert promo in readme
 
 
 def test_site_stats_script_is_loaded_without_blocking_core_assets():

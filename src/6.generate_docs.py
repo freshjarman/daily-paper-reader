@@ -40,6 +40,7 @@ except Exception:  # pragma: no cover
     from src.paper_figures import ensure_paper_media
 
 CONFIG_FILE = os.path.join(ROOT_DIR, "config.yaml")
+HOME_TEMPLATE_DIR = os.path.join(ROOT_DIR, "docs_init")
 TODAY_STR = str(os.getenv("DPR_RUN_DATE") or "").strip() or datetime.now(timezone.utc).strftime("%Y%m%d")
 RANGE_DATE_RE = re.compile(r"^(\d{8})-(\d{8})$")
 
@@ -868,14 +869,31 @@ def prepare_day_report_paths(docs_dir: str, date_str: str) -> Tuple[str, str]:
     return day_dir, day_readme
 
 
-def prepare_home_module_paths(docs_dir: str) -> Tuple[str, str]:
-    notice_path = os.path.join(docs_dir, "_home_notice.md")
-    promo_path = os.path.join(docs_dir, "_home_promo.md")
+def prepare_home_module_paths(
+    docs_dir: str,
+    home_template_dir: str | None = None,
+) -> Tuple[str, str]:
+    template_dir = home_template_dir or HOME_TEMPLATE_DIR
+    template_notice = os.path.join(template_dir, "_home_notice.md")
+    template_promo = os.path.join(template_dir, "_home_promo.md")
+    notice_path = (
+        template_notice
+        if os.path.exists(template_notice)
+        else os.path.join(docs_dir, "_home_notice.md")
+    )
+    promo_path = (
+        template_promo
+        if os.path.exists(template_promo)
+        else os.path.join(docs_dir, "_home_promo.md")
+    )
     return notice_path, promo_path
 
 
-def ensure_home_module_files(docs_dir: str) -> Tuple[str, str]:
-    notice_path, promo_path = prepare_home_module_paths(docs_dir)
+def ensure_home_module_files(
+    docs_dir: str,
+    home_template_dir: str | None = None,
+) -> Tuple[str, str]:
+    notice_path, promo_path = prepare_home_module_paths(docs_dir, home_template_dir)
     if not os.path.exists(notice_path):
         with open(notice_path, "w", encoding="utf-8") as f:
             f.write("────────────────────────────────────────\n")
@@ -2230,8 +2248,9 @@ def build_home_readme_content(
     paper_evidence_by_id: Dict[str, str],
     run_count: int = 1,
     summary: str | None = None,
+    home_template_dir: str | None = None,
 ) -> str:
-    notice_path, promo_path = ensure_home_module_files(docs_dir)
+    notice_path, promo_path = ensure_home_module_files(docs_dir, home_template_dir)
     notice_md = _read_module_markdown(notice_path)
     promo_md = _read_module_markdown(promo_path)
     latest_report_md = build_latest_report_section(
@@ -2267,6 +2286,7 @@ def sync_home_readme_from_day_report(
     paper_evidence_by_id: Dict[str, str],
     run_count: int = 1,
     summary: str | None = None,
+    home_template_dir: str | None = None,
 ) -> str:
     home_readme = os.path.join(docs_dir, "README.md")
     # 首页由三段模块拼接：公告栏（独立 md）+ 本次日报 + 宣传栏（独立 md）
@@ -2281,6 +2301,7 @@ def sync_home_readme_from_day_report(
         paper_evidence_by_id=paper_evidence_by_id,
         run_count=run_count,
         summary=summary,
+        home_template_dir=home_template_dir,
     )
     with open(home_readme, "w", encoding="utf-8") as f:
         f.write(content)

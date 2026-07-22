@@ -166,14 +166,14 @@ def test_home_dashboard_switches_to_single_column_on_small_screens():
     assert "grid-template-rows: none" in grid_rule
 
 
-def test_current_and_init_homepages_render_exactly_four_dashboard_cards():
-    for path in (ROOT / "docs" / "README.md", ROOT / "docs_init" / "README.md"):
-        content = path.read_text(encoding="utf-8")
-        assert content.count('class="dpr-home-dashboard-card ') == 4, path
-        assert content.count('class="dpr-home-dashboard-grid"') == 1, path
-        dashboard_region = _section_between(
-            content,
-            '<div class="dpr-home-dashboard-grid">',
-            '<div class="dpr-home-promo-card dpr-home-panel">',
-        )
-        assert "<a " not in dashboard_region, path
+def test_init_homepage_renders_exactly_four_dashboard_cards():
+    path = ROOT / "docs_init" / "README.md"
+    content = path.read_text(encoding="utf-8")
+    assert content.count('class="dpr-home-dashboard-card ') == 4, path
+    assert content.count('class="dpr-home-dashboard-grid"') == 1, path
+    dashboard_region = _section_between(
+        content,
+        '<div class="dpr-home-dashboard-grid">',
+        '<div class="dpr-home-promo-card dpr-home-panel">',
+    )
+    assert "<a " not in dashboard_region, path

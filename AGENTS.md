@@ -335,9 +335,12 @@ git status --short
 
 **默认不得合并的运行态/产物路径**（除非用户明确要求且已说明对 fork 用户 `Sync fork` 的风险）：
 - `config.yaml`、`docs/config.yaml`、`docs/README.md`、`docs/_sidebar.md`
+- `docs/_home_notice.md`、`docs/_home_promo.md`、`docs/.repo-owner.json`
 - `docs/<日期>/`、`docs/assets/`、`archive/`、`secret.private`
 
 若工作分支中混入了上述运行态产物，必须先从提交中剥离这些文件，只保留代码改动后再合并主分支。
+
+主仓库的产品功能、首页、公告和 Sidebar 改动不得直接修改 `docs/README.md`、`docs/_sidebar.md` 或 `docs/_home_*.md`，即使当前页面需要立刻展示也不例外。稳定内容必须写入 `docs_init/`，动态首页由 `src/6.generate_docs.py` 在用户 Fork 的下一次流水线中从 `docs_init/` 模板生成；Sidebar 必须在 `app/dpr-sidebar.js` 中兼容旧运行态文案。主仓库工作流不得提交个性化运行产物，避免任何下游 Fork 因相同文件被双方改写而无法使用 GitHub `Sync fork`。
 
 **推荐的主分支合并方式**——快进合并：
 

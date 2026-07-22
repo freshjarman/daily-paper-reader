@@ -119,7 +119,7 @@ function createClassList(initial = []) {
 
 const sampleSidebar = `
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
-* <a class="dpr-sidebar-root-link" href="#/tutorial/README">教程</a>
+* <a class="dpr-sidebar-root-link" href="#/tutorial/README">使用教程</a>
 
 * Conference Papers
   * NEURIPS 2024 <!--dpr-conference:neurips-2024-->
@@ -183,6 +183,7 @@ function testSidebarNavigationContract() {
   assert.equal(typeof tools.parseSidebar, 'function');
 
   const model = tools.parseSidebar(sampleSidebar);
+  assert.equal(model.tutorial.label, '教程', '旧版运行态文案也应归一化为两个字');
   assert.deepEqual(tools.collectPaperHrefsFromModel(model), [
     '#/202606/24/paper-a',
     '#/202606/24/paper-b',
@@ -641,21 +642,16 @@ function testQuickLinksCenterTextAndDetachIcon() {
   assert.ok(feedbackHtml.includes('aria-label="打开反馈"'));
   assert.ok(feedbackHtml.includes('<span class="dpr-sidebar-quick-label"><span class="dpr-sidebar-quick-icon" aria-hidden="true">💬</span>反馈</span>'));
 
-  const headerHtml = tools.renderSidebarHeader('#/', '#/tutorial/README', '首页', '教程');
+  const headerHtml = tools.renderSidebarHeader('#/', '#/tutorial/README', '首页', '使用教程');
   const homeIndex = headerHtml.indexOf('dpr-sidebar-quick-home');
   const tutorialIndex = headerHtml.indexOf('dpr-sidebar-quick-tutorial');
   const feedbackIndex = headerHtml.indexOf('dpr-sidebar-feedback-btn');
   assert.ok(homeIndex >= 0 && tutorialIndex > homeIndex && feedbackIndex > tutorialIndex);
   assert.ok(headerHtml.includes('aria-hidden="true">📖</span>教程</span>'));
 
-  const sidebarSource = fs.readFileSync('app/dpr-sidebar.js', 'utf8');
-  assert.ok(sidebarSource.includes("|| '教程'"));
-  assert.ok(!sidebarSource.includes("|| '使用教程'"));
-  for (const sidebarPath of ['docs/_sidebar.md', 'docs_init/_sidebar.md']) {
-    const sidebarMarkdown = fs.readFileSync(sidebarPath, 'utf8').split('\n').slice(0, 3).join('\n');
-    assert.ok(sidebarMarkdown.includes('data-dpr-hash="#/tutorial/README">教程</a>'));
-    assert.ok(!sidebarMarkdown.includes('>使用教程</a>'));
-  }
+  const sidebarTemplate = fs.readFileSync('docs_init/_sidebar.md', 'utf8').split('\n').slice(0, 3).join('\n');
+  assert.ok(sidebarTemplate.includes('data-dpr-hash="#/tutorial/README">教程</a>'));
+  assert.ok(!sidebarTemplate.includes('>使用教程</a>'));
 
   const css = fs.readFileSync('app/app.css', 'utf8');
   const headerRule = cssRule(css, '.dpr-sidebar-header');

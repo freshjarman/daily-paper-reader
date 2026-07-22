@@ -130,6 +130,36 @@ def test_same_day_home_sync_replaces_the_dashboard_instead_of_appending(tmp_path
     assert "<a " not in dashboard
 
 
+def test_home_sync_reads_stable_templates_instead_of_runtime_modules(tmp_path):
+    mod = _load_module()
+    docs_dir = tmp_path / "docs"
+    template_dir = tmp_path / "docs_init"
+    docs_dir.mkdir()
+    template_dir.mkdir()
+    (docs_dir / "_home_notice.md").write_text("旧运行态公告", encoding="utf-8")
+    (docs_dir / "_home_promo.md").write_text("旧运行态宣传", encoding="utf-8")
+    (template_dir / "_home_notice.md").write_text("新版稳定公告", encoding="utf-8")
+    (template_dir / "_home_promo.md").write_text("新版稳定宣传", encoding="utf-8")
+    mod.HOME_TEMPLATE_DIR = str(template_dir)
+
+    home_path = mod.sync_home_readme_from_day_report(
+        docs_dir=str(docs_dir),
+        date_str="20260720",
+        date_label="2026-07-20",
+        generated_at="2026-07-20 10:00:00 UTC",
+        recommend_exists=False,
+        deep_entries=[],
+        quick_entries=[],
+        paper_evidence_by_id={},
+    )
+
+    content = Path(home_path).read_text(encoding="utf-8")
+    assert "新版稳定公告" in content
+    assert "新版稳定宣传" in content
+    assert "旧运行态公告" not in content
+    assert "旧运行态宣传" not in content
+
+
 def test_day_report_uses_cumulative_wording_after_merge():
     mod = _load_module()
     deep, quick = _sample_entries()
