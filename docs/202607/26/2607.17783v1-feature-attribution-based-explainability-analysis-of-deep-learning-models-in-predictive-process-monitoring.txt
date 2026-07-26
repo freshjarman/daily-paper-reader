@@ -1,0 +1,299 @@
+Title: Feature Attribution-Based Explainability Analysis of Deep Learning Models in Predictive Process Monitoring
+
+URL Source: https://arxiv.org/pdf/2607.17783v1
+
+Published Time: Tue, 21 Jul 2026 01:44:07 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Feature Attribution-Based Explainability Analysis of Deep Learning Models in Predictive Process Monitoring 
+
+Kseniya Sahatova 1,2 [0009-0001-0301-6361] , Rafael Seidi Oyamada 2[0000-0002-4408-9575] , Xuefei Lu 1[0000-0003-2103-6478] , and Johannes De Smedt 2[0000-0003-0389-0275]  
+
+> 1
+
+SKEMA Business School, 92156 Suresnes, France 
+
+kseniya.sahatova@skema.edu, xuefei.lu@skema.edu  
+
+> 2
+
+KU Leuven, B-3000 Leuven, Belgium 
+
+rafael.oyamada@kuleuven.be, johannes.desmedt@kuleuven.be 
+
+Abstract. Predictive process monitoring supports the optimization and control of operational business processes by forecasting the future state or outcome of ongoing cases. While deep neural networks have achieved strong performance for these tasks by modeling sequential dependencies in event logs, their black-box nature limits trust and practical adop-tion. Feature attribution methods are often used to address this, but applying them directly poses a dilemma: event-level attributions impose high computational complexity for long traces, while explanations based on aggregated trace representations often fail to capture the underlying control-flow dynamics. To address this issue, we propose a local post-hoc explainability method for deep neural networks in outcome prediction. The method relies on a control-flow-aware segmentation algorithm that partitions a trace into meaningful segments and supports the compu-tation of segment-level SHAP explanations. This makes it possible to identify which parts of a trace influence a prediction and which change points steer the case toward the predicted outcome. We assess the pro-posed segmentation method on a synthetic dataset with known process logic, where meaningful change points can be explicitly verified, and we demonstrate its usefulness on real-world event logs from a loan applica-tion process and an administrative process of a Dutch municipality. 
+
+Keywords: Predictive Process Monitoring · SHAP · Control-flow-aware Trace Segmentation. 
+
+# 1 Introduction 
+
+Businesses increasingly use Artificial Intelligence (AI) to anticipate issues such as delays or failures, enabling optimization and prevention. Predictive process monitoring (PPM), a branch of Process Mining (PM), focuses on predicting the outcome of an ongoing business process instance, estimating the remaining time arXiv:2607.17783v1 [cs.LG] 20 Jul 2026 2 K. Sahatova et al. 
+
+before completion, or forecasting the sequence of activities in the future. To address these predictive tasks, researchers have adopted a variety of sequence modeling architectures [32,27], such as recurrent neural networks (RNNs) and transformers, which have emerged as a dominant paradigm due to their ability to capture the sequential and temporal dependencies inherent in event logs. Despite their strong predictive performance, sequential models in PPM re-main largely obscure: their internal representations are difficult to interpret, lim-iting practical adoption in high-stakes operational settings. This challenge has motivated growing interest in explainability methods that facilitate understand-ing of how models trained on event logs arrive at their predictions [4,5,11,13,25]. Recent studies have explored the use of feature attribution techniques such as LIME (local interpretable model-agnostic explanations) and SHAP (Shapley ad-ditive explanations) to enhance the transparency of deep learning models in PPM [10,11,21,31]. However, current approaches still explain predictions either at the level of individual events or at the level of the full aggregated trace. Both views are problematic for PPM: event-level explanations are often too fragmented to reveal meaningful process behavior, whereas trace-level explanations operate at a broader level of abstraction and introduce information loss through aggregation, making it harder to identify which part of the execution drives the prediction. Consequently, existing methods may assign importance scores without preserv-ing the local control-flow context that gives those scores process meaning. Event logs exhibit sequential and temporal dependencies, which makes them partly related to time-series data. This connection is relevant because the time-series literature has proposed several feature attribution methods that improve interpretability by grouping adjacent observations, in contrast to interpreting shallow event-level or fully aggregated data, into segments [6,9,16,22,24]. In coalition-based methods such as Shapley values, this strategy also reduces the computational cost, which otherwise grows exponentially with the number of timesteps. However, event logs are not generic time series: they contain process-specific information such as control-flow behavior, activity semantics, and case progression, and are irregular in time, since events are recorded upon activity execution rather than at fixed sampling intervals as in regular time series. As a result, segmentation strategies developed for time series may produce groups of events that do not correspond to meaningful process fragments, for example by splitting a coherent process stage or merging unrelated control-flow behavior. To address this gap, we propose a control-flow-aware segmentation algorithm that improves the computational efficiency of feature attribution-based explana-tions while preserving the control-flow constraints of business processes. Our method partitions traces into coherent subsequences of activities by identify-ing shifts in transition probabilities, thereby yielding more interpretable units. We compute segment-level SHAP values for sequential classifiers in a binary prediction setting. For stakeholders and practitioners, event-level feature attri-butions provide limited interpretation because the impact of an activity on the outcome often depends on its execution context. As a result, attributing predic-tive importance to individual activities may provide limited insight in isolation. Feature Attribution-Based Explainability Analysis in PPM 3
+
+We argue that computing SHAP values at the segment level groups activities that share similar transition dynamics, and that the underlying transition prob-abilities within each segment offer additional interpretive context beyond the attribution scores themselves. The paper is organized as follows. Section 2 reviews existing work on ex-plainability in PPM and motivates our study. Section 3 introduces the main definitions required to facilitate understanding of the methods used in this pa-per. Section 4 describes the proposed control-flow-aware segmentation algorithm and the metrics used for evaluating segmentation quality. Sections 5 and 6 in-troduce the experimental setup and present the interpretation of the obtained results, while Section 7 discusses the findings summarized in Section 8. 
+
+# 2 Related Works 
+
+Various explainability methods have been applied to enhance transparency and improve understanding of predictive models in process monitoring. In the work [21], LIME explanations were used to improve outcome prediction. Event-level feature attributions for false positives and false negatives were analyzed with rule mining to identify regions contributing to errors. The study [11] shows how Shapley values can be adapted to explain an LSTM model in the remaining-time prediction task generating explanations for each feature per timestep. In the study [31] the stability of LIME and the model-specific SHAP value estimation methods are examined in the outcome classification task across different types of trace encoding. Similar research [10] estimates the effect of design choices in predictive models and pre-processing techniques on global explainability meth-ods, examining SHAP values through the dependence plot representation. In the study [4], KernelSHAP is adapted to explain RNNs at the feature, event, and cell levels, where a cell corresponds to a specific feature of a specific event; that is, explanations are generated for each feature within a subset of events. To enable efficient computation for long sequences, the authors introduce a pruning algorithm based on the assumption that only recent events are relevant. Older events are therefore grouped into a single coalition and treated as less important for fine-grained explanations. The previously described approaches compute explanations for a single event and its associated features, proposing algorithms for efficient computation while disregarding the correlations between adjacent events inherent in event logs. These temporal dependencies make event logs analogous to time series, enabling the adaptation of explainability approaches originally developed for time-series data to the field of PM. Active research on the explainability of sequential models for time series has introduced various techniques that identify semantically mean-ingful segments and subsequently generate explanations for them. The LIME-Segment framework [24] was developed to explain time-series segments based on shape patterns and statistical properties. TS-MULE [22] utilizes LIME to explain segments of univariate and multivariate time series, employing matrix profile and SAX transformations for segmentation. Unlike in time series, consec-4 K. Sahatova et al. 
+
+utive activities in process traces may exhibit strong correlations that indicate structured process behavior, or they may show little to no correlation, suggesting loops, branching, or unpredictable behavior—i.e., process unstructuredness. WindowSHAP method [18] was introduced to reduce computational com-plexity and variance in point-wise explanations. In this approach, adjacent data points are grouped using windowing techniques with fixed- and variable-length time windows. Jiang et al. [13] adapt KernelSHAP for subsequence-level expla-nations by relying on the definition of sessions in recommendation system, where events can be grouped based on the time windows in which they occur. While such an approach is suitable for data, which temporal patterns are clearly dis-tinguishable, it has limitations in identifying meaningful subsequences when the primary analytical focus is on the process control flow—i.e., when subsequences need to be grouped based on the types of activities performed. While segment-based explanation methods have shown promise in the time-series domain, their direct application to event logs disregards the process-specific dependencies. This motivates our work, which bridges control-flow-aware trace segmentation with feature attribution to produce explanations aligned with the control-flow con-straints of business processes 
+
+# 3 Preliminaries 
+
+In this section, we introduce the main concepts from predictive process moni-toring and feature attribution used throughout this work. 
+
+Definition 1 (Event, Trace, Prefix, Event Log). Let A be the universe of activities and C the universe of case identifiers. An event is defined as a tuple 
+
+e = ( a, c, t, D ), where a ∈ A is the activity, c ∈ C is the case identifier, t is the timestamp, and D is a set of event- or case-level attributes. We denote the universe of all possible events by E.A trace σ = ⟨e1, e 2, . . . , e n⟩ is a non-empty ordered sequence of events such that ei ∈ E for all 1 ≤ i ≤ n, and ti ≤ ti+1 for all 1 ≤ i < n . Given a trace 
+
+σ = ⟨e1, . . . , e n⟩ and an integer 1 ≤ m ≤ n, the prefix of length m is defined as 
+
+prefix (σ, m ) = ⟨e1, . . . , e m⟩. The set of all possible traces over E is denoted by 
+
+E∗. Finally, an event log L is a multiset of traces. 
+
+In this work, we consider binary outcome prediction only, that is, the task of predicting the final outcome of an ongoing case from a trace prefix. 
+
+Definition 2 (Outcome Classifier). A binary outcome classifier is a function 
+
+fcl : E∗ → { 0, 1}. In practice, we consider its associated score function fcls :
+
+E∗ → [0 , 1] , which maps a prefix σ≤m = prefix (σ, m ) to the estimated probability of a positive outcome. 
+
+Our goal is to explain how a classifier arrives at its final prediction. To this end, we compute SHAP values over the segments produced by our proposed directly-follows-relation-based segmentation algorithm. Feature Attribution-Based Explainability Analysis in PPM 5
+
+Definition 3 (Directly-Follows Relation (DFR)). Let σ = ⟨e1, . . . , e n⟩ be a trace and let x, y ∈ A be two activities. We say that x is in a directly-follows relation with y, denoted by (x, y ), if there exist two consecutive events ei and 
+
+ei+1 in σ such that the activity of ei is x and the activity of ei+1 is y.
+
+Definition 4 (Shapley Values). Let N = {1, ..., n } be a set of features. Let 
+
+v : 2 N → R be a value function that assigns to each subset of features S ⊆ N areal number v(S), representing the model output when only features in S are used. The Shapley value ϕ of the feature i quantifies the weighted average marginal contribution to the model prediction over all possible feature subsets as: 
+
+ϕi(v) = X 
+
+> S⊆N\{ i}
+
+|S|!( |N | − | S| − 1)! 
+
+|N |! (v(S ∪ { i}) − v(S)) 
+
+We utilize the following characteristic function: v(S) = fcls (xS , x ′  
+
+> N\S
+
+), where 
+
+x′ is a baseline drawn from the training distribution and fcls is the scoring func-tion. In outcome prediction, v(N ) corresponds to the classifier output fcls (σ≤m).Shapley values satisfy several desirable properties, namely local accuracy, miss-ingness, and consistency; we refer to [1,17,26] for further details. 
+
+# 4 Segment-based Feature Attribution for Explainability 
+
+We capture the evolution of process executions recorded in an event log through 
+
+process phases , in which consecutive events belong to the same local control-flow context. For example, in a loan process, a trace may contain a segment 
+
+ˆσ = ⟨ei, . . . , e j ⟩ (1 ≤ i < j ≤ n, where n is the trace length) characterized as a segment of activities related to application completion, followed by a seg-ment related to offer creation. The former might contain common transitions with high directly-follows probabilities, such as Submit application → Check documents and Check documents → Validate application . Later, when the case moves to the offer creation part, we may see a less common transition like 
+
+Validate application → Create offer , characterizing a drop of likelihood that can mark the boundary between the two phases. Thus, a natural way to estimate such probabilities is through the discovery of a directly-follows graph 
+
+(DFG). More specifically, by obtaining the matrix of DFRs, we obtain empirical tran-sition probabilities between activities. Evaluating these probabilities along the events of a trace yields a sequential transition segment that reflects the local control-flow consistency of the observed process execution. Positions where this segment changes can then be interpreted as boundaries between different process phases; we refer to such positions as change points . Change point detection is a well-established task in time series analysis [8,12,15,29], where the goal is to identify positions at which the statistical properties of a sequential signal change. In our case, the signal is given by the transition-probability profile derived from the event log, and a change point corresponds to a shift in the control-flow dy-namics of the process instance, which can be interpreted as a phase boundary. Thus, let us introduce our concept of trace segmentation. 6 K. Sahatova et al. 
+
+Definition 5 (Trace Segmentation). A trace segmentation algorithm is a function fseg : E∗ → S ∗ that partitions a trace σ into a sequence of segments 
+
+s = ⟨s1, s 2, . . . , s k⟩. Each segment sl ∈ S is a sub-trace sl = ⟨ei, . . . , e m⟩ where 
+
+1 ≤ i ≤ m ≤ n, such that the concatenation of all segments s1 · s2 · · · · · sk equals the original trace σ.
+
+Using the introduced definition of trace segments and change points, we propose a control-flow-aware segmentation algorithm that identifies the corre-sponding change points and partitions a trace into segments. The algorithm optimizes a DFR-based cost function using dynamic programming, which we discuss further. Given these segments and a sequence modeling classifier, we provide explanations. 
+
+4.1 Control-flow-aware Segmentation Algorithm 
+
+Our control-flow aware segmentation algorithm combines (i) a cost function de-rived from directly-follows relations and (ii) the PELT (Pruned Exact Linear Time) algorithm [14], which detects multiple change points by minimizing a penalized objective. First, from the event log, we discover a DFG, extract the DFR matrix, and normalize it to obtain the transition probabilities between activities. Subse-quently, given a trace σ, the goal is to identify k change points that partition the trace into k + 1 segments. To assess whether a candidate segment is coherent, we assign it a cost based on the directly-follows probabilities. More specifically, transitions that are common in the event log contribute little to the cost, whereas rare or unseen transitions increase it. Therefore, segments that follow the typ-ical control-flow behavior receive low cost, while segments containing unlikely behaviors receive high cost. Formally, for a segment s = ( ai, . . . , a j ), we define: 
+
+C(s) = 
+
+> m−1
+
+X
+
+> i=1
+
+c(ai, a i+1 ), (1) where 
+
+c(ai, a i+1 ) = 
+
+(
+
+− log T [ai, a i+1 ] if T [ai, a i+1 ] > 0,γ otherwise, (2) where T [ai, a i+1 ] denotes the directly-follows probability of activity ai+1 after 
+
+ai, and γ is some penalty for the transitions that have not been captured by the DFR matrix. For example, if the transitions Submit application → Check documents 
+
+and Check documents → Validate application are frequent in the event log, then the segment Submit application → Check documents → Validate application will receive a low cost. In contrast, a segment containing a rare or unseen transition will receive a higher cost, indicating a possible shift in local control-flow behavior. Therefore, PELT identifies the change points by minimiz-ing the total segmentation cost over the trace. This objective combines the cost Feature Attribution-Based Explainability Analysis in PPM 7
+
+of the resulting segments with a penalty term for introducing additional change points: 
+
+min 
+
+> τ1: k
+> k+1
+
+X
+
+> i=1
+
+C a(τi−1+1): τi
+
+ + βk, (3) where C(·) denotes the segment cost, τ1: k are the detected change points, and 
+
+β controls the trade-off between segmentation quality and model complexity. This hyperparameter is selected via grid search by minimizing the Akaike Infor-mation Criterion (AIC), which balances goodness of fit against the number of change points, thereby favoring the less costly segmentation for a given trace. In particular, the penalty term discourages over-segmentation, such that new boundaries are introduced only when they lead to a substantial improvement in local control-flow consistency. 
+
+4.2 Calculation of Segment-level SHAP Values 
+
+Trace segmentation allows us to explain predictions at the level of coherent trace fragments. This is more informative in process mining than explaining either single events or the entire trace at once. Event-level explanations often ignore the broader local control-flow context, whereas trace-level explanations collapse the whole process instance into one explanatory unit. By using segments instead, we can quantify how different parts of a trace, each corresponding to a locally consistent control-flow region, contribute to the prediction. In other words, each segment is treated as one interpretable process unit in the SHAP computation. The calculation of segment-level SHAP values can be formalized as follows. Let σ = ⟨e1, . . . , e n⟩ be a trace of length n. We represent σ as a matrix X
+
+of the size n × d, where the i-th row xi ∈ Rd is the feature vector of event 
+
+ei, and d is the number of features. Let B be a baseline matrix of the same dimensions n × d. Following the approach in [4], we create a reference event vector ¯e ∈ Rd that summarizes typical behavior in the training data. For a categorical attribute j, ¯ej = mode (X∗,j ), where X∗,j denotes the j-th column of X. For a numerical attribute j, ¯ej = ¯X∗,j , representing the mean of the 
+
+j-th column. Further, the baseline B is constructed as B = 1n · ¯e. Suppose the trace is partitioned into k contiguous segments sl, l = 1 , . . . , k . To treat segments as explanatory units in the SHAP framework, we define a coalition vector z ∈ { 0, 1}k, where zl = 1 indicates that segment sl retains its original values from X, and zl = 0 indicates that it is replaced by the corresponding baseline values from B . For a given coalition z, we construct the mask matrix 
+
+M (z) ∈ { 0, 1}n×d, where M (z)i,j = zl, ∀i ∈ sl, j = 1 , . . . , d . The perturbation function h is given as hs(z) = M (z) ⊙ X + ( J − M (z)) ⊙ B, where J ∈ Rn×d is an all-ones matrix. Applying KernelSHAP with the k segments as features, we obtain segment-level SHAP values ϕ1, . . . , ϕ k satisfying the efficiency property Pkl=1 ϕl = f (X) − f (B), where f (B) serves as the base value. 8 K. Sahatova et al. 
+
+# 5 Experimental Setup 
+
+This section introduces the employed event logs, the predictive models for pre-dictions, the segmentation baselines, and the evaluation protocol used to study segment-level explanations. The code for reproducing the results is available on GitHub 3.
+
+5.1 Event Logs and Predictive Model 
+
+We use one synthetic and two real-world benchmark logs. The synthetic log takes into consideration the challenge behind the evaluation of segmentation strategies due to the absence of ground-truth change points. Thus, we employ the SimBank simulator [7], a tool for benchmarking prescriptive process monitoring methods. The simulator generates synthetic cases of a fictional loan application process and allows control over outcomes via a predefined process model and interventions. We select two samples with clearly defined change points from the simulator output 4. The first sample is built around the activity skip_contact_hq ,which leads to the cancellation outcome. The second sample uses contact_hq and 
+
+calculate_offer , which lead to the acceptance outcome. These known positions are used as ground truth for evaluating segmentation quality. Regarding the real-world logs, we employ the BPIC15 5 and the BPIC17 6.For both, we adopt the outcome labeling strategies from the literature [28]. The former contains administrative processes from Dutch municipalities. We use the first municipality, and cases are labeled positive if they satisfy the LTL rule that whenever send confirmation receipt occurs, it is eventually followed by retrieve missing data ; otherwise, it is labeled negative. On the other hand, the BPIC17 describes a loan application process from a financial institution, and we filter only the accepted and canceled cases. For both logs, in order to focus on predictions made before the outcome is explicitly observed, we extract fixed-length prefixes and remove traces that already contain outcome-revealing activities. As a sequence modeling classifier, we use LSTM models because it is often used in the literature [27]. Since our focus is not to optimize predictive perfor-mance but provide explanations from predictions, we opt only for this model and a simple hyperparameter optimization by sweeping the following values: the number of layers 1, 2, 3, the embedding sizes 32 , 64 , 128 , the hidden sizes 64 , 128 ,and the learning rates 1e − 4, 5e − 5, 1e − 5. As data preprocessing, we exclude outlier cases falling outside the 5th to 95th percentile of all set cases, and use the activity labels and timestamp-related features for training. To evaluate model predictions before the outcome is determined, we extract prefixes of 30 events and exclude cases in which outcome-revealing activities have already occurred. Since the goal of PPM is to provide accurate predictions as early as possible      
+
+> 3https://github.com/kSahatova/segment-level-expl-PPM.git
+> 4https://zenodo.org/records/15574272
+> 5https://data.4tu.nl/collections/BPI_Challenge_2015/5065424/1
+> 6https://data.4tu.nl/articles/dataset/BPI_Challenge_2017/12696884 Feature Attribution-Based Explainability Analysis in PPM 9
+
+during case execution, the selected prefix length balances predictive performance and explanatory value. Shorter prefixes often lack sufficient context for accurate predictions, whereas longer prefixes are more likely to contain outcome-revealing events, causing explanations to be dominated by these events and thus reducing their informativeness. The model trained on BPIC15 obtained 92% AUC, and the model trained on BPIC17 achieved 85.14%. 
+
+5.2 Segment-level explanations and quantitative evaluation 
+
+Baseline explainability methods. We compare our control-flow-aware segmen-tation against two baselines: the “per-event” explanation, which is the most common approach from the literature [11], and the “distribution-based segmen-tation" [13]. The latter also proposed for identification of the most probable segments relying on the sessions definition in recommendation system. It de-pends on several hyperparameters: we set the minimum and maximum window sizes to 3 and 5, respectively, for the initial segmentation stage, and utilize a measuring window width of 4 for segment comparison when evaluating split candidates. Furthermore, distribution-based segmentation relies on a predefined optimal number of segments. Following the study’s suggestion, we use the for-mula min(max(10 , n/ 2) , 30) , where n represents the case length. For both real-world event logs, this results in 15 segments for a 30-event trace prefix. We utilize the same KernelSHAP computation across all differently defined segments. All methods provide explanations for the same feature space, encompassing both control-flow and time-related features. Finally, we note that per-event attribu-tion operates at a finer granularity than the segment-level methods. 
+
+Evaluation of Segmentation Quality. We evaluate segmentation quality differ-ently for synthetic and real-world event logs. For the synthetic log, ground-truth change points are available. Therefore, as evaluation metric we employ the RandIndex, Precision, Recall, and F-1 score [29]. These metrics assess how accurately our segmentation algorithm identifies the true segment boundaries. For real-world logs, no ground-truth is available. Therefore, we report descrip-tive statistics on the resulting segmentation, namely the number and lengths of segments to reflect granularity. Furthermore, we compute the proportion of traces covered by the top-10 most frequent change point patterns as follows. For each trace with change points τ1, . . . , τ k, we extract the transition bound-ary (aτi , a τi+1 ) at each detected change point. After computing the frequency of unique patterns, we report the top-10 patterns coverage —how consistent the segmentation is across traces. We also evaluate segmentation quality using entropic relevance (ER) [20], an information-theoretic metric [23]. ER quanti-fies the number of bits needed to encode traces based on the directly-follows transition probabilities within each segment. Segments with more determinis-tic transitions yield lower ER scores, indicating that the segmentation captures coherent patterns that require fewer bits to describe. The implementation was adopted from the work [19]. 10 K. Sahatova et al. 
+
+Evaluation of Feature Attributions. In the absence of ground-truth explanations, feature attribution methods are commonly evaluated through perturbation-based metrics [2,3,30]. Following this idea, we assess the faithfulness of segment-level SHAP values using Relative Prediction Change (RPC). We compute RPC for both important (RPCI) and unimportant (RPCU) segments, where importance is defined by the absolute SHAP value. The top-k segments are selected such that they cover 40% of the trace prefix σ, which provides a large enough per-turbation to affect the prediction without fully destroying the trace structure. Intuitively, RPC measures how much the model prediction changes after per-turbing selected segments. A faithful explanation should assign high importance to segments whose perturbation strongly affects the prediction, and low impor-tance to segments whose perturbation has little effect. To compute RPCI, we perturb the top-k most important segments by replacing their feature values with mean values from 100 randomly sampled training cases. RPCU is com-puted by perturbing the segments deemed unimportant while keeping the top-k
+
+fixed. We report both metrics per predicted class to account for class-dependent effects [3]. 
+
+# 6 Experimental Evaluation 
+
+This study investigates how meaningful segment-level feature attributions can be derived for predictive process monitoring. We address this by exploring the following research questions:( RQ1 ) how faithful are segment-level SHAP value explanations to the model’s output compared to non-segment-level SHAP val-ues? ( RQ2 ) Can SHAP values identify meaningful segments within a case that are most influential for a given prediction? 
+
+6.1 Trace Segmentation 
+
+The results of the segmentation quality performed on the synthetic data are shown in Table 1. The agreement between predicted and ground truth change points, as quantified by the RandIndex, exceeds 0.9 for both canceled and ac-cepted cases with one and two change points, correspondingly. Segmentation accuracy is slightly higher for the former due to the smaller number of segments, achieving an F1 score of 89%. Table 1: Segmentation quality for the synthetic dataset with the activities spec-ified as change points.         
+
+> RandIndex Precision Recall F1 score Sample (change points)
+> canceled cases (“skipped_hq") 0.928 0.875 0.925 0.885 accepted cases (“contact_hq", “calculate_offer”) 0.951 0.8582 0.906 0.874
+
+Feature Attribution-Based Explainability Analysis in PPM 11 
+
+Regarding the real logs, table 2 summarizes results for BPIC17 and BPIC15. In the BPIC17, correctly predicted cases contain, on average, three events per segment and approximately eight segments per prefix. The ten most frequent segmentation patterns for True Negative (TN) and False Negative (FN) samples represent the control flow of 81% and 77% of all trace prefixes in the test set. In contrast, canceled cases follow more diverse control-flow paths; the 212 iden-tified patterns result in the ten most frequent patterns covering only 42% of the traces. Finally, the application of the control-flow-aware segmentation algorithm reduces the entropic relevance from 37.81 to 6.68, indicating that the identified segments yield a substantially more compressible, and thus more structured, trace representation. The BPIC15 event log contains 283 unique activities characterized by low or near-zero transition probabilities between the majority of event pairs. This high log variability, which is also supported by the high ER of 100, causes a more granular segmentation of the trace prefixes, resulting in approximately 13 segments with an average of two events each. These results are distributed uni-formly across all samples, which does not allow the identification of any distinct process behaviors. Consequently, the results indicate that each prefix exhibits a unique, case-specific segmentation pattern. Table 2: Segmentation evaluation on the real-world datasets.                                                                                 
+
+> BPIC17 BPIC15
+> TP FP TN FN TP FP TN FN Sample size 705 42004 288 45 7125 1Number of segments 8.93 ±1.26 6 .25 ±2.05 8 .21 ±1.16 7 .72 ±1.56 13 .31 ±0.69 12 .86 ±0.64 13 .50 ±0.74 14 ±0.0
+> Segment length 3.44 ±0.61 5 .62 ±2.58 3 .74 ±0.70 4 .14 ±1.33 2 .26 ±0.125 2 .34 ±0.12 2.23 ±0.13 2 .14 ±0.0
+> Top-10 patterns coverage 42 .1% 100% 81 .4% 77 .4% 22 .2% 100% 8% 100%
+> Number of patterns 212 349 115 45 7125 1ER full log 37.81 ±6.11 100.1 ±10.36 ER after segmentation 6.68 ±2.50 10.93 ±2.49
+
+6.2 Evaluation of Feature Attributions 
+
+For the quantitative evaluation of segment-level SHAP explanations, we use perturbation-based metrics described in Section 5. Table 3 reports RPCI and RPCU for the three segmentation strategies on BPIC17. A faithful explana-tion yields high RPCI (important segments substantially affect the prediction) and low RPCU (unimportant segments have minimal effect). The parameter 
+
+k differs across strategies since each produces segments of varying lengths. To ensure a fair comparison, k is chosen such that the perturbed segments cover 40% of the trace length. The following interpretation of the results addresses our 
+
+RQ1 . All three segmentation strategies yield faithful explanations, with higher RPCI and lower RPCU for class 1. RPCI exceeds 1.0 for class 0 cases because their near-zero scores amplify changes when important segments are perturbed, still indicating high faithfulness (e.g., removing completion/validation segments 12 K. Sahatova et al. 
+
+shifts predictions toward cancellation). For class 1, where scores are closer to 1.0, RPCI stays below 1.0 with lower variance, reflecting more consistent expla-nations across strategies. The distribution-based and control-flow-aware segmentation strategies sac-rifice some faithfulness, which can be attributed to the aggregation of events into semantically coherent segments. In contrast, event-level attributions can precisely target the most individually contributing events. However, it should be noted that RPCU for class 0 decreases as segmentation granularity becomes coarser in the both event logs. For event-level attribution, perturbing individual low-ranked events might disrupt local dependencies between neighboring events, resulting unexpected prediction changes. Segment-level strategies avoid this by perturbing coherent groups of events together, preserving internal structure and producing a cleaner separation between important and unimportant parts of the trace. Table 3: Evaluation of faithfulness of SHAP value explanations.                                                                                      
+
+> BPIC17 BPIC15
+> Sample kRPCI RPCU kRPCI RPCU
+> Per-event segmentation
+> Pred. class 0 12 0.909 ±0.856 0.525 ±0.382 12 2.140 ±2.191 0.311 ±0.179 Pred. class 1 0.832 ±0.097 0.005 ±0.012 0.973 ±0.016 0.004 ±0.005
+> Distribution-based segmentation
+> Pred. class 0 51.352 ±0.860 0.329 ±0.290 52.139 ±2.235 0.304 ±0.166 Pred. class 1 0.773 ±0.157 0.005 ±0.013 0.951 ±0.049 0.018 ±0.037
+> Control-flow-aware segmentation
+> Pred. class 0 51.278 ±0.777 0.233 ±0.230 62.154 ±2.126 0.242 ±0.148
+> Pred. class 1 0.769 ±0.113 0.008 ±0.018 0.972 ±0.017 0.007 ±0.015
+
+6.3 Segment-level Explanations 
+
+In this analysis to address our RQ2 , we consider the three most frequent seg-mentation patterns we generated from BPIC17, and the assigned SHAP values for each pattern and each class. In Figure 1, we illustrate the accepted cases. As previously discussed in the segmentation analysis, these cases follow more reg-ular and recurring control-flow patterns, which indicates a more stable process execution. In these cases, segments containing transitions such as A_Concept →
+
+W_Complete_application consistently push the prediction toward acceptance, as reflected by negative SHAP values. The same holds for later segments related to application completion and validation, such as A_Complete . This suggests that the model associates smooth and structured progression through the pro-cess with a favorable outcome. On the other hand, in Figure 2, the canceled cases Feature Attribution-Based Explainability Analysis in PPM 13 
+
+show a different pattern, mainly driven by repeated offer creation. In particular, segments related to multiple created offers receive high positive SHAP values and increasingly push the prediction toward cancellation. The last created offer often has the strongest effect. For stakeholders, this is meaningful because it points to a potential bottleneck detection: repeated offer generation is strongly associated with unsuccessful case outcomes. A visual comparison of event-level and segment-level feature attributions for these cases is provided in Figure 3. We also analyze the wrongly predicted cases, which further support this in-terpretation: accepted cases wrongly predicted as canceled often already contain multiple created offers in the observed prefix, whereas canceled cases wrongly predicted as accepted lacked any control-flow activities indicating an application completion or validation stage. This is likely influenced by the 30-event prefix, since decisive outcome-related behavior may appear later in the trace. Overall, these findings show the value of segment-level explanations: instead of attributing predictions to isolated events or to the whole trace, they reveal which part of the process drives the prediction and contextualizes particular activities in their segments. 
+
+Fig. 1: Visualization of SHAP values for representative traces from the three most frequent segmentation patterns regarding accepted cases for the BPIC17. 
+
+# 7 Discussion and Limitations 
+
+This study proposes a method to provide explainability of sequential models in the PPM tasks through the estimation of SHAP values at the segment level. The control-flow-aware segmentation algorithm allows trace partitioning into segments preserving structural dependencies. Our experiments show that event logs with moderate control-flow variability, such as BPIC17, exhibit clearly iden-tifiable phases: transition shifts are well-defined due to the log structure and a manageable number of unique activities, allowing the segmentation algorithm to 14 K. Sahatova et al. 
+
+Fig. 2: Visualization of SHAP values for representative traces from the three most frequent segmentation patterns regarding cancelled cases for the BPIC17. 
+
+Fig. 3: Comparison of event-level and segment-level SHAP value explanations for the BPIC17 log. produce meaningful partitions. Aggregating the resulting segmentation patterns across traces already facilitates a high-level analysis of the event log, revealing common phase structures without requiring inspection of individual traces. Through the quantitative evaluation of the obtained segment-level feature attributions, we demonstrated that regions meaningful to the model can be identified. Across both datasets and all segmentation strategies, perturbing the top-attributed segments causes substantial prediction changes, while perturbing low-attributed segments has minimal effect. This confirms that the identified regions are influential rather than arbitrary. Feature Attribution-Based Explainability Analysis in PPM 15 
+
+Comparing our approach against two alternative segmentation strategies, we demonstrated that grouping activities based on control-flow information leads to more comprehensible explanations that allow the identification of distinct transition patterns. While event-level feature attributions are more faithful to the model’s behavior due to their finer granularity, segment-level attributions enable the analysis of model behavior at a coarser level. In particular, they mitigate the interleaving of important and unimportant events, thereby increasing the overall comprehensibility of the explanations. Since our segmentation method relies on the directly-follows relations among activities, low transition probabilities lead to fine-grained segmentation, which limits the aggregation of segmentation patterns across cases. High variability in the event log control flow further exacerbates this issue, as few cases share similar segment structures, making it difficult to draw generalizable conclusions about model behavior at the segment level. Conversely, event logs with fewer distinct activities and short trace prefixes offer limited benefit from segmentation, as there is insufficient sequential structure to produce meaningful groupings. 
+
+# 8 Conclusion 
+
+In this paper, we proposed a feature attribution-based explainability method for PPM that preserves the control-flow perspective of business processes. More specifically, we introduced a control-flow-aware segmentation algorithm that par-titions trace prefixes into segments based on shifts in directly-follows transition probabilities, and we used these segments as explanatory units for the computa-tions of segment-level SHAP values. The results on synthetic data showed that the proposed segmentation method is capable of recovering meaningful change points with high agreement to ground truth, while the experiments on real-world event logs showed that it produces interpretable segmentation and faithful expla-nations. In particular, for BPIC17, the method revealed recurring trace segments associated with accepted and canceled cases, making it possible to relate model predictions to concrete parts of the process rather than to isolated events of fully aggregated traces. Overall, our findings show that segment-level explanations offer a useful mid-dle ground between fine-grained event-level and trace-level explanations. Al-though the former remains slightly more faithful due to its finer granularity and simplicity, segment-level explanations improve comprehensibility by preserving local control-flow context and reducing the interleaving of important and unim-portant events. At the same time, the study highlights that the benefit of the proposed method depends on the structure of the event log: logs with moderate control-flow variability allow the discovery of meaningful and comparable seg-ments, whereas highly variable logs lead to very fine-grained and case-specific segmentation. In future work, we will extend the method beyond binary out-come prediction enabling analysis of distinct failure modes and supporting more targeted decision-making. 16 K. Sahatova et al. 
+
+Disclosure of Interests. The authors have no competing interests to de-clare that are relevant to the content of this article. 
+
+# References 
+
+1. Aas, K., Jullum, M., Løland, A.: Explaining individual predictions when features are dependent: More accurate approximations to shapley values. Artificial Intelli-gence 298 (2021). https://doi.org/10.1016/j.artint.2021.103502 
+
+2. Agarwal, C., Krishna, S., Saxena, E., Pawelczyk, M., Johnson, N., Puri, I., Zitnik, M., Lakkaraju, H.: Openxai: towards a transparent evaluation of post hoc model explanations. In: Proceedings of the 36th International Conference on Neural In-formation Processing Systems. NIPS ’22, Curran Associates Inc., Red Hook, NY, USA (2022) 3. Baer, G., Grau, I., Zhang, C., Van Gorp, P.: Class-dependent perturbation effects in evaluating time series attributions. In: XAI World Conference (2025) 4. Bento, J.a., Saleiro, P., Cruz, A.F., Figueiredo, M.A., Bizarro, P.: Timeshap: Explaining recurrent models through sequence perturbations. In: Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining. p. 2565–2573. KDD ’21, Association for Computing Machinery, New York, NY, USA (2021). https://doi.org/10.1145/3447548.3467166 
+
+5. Buliga, A., Di Francescomarino, C., Ghidini, C., Donadello, I., Maggi, F.M.: Guid-ing the generation of counterfactual explanations through temporal background knowledge for predictive process monitoring. Data Mining and Knowledge Discov-ery (2025). https://doi.org/10.1007/s10618-025-01117-3 
+
+6. Crabbé, J., Van Der Schaar, M.: Explaining time series predictions with dynamic masks. In: ICML (2021). https://doi.org/10.48550/arXiv.2106.05303 
+
+7. De Moor, J., Weytjens, H., De Smedt, J., De Weerdt, J.: Simbank: from simulation to solution in prescriptive process monitoring. In: BPM (2025). https://doi.org/ 10.1007/978-3-032-02929-4_10 
+
+8. Deldari, S., Smith, D.V., Sadri, A., Salim, F.: Espresso: Entropy and shape aware time-series segmentation for processing heterogeneous sensor data. Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies 4(3) (2020). https://doi.org/10.1145/3411832 
+
+9. Doddaiah, R., Parvatharaju, P., Rundensteiner, E., Hartvigsen, T.: Class-specific explainability for deep time series classifiers. In: ICDM (2022) 10. El-khawaga, G., Abu-Elkheir, M., Reichert, M.: Xai in the context of predictive process monitoring: An empirical analysis framework. Algorithms (2022) 11. Galanti, R., Coma-Puig, B., de Leoni, M., Carmona, J., Navarin, N.: Explainable predictive process monitoring. In: ICPM (2020) 12. Hamed, H., Reis, A.C., Choobar, B.G., Pang, Q., Killick, R., Safari, M.: Change-point detection as a light data-driven approach to battery state-of-health predic-tion. Cell Reports Physical Science (2026). https://doi.org/10.1016/j.xcrp. 2026.103157 
+
+13. Jiang, G., Zhuang, F., Song, B., Zhu, Y., Sun, Y., Wang, W., Wang, D.: Seqshap: subsequence level shapley value explanations for sequential predictions. In: DAS-FAA (2024) 14. Killick, R., Fearnhead, P., Eckley, I.A.: Optimal detection of changepoints with a linear computational cost. Journal of the American Statistical Association 
+
+107 (500) (2012). https://doi.org/10.1080/01621459.2012.737745 Feature Attribution-Based Explainability Analysis in PPM 17 15. Li, J., Fearnhead, P., Fryzlewicz, P., Wang, T.: Automatic change-point detection in time series via deep learning. Journal of the Royal Statistical Society Series B: Statistical Methodology 86 (2) (2024) 16. Liu, Z., Zhang, Y., Wang, T., Wang, Z., Luo, D., Du, M., Wu, M., Wang, Y., Chen, C., Fan, L., Wen, Q.: Explaining time series via contrastive and locally sparse perturbations. In: ICLR (2024) 17. Lundberg, S.M., Lee, S.I.: A unified approach to interpreting model predictions. In: Proceedings of the 31st International Conference on Neural Information Processing Systems. p. 4768–4777. NIPS’17, Curran Associates Inc., Red Hook, NY, USA (2017). https://doi.org/10.48550/arXiv.1705.07874 
+
+18. Nayebi, A., Tipirneni, S., Reddy, C.K., Foreman, B., Subbian, V.: Windowshap: An efficient framework for explaining time-series classifiers based on shapley values. Journal of Biomedical Informatics 144 , 104438 (2023) 19. Peeperkorn, J., De Smedt, J., De Weerdt, J.: Model-driven stochastic trace clus-tering. Information Systems 139 (2026). https://doi.org/10.1016/j.is.2026. 102697 
+
+20. Polyvyanyy, A., Moffat, A., García-Bañuelos, L.: An entropic relevance measure for stochastic conformance checking in process mining. In: ICPM (2020). https: //doi.org/10.1109/ICPM49681.2020.00024 
+
+21. Rizzi, W., Di Francescomarino, C., Maggi, F.M.: Explainability in predictive pro-cess monitoring: When understanding helps improving. In: BPM (2020). https: //doi.org/10.1007/978-3-030-58638-6_9 
+
+22. Schlegel, U., Vo, D.L., Keim, D.A., Seebacher, D.: Ts-mule: Local interpretable model-agnostic explanations for time series forecast models. In: ECML-PKDD (2021). https://doi.org/10.1007/978-3-030-93736-2_40 
+
+23. Shannon, C.E.: A mathematical theory of communication. The Bell system tech-nical journal 27 (3) (1948) 24. Sivill, T., Flach, P.: Limesegment: Meaningful, realistic time series explanations. In: International Conference on Artificial Intelligence and Statistics (2022) 25. Stevens, A., Ouyang, C., De Smedt, J., Moreira, C.: Generating feasible and plausi-ble counterfactual explanations for outcome prediction of business processes. IEEE TSC (2025). https://doi.org/10.1109/TSC.2025.3609837 
+
+26. Sundararajan, M., Najmi, A.: The many shapley values for model explanation. In: International conference on machine learning (2020). https://doi.org/10.48550/ arXiv.1911.06292 
+
+27. Tax, N., Verenich, I., La Rosa, M., Dumas, M.: Predictive business process moni-toring with lstm neural networks. In: CAiSE (2017). https://doi.org/10.1007/ 978-3-319-59536-8_30 
+
+28. Teinemaa, I., Dumas, M., Rosa, M.L., Maggi, F.M.: Outcome-oriented predictive process monitoring: Review and benchmark. ACM TKDD 13 (2) (2019). https: //doi.org/10.1145/3301300 
+
+29. Truong, C., Oudre, L., Vayatis, N.: Selective review of offline change point de-tection methods. Signal processing 167 (2020). https://doi.org/10.1016/j. sigpro.2019.107299 
+
+30. Turbé, H., Bjelogrlic, M., Lovis, C., Mengaldo, G.: Evaluation of post-hoc inter-pretability methods in time-series classification. Nature Machine Intelligence 5(3) (2023). https://doi.org/10.1038/s42256-023-00620-w 
+
+31. Velmurugan, M., Ouyang, C., Moreira, C., Sindhgatta, R.: Evaluating stability of post-hoc explanations for business process predictions. In: ICSOC (2021) 32. Weytjens, H., De Weerdt, J.: Process outcome prediction: Cnn vs. lstm (with at-tention). In: BPM (2020). https://doi.org/10.1007/978-3-030-66498-5_24

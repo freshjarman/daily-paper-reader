@@ -1,58 +1,106 @@
-<div class="dpr-home-notice-card">
-  <h3 class="dpr-home-notice-title">🚀 Start Here</h3>
-  <ul class="dpr-home-notice-list">
-    <li><a href="#/tutorial/README">使用教程</a></li>
-  </ul>
+<div class="dpr-home-notice-card dpr-home-panel">
+  <div class="dpr-home-notice-header dpr-home-panel-header">
+    <h3 class="dpr-home-notice-title">公告与更新</h3>
+    <a class="dpr-home-notice-tutorial" href="#/tutorial/README">使用教程 <span aria-hidden="true">›</span></a>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-20">07.20</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">反馈功能上线</strong>
+      <span class="dpr-home-notice-entry-summary">新增反馈功能，欢迎大家踊跃反馈各种建议，我们会第一时间查看并协调处理。</span>
+    </div>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-19">07.19</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">首页新增社区统计</strong>
+      <span class="dpr-home-notice-entry-summary">现在可以看到今天看论文的人数和项目加入人数。</span>
+    </div>
+  </div>
+  <div class="dpr-home-site-stats" data-dpr-site-stats hidden aria-live="polite">
+    <span>今天有 <strong class="dpr-home-site-stat-value" data-dpr-daily-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>昨天有 <strong class="dpr-home-site-stat-value" data-dpr-yesterday-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>已有 <strong class="dpr-home-site-stat-value" data-dpr-fork-count>--</strong> 人加入 Daily Paper Reader</span>
+    <span class="dpr-home-history">
+      <button type="button" class="dpr-home-history-trigger" data-dpr-history-trigger aria-label="查看最近 14 天阅读趋势"><span aria-hidden="true">🔍</span></button>
+      <span class="dpr-home-history-popover" data-dpr-history-popover role="tooltip">
+        <span class="dpr-home-history-header">近 14 天阅读趋势</span>
+        <span class="dpr-home-history-meta">
+          <span data-dpr-history-range>--</span>
+          <span>峰值 <strong data-dpr-history-peak>--</strong></span>
+        </span>
+        <span class="dpr-home-history-chart" data-dpr-history-chart></span>
+      </span>
+    </span>
+  </div>
 </div>
 
-## 每次日报
-- 最新运行日期：2026-07-19
-- 运行时间：2026-07-19 21:10:49 UTC
-- 运行状态：成功
-- 本次总论文数：9
-- 精读区：6
-- 速读区：3
+<div class="dpr-home-dashboard-grid">
+<section class="dpr-home-dashboard-card dpr-home-report-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">2026-07-26</span>
+      <h3 class="dpr-home-dashboard-title">今日汇总</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">共 7 篇</strong>
+  </div>
+  <dl class="dpr-home-dashboard-stats">
+    <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>5</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
+  </dl>
+  <p class="dpr-home-dashboard-body">最近更新：2026-07-26 19:52:55 UTC<br>状态：成功</p>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-brief-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">合并后生成</span>
+      <h3 class="dpr-home-dashboard-title">今日简报</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">AI</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<p>今日精读5篇速读2篇，两篇9.0分论文聚焦用户行为建模与长记忆序列分析。最值得关注的是用户中心的可解释状态空间模型和幂律强度长记忆马尔可夫链。建议优先精读这两篇高分论文以掌握前沿方法。</p>
+  </div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-deep-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">精读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">5 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="User-Centric Modeling of Transactional Sequences with Explainable State Space Models">User-Centric Modeling of Transactional Sequences with Explainable State Space Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Long-memory Markov chains with power-law intensities">Long-memory Markov chains with power-law intensities</span></li><li><span class="dpr-home-dashboard-paper-title" title="Smooth Neural Point Processes via B-Splines">Smooth Neural Point Processes via B-Splines</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>5</strong></span></div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-skim-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">速读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">2 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Causal Discovery on Irregular Time Series">Causal Discovery on Irregular Time Series</span></li><li><span class="dpr-home-dashboard-paper-title" title="STeMP: Spatio-Temporal Modelling Protocol">STeMP: Spatio-Temporal Modelling Protocol</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
+</section>
+</div>
 
-### 今日简报（AI）
-今日精读金融多模态事件序列基础模型与异步时间序列检索增强扩散变换器两篇高分论文，速读涉及神经雪崩时空结构、行人轨迹预测与知识图谱推理。最值得关注的方向是金融多模态基础模型及异步时间序列的检索增强扩散方法。建议普通读者可重点跟进金融时序与多模态融合的基础模型发展。
-- 详情：[/202607/19/README](/202607/19/README)
-
-### 精读区论文标签
-1. [A Foundation Model for Multimodal Event Sequences in Financial Applications](/202607/19/2607.09955v1-a-foundation-model-for-multimodal-event-sequences-in-financial-applications)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：用于多模态事件序列的预训练Transformer模型，采用下一事件预测目标
-2. [ReDiTT: Retrieval Augmented Conditional Diffusion Transformers for Asynchronous Time Series](/202607/19/2607.12391v1-reditt-retrieval-augmented-conditional-diffusion-transformers-for-asynchronous-time-series)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：扩散模型用于异步时间序列预测事件间时间和类型
-3. [STKAN: Kolmogorov-Arnold Networks for Spatio-Temporal Forecasting](/202607/19/2607.13108v1-stkan-kolmogorov-arnold-networks-for-spatio-temporal-forecasting)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：使用神经网络架构进行时空预测
-4. [GAttNHP: Group Attention Neural Hawkes Process for Extrapolation Reasoning in Temporal Knowledge Graphs](/202607/19/2607.14733v1-gattnhp-group-attention-neural-hawkes-process-for-extrapolation-reasoning-in-temporal-knowledge-graphs)  
-   标签：评分：9.0/10、query:tpp-es
-   evidence：用于时序知识图谱事件预测的神经霍克斯过程
-5. [Manifold Constrained Conformal Prediction for Spatial Events](/202607/19/2607.10008v1-manifold-constrained-conformal-prediction-for-spatial-events)  
-   标签：评分：8.0/10、query:tpp-es
-   evidence：对热带气旋和地震等空间事件的共形预测
-6. [Scalable Training of Continuous-Time Spiking Neural Networks with Differentiable Spike-Time Discretization](/202607/19/2607.14672v1-scalable-training-of-continuous-time-spiking-neural-networks-with-differentiable-spike-time-discretization)  
-   标签：评分：8.0/10、query:tpp-es
-   evidence：连续时间脉冲神经网络训练与尖峰时间离散化方法，与连续时间事件序列建模相关
-
-### 速读区论文标签
-1. [Uncovering the spatiotemporal structure of neural avalanches through optimal transport and dynamic time warping](/202607/19/biorxiv-10-64898-2026-07-10-737743-v1-uncovering-the-spatiotemporal-structure-of-neural-avalanches-through-optimal-transport-and-dynamic-time-warping)  
-   标签：评分：7.0/10、query:tpp-es
-   evidence：使用对齐方法分析时空事件
-2. [TSCA-Net: Temporal-Spatial Clique Attention for Interpretable Multimodal Pedestrian Trajectory Prediction](/202607/19/2607.11939v1-tsca-net-temporal-spatial-clique-attention-for-interpretable-multimodal-pedestrian-trajectory-prediction)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：时空注意力用于轨迹预测
-3. [Reachability-Aware Pretraining for Efficient Target-Oriented Path Exploration in Temporal Knowledge Graph Reasoning](/202607/19/2607.14886v1-reachability-aware-pretraining-for-efficient-target-oriented-path-exploration-in-temporal-knowledge-graph-reasoning)  
-   标签：评分：6.0/10、query:tpp-es
-   evidence：使用时间知识图谱进行神经事件预测
-
-
-<div class="dpr-home-promo-card">
-  <h3 class="dpr-home-promo-title">💬 社区与支持</h3>
-  <ul class="dpr-home-promo-list">
-    <li>欢迎 Star / Fork / Issue / PR</li>
-    <li>QQ群：583867967（欢迎交流，已有：1151人）</li>
-  </ul>
+<div class="dpr-home-promo-card dpr-home-panel">
+  <div class="dpr-home-panel-header">
+    <h3 class="dpr-home-promo-title">社区与支持</h3>
+  </div>
+  <p class="dpr-home-promo-copy">欢迎通过 Star、Fork、Issue 或 PR 一起完善 Daily Paper Reader。</p>
+  <div class="dpr-home-promo-meta">
+    <span>QQ群 <strong>583867967</strong></span>
+    <span class="dpr-home-promo-separator" aria-hidden="true">·</span>
+    <span>已有 <strong>1,491</strong> 人参与交流</span>
+  </div>
 </div>
