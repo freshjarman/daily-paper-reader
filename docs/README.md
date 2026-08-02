@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-07-26</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-02</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 7 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>5</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-07-26 19:52:55 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-02 20:14:49 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读5篇速读2篇，两篇9.0分论文聚焦用户行为建模与长记忆序列分析。最值得关注的是用户中心的可解释状态空间模型和幂律强度长记忆马尔可夫链。建议优先精读这两篇高分论文以掌握前沿方法。</p>
+<p>今日精读两篇9分论文，聚焦函数空间最优预测与动态图事件时间统一建模。最值得关注神经跳跃ODE的L²优化框架，以及GTIN对时序图事件与时间联合预测的突破。建议优先复现这两篇方法，后续再扩展至扩散模型与贝叶斯推断等速读方向。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -74,7 +74,7 @@
     <strong class="dpr-home-dashboard-count">5 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="User-Centric Modeling of Transactional Sequences with Explainable State Space Models">User-Centric Modeling of Transactional Sequences with Explainable State Space Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Long-memory Markov chains with power-law intensities">Long-memory Markov chains with power-law intensities</span></li><li><span class="dpr-home-dashboard-paper-title" title="Smooth Neural Point Processes via B-Splines">Smooth Neural Point Processes via B-Splines</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Operator Neural Jump ODEs: $L^2$-optimal prediction in function spaces">Operator Neural Jump ODEs: $L^2$-optimal prediction in function spaces</span></li><li><span class="dpr-home-dashboard-paper-title" title="GTIN: A Unified Framework for Joint Event and Time Prediction in Temporal Graphs">GTIN: A Unified Framework for Joint Event and Time Prediction in Temporal Graphs</span></li><li><span class="dpr-home-dashboard-paper-title" title="Diverse Morphologies of GRB X-Ray Plateaus within a Common Magnetar Framework">Diverse Morphologies of GRB X-Ray Plateaus within a Common Magnetar Framework</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>5</strong></span></div>
 </section>
@@ -84,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">2 篇</strong>
+    <strong class="dpr-home-dashboard-count">3 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Causal Discovery on Irregular Time Series">Causal Discovery on Irregular Time Series</span></li><li><span class="dpr-home-dashboard-paper-title" title="STeMP: Spatio-Temporal Modelling Protocol">STeMP: Spatio-Temporal Modelling Protocol</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality">Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality</span></li><li><span class="dpr-home-dashboard-paper-title" title="Distributed and recursive Bayesian inference for Big Data and complex spatio-temporal models">Distributed and recursive Bayesian inference for Big Data and complex spatio-temporal models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Windowed thinning and query complexity for the bouncy particle and Zigzag samplers">Windowed thinning and query complexity for the bouncy particle and Zigzag samplers</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span></div>
 </section>
 </div>
 

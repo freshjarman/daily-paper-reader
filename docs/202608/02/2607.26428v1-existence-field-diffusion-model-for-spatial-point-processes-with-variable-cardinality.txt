@@ -1,0 +1,472 @@
+Title: Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality
+
+URL Source: https://arxiv.org/pdf/2607.26428v1
+
+Published Time: Thu, 30 Jul 2026 00:27:01 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality 
+
+Xiaoyin Pan 
+
+University of California, Riverside 
+
+xpan041@ucr.edu 
+
+Christian R. Shelton 
+
+University of California, Riverside 
+
+cshelton@cs.ucr.edu 
+
+Rakshith Mahishi 
+
+New York University 
+
+rm6801@nyu.edu 
+
+Chengkuan Hong 
+
+Zhongguancun Academy 
+
+hongchengkuan@bza.edu.cn 
+
+# Abstract 
+
+We study generative modeling of spatial point processes (SPP), where both the number of points and their spatial configuration are governed by a joint distribution. While diffusion models have achieved strong performance in modeling complex distributions, extending them to variable-cardinality SPP remains challenging. Existing approaches either decouple the modeling of cardinality and spatial struc-ture, or rely on discrete trans-dimensional operations to modify the number of points, resulting in inflexible and asymmetric generative dynamics. We propose the existence-field diffusion model (EFDM) for spatial point processes modeling, where each potential point is associated with an existence variable representing its degree of presence. This enables a unified diffusion process that jointly models both spatial locations and cardinality without requiring explicit discrete transi-tions. We demonstrate that our approach provides a flexible and general framework for generative modeling of spatial point processes, achieving improved modeling capability on datasets with varying cardinality. 
+
+# 1 Introduction 
+
+Diffusion models Ho et al. [2020], Song et al. [2020], Sohl-Dickstein et al. [2015] have achieved success in generative modeling, enabling high-quality generation in many domains. Their applications to point processes have mainly focused on data with fixed size and ordering, such as images and audio. However, many real-world data are naturally represented as point sets with variable cardinality, such as spatial events, molecular structures, and particle systems. Modeling such data requires handling unordered point sets, and learning distributions over both the number of points and their spatial configuration. Distributions over such objects are called spatial point processes (SPP). Diffusion models for SPPs pose a fundamental challenge: how to model both cardinality and spatial structure in a unified and permutation-invariant manner. In many real-world scenarios, the spatial configuration of points depends on the set cardinality. For example, molecules with a small number of atoms have different spatial configurations than larger molecules. Similarly, the locations of ride-share pick-ups in a city differ on weekends (fewer pick-ups) and weekdays (more pick-ups). The spatial distribution is not independent of the number of points. This motivates modeling the joint dependency between cardinality and spatial structure. Traditional SPP models are based on intensity functions, which often require strong domain knowl-edge and can suffer from intractable likelihoods. Diffusion models have been applied to point cloud generation Luo and Hu [2021], Mikuni et al. [2023], Ji et al. [2024], but these methods typically assume a fixed number of points and do not model the dependency between point positions and 
+
+> Preprint. arXiv:2607.26428v1 [cs.LG] 29 Jul 2026
+
+Figure 1: Forward and reverse processes of EFDM. Point transparency indicates existence variables. Both positions and existence are diffused to noise in the forward process and jointly denoised in the reverse process, enabling continuous modeling of cardinality without discrete transitions. cardinality. Recently, some work has addressed variable-cardinality diffusion models for point sets. Existing approaches can be broadly categorized into two classes. One strategy is to separate modeling cardinality from spatial coordinates Hoogeboom et al. [2022]. It learns the distribution of the number of points and the conditional spatial coordinates separately. Although straightforward, this approach decouples the modeling of cardinality and spatial structure, which may limit its ability to capture differences in spatial distribution across varying cardinalities. More recent approaches instead aim to jointly model cardinality and spatial configuration using trans-dimensional diffusion processes Lüdke et al. [2024], Campbell et al. [2023], where points are explicitly added or removed during the diffusion processes. However, these methods change cardinality through discrete thinning, superposition, or jump operations, and use direction-specific mechanisms in the forward and reverse processes. To address these limitations, we propose a continuous formulation of variable-cardinality diffusion model, existence-field diffusion model (EFDM), where the existence of points can be inherently uncertain during diffusion (see Fig. 1). In addition to diffusing point positions, our diffusion model also diffuses the existence degree of all possible points, which can be converted into discrete existence via probabilistic sampling at the end of generation. In our method, points can strengthen or diminish in both directions naturally, enabling unified modeling of the joint distribution over cardinality and spatial configurations through a continuous and flexible variable-cardinality diffusion process. We demonstrate the effectiveness of EFDM on both synthetic and real-world datasets. EFDM captures the dependency between cardinality and spatial structure, achieving stronger performance under conditional evaluation of distributions across different cardinality levels than previous work. 
+
+# 2 Related Work 
+
+Spatial Point Processes (SPP). Traditional spatial point process (SPP) models are typically based on intensity functions Daley and Vere-Jones [2003], which characterize the likelihood of event occurrence over space and time. While interpretable, these approaches often require strong domain knowledge and suffer from computational challenges due to the intractability of likelihood integrals in high-dimensional settings. Recent neural approaches extend point process modeling using deep learning techniques Mei and Eisner [2017], Chen et al. [2020], Zhou et al. [2022], Hong and Shelton [2022], but still rely on intensity-based formulations, which limit their ability to capture complex interactions and scale to high-dimensional settings. 
+
+Point Set Generation. Early work on point set generation focused on modeling point clouds with a fixed number of points. Many approaches model point sets as samples from a distribution using methods such as flow-based Yang et al. [2019], autoregressive Sun et al. [2020], or energy-based methods Cai et al. [2020]. These models typically assume a fixed cardinality and therefore do not support variable cardinality. Additionally, they may either violate permutation invariance or suffer from high training complexity. Recent work has applied diffusion models to point set generation due to diffusion models’ stable training and strong generative performance Luo and Hu [2021], Mikuni et al. [2023], Ji et al. [2024]. However, most existing approaches still focus on fixed-cardinality point clouds and therefore do not 2directly address the main challenge of spatial point processes, where both the number of points and their locations are variable. 
+
+Diffusion Models for Spatial Point Processes. Diffusion-based models have been extended to spatial point processes with variable cardinality and can be broadly categorized into two classes. The first is to model the distributions of cardinality and point locations separately Hoogeboom et al. [2022], which combines a diffusion model for point locations with an independent model for cardinality. During generation, it first samples the number of points from the cardinality model and then generate point locations conditioned on this number using a diffusion network. While these approaches preserve permutation invariance and support varying cardinality, they decouple the modeling of cardinality and spatial structure, making it more difficult to model dependencies between them. The second, more recent, category jointly models cardinality and positions. Point set diffusion (PSD) Lüdke et al. [2024] constructs a stochastic interpolation between data and noise point sets via thinning and superposition, avoiding explicit reliance on intensity functions. However, its reverse process relies on conditional density estimation to generate missing points, and noise is introduced as independent points rather than the diffusion noise of the data point positions. The trans-dimensional diffusion model (TDDM) Campbell et al. [2023] formulates generation as a jump diffusion process, where dimension changes are governed by a Poisson process, and point positions evolve via continuous diffusion. Although TDDM jointly models cardinality and positions, it relies on discrete dimension transitions and an asymmetric design where points are removed in the forward process and added in the reverse process. Both PSD and TDDM perform discretely and asymmetrically during diffusing and denoising processes. Overall, existing variable-cardinality diffusion models either decouple cardinality and spatial model-ing or rely on discrete trans-dimensional operations, leaving the problem of unified and continuous modeling of spatial point processes largely open. To address this limitation, we propose a continuous formulation in which each point is associated with an existence variable, enabling a unified diffusion process that models both point locations and cardinality jointly. 
+
+# 3 Preliminaries 
+
+3.1 Spatial Point Processes 
+
+Let (D, d ) be a complete separable metric space equipped with its Borel σ-algebra B. A spatial point process (SPP) Gelfand et al. [2010] is defined as a random configuration of points in D. Formally, let 
+
+(Ω , F, P) be a probability space. A spatial point process is a measurable mapping 
+
+x : Ω → N lf (D),
+
+where Nlf (D) denotes the set of locally finite point configurations on D, i.e., subsets x ⊆ D such that every bounded Borel set contains only finitely many points. A realization of the process can therefore be represented as a finite point set: 
+
+x = {x1, . . . , x n}, xi ∈ D, 
+
+where n = |x| is the number of points. 
+
+3.2 Diffusion Models 
+
+Diffusion models are generative models that learn a data distribution by gradually diffusing a data point with random noise until it reaches a prior distribution. They then learn a reverse process that can reconstruct the original data distribution via denoising. The forward process is defined as a Markov chain q(x(1: T ) | x(0) ) := QTt=1 q(x(t) | x(t−1) ), where q(x(t) | x(t−1) ) is the Markov diffusion kernel. The reverse process is defined as pθ
+
+ x(0: T ) := p x(T ) Q Tt=1 pθ
+
+ x(t−1) | x(t),approximated by a trained neural network with parameters θ.34 Variable-Cardinality Point Set Diffusion 
+
+In this section, we first formalize the problem of diffusion modeling for spatial point processes. We then discuss existing and baseline approaches, before introducing our proposed method. 
+
+4.1 Problem Formulation 
+
+We consider spatial point processes defined on Rd, whose realizations are finite sets of points. Let 
+
+X = {x ⊂ Rd : |x| < ∞} 
+
+denote the space of all finite point sets. Each data sample x ∈ X is an unordered collection of points 
+
+x = {x1, . . . , x n}, where xi ∈ Rd and n = |x| denotes the cardinality of the set, which may vary across samples. We assume that the observed dataset D ⊂ X consists of i.i.d. samples from an unknown distribution p∗(x) defined on X .We aim to develop diffusion-based generative models for spatial point processes, i.e., distributions over finite point configurations. While diffusion models are naturally defined on fixed-dimensional Euclidean spaces, extending them to point sets introduces two key challenges. 
+
+Permutation invariance. Although a point set x = {x1, . . . , x n} is unordered, diffusion models typically operate on ordered representations such as (x1, . . . , x n) ∈ (Rd)n. A valid model must therefore ensure that the induced distribution is invariant to permutations of the points. Formally, for any permutation π of {1, . . . , n }, p(x1, . . . , x n) = p(xπ(1) , . . . , x π(n)).
+
+Variable cardinality. The number of points n is itself random and varies across samples. Agenerative model must therefore handle distributions defined over spaces of varying dimensionality, capturing both the spatial configuration of points and the variability in set cardinality. Our goal is to learn a diffusion-based model pθ (x) that approximates the data distribution p∗(x) and enables sampling of new point sets with varying cardinalities. 
+
+4.2 Simple Baseline Approaches 
+
+We first discuss two baseline approaches for applying diffusion models to variable-size point sets. Both approaches explicitly model the set cardinality and factorize the distribution as p(x) = p(n) p(x | n),but differ in how the conditional distribution p(x | n) is modeled. 
+
+Independent Point Diffusion. A simple approach is to model each point independently. The conditional distribution is approximated as 
+
+p(x | n) ≈
+
+> n
+
+Y
+
+> i=1
+
+p(xi).
+
+This formulation satisfies permutation invariance because the product factorization treats all points symmetrically and is invariant to any permutation of the points. In practice, the point distribution p(x) is modeled using a diffusion model defined on Rd, while 
+
+p(n) is learned using a separate cardinality model. As a single discrete-valued variable, a standard distribution estimator is sufficient for p(n). To generate a point set, we first sample the cardinality 
+
+n ∼ p(n), and then independently sample n points x1, . . . , x n ∼ p(x).
+
+Cardinality-Conditioned Point Diffusion. A more expressive approach is to model the conditional distribution p(x | n) directly using a diffusion model defined on n points. This approach allows dependencies among points and implicitly between the number of points and their locations. It corresponds to the fixed-dimensional diffusion model (FDDM) framework proposed in Hoogeboom et al. [2022]. This formulation can satisfy permutation invariance when the diffusion model is designed to operate on the entire n-point configuration in a symmetric manner, without assigning distinct roles to individual points. To generate a point set, FDDM first samples the cardinality 
+
+n ∼ p(n), and then generates n points x = {x1, . . . , x n} simultaneously using the conditional diffusion model. 4Both approaches explicitly model the set cardinality and generate points conditioned on it. Although the conditional model can generate points given n, it does not treat cardinality as part of the dif-fusion state itself, which limits the ability to capture dependencies between cardinality and spatial configuration. Moreover, the independent formulation additionally ignores dependencies among points. 
+
+4.3 Jump Diffusion 
+
+Recent work Campbell et al. [2023] introduced a jump-diffusion-based trans-dimensional diffusion model (TDDM) that jointly models both the dimension and the state. In this framework, the generative process combines standard diffusion dynamics with stochastic discrete jump events that modify the number of points. During the forward process, points are randomly removed according to a jump rate 
+
+λt(x(t)), while in the reverse process, the model denoises the current configuration by sequentially adding new points as governed by a learned neural network model. In principle, the jump diffusion framework is flexible, as the jump rate λt(x(t)) can be designed to depend on both the state and time. In practice, existing implementations parameterize the jump rate as a function only of time (i.e., λt) and remove points until only single point remains. This limits flexibility when modeling point sets with a wide range of cardinalities, as we demonstrated in our results. Moreover, the use of discrete jump events leads to asymmetric dynamics, where points are removed in the forward process and added in the reverse process. 
+
+4.4 Existence-Field Point Diffusion 
+
+Unlike jump diffusion models that rely on discrete and asymmetric trans-dimensional jumps, we introduce a continuous existence variable associated with each potential point. This allows the presence of points to evolve smoothly under diffusion dynamics, enabling both appearance and disappearance to be modeled within a standard diffusion framework. For each point xi ∈ Rd, we introduce an existence variable ei ∈ [0 , 1] that represents the degree to which the point is present. We assume an upper bound N on the number of points, and represent a configuration using N potential points. In theory, we set N to be very large, effectively removing this as a constraint. In the experiments, N is chosen to be at least as large as the maximum cardinality in the training data, so that no observed point set is truncated. We define the augmented variable yi = ( xi, e i) and represent a configuration as the N -tuple 
+
+y = ( y1, . . . , y N ) =  (xi, e i)Ni=1 ∈ Y , Y =  Rd × [0 , 1] N .
+
+This defines an augmented representation of point sets in 
+
+XN = x ⊂ Rd : |x| ≤ N .
+
+For a clean binary representation with ei ∈ { 0, 1}, the corresponding point set is 
+
+x(y) = {xi : ei = 1 , i ∈ { 1, . . . , N }} .
+
+Conversely, any point set x = {x1, . . . , x n} ∈ X N can be embedded into Y by assigning its n points to n slots and setting their existence variables to ei = 1 . The remaining N − n slots are treated as inactive and assigned ei = 0 .This formulation naturally accommodates variable cardinality through the existence variables ei, and can satisfy permutation invariance when the representation and the underlying model treat all points symmetrically without assigning point-specific roles. We then apply diffusion to both the coordinates xi and a reparameterized form of the existence variables ei, so that the augmented representation y is gradually perturbed toward a simple prior distribution. This enables learning the distribution p(y) using a standard diffusion model. 
+
+Forward diffusion. Let y = ( y1, . . . , y N ) denote the augmented representation where yi =(xi, e i) ∈ Rd × [0 , 1] . We apply a reparameterization to the existence variables. We use the logit transform 
+
+ui = log ei
+
+1 − ei
+
+,
+
+5and perform diffusion over (xi, u i). In practice, we clip existence values to [ϵ, 1 − ϵ] before applying the logit transform. With a slight abuse of notation, we denote the diffusion state as yi = ( xi, u i),where ui is the reparameterized existence variable. We define a forward diffusion process that gradually diffuses both the spatial coordinates and the reparameterized existence variables towards a simple Gaussian prior. Specifically, we consider a sequence of latent variables {y(t)}Tt=0 with y(0) ∼ p∗(y) and define the forward process 
+
+q(y(t) | y(t−1) ) = N (y(t); p1 − βty(t−1) , β tI) ,
+
+where {βt}Tt=1 is a variance schedule. Equivalently, the marginal distribution at timestep t can be written as 
+
+q(y(t) | y(0) ) = N
+
+
+
+y(t); √¯αty(0) , (1 − ¯αt)I
+
+
+
+,
+
+where αt = 1 − βt and ¯αt = Qts=1 αs. When t = T , the distribution of y(T ) approaches N (0 , I ).
+
+Reverse process. To generate samples, we learn a parameterized reverse process pθ (y(t−1) | y(t))
+
+that approximates the true posterior q(y(t−1) | y(t)). Following standard diffusion formulations, we model the reverse transition as 
+
+pθ (y(t−1) | y(t)) = N
+
+
+
+y(t−1) ; μθ (y(t), t ), σ 2 
+
+> t
+
+I
+
+
+
+.
+
+Instead of predicting μθ directly, we train a neural network ϵθ (y(t), t ) to predict the noise added to 
+
+y(0) . The reverse mean can then be written as 
+
+μθ (y(t), t ) = 1
+
+√αt
+
+
+
+y(t) − βt
+
+√1 − ¯αt
+
+ϵθ (y(t), t )
+
+
+
+.
+
+Training objective. Following the standard DDPM Ho et al. [2020] formulation, the model is trained by minimizing a noise prediction loss 
+
+L = Ey(0) ,t,ϵ 
+
+h
+
+∥ϵ − ϵθ (y(t), t )∥2i
+
+,
+
+where 
+
+y(t) = √¯αty(0) + √1 − ¯αtϵ, ϵ ∼ N (0 , I ).
+
+Since y contains both coordinates and existence variables, the model jointly learns to denoise spatial locations and existence degrees. 
+
+Sampling. To generate a point set, we initialize y(T ) ∼ N (0 , I ) and iteratively sample 
+
+y(t−1) ∼ pθ (y(t−1) | y(t))
+
+until y(0) is obtained. Each existence variable is recovered via 
+
+ei = σ(ui) ,
+
+where σ(·) is the sigmoid function. We then interpret ei as the probability of presence and sample binary indicators zi ∼ Bernoulli (ei).Given a fixed maximum number of slots N , some slots may correspond to inactive points. The final point set is constructed by only selecting the active points: 
+
+x = {xi | zi = 1 }.
+
+The resulting number of points is 
+
+n =
+
+> N
+
+X
+
+> i=1
+
+zi ≤ N. 
+
+65 Experiments 
+
+We evaluate our model on three datasets, including one synthetic dataset and two real-world datasets: the City Louisville e-scooter trip dataset Louisville/Jefferson County Information Consortium [2019] and the QM9 molecule dataset Ruddigkeit et al. [2012], Ramakrishnan et al. [2014]. We compare our method, EFDM, with several baselines, including the independent diffusion model (IDM), the fixed-dimensional diffusion model (FDDM), and the trans-dimensional diffusion model (TDDM). For EFDM, each training point set with cardinality n ≤ N is converted into an N -slot representation. The true data points are assigned existence value ei = 1 − ϵ, and the remaining N − n slots are filled with inactive points with ei = ϵ. The coordinates of inactive points are randomly sampled from the n
+
+observed points in the same point set, so that every training example has the same number of slots while preserving its original cardinality through the existence variables. For TDDM, in addition to the original formulation where the forward jump rate λt depends only on time t, we also introduce a modified version (TDDMv), where the forward rate is allowed to depend on the initial cardinality of each sample to better adapt to datasets with more variable point counts. For the synthetic and trip datasets, we implement all methods using comparable neural network architectures to directly evaluate their abilities to model the joint distribution of spatial structure and cardinality. For the molecule dataset, we implement EFDM and FDDM with transformer neural network architectures, and use the pretrained TDDM model for this task provided by Campbell et al. [2023] that uses a graph neural network (GNN). For each model, we choose the architecture (transformer or GNN) and training (our own training or pretrained models) that result in the best performance. Detailed model configurations, parameter counts, and compute information are provided in Appendix A.2. 
+
+Metrics. We evaluate both the cardinality distribution and the spatial distribution of generated point sets. The ground-truth is a held-out testing set from the same dataset. • Cardinality. We measure the discrepancy between generated and ground-truth cardinality distributions using the 1D Wasserstein distance (W1d). • Spatial statistics. To assess spatial structure, we compute statistics of each set, including spatial mean, variance, skew, kurtosis, and nearest-neighbor distance (NN1). For NN1, the value for each point set is computed as the average nearest-neighbor distances over all points in the set. We then compare the distributions of these statistics between generated and real data using W1d distance. We report both unconditional and conditional evaluations. In the unconditional setting, all samples are pooled together. In the conditional setting, samples are grouped into bins according to their cardinality with approximately equal number of samples per bin, and W1d distances are computed within each bin. The final score is obtained by averaging the W1 distances across bins. This allows us to evaluate whether the model captures differing spatial structure across cardinalities. • Other Measurements. For the molecule dataset, we additionally report domain-specific metrics: atom stability, molecule stability, and molecule validity. 
+
+5.1 Synthetic Data 
+
+We construct a synthetic dataset with point sets of different spatial distributions over different cardinality ranges. (See the supplementary material for details.) It is designed to test whether a model can jointly capture variable cardinality and the corresponding conditional spatial structure. Tbl. 1 reports W1 distances on spatial statistics under both conditional (binned by cardinality) and unconditional evaluations. Under the conditional setting, EFDM achieves the lowest error across all metrics except NN1, indicating that it better captures the spatial structure’s relationship to differing cardinalities. Under the unconditional setting, FDDM achieves lower errors on several metrics. This is expected since unconditional evaluation mixes samples with different cardinalities, which can obscure the underlying structure differences across cardinality levels. By contrast, EFDM focuses on modeling the joint distribution of cardinality and spatial structure, preserving differences across cardinalities and leading to a better performance under conditional evaluation. 7Table 1: Wasserstein-1 (W1) distance on spatial statistics for synthetic dataset. We report both conditional (binned by cardinality) and unconditional results. Lower values indicate better alignment with the real distribution.                                                              
+
+> Conditional (binned) Unconditional Method Mean Var Skew Kurt. NN1 Mean Var Skew Kurt. NN1 EFDM 0.0882 0.0276 0.0699 0.1271 0.0052 0.0899 0.0176 0.0263 0.0358 0.0115 FDDM 0.1674 0.0491 0.0745 0.1729 0.0045 0.0761 0.0086 0.0266 0.0331 0.0022
+> TDDM 0.7652 0.3815 0.2208 0.9185 0.0225 0.7564 0.1453 0.1485 0.3071 0.0412 TDDMv 0.4278 0.0943 0.0821 0.3317 0.0089 0.6418 0.0606 0.0871 0.0811 0.0385 IDM 0.8181 0.5772 0.6492 0.5554 0.0599 0.7725 0.5705 0.6508 0.4732 0.0617
+
+Table 2: Wasserstein-1 (W1) distance on spatial statistics for the trip dataset. We report both conditional (binned by cardinality) and unconditional results. Lower values indicate better alignment with the real distribution.                                                              
+
+> Conditional (binned) Unconditional Method Mean Var Skew Kurt. NN1 Mean Var Skew Kurt. NN1 EFDM 0.1157 0.1315 0.2760 0.8623 0.0285 0.0733 0.1013 0.2052 0.5093 0.0300 FDDM 0.1731 0.1842 0.3488 1.2839 0.0267 0.1085 0.0925 0.2185 0.7253 0.0284
+> TDDM 0.1737 0.2005 0.4543 2.8645 0.0112 0.3817 0.2674 0.5986 2.7713 0.0678 TDDMv 0.1865 0.2048 0.4075 1.1025 0.0451 0.0669 0.1131 0.0788 0.5943 0.0724 IDM 0.2167 0.2145 0.3471 1.0825 0.0379 0.1882 0.1534 0.2672 0.7083 0.0394
+
+The supplementary material shows example point sets grouped by different cardinality ranges for each method and the cardinality distributions, which confirm the findings of Tbl. 1. FDDM’s and IDM’s cardinality distributions well match the ground truth because they directly model it. EFDM also does well while better matching the spatial distributions. Although TDDMv covers a broader range than the original version, both TDDM and TDDMv capture only part of the distributions and fail to consistently represent all cardinality-dependent patterns. 
+
+5.2 Trip Data 
+
+We use the City of Louisville e-scooter trip dataset, which contains real-world shared micro-mobility trip records in Louisville, Kentucky. Each record includes spatial and temporal information, such as trip start time, duration, and location. We construct a sample as 10% of the pick-up locations for a given day. The days are then randomly split into training, validation, and testing sets. As shown in Tbl. 2, EFDM achieves the best performance across most spatial statistics under conditional evaluation. Under unconditional evaluation, EFDM remains competitive but does not consistently achieve the lowest error across all metrics. We attribute this to how EFDM learns the joint distribution over both cardinality and spatial structure, rather than modeling them separately. By contrast, methods that decouple cardinality and spatial modeling (e.g., FDDM) may achieve lower unconditional errors on certain statistics, but fail to capture the full joint structure of the data well. The supplementary material shows example point sets grouped by different cardinality ranges and the cardinality distributions. EFDM shows performance comparable to FDDM and IDM, both of which model the cardinality directly and fit it well as expected. However, both TDDM and TDDMv lack the ability to fit a large range of cardinalities, generating samples within a narrow range. The TDDMv model shows improved alignment with the high-density regions of the true distribution compared to the original TDDM. By contrast, the original TDDM tends to produce cardinalities concentrated around the middle of the overall range of n, rather than matching the high-density regions of the true distribution, as its forward jump rate is defined based on the maximum cardinality. 
+
+5.3 Molecule 
+
+We evaluate our model on the QM9 dataset, which consists of small organic molecules with varying numbers of atoms. Each molecule is represented as a set of atoms in 3D space, where each atom is associated with a spatial coordinate and a categorical atom type. Following prior work, we treat each molecule as a point set, where atom positions define the spatial structure, atom types 8Table 3: Quantitative results on QM9. We report molecular validity metrics and Wasserstein-1 (W1) distances on spatial statistics. For atom stability, molecule stability, and validity, higher values are better. For W1 distances, lower values indicate better alignment with the real distribution.                              
+
+> Molecular metrics ( ↑)Spatial statistics W1 ( ↓)Method Atom Stable Mol. Stable Validity Var Skew Kurt. NN1 EFDM 0.968 0.766 0.920 0.074 0.031 0.043 0.005
+> FDDM 0.902 0.309 0.665 0.075 0.035 0.053 0.006 TDDM (pretrained) 0.966 0.735 0.867 0.398 0.072 0.104 0.009
+
+Table 4: Wasserstein-1 (W1) distance between generated and test atom-count distributions on QM9. We report W1 distances for each atom type (C, H, N, O, F) Lower values indicate better agreement with the real distribution.                     
+
+> Method CHNOFEFDM 0.0465 0.1259 0.0383 0.0262 0.0058
+> FDDM 0.0625 0.2667 0.0735 0.0534 0.0176 TDDM (pretrained) 0.0990 1.1771 0.0489 0.0456 0.0137
+
+represent categorical features associated with each point, and the number of atoms corresponds to the cardinality. Following Campbell et al. [2023], we adopt standard evaluation metrics for molecular generation, including atom stability, molecule stability, and molecule validity. Bonds are not explicitly modeled but are inferred from inter-atomic distances during evaluation. We reimplement FDDM using the same Transformer family and general training pipeline. Because the deepest stable FDDM configuration differs from the EFDM configuration, this comparison is not parameter-matched; model sizes are reported in Table 6 for transparency. We also include the pretrained TDDM model provided by Campbell et al. [2023], which employs an equivariant graph neural network, as a strong pretrained equivariant baseline. Equivariant GNNs are particularly effective for molecular data because they can capture geometric symmetries and chemical interactions. The use of such architectures is compatible with EFDM and could further improve molecular generation performance. In this work, we adopt simple transformer-based architectures to focus the comparison on the generative modeling framework, rather than on domain-specific architectural design. We also keep a running exponential moving average (EMA) of the network weights. We observe that the reproduced results may differ from those reported in the original papers, which can be attributed to differences in training configurations, hyperparameters, and evaluation protocols. As shown in Tbl. 3, EFDM achieves the best performance across all molecular validity metrics, including atom stability, molecule stability, and validity under non-GNN setting. In particular, EFDM outperforms FDDM when both models use simple neural network architectures without graph neural networks. EFDM achieves competitive performance compared to the pretrained TDDM model, despite not using graph neural networks. Tbl. 3 further evaluates the spatial structure of generated molecules. EFDM achieves the lowest Wasserstein-1 (W1) distances across all spatial statistics, indicating a better match to the real data distribution. FDDM shows moderate performance but underperforms EFDM, while TDDM has larger errors on several statistics. Tbl. 4 shows the distributions of atom counts for each atom type. EFDM closely matches the ground-truth distributions across all atom types. By contrast, both FDDM and TDDM show larger discrepancies for certain atom types, particularly for hydrogen, which is the most frequent atom type. The supplementary material also plots the distributions of atom counts as well as sample molecules. EFDM produces molecules with diverse sizes and realistic structures that are consistent with the real data. Across different target cardinalities, the generated molecules exhibit plausible geometric arrangements and coherent bonding patterns, further demonstrating the effectiveness of our approach in modeling both cardinality and spatial structure. 96 Conclusions 
+
+We introduced EFDM, a diffusion-based generative model that provides a unified and continuous framework for spatial point processes with variable cardinality. By associating each potential point with an existence variable, EFDM models point locations and cardinality within a single diffusion process, avoiding discrete trans-dimensional operations. Experiments on synthetic, trip, and molecular datasets show strong performance under conditional evaluation and competitive results on molecular validity metrics, demonstrating the effectiveness of our approach across a range of domains. It is worth noting that when the cardinality is independent of spatial distribution, EFDM may overfit and perform worse than simpler factorized approaches; it may also introduce additional computational and memory costs. Currently, EFDM is designed to focus on static spatial point processes; extending it to deal with spatial-temporal point processes (STPP) is an important direction for future work. 
+
+# References 
+
+Ruojin Cai, Guandao Yang, Hadar Averbuch-Elor, Zekun Hao, Serge Belongie, Noah Snavely, and Bharath Hariharan. Learning gradient fields for shape generation. In European Conference on Computer Vision , pages 364–381. Springer, 2020. Andrew Campbell, William Harvey, Christian Weilbach, Valentin De Bortoli, Thomas Rainforth, and Arnaud Doucet. Trans-dimensional generative modeling via jump diffusion models. Advances in Neural Information Processing Systems , 36:42217–42257, 2023. Ricky TQ Chen, Brandon Amos, and Maximilian Nickel. Neural spatio-temporal point processes. 
+
+arXiv preprint arXiv:2011.04583 , 2020. Daryl J Daley and David Vere-Jones. An Introduction to the Theory of Point Processes: Volume I: Elementary Theory and Methods . Springer, 2003. Alan E Gelfand, Peter Diggle, Peter Guttorp, and Montserrat Fuentes. Handbook of Spatial Statistics .CRC press, 2010. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 33:6840–6851, 2020. Chengkuan Hong and Christian Shelton. Deep Neyman-Scott processes. In International Conference on Artificial Intelligence and Statistics , pages 3627–3646. PMLR, 2022. Emiel Hoogeboom, Vıctor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion for molecule generation in 3D. In International Conference on Machine Learning , pages 8867– 8887. PMLR, 2022. Junzhong Ji, Runfeng Zhao, and Minglong Lei. Latent diffusion transformer for point cloud genera-tion. The Visual Computer , 40(6):3903–3917, 2024. The Louisville/Jefferson County Information Consortium. City Lousiville escooter trip data. https://www.kaggle.com/datasets/busielmorley/city-lousiville-escooter-trip-data, 2019. Louisville is spelled lousiville in the URL. David Lüdke, Enric Rabasseda Raventós, Marcel Kollovieh, and Stephan Günnemann. Unlocking point processes through point set diffusion. arXiv preprint arXiv:2410.22493 , 2024. Shitong Luo and Wei Hu. Diffusion probabilistic models for 3D point cloud generation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2837–2845, 2021. Hongyuan Mei and Jason M Eisner. The neural Hawkes process: A neurally self-modulating multivariate point process. Advances in Neural Information Processing Systems , 30, 2017. Vinicius Mikuni, Benjamin Nachman, and Mariel Pettee. Fast point cloud generation with diffusion models in high energy physics. Physical Review D , 108(3):036025, 2023. 10 Raghunathan Ramakrishnan, Pavlo O Dral, Matthias Rupp, and O Anatole Von Lilienfeld. Quantum chemistry structures and properties of 134 kilo molecules. Scientific data , 1(1):1–7, 2014. Lars Ruddigkeit, Ruud Van Deursen, Lorenz C Blum, and Jean-Louis Reymond. Enumeration of 166 billion organic small molecules in the chemical universe database GDB-17. Journal of chemical information and modeling , 52(11):2864–2875, 2012. Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In International Conference on Machine Learning ,pages 2256–2265, 2015. Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456 , 2020. Yongbin Sun, Yue Wang, Ziwei Liu, Joshua Siegel, and Sanjay Sarma. PointGrow: Autoregressively learned point cloud generation with self-attention. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 61–70, 2020. Guandao Yang, Xun Huang, Zekun Hao, Ming-Yu Liu, Serge Belongie, and Bharath Hariharan. PointFlow: 3D point cloud generation with continuous normalizing flows. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 4541–4550, 2019. Zihao Zhou, Xingyi Yang, Ryan Rossi, Handong Zhao, and Rose Yu. Neural point process for learning spatiotemporal event dynamics. In Learning for Dynamics and Control Conference , pages 777–789. PMLR, 2022. 
+
+# A Supplementary Material 
+
+This appendix provides additional details on synthetic data generation and supplementary visualiza-tions for the experiments. 
+
+A.1 Synthetic data generation 
+
+We construct synthetic point sets in R2 where the spatial distribution depends on the cardinality range. For each sample, we first draw a cardinality n ∈ [20 , 400] and define the regime 
+
+r(n) = 
+
+
+
+0, n < 80 ,
+
+1, 80 ≤ n < 160 ,
+
+2, 160 ≤ n < 280 ,
+
+3, n ≥ 280 .
+
+Given r(n), points are sampled from one of the following regime-specific distributions. For r = 0 , points are sampled from a compact Gaussian blob with a mild nonlinear arc: 
+
+zi ∼ N (μ0, Σ0), xi =
+
+ zi, 1
+
+zi, 2 + 0 .35 sin(0 .7zi, 1)
+
+
+
+,
+
+where 
+
+μ0 = (1 .6, 1.6) , Σ0 =
+
+0.85 0.20 0.20 0.85 
+
+
+
+.
+
+For r = 1 , points are sampled from a rotated elliptical Gaussian: 
+
+zi ∼ N (0 , I 2), xi = R(0 .8) Sz i + μ1 + ϵi,
+
+where 
+
+μ1 = ( −1.6, 1.6) , S =
+
+1.25 00 0.55 
+
+
+
+,
+
+and 
+
+R(θ) = 
+
+cos θ − sin θ
+
+sin θ cos θ
+
+
+
+.
+
+11 For r = 2 , points are sampled from a noisy ring: 
+
+ϕi ∼ Unif(0 , 2π), ρi ∼ N (1 .8, 0.35 2),xi =
+
+ρi cos ϕi
+
+ρi sin ϕi
+
+
+
++ μ2 + ϵi, μ2 = ( −1.4, −1.4) .
+
+For r = 3 , points are sampled from a bimodal Gaussian mixture followed by a shear transform: 
+
+˜xi ∼ 0.55 N (μ3,1, Σ3,1) + 0 .45 N (μ3,2, Σ3,2),
+
+where 
+
+μ3,1 = (1 .2, −1.2) , μ3,2 = (2 .2, −2.0) ,
+
+Σ3,1 =
+
+0.45 0.15 0.15 0.25 
+
+
+
+, Σ3,2 =
+
+ 0.25 −0.05 
+
+−0.05 0.55 
+
+
+
+.
+
+The final point is obtained by applying a shear: 
+
+xi =
+
+˜xi, 1 + 0 .25˜ xi, 2
+
+˜xi, 2
+
+
+
++ ϵi.
+
+For regimes r = 1 , 2, 3, we add Gaussian noise 
+
+ϵi ∼ N (0 , σ 2
+
+> n
+
+I2), σn = 0 .55 
+
+ 80 max( n, 80) 
+
+0.15 
+
+.
+
+Finally, each point set is shifted by a small sample-level jitter 
+
+δ ∼ N (0 , 0.32I2), xi ← xi + δ. 
+
+All valid points are normalized using the mean and standard deviation computed from the training set. 
+
+A.2 Implementation Details 
+
+This section summarizes the model configurations used in the experiments. 
+
+Maximum cardinality. For EFDM, we choose the maximum slot number N based on the dataset cardinality range. For the synthetic and trip datasets, we use N = 400 . For the QM9 molecule dataset, we use N = 29 , corresponding to the maximum number of atoms in the dataset. In all experiments, N is chosen to be at least as large as the maximum observed cardinality, so that the upper bound does not constrain the generated samples. If generation beyond the observed cardinality range is desired, N can be increased accordingly, at the cost of additional computation and memory. 
+
+Model configurations. For the synthetic and trip datasets, EFDM, FDDM, TDDM, and TDDMv use Transformer-based architectures under the same configuration for each dataset. IDM uses a point-wise feedforward network, since it models points independently and does not use interactions among points. The configurations are summarized in Table 5. Table 5: Model configurations for the synthetic and trip experiments. EFDM, FDDM, TDDM, and TDDMv use Transformer-based architectures. IDM uses a point-wise MLP.                               
+
+> Dataset Method Backbone Emb. Dim FF/Hidden Dim Heads Layers Synthetic EFDM/FDDM/TDDM/TDDMv Transformer 128 256 44Synthetic IDM MLP 128 256 –4Trip EFDM/FDDM/TDDM/TDDMv Transformer 256 512 48Trip IDM MLP 256 512 –8
+
+For the molecule experiments, EFDM and FDDM use Transformer-based architectures. The pre-trained TDDM baseline is provided by prior work. Our own training of TDDM using GNN did not improve the experimental results over the provided pretrained TDDM model. For FDDM, increasing the depth to match EFDM led to unstable optimization and non-decreasing training loss, so we used the deepest FDDM configuration that trained stably. We report the configurations and parameter counts in Table 6 for transparency. 12 Table 6: Model configurations and parameter counts for the QM9 molecule experiments.                         
+
+> Method Backbone Emb. Dim FF Dim Heads Layers Params EFDM Transformer 256 512 824 12,804,360 FDDM Transformer 256 512 810 5,490,440 TDDM (pretrained) EGNN ––––7,327,554
+
+Compute resources. All experiments were run on a single NVIDIA RTX 6000 Ada GPU. For EFDM, training took approximately 10 hours on the synthetic dataset, 5–10 hours on the trip dataset, and 7 days on the QM9 molecule dataset. 
+
+A.3 Additional Visualizations 
+
+This section provides additional visualizations that complement the quantitative results in the main paper. The figures show generated point sets, cardinality distributions, atom-count distributions, and molecule examples across the synthetic, trip, and QM9 experiments. 
+
+Synthetic data. Figure 2 visualizes generated point sets grouped by cardinality ranges, allowing comparison of how different methods capture cardinality-dependent spatial patterns. Figures 3 and 4 show the overall and per-method cardinality distributions, respectively. 
+
+Trip data. Figure 5 shows generated point sets grouped by cardinality ranges for the trip dataset. Figures 6 and 7 compare the overall and per-method cardinality distributions. 
+
+QM9 molecules. Figure 8 compares atom-count distributions for different atom types, and Figure 9 shows examples of real molecules and EFDM-generated molecules. Together, these figures provide additional qualitative evidence that EFDM captures both cardinality and spatial structure. 13 n < 80 80 ≤ n < 160 160 ≤ n < 280 n ≥ 280 
+
+> Real Data EFDM TDDM TDDMv FDDM IDM
+
+Figure 2: Visualization of generated synthetic point sets from different models. (a) Real data. (b) EFDM. (c) TDDM. (d) TDDMv. (e) FDDM. (f) IDM. EFDM more closely reproduces the cardinality-dependent spatial patterns in these examples. FDDM and IDM capture part of the structure, while TDDM-based methods fail to recover the full range of cardinality-dependent spatial patterns. 14 Figure 3: Overall comparison of cardinality distributions on the synthetic dataset. Gray: real data; blue: EFDM; orange: TDDM; green: TDDMv; pink: FDDM; purple: IDM. EFDM closely follows the real distribution. FDDM and IDM show similar trends but with some deviation, while TDDM-based methods concentrate on a narrow range and fail to match the true distribution. 
+
+Figure 4: Per-method comparison of cardinality distributions on the synthetic dataset. 15 n ≤ 40 40 < n ≤ 79 79 < n ≤ 143 n > 143 
+
+> Real Data EFDM TDDM TDDMv FDDM IDM
+
+Figure 5: Visualization of generated trip data point sets from different models. (a) Real data. (b) EFDM. (c) TDDM. (d) TDDMv. (e) FDDM. (f) IDM. EFDM more closely reproduces the cardinality-dependent spatial patterns in these examples. FDDM and IDM capture part of the structure, while TDDM-based methods fail to recover the full range of cardinality-dependent spatial patterns. 16 Figure 6: Overall comparison of cardinality distributions on the trip dataset. 
+
+Figure 7: Per-method comparison of cardinality distributions on the trip dataset. 17 Figure 8: Comparison of atom-count distributions between the test set and generated molecules on QM9. Rows correspond to atom types (C, H, N, O, and F), and columns correspond to EFDM, FDDM, and TDDM-pretrained, respectively. In each subplot, we compare the empirical count distribution of the test set and generated samples, and report the Wasserstein-1 (W1) distance. Lower W1 indicates better agreement with the real distribution. 18 (a) Real data (QM9 molecules) 
+
+> (b) EFDM samples
+
+Figure 9: Examples of molecules from the QM9 dataset (top) and samples generated by EFDM (bottom). Each column corresponds to molecules with similar numbers of atoms, with sizes approxi-mately 5, 10, 15, 20, and 25. EFDM generates molecules with diverse structures and sizes that are consistent with the real data. Bonds are inferred from interatomic distances and are shown only for visualization. 19
