@@ -1,0 +1,316 @@
+Title: MissHyper: Restoring Clinical Synchronicity in Missingness-Guided Hypergraph Forecasting
+
+URL Source: https://arxiv.org/pdf/2607.21922v1
+
+Published Time: Mon, 27 Jul 2026 00:25:33 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# MissHyper: Restoring Clinical Synchronicity in Missingness-Guided Hypergraph Forecasting 
+
+Mingyi Ma 
+
+Academy of Advanced Interdisciplinary Studies Wuhan University 
+
+money.yi@whu.edu.cn 
+
+Qingxiong Tan 
+
+Institute for Mathematics & Artificial Intelligence Wuhan University 
+
+tanqingxiong@whu.edu.cn 
+
+## Abstract 
+
+Clinical irregular multivariate time series are shaped not only by physiological dynamics but also by the measurement process that determines when and what to observe. In event-centric models, however, co-timestamp structure can be flat-tened too early: measurements acquired at the same timestamp are embedded as isolated nodes, leaving local patient-state context unavailable until later message-passing layers. We study this pre-propagation representation bottleneck and ad-dress it by restoring co-timestamp context before message passing begins. We propose MissHyper , a missingness-guided hypergraph forecasting model with pre-propagation synchronicity restoration. MissHyper augments each event with a local support-density cue, aggregates co-timestamp records to recover patient-state context, and uses a missingness-guided gate to adaptively fuse node-specific evidence with the recovered context. Across PhysioNet 2012, MIMIC-III, and MIMIC-IV, MissHyper achieves consistent gains in multi-step forecasting and out-performs a strong hypergraph baseline. These results suggest that improving event initialization can benefit sparse clinical forecasting without requiring a redesigned downstream propagation architecture. Ablations indicate that snapshot restoration, adaptive fusion, and support-density encoding all contribute, pointing to event initialization as a critical design axis for sparse clinical forecasting. 
+
+## 1 Introduction 
+
+Clinical forecasting often relies on irregular multivariate records, where patient state is reflected by sparse and partially observed measurements such as vital signs, laboratory tests, and treatment-related indicators. Forecasting future values from these records supports early warning, risk monitoring, and resource planning in intensive care units. Public benchmarks such as PhysioNet 2012, MIMIC-III, and MIMIC-IV have made this setting a standard testbed for clinical temporal modeling [1– 4]. Prior benchmarking studies have also shown that preprocessing choices and task definitions can strongly affect clinical time-series evaluation [5–7]. Unlike sensor streams collected at fixed frequencies, clinical observations are shaped by care routines, patient severity, and physician decisions. Missingness can therefore be informative rather than purely random [8–10], and local observation density can serve as a cue for estimating the reliability of an event. This acquisition process leads to two related modeling issues in clinical IMTS. First, variables are measured at different frequencies: vital signs may be charted repeatedly, whereas laboratory tests 
+
+> Preprint. arXiv:2607.21922v1 [cs.LG] 24 Jul 2026
+
+Figure 1: Motivation and core idea of MissHyper. (a) Clinical observations are sparse, asynchronous, and unevenly supported. (b) MissHyper restores timestamp-level synchronicity before hypergraph propagation and adaptively fuses the restored context into event nodes. are often ordered only when clinically needed [11–14]. Second, measurements collected at the same timestamp can form a patient-state snapshot, such as a set of concurrently charted vital signs or a laboratory panel [4, 15, 16]. For instance, a moderately elevated pulse may carry different clinical implications when accompanied by low blood pressure and reduced oxygen saturation than when recorded in isolation. Event-centric IMTS models preserve sparse observations efficiently by treating records as nodes or tokens, but this design can introduce a pre-propagation representation bottleneck :co-timestamp records that jointly describe patient state are initialized independently before they can exchange information [17–23]. Figure 1 illustrates this motivation: panel (a) shows sparse and unevenly supported clinical observations, while panel (b) shows how same-timestamp context can be restored before propagation. Prior IMTS models have mainly improved how sparse observations are processed after their initial event representations are formed. Some methods use Gaussian processes or continuous-time dynamics [24–28]. Other methods rely on recurrent, attention-based, or patch-based updates [29, 30, 17, 11, 13, 14, 21]. Recent work further explores graph or hypergraph propagation [31, 19, 20, 32, 22, 23]. However, even when timestamp hyperedges provide a path for later message passing, the node states entering the first propagation layer are still initialized from local event features alone. Since same-timestamp co-occurrence is directly available from the event layout, postponing it to later layers forces the model to reconstruct a simple clinical relation that could be exposed before propagation. We propose MissHyper , a missingness-guided initialization strategy for hypergraph forecasting of clinical IMTS. MissHyper operates before hypergraph propagation by modifying the event represen-tations passed into the forecasting backbone. Each event node receives a value, a role indicator, and a local support-density cue derived from the observation mask. Events sharing a timestamp are sum-marized into compact timestamp-level context, which is adaptively fused with node representations through a missingness-guided gate. Thus, MissHyper exposes co-timestamp clinical context before relational propagation while preserving sparse event modeling. The main contributions of this work are summarized as follows: • We identify a pre-propagation bottleneck in sparse clinical event representations: records acquired at the same timestamp are often initialized independently even though they jointly form a patient-state snapshot. This framing shifts attention from only improving later dependency propagation to improving the information available in each event representation before propagation begins. • We design MissHyper as a lightweight snapshot-aware initialization module that combines mask-derived support encoding, timestamp-level context restoration, and missingness-guided gated fusion. It restores co-timestamp context that is directly observable from the sparse event layout and uses local observation density as a reliability cue for event initialization. • Experiments on PhysioNet 2012, MIMIC-III, and MIMIC-IV show consistent reductions in both MSE and MAE compared with representative irregular time-series baselines and the direct hypergraph baseline. Ablation and sensitivity analyses support the roles of snapshot restoration, adaptive fusion, and local support density, suggesting that event initialization is important when sparse clinical measurements must be interpreted together with their acquisition context. 22 Related Work 
+
+2.1 Sparse Clinical Sequence Modeling 
+
+Prior IMTS studies mainly address sparse and non-uniform sampling through padding, interpolation, continuous-time modeling, recurrent updates, attention, patching, or set/event representations [33– 35]. Gaussian-process methods model irregular observations with uncertainty but can be sensitive to kernel design and costly in high-dimensional clinical settings [24, 36, 25]. Recurrent models such as T-LSTM, Phased LSTM, and GRU-D incorporate elapsed time, masks, or decayed memory [37, 38, 29]. Continuous-time models describe latent dynamics between observations through ODE-based updates [39, 26–28] or related flow and controlled-differential formulations [40–42]. Attention and event-based methods such as SeFT, mTAN, STraTS, PrimeNet, DNA-T, TimeCHEAT, and VIMTS avoid simple dense alignment and learn from sparse observed records [17, 30, 11, 18, 13, 14, 21]. Imputation-oriented models use recurrence, adversarial learning, or graph propagation [43–46], while diffusion and self-attention variants reconstruct missing values with different generative or attention mechanisms [47, 48]. These methods improve irregular temporal modeling, but they usually treat same-timestamp clinical measurements as context to be learned later or implicitly. They therefore do not explicitly address whether each sparse event should already contain local snapshot information before dependency learning begins. 
+
+2.2 Graph and Hypergraph Dependency Learning 
+
+Graph-based methods introduce structural bias for variable and temporal dependency learning. General graph neural networks and graph attention methods provide the basic message-passing machinery [49–52], and later variants extend this machinery through sampling or edge-conditioned messages [53, 54]. Time-series graph models have been used to capture inter-series or spatio-temporal dependencies [55–57]. For irregularly sampled series, Raindrop, Warpformer, GraFITi, Temporal Graph ODEs, and Hi-Patch learn from sparse, transformed, continuous-time, or multi-scale graph structures [31, 12, 19, 32, 22]. Other recent variants combine patching, neural flows, or knowledge guidance with graph reasoning [20, 58, 59]. Hypergraph methods further allow one hyperedge to connect multiple records [60–62]. Hypergraph attention and structure-learning variants enrich this representation [63–66]. HyperIMTS applies timestamp and variable hyperedges to IMTS forecasting [23], while recent hypergraph variants further explore adaptive or multi-scale structures for time-series forecasting [67]. These approaches strengthen dependency propagation and avoid excessive padding, but their initial node states can still be formed mainly from local event features. MissHyper is motivated by this limitation: before graph or hypergraph propagation, it restores directly observed co-timestamp context and uses missingness-derived support density to decide how strongly that context should shape each event representation. 
+
+## 3 Proposed Method 
+
+MissHyper targets the event initialization stage of a hypergraph IMTS forecaster. Before relational propagation begins, each sparse event node is enriched with two forms of layout-derived context: local observation support and co-timestamp evidence. We implement this snapshot-aware initialization with three encoder steps: mask-derived support encoding, timestamp-level synchronicity restoration, and missingness-guided fusion. Figure 2 summarizes the pipeline. This design focuses the proposed changes on representation initialization before downstream prop-agation. MissHyper uses only sparse-layout information, without imputing unmeasured values or converting sparse records into a dense observation grid. Episodes can contain different numbers of observed events, and all event sets are processed in sparse form. The mask used for density estimation records only event availability and is not treated as a dense value input. 
+
+3.1 Event-node formulation 
+
+Each patient episode is represented as sparse timestamp-variable events. An observed event is 
+
+en = ( τn, u n, x n), where τn, un, and xn denote timestamp, variable, and value. Forecast targets 3Figure 2: Overall framework of MissHyper: restoring co-timestamp clinical snapshots before hypergraph propagation. MissHyper first encodes mask-derived local support density for each sparse event, then aggregates events observed at the same timestamp to recover patient-state context, and finally uses a missingness-guided gate to fuse node-specific evidence with the restored snapshot before forecasting. are represented as query events with known timestamp-variable positions but hidden values. This query-node view makes forecasting compatible with sparse relational learning: the model receives lookback observations and query locations, then estimates the hidden values attached to those query nodes. Let Ob, Qb, and Vb = Ob ∪ Q b denote observed, query, and all event nodes for episode b. Observed nodes carry measured values from the input window, while query nodes carry only timestamp and variable identity, with their values replaced by a neutral placeholder. A binary role flag prevents this placeholder from being confused with a true zero-valued observation. For n ∈ V b,
+
+˜xb,n =
+
+xb,n , if n is an observed event ,
+
+0, if n is a query event , qb,n =
+
+0, if n is an observed event ,
+
+1, if n is a query event .
+
+This formulation keeps prediction local to nodes while preserving the distinction between evidence and targets. It requires only a timestamp index and a variable index for each node. 
+
+3.2 Mask-derived support cue 
+
+Clinical observations are unevenly distributed, so local event density provides a cue about how well an event is supported by nearby measurements. A value surrounded by many nearby records has stronger local support than the same value appearing after a long unobserved interval. MissHyper encodes this support as an explicit node-level cue before dependency learning. Let Ωb ∈ { 0, 1}L×C be the structural event-position mask, with Ωb,ℓ,u = 1 when position (ℓ, u ) is an observed input position or a predefined forecast query position. Query coordinates are specified by the forecasting task, but their target values are never used. The mask is used only to compute a scalar support cue and is not passed to the forecasting backbone as a dense input sequence. For each position and node, we define 
+
+ρb,ℓ,u = 1
+
+|W w(ℓ)|
+
+X 
+
+> s∈W w(ℓ)
+
+Ωb,s,u , ρb,ℓ,u ∈ [0 , 1] ,ρb,n := ρb,τ b,n ,u b,n ,
+
+where Ww(ℓ) is a clipped temporal window. Larger ρ indicates stronger nearby support, while 1 − ρ
+
+is the corresponding local missingness level. If a task does not expose query locations in advance, the 4same computation can be restricted to the observed prefix. The node input and initial embedding are 
+
+sb,n = [˜ xb,n , q b,n , ρ b,n ]⊤ ∈ R3,
+
+h(0)  
+
+> b,n
+
+= ϕin (sb,n ), h(0)  
+
+> b,n
+
+∈ Rd,
+
+where ϕin is a learnable input projection. This scalar cue helps distinguish observations with similar values but different local acquisition support, and later provides a reliability coordinate for gated fusion with same-timestamp context. We use a bounded average rather than a learned density estimator to keep this component simple and easy to isolate. The window size w controls the temporal scale of the cue and is selected on the validation split. 
+
+3.3 Synchronicity restoration 
+
+Flattening sparse records into event nodes can hide co-timestamp snapshots at initialization. In an ICU record, multiple variables measured at the same timestamp often correspond to a shared clinical recording event, such as vital-sign charting or a laboratory panel. Treating those measurements as isolated node inputs delays a directly observable relation until later message passing. MissHyper re-stores this structure before message passing by summarizing the observed evidence at each timestamp and broadcasting the summary to nodes with the same time index. Let πb(n) = τb,n map a node to its timestamp and let H(0)  
+
+> b
+
+stack initial node embeddings. We compute one support-weighted context per timestamp: 
+
+cb,ℓ =
+
+P 
+
+> n∈O b:τb,n =ℓ
+
+ρb,n h(0) 
+
+> b,n
+
+P 
+
+> n∈O b:τb,n =ℓ
+
+ρb,n + ϵ , Cb = stack Lℓ=1 cb,ℓ .
+
+Here ϵ handles empty timestamps. If timestamp ℓ has no observed event, cb,ℓ defaults to the zero vector before projection. Query-only timestamps therefore contain no target information and are handled by the same projection and gating mechanism. The contexts are projected and gathered back to event nodes: 
+
+ecb,n = ϕc
+
+ cb,π b(n)
+
+ , eCb = stack |V b| 
+
+> n=1
+
+ecb,n .
+
+Thus each node receives co-timestamp context before downstream hypergraph propagation. We intentionally use deterministic support weighting rather than an additional attention layer: the goal is to expose a simple co-timestamp relation before downstream propagation, not to introduce another propagation-like module. Only observed nodes contribute to the timestamp context. Query nodes may receive the restored context associated with their timestamp, but their hidden target values never enter the aggregation, preventing target-value leakage while still using known query locations. Support weighting gives larger influence to measurements with stronger local support, so the restored context combines instantaneous co-occurrence with local observation support before learned dependency propagation. 
+
+3.4 Missingness-guided gated fusion 
+
+Snapshot context should not be forced into every node equally. A sparse neighborhood may provide weak local evidence, in which case the gate can learn to borrow more from the restored timestamp context. A dense neighborhood provides stronger local support, allowing the update to remain closer to the node’s own embedding when appropriate. Because the gate receives the node state, the timestamp context, and ρ, the interpolation is explicitly conditioned on both representation content and local support. Uniformly replacing node features with a timestamp summary could wash out variable-specific evidence, while ignoring the summary would leave the initialization bottleneck unresolved. MissHyper uses a dimension-wise gate conditioned on node state, timestamp context, and density. Let ρb ∈ R|V b|× 1 stack node densities: 
+
+Ab = σ
+
+
+
+ϕg
+
+h 
+
+H(0)  
+
+> b
+
+∥ eCb ∥ ρb
+
+i 
+
+, Ab ∈ (0 , 1) |V b|× d,
+
+5where ∥ denotes concatenation and σ is sigmoid. The fused node representation is 
+
+Z(0)  
+
+> b
+
+= H(0)  
+
+> b
+
++ Ab ⊙
+
+ eCb − H(0) 
+
+> b
+
+
+
+.
+
+The gate controls how far each node moves from local evidence toward restored timestamp context. This residual interpolation keeps the fused representation in the same embedding space as the original node state. When a gate value is close to zero, the node remains dominated by its own input embedding. When a gate value is close to one, the node moves toward the restored timestamp context. Intermediate values allow the model to select different mixtures across hidden dimensions. In this way, missingness is not treated only as absence, but as a signal for how reliable isolated event evidence may be. The fusion module is deliberately small: it creates no new edges and performs no iterative message passing. Its purpose is to prepare a better initial state for downstream dependency learning. 
+
+3.5 Hypergraph forecasting backbone 
+
+The context-aware embeddings Z(0)  
+
+> b
+
+are passed to the unchanged hypergraph forecasting backbone. The backbone receives the same timestamp-node and variable-node incidence relations as the direct hypergraph baseline. Timestamp incidence connects records that share a time index, while variable incidence connects records from the same clinical variable across time. MissHyper changes neither relation. It only changes the node features entering the first propagation layer. 
+
+
+
+Z(K) 
+
+> b
+
+, T(K) 
+
+> b
+
+, U(K)
+
+> b
+
+
+
+= Bθ
+
+
+
+Z(0)  
+
+> b
+
+, Atb, Aub
+
+
+
+,
+
+where Atb and Aub are timestamp-node and variable-node incidence relations, and T(K) 
+
+> b
+
+, U(K) 
+
+> b
+
+are final hyperedge states. Keeping the backbone architecture and propagation operators unchanged isolates the encoder-side contribution. Conceptually, the backbone is responsible for higher-order dependency learning after initialization. The timestamp relation can refine synchronized measurements across layers, and the variable relation can exchange information along each clinical channel. MissHyper does not compete with these operations. Instead, it gives the first propagation layer node states that already contain a local snapshot estimate, reducing the need for early layers to spend capacity reconstructing same-timestamp evidence from scratch. For query node n, the decoder uses its final node state and incident hyperedge states: 
+
+rb,n =
+
+h
+
+z(K) 
+
+> b,n
+
+∥ t(K) 
+
+> b,τ b,n
+
+∥ u(K)
+
+> b,u b,n
+
+i
+
+, ˆxb,n = ψo(rb,n ).
+
+With all mini-batch forecast queries collected in Q, training minimizes 
+
+L = E(b,n )∈Q 
+
+h
+
+∥ˆxb,n − xb,n ∥22
+
+i
+
+.
+
+The prediction head is applied only to query nodes. Observed nodes participate as evidence during propagation but do not contribute to the forecasting loss. Since MissHyper keeps the loss, decoder inputs, and backbone outputs unchanged, the training objective remains the standard multi-step forecasting objective used by the baseline. The additional computation is O(|V |w) for window-based density gathering and linear in the number of event nodes for timestamp aggregation and gated fusion. With the small validation-selected window sizes used in our experiments, this overhead remains limited relative to the hypergraph propagation backbone. 
+
+## 4 Experiments 
+
+We evaluate whether snapshot-aware event initialization improves clinical IMTS forecasting under an unchanged hypergraph backbone architecture. The experiments examine three questions: whether MissHyper improves over representative irregular forecasting baselines, whether each encoder component contributes to the gain, and whether the support-density window is robust to reasonable choices. 6Table 1: Dataset statistics for clinical IMTS forecasting. Avg. Obs. denotes the average number of observed values per patient episode.                 
+
+> Dataset Num. Vars Num. Samples Avg. Obs. Max Length P12 36 11,981 308.6 47 MIMIC-III 96 21,250 144.6 96 MIMIC-IV 100 17,874 304.8 971
+
+4.1 Experimental Setup Datasets. We use three clinical IMTS benchmarks: PhysioNet 2012 (P12), MIMIC-III, and MIMIC-IV [2–4]. PhysioNet 2012 provides ICU time-series records from the first 48 hours of patient stays and is processed at a 1-hour resolution. MIMIC-III is a large critical-care EHR benchmark whose ICU measurements are discretized into 30-minute intervals under the same setup. MIMIC-IV extends the MIMIC data ecosystem with more recent and denser ICU records, which are processed at a 1-minute resolution. Because clinical benchmark construction and extraction choices can affect time-series evaluation, we follow established preprocessing protocols for these datasets [5–7]. These datasets contain sparse and asynchronous ICU measurements with substantial variable-wise differences in recording frequency. As shown in Table 1, the datasets differ in scale, variable dimensionality, observation density, and sequence length. This diversity allows us to test MissHyper across different sparsity and asynchrony regimes. 
+
+Protocol. Each patient episode is represented as sparse timestamp-variable records rather than a dense time-by-variable grid. The model receives an observed prefix and predicts values at query positions within the forecasting horizon. Following prior clinical IMTS forecasting protocols [23], we split episodes into training, validation, and test sets with an 80%/10%/10% ratio. Models are trained with shuffled mini-batches from the training split. The validation split is used only for early stopping and support-density window selection. For each seed, the checkpoint selected on the validation split is evaluated on the held-out test split. We use the dataset-specific discretization described above, following prior IMTS forecasting protocols. 
+
+Baselines and implementation. We compare MissHyper with representative methods for irregular multivariate time-series forecasting. Event- and attention-based baselines include PrimeNet, mTAN, and SeFT [18, 30, 17]. Continuous-time and neural-flow baselines include NeuralFlows, CRU, and GNeuralFlow [41, 42, 58]. GRU-D represents missingness-aware recurrent modeling [29]. Graph-structured and recent irregular forecasting baselines include Raindrop, Warpformer, tPatchGNN, and GraFITi [31, 12, 20, 19]. The most controlled comparison is the direct hypergraph baseline, where MissHyper uses the same construction and propagation operators but replaces the event initialization stage [23]. All experiments are conducted on a Linux server with a single NVIDIA GeForce RTX 4090 GPU. The implementation uses PyTorch 2.9.1. We optimize all trainable parameters with Adam. The learning rate is kept at L0 for the first three epochs and then decayed as Ln = L0 × 0.8n−3
+
+for epoch n > 3. Models are trained for up to 300 epochs with an early-stopping patience of 10 epochs. We report MSE and MAE as mean ± standard deviation over five random seeds, 2024–2028. For MissHyper, the batch size is 32 and the initial learning rate is 5 × 10 −4. Backbone-related hyperparameters are kept fixed across the direct hypergraph comparison to isolate the effect of event initialization. 
+
+4.2 Main Results 
+
+Table 2 reports the multi-step forecasting results on the three clinical benchmarks. MissHyper achieves the best MSE and MAE across all three datasets. Compared with the direct hypergraph baseline, MissHyper reduces MSE on all three datasets, from 0.3010 to 0.2962 on P12, 0.4009 to 0.3860 on MIMIC-III, and 0.2136 to 0.2081 on MIMIC-IV. The reductions are consistent across datasets, with the largest relative improvement on MIMIC-III. The parallel reductions in MAE indicate that the gains are not specific to MSE and reflect broader forecasting improvements. The improvement is most pronounced on MIMIC-III, which has many variables but fewer average observations per episode, as shown in Table 1. In this sparse high-dimensional setting, co-timestamp measurements are less frequent and easier to underrepresent during independent event initialization. 7Table 2: Multi-step forecasting performance (mean ± std over 5 runs). Lower is better.                                                                                                                                                                                                                                                   
+
+> P12 (PhysioNet) MIMIC-III MIMIC-IV Method MSE MAE MSE MAE MSE MAE PrimeNet 0.7981 ±0.0001 0.6872 ±0.0002 0.9105 ±0.0002 0.6657 ±0.0001 0.6682 ±0.0001 0.5891 ±0.0002 NeuralFlows 0.4098 ±0.0031 0.4492 ±0.0024 0.6127 ±0.0098 0.5342 ±0.0061 0.4712 ±0.0021 0.4782 ±0.0012 CRU 0.6215 ±0.0042 0.5791 ±0.0035 0.5921 ±0.0101 0.5178 ±0.0050 0.4368 ±0.0019 0.4574 ±0.0009 mTAN 0.3826 ±0.0040 0.4318 ±0.0031 0.9473 ±0.1092 0.6811 ±0.0472 0.5361 ±0.0118 0.5203 ±0.0061 SeFT 0.7694 ±0.0020 0.6728 ±0.0030 0.9286 ±0.0017 0.6641 ±0.0009 0.6735 ±0.0003 0.5912 ±0.0004 GNeuralFlow 0.8251 ±0.0287 0.6812 ±0.0094 0.9012 ±0.0186 0.6483 ±0.0069 0.5023 ±0.0017 0.4915 ±0.0005 GRU-D 0.3467 ±0.0025 0.4010 ±0.0016 0.4817 ±0.0094 0.4563 ±0.0053 0.6598 ±0.0024 0.5834 ±0.0015 Raindrop 0.3519 ±0.0023 0.4087 ±0.0021 0.6782 ±0.1714 0.5528 ±0.0821 0.3429 ±0.0038 0.3896 ±0.0028 Warpformer 0.3089 ±0.0014 0.3649 ±0.0018 0.4326 ±0.0031 0.4047 ±0.0016 0.2728 ±0.0025 0.3129 ±0.0020 tPatchGNN 0.3168 ±0.0049 0.3715 ±0.0046 0.4465 ±0.0107 0.4091 ±0.0083 0.2761 ±0.0019 0.3115 ±0.0014 GraFITi 0.3098 ±0.0017 0.3651 ±0.0031 0.4374 ±0.0412 0.4148 ±0.0285 0.2467 ±0.0008 0.3018 ±0.0005 HyperIMTS 0.3010 ±0.0027 0.3619 ±0.0045 0.4009 ±0.0122 0.3745 ±0.0099 0.2136 ±0.0020 0.2793 ±0.0020 MissHyper 0.2962 ±0.0008 0.3561 ±0.0011 0.3860 ±0.0033 0.3643 ±0.0018 0.2081 ±0.0025 0.2751 ±0.0011
+
+Table 3: Ablation study on multi-step forecasting (mean ± std over 5 runs). Lower is better.                                                                                 
+
+> P12 (PhysioNet) MIMIC-III MIMIC-IV Variant MSE MAE MSE MAE MSE MAE MissHyper 0.2962 ±0.0008 0.3561 ±0.0011 0.3860 ±0.0033 0.3643 ±0.0018 0.2081 ±0.0025 0.2751 ±0.0011 w/o Snapshot Restoration 0.2984 ±0.0012 0.3587 ±0.0015 0.3942 ±0.0047 0.3710 ±0.0026 0.2110 ±0.0029 0.2783 ±0.0016 w/o Adaptive Gate 0.2976 ±0.0010 0.3579 ±0.0013 0.3909 ±0.0039 0.3676 ±0.0022 0.2098 ±0.0026 0.2766 ±0.0014 w/o Support-Density Cue 0.2981 ±0.0013 0.3584 ±0.0016 0.3924 ±0.0043 0.3691 ±0.0025 0.2105 ±0.0028 0.2774 ±0.0015
+
+When records are initialized independently, later layers must reconstruct more of the timestamp-level structure from sparse interactions. Restoring co-timestamp context before propagation therefore provides the downstream learner with a more informative starting point. On MIMIC-III, MissHyper also reduces the MSE standard deviation from 0.0122 to 0.0033. This lower variance is consistent with the view that reducing the pre-propagation bottleneck can make downstream message passing less sensitive to random initialization. 
+
+4.3 Ablation Study 
+
+We ablate three encoder-side components: co-timestamp context restoration, adaptive fusion, and the support-density cue. All variants share the same propagation architecture and training protocol, so the comparison isolates the contribution of MissHyper’s encoder design. The component-wise ablation trends are visualized in Figure 3a. Table 3 shows that MissHyper’s gain comes from the combination of its encoder-side components rather than a single cue. All three components contribute to either restoring timestamp-level context or controlling how it is fused into event representations. The largest degradation occurs without co-timestamp context restoration, supporting the central role of pre-propagation synchronicity. On MIMIC-III, removing this component increases MSE from 0.3860 to 0.3942. Removing the adaptive gate also degrades performance, indicating that restored context should be fused selectively rather than applied uniformly. Finally, removing the support-density cue consistently hurts performance, suggesting that local missingness provides reliability information beyond the raw value and role indicator. 
+
+4.4 Sensitivity to the Support-Density Window 
+
+We select the support-density window size using only the validation split by sweeping w ∈{2, 3, . . . , 14 }. The selected values are w = 3 for P12, w = 7 for MIMIC-III, and w = 6 for MIMIC-IV. These values are fixed before test evaluation and used for the main results in Table 2. Figure 3b reports test performance for nearby window choices after the validation-selected values are fixed. These additional test points are reported only for robustness inspection and are not used to select w. Nearby choices yield similar test performance, indicating that the method is reasonably robust to this hyperparameter. The selected values also reflect dataset-specific time units: P12 uses 1-hour bins, so w = 3 covers about 3 hours, while MIMIC-III uses 30-minute bins and w = 7 covers about 3.5 hours. MIMIC-IV 8(a) Ablation trends across datasets and metrics. (b) Support-density window sensitivity. 
+
+Figure 3: Additional analyses for MissHyper. (a) Component-wise ablation verifies the contribution of snapshot restoration, adaptive fusion, and support-density encoding. (b) Window-size sensitivity shows robustness around the validation-selected support-density window. is discretized at 1 minute, so w = 6 corresponds to a shorter physical interval, consistent with the finer temporal granularity of this processed benchmark. 
+
+## 5 Conclusion and Discussion 
+
+We studied a pre-propagation representation bottleneck in event-centric clinical IMTS models: co-timestamp records are often initialized independently even when they jointly form a patient-state snapshot. MissHyper addresses this issue by augmenting sparse event nodes with a local support-density cue, restoring timestamp-level context, and using a missingness-guided gate to fuse this context with node-specific evidence. Experiments on P12, MIMIC-III, and MIMIC-IV show consistent gains, with clear improvements over the direct hypergraph baseline, supporting the view that event representations should reflect not only measured values but also the acquisition context in which those values appear. More broadly, our results suggest that sparse clinical forecasting benefits from treating missingness and co-timestamp structure as part of the representation problem, rather than as signals left to later dependency propagation. This perspective may also inform other event-centric models in which observations are sparse, asynchronous, and shaped by domain-specific measurement processes. MissHyper has several limitations. It uses a fixed local window to estimate support density and focuses on numerical clinical time series without incorporating additional EHR modalities. It also relies on hypergraph attention operations, whose scalability may become a concern for very long sequences or high-dimensional records. Although methods such as MissHyper could support earlier risk monitoring from sparse ICU records, inaccurate forecasts, dataset bias, privacy constraints, and over-reliance on automated predictions remain important risks in deployment. Any clinical use would require external validation, calibration checks, privacy-preserving data handling, and careful subgroup monitoring. Future work may explore adaptive density estimators, multi-scale synchronicity restoration, and extensions beyond hypergraph backbones, including joint forecasting-imputation and downstream clinical prediction tasks. 
+
+## References 
+
+[1] Ary L Goldberger, Luis AN Amaral, Leon Glass, Jeffrey M Hausdorff, Plamen Ch Ivanov, Roger G Mark, Joseph E Mietus, George B Moody, Chung-Kang Peng, and H Eugene Stanley. PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals. Circulation , 101(23):e215–e220, 2000. doi: 10.1161/01.CIR.101.23.e215. [2] Ikaro Silva, George Moody, Daniel J. Scott, Leo A. Celi, and Roger G. Mark. Predicting in-hospital mortality of ICU patients: The PhysioNet/Computing in Cardiology challenge 2012. In 2012 Computing in Cardiology , pages 245–248, 2012. [3] Alistair E. W. Johnson, Tom J. Pollard, Lu Shen, Li-wei H. Lehman, Mengling Feng, Moham-mad Ghassemi, Benjamin Moody, Peter Szolovits, Leo Anthony Celi, and Roger G. Mark. 9MIMIC-III, a freely accessible critical care database. Scientific Data , 3:160035, 2016. doi: 10.1038/sdata.2016.35. [4] Alistair E. W. Johnson, Lucas Bulgarelli, Lu Shen, Alvin Gayles, Ayad Shammout, Steven Horng, Tom J. Pollard, Sicheng Hao, Benjamin Moody, Brian Gow, Li-wei H. Lehman, Leo A. Celi, and Roger G. Mark. MIMIC-IV, a freely accessible electronic health record dataset. 
+
+Scientific Data , 10(1):1, 2023. doi: 10.1038/s41597-022-01899-x. [5] Sanjay Purushotham, Chuizheng Meng, Zhengping Che, and Yan Liu. Benchmarking deep learning models on large healthcare datasets. Journal of Biomedical Informatics , 83:112–134, 2018. doi: 10.1016/j.jbi.2018.04.007. [6] Hrayr Harutyunyan, Hrant Khachatrian, David C. Kale, Greg Ver Steeg, and Aram Galstyan. Multitask learning and benchmarking with clinical time series data. Scientific Data , 6:96, 2019. doi: 10.1038/s41597-019-0103-9. [7] Shirly Wang, Matthew B. A. McDermott, Geeticka Chauhan, Michael C. Hughes, Tristan Naumann, and Marzyeh Ghassemi. MIMIC-Extract: A data extraction, preprocessing, and representation pipeline for MIMIC-III. In Proceedings of the ACM Conference on Health, Inference, and Learning , pages 222–235, 2020. doi: 10.1145/3368555.3384469. [8] Donald B. Rubin. Inference and missing data. Biometrika , 63(3):581–592, 1976. doi: 10.1093/ biomet/63.3.581. [9] Joseph L. Schafer and John W. Graham. Missing data: Our view of the state of the art. 
+
+Psychological Methods , 7(2):147–177, 2002. doi: 10.1037/1082-989X.7.2.147. [10] Roderick J. A. Little and Donald B. Rubin. Statistical Analysis with Missing Data . Wiley, 2 edition, 2002. doi: 10.1002/9781119013563. [11] Sindhu Tipirneni and Chandan K. Reddy. Self-supervised transformer for sparse and irregularly sampled multivariate clinical time-series. ACM Transactions on Knowledge Discovery from Data , 16(6):105:1–105:17, 2022. doi: 10.1145/3516367. [12] Jiawen Zhang, Shun Zheng, Wei Cao, Jiang Bian, and Jia Li. Warpformer: A multi-scale modeling approach for irregular clinical time series. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 3273–3285, 2023. doi: 10.1145/ 3580305.3599543. [13] Jianxuan Huang, Baoyao Yang, Kejing Yin, and Jingwen Xu. DNA-T: Deformable neighbor-hood attention transformer for irregular medical time series. IEEE Journal of Biomedical and Health Informatics , 28(7):4224–4237, 2024. doi: 10.1109/JBHI.2024.3395446. [14] Jiexi Liu, Meng Cao, and Songcan Chen. TimeCHEAT: A channel harmony strategy for irregularly sampled multivariate time series analysis. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 18861–18869, 2025. doi: 10.1609/aaai.v39i18.34076. [15] Michael Wornow, Rahul Thapa, Ethan Steinberg, Jason Fries, and Nigam Shah. EHRSHOT: An EHR benchmark for few-shot evaluation of foundation models. In Advances in Neural Information Processing Systems , volume 36, 2023. [16] Ethan Steinberg, Jason Fries, Yizhe Xu, and Nigam Shah. MOTOR: A time-to-event foundation model for structured medical records. In International Conference on Learning Representations ,2024. [17] Max Horn, Michael Moor, Christian Bock, Bastian Rieck, and Karsten Borgwardt. Set functions for time series. In Proceedings of the 37th International Conference on Machine Learning ,volume 119 of Proceedings of Machine Learning Research , pages 4353–4363, 2020. [18] Ranak Roy Chowdhury, Jiacheng Li, Xiyuan Zhang, Dezhi Hong, Rajesh K. Gupta, and Jingbo Shang. PrimeNet: Pre-training for irregular multivariate time series. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 7184–7192, 2023. doi: 10.1609/aaai.v37i6.25876. 10 [19] Vijaya Krishna Yalavarthi, Kiran Madhusudhanan, Randolf Scholz, Nourhan Ahmed, Johannes Burchert, Shayan Jawed, Stefan Born, and Lars Schmidt-Thieme. GraFITi: Graphs for fore-casting irregularly sampled time series. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 16255–16263, 2024. doi: 10.1609/aaai.v38i15.29560. [20] Weijia Zhang, Chenlong Yin, Hao Liu, Xiaofang Zhou, and Hui Xiong. Irregular multivariate time series forecasting: A transformable patching graph neural networks approach. In Proceed-ings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pages 60179–60196. PMLR, 2024. [21] Zhangyi Hu, Jiemin Wu, Hua Xu, Mingqian Liao, Ninghui Feng, Bo Gao, Songning Lai, and Yutao Yue. IMTS is worth time × channel patches: Visual masked autoencoders for irregular multivariate time series prediction. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , 2025. [22] Yicheng Luo, Bowen Zhang, Zhen Liu, and Qianli Ma. Hi-Patch: Hierarchical patch GNN for irregular multivariate time series. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , 2025. [23] Boyuan Li, Yicheng Luo, Zhen Liu, Junhao Zheng, Jianming Lv, and Qianli Ma. HyperIMTS: Hypergraph neural network for irregular multivariate time series forecasting. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , pages 35502–35518. PMLR, 2025. [24] Steven Cheng-Xian Li and Benjamin M. Marlin. Classification of sparse and irregularly sampled time series with mixtures of expected gaussian kernels and random features. In Proceedings of the Thirty-First Conference on Uncertainty in Artificial Intelligence , pages 484–493, 2015. [25] Joseph Futoma, Sanjay Hariharan, and Katherine Heller. Learning to detect sepsis with a multitask Gaussian process RNN classifier. In Proceedings of the 34th International Conference on Machine Learning , volume 70 of Proceedings of Machine Learning Research , pages 1174– 1182. PMLR, 2017. [26] Yulia Rubanova, Ricky T. Q. Chen, and David K. Duvenaud. Latent ordinary differential equations for irregularly-sampled time series. In Advances in Neural Information Processing Systems , volume 32, 2019. [27] Edward De Brouwer, Jaak Simm, Adam Arany, and Yves Moreau. GRU-ODE-Bayes: Con-tinuous modeling of sporadically-observed time series. In Advances in Neural Information Processing Systems , volume 32, 2019. [28] Yuqi Chen, Kan Ren, Yansen Wang, Yuchen Fang, Weiwei Sun, and Dongsheng Li. ContiF-ormer: Continuous-time transformer for irregular time series modeling. In Advances in Neural Information Processing Systems , volume 36, 2023. [29] Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag, and Yan Liu. Recurrent neural networks for multivariate time series with missing values. Scientific Reports , 8:6085, 2018. doi: 10.1038/s41598-018-24271-9. [30] Satya Narayan Shukla and Benjamin M. Marlin. Multi-time attention networks for irregularly sampled time series. In International Conference on Learning Representations , 2021. [31] Xiang Zhang, Marko Zeman, Theodoros Tsiligkaridis, and Marinka Zitnik. Graph-guided network for irregularly sampled multivariate time series. In International Conference on Learning Representations , 2022. [32] Alessio Gravina, Daniele Zambon, Davide Bacciu, and Cesare Alippi. Temporal graph ODEs for irregularly-sampled time series. In Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence , pages 4025–4034, 2024. doi: 10.24963/ijcai.2024/445. [33] Satya Narayan Shukla and Benjamin M. Marlin. A survey on principles, models and methods for learning from irregularly sampled time series. arXiv preprint arXiv:2012.00168 , 2021. doi: 10.48550/arXiv.2012.00168. 11 [34] Satya Narayan Shukla and Benjamin M. Marlin. Interpolation-prediction networks for irregu-larly sampled time series. In International Conference on Learning Representations , 2019. [35] Christian Klötergens, Vijaya Krishna Yalavarthi, Randolf Scholz, Maximilian Stubbemann, Stefan Born, and Lars Schmidt-Thieme. Physiome-ODE: A benchmark for irregularly sampled multivariate time-series forecasting based on biological ODEs. In International Conference on Learning Representations , 2025. [36] Steven Cheng-Xian Li and Benjamin M. Marlin. A scalable end-to-end gaussian process adapter for irregularly sampled time series classification. In Advances in Neural Information Processing Systems , volume 29, pages 1804–1812, 2016. [37] Daniel Neil, Michael Pfeiffer, and Shih-Chii Liu. Phased LSTM: Accelerating recurrent network training for long or event-based sequences. In Advances in Neural Information Processing Systems , volume 29, 2016. [38] Inci M. Baytas, Cao Xiao, Xi Zhang, Fei Wang, Anil K. Jain, and Jiayu Zhou. Patient subtyping via time-aware LSTM networks. In Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 65–74, 2017. doi: 10.1145/ 3097983.3097997. [39] Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David K. Duvenaud. Neural ordinary differential equations. In Advances in Neural Information Processing Systems , volume 31, 2018. [40] Patrick Kidger, James Morrill, James Foster, and Terry Lyons. Neural controlled differential equations for irregular time series. In Advances in Neural Information Processing Systems ,volume 33, 2020. [41] Marin Biloš, Johanna Sommer, Syama Sundar Rangapuram, Tim Januschowski, and Stephan Günnemann. Neural flows: Efficient alternative to neural ODEs. In Advances in Neural Information Processing Systems , volume 34, pages 21325–21337, 2021. [42] Mona Schirmer, Mazin Eltayeb, Stefan Lessmann, and Maja Rudolph. Modeling irregular time series with continuous recurrent units. In Proceedings of the 39th International Conference on Machine Learning , volume 162 of Proceedings of Machine Learning Research , pages 19388–19405, 2022. [43] Jinsung Yoon, William R. Zame, and Mihaela van der Schaar. Estimating missing data in temporal data streams using multi-directional recurrent neural networks. arXiv preprint arXiv:1711.08742 , 2017. doi: 10.48550/arXiv.1711.08742. [44] Wei Cao, Dong Wang, Jian Li, Hao Zhou, Lei Li, and Yitan Li. BRITS: Bidirectional recurrent imputation for time series. In Advances in Neural Information Processing Systems , volume 31, 2018. [45] Yonghong Luo, Ying Zhang, Xiangrui Cai, and Xiaojie Yuan. E 2GAN: End-to-end generative adversarial network for multivariate time series imputation. In Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence, IJCAI-19 , pages 3094–3100. International Joint Conferences on Artificial Intelligence Organization, 7 2019. doi: 10.24963/ ijcai.2019/429. [46] Andrea Cini, Ivan Marisca, and Cesare Alippi. Filling the gaps: Multivariate time series imputation by graph neural networks. In International Conference on Learning Representations ,2022. [47] Yusuke Tashiro, Jiaming Song, Yang Song, and Stefano Ermon. CSDI: Conditional score-based diffusion models for probabilistic time series imputation. In Advances in Neural Information Processing Systems , volume 34, pages 24804–24816, 2021. [48] Wenjie Du, David Côté, and Yan Liu. SAITS: Self-attention-based imputation for time series. 
+
+Expert Systems with Applications , 219:119619, 2023. doi: 10.1016/j.eswa.2023.119619. 12 [49] Franco Scarselli, Marco Gori, Ah Chung Tsoi, Markus Hagenbuchner, and Gabriele Monfardini. The graph neural network model. IEEE Transactions on Neural Networks , 20(1):61–80, 2009. doi: 10.1109/TNN.2008.2005605. [50] Michaël Defferrard, Xavier Bresson, and Pierre Vandergheynst. Convolutional neural networks on graphs with fast localized spectral filtering. In Advances in Neural Information Processing Systems , volume 29. Curran Associates, Inc., 2016. [51] Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks. In International Conference on Learning Representations , 2017. [52] Petar Veliˇ ckovi´ c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. Graph attention networks. In International Conference on Learning Representations ,2018. [53] William L. Hamilton, Rex Ying, and Jure Leskovec. Inductive representation learning on large graphs. In Advances in Neural Information Processing Systems , volume 30, 2017. [54] Justin Gilmer, Samuel S. Schoenholz, Patrick F. Riley, Oriol Vinyals, and George E. Dahl. Neural message passing for quantum chemistry. In Proceedings of the 34th International Conference on Machine Learning , volume 70 of Proceedings of Machine Learning Research ,pages 1263–1272, 2017. [55] Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xian Wu Chang, and Chengqi Zhang. Connecting the dots: Multivariate time series forecasting with graph neural networks. In 
+
+Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 753–763, 2020. doi: 10.1145/3394486.3403118. [56] Kun Yi, Qi Zhang, Wei Fan, Hui He, Liang Hu, Pei Wang, Ning An, Longbing Cao, and Zhendong Niu. FourierGNN: Rethinking multivariate time series forecasting from a pure graph perspective. In Advances in Neural Information Processing Systems , volume 36, 2023. [57] Jindong Han, Weijia Zhang, Hao Liu, Tao Tao, Ning Tan, and Hui Xiong. BigST: Linear complexity spatio-temporal graph neural network for traffic forecasting on large-scale road networks. Proceedings of the VLDB Endowment , 17(5):1081–1090, 2024. doi: 10.14778/ 3641204.3641217. [58] Giangiacomo Mercatali, Andre Freitas, and Jie Chen. Graph neural flows for unveiling sys-temic interactions among irregularly sampled time series. In Advances in Neural Information Processing Systems , volume 37, pages 57183–57206. Curran Associates, Inc., 2024. doi: 10.52202/079017-1822. [59] Yicheng Luo, Zhen Liu, Linghao Wang, Junhao Zheng, Binquan Wu, and Qianli Ma. Knowledge-empowered dynamic graph network for irregularly sampled medical time series. In Advances in Neural Information Processing Systems , volume 37, pages 67172–67199. Curran Associates, Inc., 2024. doi: 10.52202/079017-2144. [60] Yifan Feng, Haoxuan You, Zizhao Zhang, Rongrong Ji, and Yue Gao. Hypergraph neural networks. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 33, pages 3558–3565, 2019. doi: 10.1609/aaai.v33i01.33013558. [61] Jianwen Jiang, Yuxuan Wei, Yifan Feng, Jingxuan Cao, and Yue Gao. Dynamic hypergraph neural networks. In Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence , pages 2635–2641, 2019. doi: 10.24963/ijcai.2019/366. [62] Naganand Yadati, Madhav Nimishakavi, Prateek Yadav, Vikram Nitin, Anand Louis, and Partha Talukdar. HyperGCN: A new method for training graph convolutional networks on hypergraphs. In Advances in Neural Information Processing Systems , volume 32, 2019. [63] Ruochi Zhang, Yuesong Zou, and Jian Ma. Hyper-SAGNN: A self-attention based graph neural network for hypergraphs. In International Conference on Learning Representations , 2020. [64] Song Bai, Feihu Zhang, and Philip H. S. Torr. Hypergraph convolution and hypergraph attention. 
+
+Pattern Recognition , 110:107637, 2021. doi: 10.1016/j.patcog.2020.107637. 13 [65] Derun Cai, Moxian Song, Chenxi Sun, Baofeng Zhang, Shenda Hong, and Hongyan Li. Hy-pergraph structure learning for hypergraph neural networks. In Proceedings of the Thirty-First International Joint Conference on Artificial Intelligence , pages 1923–1929, 2022. doi: 10.24963/ijcai.2022/267. [66] Yue Gao, Yifan Feng, Shuyi Ji, and Rongrong Ji. HGNN+: General hypergraph neural networks. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(3):3181–3199, 2023. doi: 10.1109/TPAMI.2022.3182052. [67] Zongjiang Shang, Ling Chen, Binqing Wu, and Dongliang Cui. Ada-MSHyper: Adaptive multi-scale hypergraph transformer for time series forecasting. In Advances in Neural Information Processing Systems , volume 37, 2024. 14

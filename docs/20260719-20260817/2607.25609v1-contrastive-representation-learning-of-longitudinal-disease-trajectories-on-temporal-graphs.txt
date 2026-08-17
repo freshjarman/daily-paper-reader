@@ -1,0 +1,584 @@
+Title: Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs
+
+URL Source: https://arxiv.org/pdf/2607.25609v1
+
+Published Time: Wed, 29 Jul 2026 00:52:24 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs 
+
+# Bastian Pfeifer ✉∗
+
+bastian.pfeifer@medunigraz.at Institute for Medical Informatics, Statistics and Documentation Medical University Graz Graz, Austria 
+
+## Abstract 
+
+Understanding disease trajectories from longitudinal clinical data remains challenging due to complex temporal dynamics and het-erogeneous patient cohorts. Here, we present a contrastive rep-resentation learning framework that models multivariate disease trajectories as temporal graphs and learns representations using contrastive graph neural networks. Nodes represent patient obser-vations over time, while edges capture temporal continuity and structural similarity between trajectories. Structure-aware random walks guide contrastive learning to generate embeddings that pre-serve temporal context and trajectory topology. The resulting repre-sentations enable robust clustering of patients with similar disease progression patterns and reveal latent structure in longitudinal data. 
+
+## CCS Concepts 
+
+• Computing methodologies → Artificial intelligence ; Ma-chine learning ; • Applied computing → Life and medical sciences .
+
+ACM Reference Format: 
+
+Bastian Pfeifer. 2018. Contrastive Representation Learning of Longitudi-nal Disease Trajectories on Temporal Graphs. In Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 12 pages. https: //doi.org/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+Longitudinal data arise naturally in numerous application domains, including medicine, biology, epidemiology, and the social sciences, where repeated measurements are collected from the same indi-viduals over time [1, 2]. A fundamental objective in longitudinal data analysis is to identify groups of subjects with similar temporal behavior, enabling patient stratification, disease subtyping, and a better understanding of underlying progression patterns. Traditional longitudinal clustering methods, such as mixed-effects models, latent class models, and functional clustering approaches, have demonstrated success in many applications. However, these 
+
+> Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference acronym ’XX, Woodstock, NY
+> © 2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2018/06 https://doi.org/XXXXXXX.XXXXXXX
+
+methods often rely on restrictive model assumptions and may strug-gle with high-dimensional measurements and complex nonlinear dynamics. Moreover, they typically analyze subjects individually and do not explicitly exploit structural relationships between ob-servations across different subjects. Graph neural networks and graph contrastive learning have recently emerged as powerful tools for representation learning on relational data. Nevertheless, their potential for longitudinal data remains relatively unexplored. In this work, we propose a novel graph contrastive learning frame-work for unsupervised longitudinal clustering, called RankWalk. We represent each observation as a graph node and construct a heterogeneous graph by combining temporal edges connecting consecutive observations of the same subject with similarity edges linking subjects exhibiting comparable characteristics at the same measurement time. The resulting node representations are learned using a weighted contrastive objective that emphasizes more infor-mative positive pairs. The proposed framework is evaluated on two complementary simu-lation studies and four real-world longitudinal biomedical datasets. Experimental results demonstrate that the learned representations consistently improve clustering performance compared with exist-ing longitudinal clustering approaches. The remainder of this manuscript is organized as follows. Sec-tion 2 gives an overview of related work. Section 3 introduces the proposed RankWalk framework, including the longitudinal graph construction and graph contrastive learning strategy. Section 4 de-scribes the experimental setup and benchmark datasets. Section 5 presents the simulation studies and real-world benchmark results. Finally, Section 6 concludes the paper and outlines directions for future research. 
+
+## 2 Related Work 
+
+Longitudinal clustering has been extensively studied using statisti-cal, functional, distance-based, and deep representation learning approaches [3, 4]. Functional data analysis methods, particularly those based on functional principal component analysis (FPCA) [5, 6], represent trajectories in a low-dimensional functional basis before clustering in the resulting score space. While effective for smooth trajectories, these methods generally assume continuous underlying functions. Distance-based approaches, such as Dynamic Time Warping (DTW) [7], align trajectories by allowing nonlinear temporal distortions and form the basis of clustering algorithms implemented in libraries such as tslearn [8]. Likewise, kml3d [9] extends 𝑘 -means to multivariate longitudinal trajectories using dedicated trajectory distance measures. arXiv:2607.25609v1 [cs.LG] 28 Jul 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer 
+
+More recently, deep learning methods have been proposed for lon-gitudinal representation learning. These include recurrent LSTM-based architectures and self-supervised approaches such as TS2Vec [10], which learns temporal representations using temporal con-volutional networks and hierarchical contrastive learning. VADER [4, 11] combines variational autoencoders with temporal modeling to derive latent representations for clustering. Although these methods can capture complex nonlinear temporal patterns, they generally do not explicitly exploit graph-structured relationships between subjects and observations. A graph-based perspective provides a natural framework to integrate temporal dependencies and relationships between observations, enabling the representation of longitudinal data as interconnected trajectories rather than isolated sequences. Our proposed approach represents longitudinal data as a hetero-geneous graph and combines graph neural networks with self-supervised contrastive learning. By jointly modeling temporal de-pendencies, cross-subject structural similarity, and anchor-guided positive sampling, the proposed framework learns representations specifically tailored to longitudinal clustering without requiring predefined trajectory models, pairwise distance matrices, or labeled data. 
+
+## 3 Proposed Method 3.1 Problem Formulation 
+
+Given longitudinal observations collected from multiple subjects over time, we aim to learn low-dimensional representations that preserve temporal evolution patterns and structural relationships among observations. We define longitudinal data as 
+
+D = {( 𝑠 𝑖 , 𝑡 𝑖 , x𝑖 )} 𝑁 𝑖 =1, (1) where 𝑁 denotes the total number of observations. Each observa-tion index 𝑖 corresponds to one graph node, 𝑠 𝑖 indicates the asso-ciated subject, 𝑡 𝑖 denotes the acquisition time, and x𝑖 ∈ R𝑑 is the observed feature vector. Each longitudinal observation is represented as a node in a graph 
+
+𝐺 = (𝑉 , 𝐸 ), (2) where |𝑉 | = 𝑁 . The objective is to learn an encoder 
+
+z𝑖 = 𝑓 𝜃 (x𝑖 , 𝐺 ), (3) which maps each observation into a low-dimensional embedding while preserving both longitudinal dependencies and local struc-tural similarities. The proposed framework consists of three main components: (i) ro-bust longitudinal graph construction, (ii) anchor-guided structural positive sampling, and (iii) weighted graph contrastive representa-tion learning. 
+
+## 3.2 Robust Longitudinal Graph Construction 
+
+Each longitudinal observation corresponds to a graph node. The graph integrates two complementary types of relationships: tempo-ral dependencies within subjects and similarity relationships across subjects observed at the same measurement time. 
+
+3.2.1 Temporal Connectivity. Temporal edges preserve the evo-lution trajectory of each subject. For every subject, consecutive observations are connected: 
+
+𝐸 temp = {( 𝑣 𝑖 , 𝑣 𝑗 ) : 𝑠 𝑖 = 𝑠 𝑗 , 𝑡 𝑗 = next (𝑡 𝑖 )} . (4) These edges encode longitudinal progression by connecting neigh-boring time points within the same individual. 
+
+3.2.2 Time-Specific Similarity Connectivity. To capture cross-subject similarity, similarity edges are constructed separately within each measurement time point. Direct distance estimation in high-dimensional feature spaces may be sensitive to noise; therefore, we employ a robust rank-aggregation strategy. Let 
+
+S = {𝑆 1, . . . , 𝑆 𝑀 } (5) denote randomly sampled feature subspaces. For each subspace 𝑆 𝑚 ,the pairwise distance between two observations acquired at the same time point is computed as 
+
+𝑑 𝑚 (𝑖, 𝑗 ) = ∥x𝑖 [𝑆 𝑚 ] − x𝑗 [𝑆 𝑚 ] ∥ 2. (6) Instead of averaging raw distances, we aggregate the relative or-dering of distances across subspaces: 
+
+𝐷 𝑡 (𝑖, 𝑗 ) = 1
+
+𝑀 
+
+> 𝑀
+
+∑︁ 
+
+> 𝑚 =1
+
+rank (𝑑 𝑚 (𝑖, 𝑗 )) , 𝑡 𝑖 = 𝑡 𝑗 = 𝑡 . (7) The rank-based distance reduces sensitivity to individual noisy features and captures robust neighborhood relationships. For each node, the 𝑘 nearest neighbors are selected only among observations from the same measurement time: 
+
+𝐸 sim = {( 𝑣 𝑖 , 𝑣 𝑗 ) : 𝑣 𝑗 ∈ KNN 𝑘 (𝐷 𝑡 𝑖 (𝑖, :)) , 𝑡 𝑖 = 𝑡 𝑗 }. (8) The final longitudinal graph is obtained by combining temporal and similarity relations: 
+
+𝐸 = 𝐸 temp ∪ 𝐸 sim . (9) 
+
+Irregular Measurement Times. When observations are acquired at irregular time points, constructing similarity edges only between measurements obtained at identical time instances is no longer feasible. We therefore partition the continuous time axis into a sequence of overlapping sliding windows. Let the observation period be divided into windows of equal width with overlap ratio 𝜌 ∈ [ 0, 1). Each observation is assigned to ev-ery window whose temporal interval contains its acquisition time. Within each window, multiple measurements from the same subject are aggregated by averaging the observed feature values, yielding a single representative observation per subject and window. These aggregated observations define window-specific graph nodes, while temporal edges connect consecutive windows belonging to the same subject. Similarity edges are then constructed independently within each window using the same robust subspace rank-aggregation procedure described above. The overlapping windows provide smooth transitions between neighboring temporal regions and increase robustness to irregular Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 1: Graphical illustration of the proposed RankWalk method. 
+
+sampling by allowing observations near window boundaries to contribute to multiple local neighborhoods. 
+
+## 3.3 Anchor-Guided Structural Sampling 
+
+3.3.1 Structural Affinity Matrix. To quantify structural similarity beyond direct graph connectivity, we compute a node affinity matrix using the Jaccard coefficient: 
+
+𝐽 𝑖 𝑗 = |N ( 𝑖 ) ∩ N ( 𝑗 )| |N ( 𝑖 ) ∪ N ( 𝑗 )| , (10) where N ( 𝑖 ) denotes the neighborhood of node 𝑖 in the constructed graph. The resulting matrix 
+
+𝐽 ∈ R𝑁 ×𝑁 (11) is used as a structural prior for sampling informative contrastive pairs. It does not modify the graph topology; instead, it guides the exploration process used to identify structurally meaningful positive samples. 
+
+3.3.2 Anchor-Guided Random Walk. For each anchor node 𝑎 , we perform a stochastic walk 
+
+𝑣 0 = 𝑎, 𝑣 1, . . . , 𝑣 𝐿 . (12) At each step, the transition probability from the current node 𝑢 to a neighboring node 𝑣 is defined as 
+
+𝑃 (𝑣 |𝑢, 𝑎 ) = 𝐽 𝑎𝑣 + 𝜖 
+
+Í𝑤 ∈ N ( 𝑢 ) (𝐽 𝑎𝑤 + 𝜖 ) . (13) Unlike conventional random walks whose transition probabilities depend only on the current node, the proposed walk explicitly conditions the transition distribution on the starting anchor node. Therefore, the exploration process is biased toward nodes exhibiting structural similarity to the anchor [12]. 
+
+3.3.3 Rank-Weighted Positive Pair Generation. During the walk, the first visiting step of each node is recorded [12]: 
+
+𝑟 𝑎 (𝑣 ) = min {𝑙 : 𝑣 𝑙 = 𝑣 }. (14) Nodes discovered earlier are considered more reliable structural matches. Therefore, the top-𝐾 nodes with the smallest visiting ranks are selected as positive samples: 
+
+P𝑎 = TopK 𝑣 (− 𝑟 𝑎 (𝑣 )) . (15) Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer 
+
+Each anchor-positive pair (𝑎, 𝑗 ) is assigned an importance weight according to its discovery rank: 
+
+𝑤 𝑎 𝑗 = 1 − 𝑟 𝑎 ( 𝑗 )
+
+max 𝑣 ∈ P 𝑎 𝑟 𝑎 (𝑣 ) + 𝜖 . (16) The collection of weighted positive pairs defines the supervision signal for contrastive representation learning. 
+
+## 3.4 Graph Contrastive Representation Learning 
+
+Given the constructed longitudinal graph and sampled positive pairs, we learn node representations using a graph neural encoder trained with a weighted contrastive objective. The initial node representation is obtained through a feature en-coder: 
+
+𝐻 (0) = 𝜙 (𝑋 ), (17) where 𝜙 (·) denotes a multilayer perceptron. Graph propagation is performed using graph convolution layers: 
+
+𝐻 (𝑙 +1) = GCN (𝐻 (𝑙 ) , 𝐴 ). (18) A residual connection is applied to preserve the original feature information: 
+
+𝐻 = 𝐻 (𝐿 ) + 𝐻 (0) . (19) The final embedding is produced by a projection head followed by 
+
+ℓ2 normalization: 
+
+z𝑖 = 𝑔 (𝐻 𝑖 )∥𝑔 (𝐻 𝑖 )∥ 2
+
+. (20) 
+
+3.4.1 Negative Sampling. For each positive pair (𝑖, 𝑗 ), a set of neg-ative samples is independently drawn from the node population: 
+
+N𝑖 = {𝑛 1, . . . , 𝑛 𝑀 }, (21) where each negative node is sampled according to 
+
+𝑛 𝑚 ∼ Uniform (𝑉 ). (22) These negative samples represent observations that should not have high embedding similarity with the anchor node. Therefore, the ob-jective encourages the model to distinguish structurally meaningful positives from unrelated observations. 
+
+3.4.2 Weighted InfoNCE Objective. For a positive pair (𝑖, 𝑗 ), the embedding similarity is defined as 
+
+𝑠 𝑖 𝑗 = z⊤ 
+
+> 𝑖
+
+z𝑗 
+
+𝜏 , (23) where 𝜏 is the temperature parameter. The proposed weighted contrastive objective is 
+
+L = − 1
+
+|P | ∑︁ (𝑖,𝑗 ) ∈ P 
+
+𝑤 𝑖 𝑗 log exp (𝑠 𝑖 𝑗 )
+
+exp (𝑠 𝑖 𝑗 ) + Í𝑛 ∈ N 𝑖 exp (𝑠 𝑖𝑛 ) . (24) The weighting mechanism assigns larger contributions to posi-tive pairs that are identified early during anchor-guided structural exploration, reflecting higher confidence in their structural corre-spondence. The model parameters are optimized by minimizing L
+
+using Adam optimization with gradient clipping. A graphical illustration of the proposed method is displayed in Figure 1. 
+
+## 4 Evaluation Strategy 
+
+We evaluated the proposed framework against a range of estab-lished methods for longitudinal trajectory representation and clus-tering using both simulated data and four real-world longitudinal benchmark datasets. The considered approaches included func-tional principal component analysis (fPCA), dynamic time warping (DTW), k-means for multivariate longitudinal data (kml3d), the self-supervised temporal representation learning approach TS2Vec, and the variational deep embedding approach VaDER. These meth-ods cover classical functional representations, trajectory similarity-based approaches, and deep representation learning techniques. For all approaches, the resulting trajectory representations or simi-larity structures were used to derive a subject-level representation, which was then clustered using the same k-means algorithm. This common clustering procedure ensures that performance differences primarily reflect the quality of the learned longitudinal representa-tions rather than differences in the clustering algorithm itself. In the simulation studies, the number of clusters for k-means was set to the known number of simulated clusters. The clustering performance was assessed using the adjusted Rand index (ARI), which measures the agreement between the estimated cluster as-signments and the known true cluster labels while correcting for chance agreement. Higher ARI values indicate better recovery of the underlying cluster structure. For the real-world benchmark datasets, the resulting clusters were evaluated using survival-based measures, including the concordance index [13] and the log-rank test statistic [14]. 
+
+## 4.1 Simulated Longitudinal Data 
+
+To evaluate the performance of the proposed framework under dif-ferent longitudinal data-generating mechanisms, we conducted two complementary simulation studies. The first simulation represents a classical multivariate longitudinal setting, where clusters are char-acterized by distinct predefined mean trajectories with correlated outcomes and subject-level temporal variability. In contrast, the second simulation considers a more challenging nonlinear dynamic scenario, where cluster structure emerges from latent regime-switching processes, nonlinear temporal dependen-cies, and transient subject-specific perturbations. 
+
+4.1.1 Simulation 1: Multivariate longitudinal trajectory dynamics. 
+
+For the first simulation scenario we followed the strategy described in [15]. A multivariate longitudinal model of the form 
+
+𝑌 (ℎ) 
+
+> 𝑖 𝑗
+
+= 𝑓 (ℎ) 
+
+> 𝑖
+
+(𝑡 𝑖 𝑗 ) + 𝑟 𝑖 (𝑡 𝑖 𝑗 ) + 𝜎 𝑖ℎ + 𝜀 𝑖 𝑗ℎ , (25) was exploited, where 𝑌 (ℎ) 
+
+> 𝑖 𝑗
+
+denotes the ℎ-th outcome for subject 𝑖 
+
+at measurement occasion 𝑗 , and 𝑓 (ℎ) 
+
+> 𝑖
+
+(·) represents the ℎ-th fixed component or mean trajectory for subject 𝑖 . We specified 𝐻 = 5outcomes and four underlying clusters. The cluster-specific mean trajectories 𝑓 (ℎ) (·) , ℎ = 1, . . . , 5, are summarized in Appendix Ta-ble 2 (see Appendix Section A.1) and visualized in Figure 4. The subject-specific random temporal component in equation (12) is Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+modeled by a quadratic random function 
+
+𝑟 𝑖 (𝑡 ) = 𝑏 𝑖 0 + 𝑏 𝑖 1𝑡 + 𝑏 𝑖 2𝑡 2, (26) where 
+
+(𝑏 𝑖 0, 𝑏 𝑖 1, 𝑏 𝑖 2)⊤ ∼ 𝑁 (0, Σ𝑏 ) . (27) The function 𝑟 𝑖 (𝑡 ) represents a latent subject-level trajectory that is shared across all outcomes ℎ = 1, . . . , 5, thereby inducing corre-lation among the multivariate longitudinal responses within each subject. In the described setting, the clusters are primarily distin-guished by outcomes 𝑌 (1) and 𝑌 (2) , moderately by 𝑌 (3) and 𝑌 (4) ,while 𝑌 (5) is completely non-informative for cluster separation. The random effects 𝜎 𝑖ℎ , ℎ = 1, . . . , 5, captured correlations among the outcomes and were generated from the multivariate normal distribution 
+
+©«
+
+𝜎 𝑖 1
+
+𝜎 𝑖 2
+
+𝜎 𝑖 3
+
+𝜎 𝑖 4
+
+𝜎 𝑖 5
+
+ª®®®®®¬
+
+∼ MVN (0, Σ) , Σ =
+
+©«
+
+1 0.5 0.3 −0.1 00.5 1 0.2 0.1 00.3 0.2 1 0.1 0
+
+−0.1 0.1 0.1 1 00 0 0 0 1
+
+ª®®®®®¬
+
+𝜎, 
+
+(28) with 𝜎 = diag (𝜎 1, 𝜎 2, 𝜎 3, 𝜎 4, 𝜎 5). The outcome variable 𝑌 (5) served as pure noise and was constructed to be independent of the others. Measurement errors 𝜀 𝑖 𝑗ℎ were sampled from either a normal distri-bution, 
+
+𝜀 𝑖 𝑗ℎ ∼ N ( 0, 𝜂 2). (29) The sparse and irregular observation times were generated as fol-lows. For each subject 𝑖 , the number of measurements 𝑛 𝑖 was drawn from a discrete uniform distribution on {4, . . . , 12 }. The measure-ment times 𝑡 𝑖 𝑗 , 𝑗 = 1, . . . , 𝑛 𝑖 , were then obtained by sampling 𝑛 𝑖 
+
+random points from the interval (0, 11 ) and taking their order sta-tistics, with the first observation time fixed at 𝑡 𝑖 1 = 0. In the case of regular observation times, no random sampling was performed; instead, subjects were assigned time-aligned, consecutive measure-ment times. To ensure adequate temporal spacing, the interval between any two adjacent observation times was constrained to be greater than 0 .5. Representative sample trajectories, color-coded by cluster, are shown in Appendix Figure 4 for each outcome (see Appendix Section A.1). 
+
+4.1.2 Simulation 2: Nonlinear regime-switching longitudinal dynam-ics. The second simulation study was designed to evaluate clus-tering and representation learning methods under a challenging nonlinear longitudinal setting. In contrast to the first simulation, where cluster differences were induced through predefined mean trajectories, this scenario generated observations from a latent regime-switching process with nonlinear temporal dependencies and transient shocks. We considered 𝐾 = 4 underlying clusters and 𝐻 = 5 longitudinal outcomes. For each subject 𝑖 , observations were generated accord-ing to 
+
+𝑌 (ℎ) 
+
+> 𝑖 𝑗
+
+= 𝜇 (ℎ) 
+
+> 𝑖 𝑗
+
++ 𝜀 (ℎ) 
+
+> 𝑖 𝑗
+
+, ℎ = 1, . . . , 𝐻, (30) where 𝜀 (ℎ) 
+
+> 𝑖 𝑗
+
+denotes measurement noise, 
+
+𝜀 (ℎ) 
+
+> 𝑖 𝑗
+
+∼ N ( 0, 𝜂 2), (31) with 𝜂 = 0.8 in the default simulation setting. The latent mean process was defined as 
+
+𝝁 𝑖 𝑗 = 𝜶 𝑘 𝑖 ,𝑧 𝑖 𝑗 + 𝒈 (Y𝑖,𝑗 −1) + 𝜹 𝑖 𝑗 , (32) where 𝑘 𝑖 ∈ { 1, . . . , 𝐾 } denotes the cluster membership of subject 𝑖 ,
+
+𝑧 𝑖 𝑗 ∈ { 1, 2, 3} denotes the latent dynamic regime at measurement occasion 𝑗 , 𝜶 𝑘 𝑖 ,𝑧 𝑖 𝑗 is a cluster- and regime-specific effect, 𝒈 (·) rep-resents a nonlinear autoregressive component, and 𝜹 𝑖 𝑗 captures transient shock effects. 
+
+Latent regime process. The latent state process {𝑧 𝑖 𝑗 } was generated according to a cluster-specific first-order Markov chain: 
+
+𝑃 (𝑧 𝑖 𝑗 = 𝑏 |𝑧 𝑖,𝑗 −1 = 𝑎, 𝑘 𝑖 = 𝑘 ) = Π(𝑘 ) 
+
+> 𝑎𝑏
+
+, (33) where Π(𝑘 ) denotes the transition matrix associated with cluster 𝑘 .The four clusters represented different temporal stability patterns (see Appendix Section A.2). 
+
+Cluster- and regime-specific effects. The baseline state effects were generated as 
+
+𝜶 𝑘,𝑧 ∼ N ( m𝑘,𝑧 , 1.22𝐼 𝐻 ), (34) where the cluster-dependent means were defined as 
+
+m1,𝑧 = −5, m2,𝑧 = −1, m3,𝑧 = 3, (35) for all regimes 𝑧 , while the fourth cluster contained regime-dependent behavior: 
+
+m4,𝑧 ∈ {− 6, 0, 6}, (36) for regimes 𝑧 = 1, 2, 3, respectively. This construction induces cluster separation through both average response level and temporal regime behavior. 
+
+Nonlinear temporal dynamics. To introduce nonlinear dependencies between consecutive measurements, the dynamic component was defined recursively as 
+
+𝑔 ℎ (Y𝑖,𝑗 −1) = sin (𝑌 (ℎ) 
+
+> 𝑖,𝑗 −1
+
+) + 0.10 (𝑌 (ℎ) 
+
+> 𝑖,𝑗 −1
+
+)2
+
+1 + | 𝑌 (ℎ)  
+
+> 𝑖,𝑗 −1
+
+| − 0.10 tanh 
+
+> 𝐻
+
+∑︁ 
+
+> 𝑙 =1
+
+𝑌 (𝑙 ) 
+
+> 𝑖,𝑗 −1
+
+!
+
+,
+
+(37) where ℎ = 1, . . . , 𝐻 .Therefore, the current observation depends nonlinearly on the com-plete previous multivariate state vector, inducing cross-outcome temporal dependencies. 
+
+Transient shock effects. To simulate abrupt temporal perturbations, each subject was assigned a random number of shock events: 
+
+𝑁 shock  
+
+> 𝑖
+
+∼ Poisson (0.3). (38) Shock times were sampled uniformly from the observation interval: 
+
+𝜏 𝑖𝑟 ∼ Unif (2,𝑇 max ). (39) For each shock occurring before time 𝑡 𝑖 𝑗 , the corresponding contri-bution was Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer 
+
+𝜹 𝑖 𝑗 =∑︁  
+
+> 𝜏 𝑖𝑟 ≤𝑡 𝑖 𝑗
+
+0.5𝜶 𝑘 𝑖 ,𝑧 𝑖 𝑗 exp (−( 𝑡 𝑖 𝑗 − 𝜏 𝑖𝑟 )) . (40) Thus, shocks produced temporary deviations whose influence de-cayed exponentially over time. 
+
+Irregular observation times. To mimic sparse longitudinal sampling, the number of measurements per subject was generated as 
+
+𝑛 𝑖 ∼ DiscreteUniform (8, 16 ).
+
+For irregular observation designs, measurement times were sampled from exponential inter-arrival distributions: 
+
+𝑡 𝑖 𝑗 =
+
+> 𝑗
+
+∑︁ 
+
+> 𝑙 =1
+
+𝑢 𝑖𝑙 , 𝑢 𝑖𝑙 ∼ Exp (0.45 ), (41) with observations restricted to the interval (0,𝑇 max ), where 𝑇 max =
+
+10. If fewer than five observations were obtained, the subject was assigned an equally spaced observation schedule. For the regular observation scenario, measurement occasions were fixed on an equally spaced grid. Representative sample mean trajectories, color-coded by cluster, are shown in Appendix Figure 5 for each outcome (see Appendix Section A.2). 
+
+## 4.2 Real-World Longitudinal Datasets 
+
+To evaluate the proposed framework on real-world longitudinal data, we consider four benchmark datasets from different biomedi-cal domains: PBC2, HEART, PAQUID, and AIDS. These datasets rep-resent diverse longitudinal scenarios, including chronic disease pro-gression, postoperative monitoring, cognitive aging, and infectious disease evolution. They differ in terms of cohort size, number of repeated measurements, observation frequency, and the complexity of the underlying temporal processes. All datasets contain multiple observations per subject collected at irregular time points, resulting in unbalanced longitudinal structures. Details on the datasest can be found in Appendix Section B. 
+
+## 5 Results and Discussion 
+
+The obtained results from the first simulation demonstrate that the proposed RankWalk approach is highly competitive with es-tablished statistical methods for longitudinal clustering (Appendix Figure 6, Appendix Section C). Across the 50 simulation replicates, RankWalk consistently achieves clustering performance compara-ble to the strongest baseline methods, including fPCA and DTW, while outperforming the deep learning approaches TS2Vec and VaDER. The strong performance of functional principal compo-nent analysis (fPCA) is expected, as the simulated trajectories are generated from smooth functional mean curves that closely match the assumptions underlying FPCA. Similarly, DTW benefits from the regular sampling design and the relatively smooth temporal trajectories. In contrast, TS2Vec and VaDER exhibit lower cluster-ing accuracy and substantially higher variability across simulation runs, suggesting that these generic deep representation learning approaches are less well suited to this relatively small stringent functional longitudinal dataset. Overall, these results indicate that the proposed graph-based representation learning framework can achieve performance comparable to specialized longitudinal model-ing techniques while providing a flexible representation of temporal and structural relationships among observations. When a randomly selected longitudinal variable is additionally corrupted by noise in each simulation replicate, clear differences in robustness between the competing methods emerge (Figure 2). Since only a subset of the measured outcomes remains informative, methods relying on global trajectory representations become sub-stantially more sensitive to the corrupted variable. This effect is particularly evident for fPCA, whose performance degrades consid-erably, while DTW also exhibits a noticeable reduction in clustering accuracy. TS2Vec likewise shows limited robustness in this setting. In contrast, RankWalk remains remarkably stable and consistently achieves the highest clustering performance across simulation repli-cates. This robustness stems from the proposed graph construction strategy, where neighborhood relationships are estimated through rank aggregation across multiple randomly sampled feature sub-spaces. As many subspaces do not contain the corrupted variable, the influence of the noisy measurements is naturally attenuated, re-sulting in more reliable similarity estimates. Among the competing methods, only kml3d remains consistently competitive, although RankWalk achieves the strongest overall performance. These find-ings demonstrate that the proposed graph-based representation learning framework is particularly robust when only a subset of longitudinal variables is affected by measurement noise. The third simulation investigates a more challenging setting char-acterized by nonlinear temporal dynamics and latent regime transi-tions. In contrast to the previous experiments, cluster membership is not defined solely by smooth mean trajectories, but by subject-specific dynamic processes generated through cluster-dependent Markov transitions, nonlinear evolution, and transient perturba-tions. Under this setting, classical trajectory-based approaches show substantially reduced performance (see Figure 3). In particular, kml3d performs poorly, indicating that methods relying on pre-defined longitudinal trajectory structures are not able to adequately capture complex dynamic behavior. Functional PCA achieves mod-erate performance, but remains limited by its assumption of smooth low-dimensional functional representations. In contrast, methods designed to capture temporal dependencies, including DTW and TS2Vec, achieve substantially improved clus-tering accuracy. The proposed RankWalk approach achieves the strongest overall performance and remains highly competitive with TS2Vec, frequently recovering the true cluster structure with near-perfect accuracy. This performance highlights the advantage of integrating temporal connectivity with adaptive similarity rela-tionships in a graph representation. By jointly exploiting within-subject temporal evolution and cross-subject structural similarity, RankWalk can capture complex longitudinal patterns without re-quiring explicit assumptions about the underlying trajectory shape. These results demonstrate the ability of the proposed framework to model heterogeneous nonlinear longitudinal processes beyond classical functional representations. In a subsequent evaluation, we compared the clustering perfor-mance of RankWalk on datasets with regular and irregular sam-pling intervals. As shown in Appendix Figures 7 and 8, the proposed sliding-window strategy for transforming irregularly sampled ob-servations into a regular temporal grid performs well, resulting in Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs Conference acronym ’XX, June 03–05, 2018, Woodstock, NY fPCA VaDER DTW TS2Vec kml3d RankWalk 0.0 0.5 1.0 Adjusted Rand Index (ARI) Method 0.07 0.04 0.02 0.85 0.16 0.93 0.52 0.58 1 0.52 0.96 0.48 0.51 0.98 0.46 0.98 0.42 0.49 1 0.44 0.15 0 0.02 0 0.12 0.84 0.48 0.54 0.56 0.88 kml3d fPCA DTW TS2Vec RankWalk VaDER kml3d fPCA DTW TS2Vec RankWalk VaDER WinRate 
+
+> 0.00 0.25 0.50 0.75 1.00
+
+Figure 2: Simulation 1 – Clustering performance on noisy synthetic longitudinal multivariate trajectories (see Section 4.1.1). The subject and variable-specific noise levels were set to 𝜎 𝑖 = 3, where 𝑖 ∈ { 1, ..., 5}. The global measurement error was set to 
+
+𝜂 = 3. (a) We randomly replaced a single 𝜎 𝑖 with a value out of [3, 20 ] in each iteration. The number of clusters is set to the known ground-truth 𝐾 = 4. The results are based on 50 iterations. (b) Pairwise dominance heatmap showing the proportion of simulation replicates in which the method on the 𝑥 -axis achieved a higher ARI than the method on the 𝑦 -axis. Ties are excluded from the calculation, with values close to one indicating consistent superiority across simulation runs. 
+
+only a marginal reduction in clustering performance. These find-ings indicate that the proposed graph construction framework is robust to irregular measurement schedules commonly encountered in real-world longitudinal studies. In addition, we evaluated the proposed approach on four real-world longitudinal benchmark datasets using survival-based evaluation of the obtained clustering structure. The evaluation was performed using the concordance index (c-index) and the log-rank test statistic. The c-index measures the concordance between the ordering of survival times and the risk ordering induced by cluster assignments, where values closer to one indicate stronger agreement. To assess the separation between the survival distributions of the identified clusters, we additionally report the 𝜒 2 statistic from the log-rank test. The log-rank test evaluates the null hypothesis that the survival functions are equal across clusters, with larger 𝜒 2
+
+values indicating stronger evidence against this hypothesis. The significance of the test depends on the degrees of freedom, given by the number of clusters minus one. For the four-cluster setting considered in this study, the log-rank statistic has three degrees of freedom. Accordingly, values exceeding 𝜒 20.95 ,3 = 7.81 and 𝜒 20.99 ,3 =
+
+11 .35 indicate statistically significant separation of survival curves at the 5% and 1% significance levels, respectively. Since longitudinal measurements in real-world cohorts are fre-quently acquired at irregular time points, we included functional principal component analysis (fPCA) as the main comparator, as it explicitly supports irregularly sampled trajectories. Deep generative approaches such as VaDER were not included in this comparison because they did not show competitive performance in the syn-thetic experiments and therefore did not provide a reliable baseline for real-world evaluation. Table 1 summarizes the results. Across all benchmark datasets, RankWalk achieved higher C-index values and substantially increased log-rank 𝜒 2 statistics compared with fPCA. The largest improvement was observed for the HEART dataset, where RankWalk increased the C-index from 0 .57 to 0 .71 and im-proved the survival separation statistic from 4 .81 to 52 .25. While the fPCA-based clustering did not reach statistical significance for this cohort, the RankWalk-based clustering resulted in a highly sig-nificant separation of survival curves. Similar improvements were observed for PBC2 and AIDS, where both approaches produced significant survival separation, but RankWalk yielded substantially stronger evidence. For PAQUID, RankWalk also improved upon fPCA, although the larger standard deviation of the C-index reflects increased variability across repeated runs. Overall, these results suggest that representing irregular longitudi-nal data as graphs, combining within-subject temporal dependen-cies with cross-subject similarity relationships, enables the iden-tification of trajectory patterns that are more strongly associated with survival outcomes than functional representations based on low-dimensional trajectory bases. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer kml3d VaDER fPCA DTW RankWalk TS2Vec 0.0 0.3 0.6 0.9 Adjusted Rand Index (ARI) Method 0.98 1 1 1 0.58 0.02 1 1 1 0.02 0 0 0.98 0.8 00 0 0.02 0.39 00 0 0.2 0.61 00.42 0.98 1 1 1kml3d fPCA DTW TS2Vec RankWalk VaDER kml3d fPCA DTW TS2Vec RankWalk VaDER WinRate 
+
+> 0.00 0.25 0.50 0.75 1.00
+
+Figure 3: Simulation 2 – Clustering performance on synthetic longitudinal multivariate trajectories with nonlinear regime-switching dynamics (see Section 4.1.2). The number of clusters is set to the known ground-truth 𝐾 = 4. The results are based on 50 iterations. (a) Results are shown shown as boxplots. (b) Pairwise dominance heatmap showing the proportion of simulation replicates in which the method on the 𝑥 -axis achieved a higher ARI than the method on the 𝑦 -axis. Ties are excluded from the calculation, with values close to one indicating consistent superiority across simulation runs. Table 1: Comparison of clustering performance across bench-mark datasets. Values are reported as mean ± standard devi-ation. Dataset Method c-index 𝜒 2
+
+PBC2 RankWalk 0.78 ± 0.02 246 .91 ± 20 .85 fPCA 0.76 127 .50 AIDS RankWalk 0.69 ± 0.00 105 .86 ± 6.80 fPCA 0.64 53 .09 HEART RankWalk 0.71 ± 0.02 52 .25 ± 7.96 fPCA 0.57 4.81 PAQUID RankWalk 0.70 ± 0.02 39 .80 ± 6.64 fPCA 0.66 5.06 
+
+## 6 Conclusion 
+
+We presented RankWalk, a graph contrastive learning framework for clustering multivariate longitudinal data. By representing longi-tudinal observations as a heterogeneous graph that jointly captures temporal dependencies within subjects and structural similarities across subjects, the proposed method learns low-dimensional rep-resentations tailored to longitudinal clustering. The integration of robust graph construction, anchor-guided structural sampling, and weighted contrastive learning enables RankWalk to identify mean-ingful trajectory patterns without relying on predefined trajectory models or labeled data. Experimental results on two complemen-tary simulation studies and four real-world biomedical benchmark datasets demonstrated that the proposed framework achieves com-petitive or superior clustering performance compared with estab-lished statistical and deep learning approaches while remaining robust to measurement noise and irregular sampling. Future work will investigate extensions to dynamic graph architectures, missing data mechanisms, and multimodal longitudinal datasets to further improve representation learning in complex biomedical applica-tions. 
+
+## Code Availability 
+
+The RankWalk method is available as a Python package on GitHub (https://github.com/pievos101/RankWalk). 
+
+## Acknowledgments 
+
+The authors used OpenAI’s ChatGPT (GPT-5.5) to assist with im-proving the English language and readability of the manuscript. In addition, Figure 1 was created with the assistance of ChatGPT. The authors reviewed and edited all AI-generated content and take full responsibility for the final manuscript. 
+
+## Ethics and Privacy Statement 
+
+This paper presents a methodological contribution to longitudi-nal graph representation learning. No new human subject data were collected, and experiments were conducted using benchmark datasets with appropriate permissions or approvals. Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+## References 
+
+[1] Sophia Miryam Schüssler-Fiorenza Rose, Kévin Contrepois, Kegan J Moneghetti, Wenyu Zhou, Tejaswini Mishra, Samson Mataraso, Orit Dagan-Rosenfeld, Ariel B Ganz, Jessilyn Dunn, Daniel Hornburg, et al. A longitudinal big data approach for precision health. Nature medicine , 25(5):792–804, 2019. [2] Suhas V Vasaikar, Adam K Savage, Qiuyu Gong, Elliott Swanson, Aarthi Talla, Cara Lord, Alexander T Heubeck, Julian Reading, Lucas T Graybuck, Paul Meijer, et al. A comprehensive platform for analyzing longitudinal multi-omics data. 
+
+Nature Communications , 14(1):1684, 2023. [3] Zihang Lu. Clustering longitudinal data: A review of methods and software packages. International Statistical Review , 93(3):425–458, 2025. [4] Jiajun Qiu, Yao Hu, Li Li, Abdullah Mesut Erzurumluoglu, Ingrid Braenne, Charles Whitehurst, Jochen Schmitz, Jatin Arora, Boris Alexander Bartholdy, Shrey Gandhi, et al. Deep representation learning for clustering longitudinal sur-vival data from electronic health records. Nature Communications , 16(1):2534, 2025. [5] Jane-Ling Wang, Jeng-Min Chiou, and Hans-Georg Müller. Functional data analysis. Annual Review of Statistics and its application , 3:257–295, 2016. [6] Kehui Chen, Xiaoke Zhang, Alexander Petersen, and Hans-Georg Müller. Quan-tifying infinite-dimensional data: Functional data analysis in action. Statistics in Biosciences , 9(2):582–604, 2017. [7] Toni Giorgino. Computing and visualizing dynamic time warping alignments in r: the dtw package. Journal of statistical Software , 31:1–24, 2009. [8] Romain Tavenard, Johann Faouzi, Gilles Vandewiele, Felix Divo, Guillaume An-droz, Chester Holtz, Marie Payne, Roman Yurchak, Marc Rußwurm, Kushal Kolar, et al. Tslearn, a machine learning toolkit for time series data. Journal of machine learning research , 21(118):1–6, 2020. [9] Christophe Genolini, Xavier Alacoque, Mariane Sentenac, and Catherine Arnaud. kml and kml3d: R packages to cluster longitudinal data. Journal of statistical software , 65:1–34, 2015. [10] Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, and Bixiong Xu. Ts2vec: Towards universal representation of time series. In Proceedings of the AAAI conference on artificial intelligence , volume 36, pages 8980–8987, 2022. [11] Johann de Jong, Mohammad Asif Emon, Ping Wu, Reagon Karki, Meemansa Sood, Patrice Godard, Ashar Ahmad, Henri Vrooman, Martin Hofmann-Apitius, and Holger Fröhlich. Deep learning for clustering of multivariate clinical patient trajectories with missing values. GigaScience , 8(11):giz134, 2019. [12] Bastian Pfeifer and Michael G Schimek. Robust node affinities via jaccard-biased random walks and rank aggregation. arXiv preprint arXiv:2603.05375 , 2026. [13] Frank E Harrell, Robert M Califf, David B Pryor, Kerry L Lee, and Robert A Rosati. Evaluating the yield of medical tests. Jama , 247(18):2543–2546, 1982. [14] Nathan Mantel et al. Evaluation of survival data and two new rank order statistics arising in its consideration. Cancer Chemother Rep , 50(3):163–170, 1966. [15] Junyi Zhou, Ying Zhang, and Wanzhu Tu. clustermld: An efficient hierarchical clustering method for multivariate longitudinal data. Journal of Computational and Graphical Statistics , 32(3):1131–1144, 2023. 
+
+## A Details on Simulated Longitudinal Data A.1 Simulation 1 
+
+See Appendix Table 2. 
+
+## A.2 Simulation 2 
+
+The four clusters represented different temporal stability patterns: 
+
+Π(1) = ©«
+
+0.93 0.05 0.02 0.05 0.90 0.05 0.02 0.05 0.93 
+
+ª®¬
+
+, (42) representing a stable regime process, 
+
+Π(2) = ©«
+
+0.82 0.15 0.03 0.10 0.80 0.10 0.03 0.15 0.82 
+
+ª®¬
+
+, (43) representing a progressive transition pattern, 
+
+Π(3) = ©«
+
+0.75 0.15 0.10 0.15 0.70 0.15 0.10 0.15 0.75 
+
+ª®¬
+
+, (44) 
+
+Table 2: Cluster-specific mean trajectories Outcome ℎ Mean trajectories 
+
+ℎ = 1 cluster 1: 𝑓 (1) 
+
+> 𝑐 1
+
+(𝑡 ) = 8𝑡 − 0.6𝑡 2
+
+cluster 2: 𝑓 (1) 
+
+> 𝑐 2
+
+(𝑡 ) = 20 − 6𝑡 + 0.3𝑡 2
+
+cluster 3: 𝑓 (1) 
+
+> 𝑐 3
+
+(𝑡 ) = 0cluster 4: 𝑓 (1) 
+
+> 𝑐 4
+
+(𝑡 ) = 20 
+
+ℎ = 2 cluster 1: 𝑓 (2) 
+
+> 𝑐 1
+
+(𝑡 ) = 𝑡 
+
+cluster 2: 𝑓 (2) 
+
+> 𝑐 2
+
+(𝑡 ) = −𝑡 
+
+cluster 3: 𝑓 (2) 
+
+> 𝑐 3
+
+(𝑡 ) = −7𝑡 + 0.5𝑡 2
+
+cluster 4: 𝑓 (2) 
+
+> 𝑐 4
+
+(𝑡 ) = −20 + 𝑡 ℎ = 3 cluster 1: 𝑓 (3) 
+
+> 𝑐 1
+
+(𝑡 ) = −10 + 6𝑡 − 0.4𝑡 2
+
+cluster 2: 𝑓 (3) 
+
+> 𝑐 2
+
+(𝑡 ) = −10 + 6𝑡 − 0.4𝑡 2
+
+cluster 3: 𝑓 (3) 
+
+> 𝑐 3
+
+(𝑡 ) = 0.2𝑡 
+
+cluster 4: 𝑓 (3) 
+
+> 𝑐 4
+
+(𝑡 ) = 0.2𝑡 ℎ = 4 cluster 1: 𝑓 (4) 
+
+> 𝑐 1
+
+(𝑡 ) = −1 + 𝑡 
+
+cluster 2: 𝑓 (4) 
+
+> 𝑐 2
+
+(𝑡 ) = −1 + 𝑡 
+
+cluster 3: 𝑓 (4) 
+
+> 𝑐 3
+
+(𝑡 ) = −1 + 𝑡 
+
+cluster 4: 𝑓 (4) 
+
+> 𝑐 4
+
+(𝑡 ) = 10 + 2𝑡 − 0.2𝑡 2
+
+ℎ = 5 cluster 1: 𝑓 (5) 
+
+> 𝑐 1
+
+(𝑡 ) = −2𝑡 + 0.1𝑡 2
+
+cluster 2: 𝑓 (5) 
+
+> 𝑐 2
+
+(𝑡 ) = −2𝑡 + 0.1𝑡 2
+
+cluster 3: 𝑓 (5) 
+
+> 𝑐 3
+
+(𝑡 ) = −2𝑡 + 0.1𝑡 2
+
+cluster 4: 𝑓 (5) 
+
+> 𝑐 4
+
+(𝑡 ) = −2𝑡 + 0.1𝑡 2
+
+representing an unstable but non-chaotic process, and 
+
+Π(4) = ©«
+
+0.75 0.20 0.05 0.20 0.60 0.20 0.05 0.20 0.75 
+
+ª®¬
+
+, (45) representing a relapsing-remitting dynamic pattern. 
+
+## B Details o Real-Worls Data 
+
+B.0.1 PBC2. The PBC2 dataset contains longitudinal observations from patients diagnosed with primary biliary cirrhosis (PBC), a chronic liver disease characterized by progressive deterioration of liver function. The data originate from a clinical study conducted at the Mayo Clinic and contain repeated biochemical measurements collected during patient follow-up. The dataset includes 312 pa-tients and a total of 1,945 longitudinal observations. Each patient contributes a varying number of measurements, resulting in an un-balanced longitudinal design. The repeated measurements include several clinical biomarkers related to liver function and disease severity, such as serum bilirubin, serum cholesterol, albumin, alka-line phosphatase, SGOT, platelet count, and prothrombin time. In addition to longitudinal biomarker measurements, the dataset con-tains survival-related information, including transplantation and mortality outcomes. The PBC2 dataset therefore represents a set-ting with heterogeneous disease progression patterns and irregular follow-up schedules. 
+
+B.0.2 HEART. The HEART dataset is a longitudinal clinical dataset describing patients with heart valve disease who were monitored following aortic valve replacement surgery. The dataset was de-signed for joint modeling studies of longitudinal biomarkers and Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer 4 51 2 32.5 5.0 7.5 10.0 2.5 5.0 7.5 10.0 2.5 5.0 7.5 10.0 −20 −10 010 20 −40 −20 020 −20 −10 010 −40 −20 020 −20 020 Time Value 
+
+Figure 4: Simulation 1: Longitudinal simulated multivariate data. For each longitudinal outcome variable the mean tra-jectories for each cluster are displayed. See Section 4.1.1 for details. 
+
+survival outcomes. The dataset contains 256 patients with 988 longi-tudinal observations, corresponding to approximately 3.86 repeated measurements per patient on average. Measurements were col-lected at patient-specific follow-up times, leading to an unbalanced observation structure. The longitudinal variables include indicators of cardiac function, such as valve gradient, left ventricular mass index, and ejection fraction, together with baseline demographic and clinical characteristics. The dataset captures heterogeneous postoperative recovery patterns and variability in long-term cardiac development between patients. 
+
+B.0.3 PAQUID. The PAQUID dataset originates from a large prospec-tive cohort study investigating cognitive and functional aging in elderly individuals in France. The study was initiated to character-ize age-related changes in cognitive performance, functional status, and health outcomes over extended follow-up periods. The original cohort consists of 3,675 participants followed longitudinally over several years. Participants underwent repeated assessments includ-ing cognitive tests, functional measurements, and demographic and health-related evaluations. Due to the long-term population-based design, subjects differ substantially in the number of avail-able follow-up visits and observation intervals. The resulting data structure is highly unbalanced, with slowly evolving individual trajectories reflecting heterogeneous aging processes. 
+
+B.0.4 AIDS. The AIDS dataset contains longitudinal measurements collected from HIV-infected individuals enrolled in a clinical study investigating disease progression. The primary longitudinal marker is the CD4 cell count, which is an important indicator of immune 4 51 2 32.5 5.0 7.5 10.0 2.5 5.0 7.5 10.0 2.5 5.0 7.5 10.0 −5 0510 −5 0510 −10 −5 05−5 0510 −5 05Time Value 
+
+Figure 5: Simulation 2: Nonlinear regime-switching longitu-dinal dynamics. For each longitudinal outcome variable the mean trajectories for each cluster are displayed. See Section 4.1.2 for details. 
+
+system status in HIV infection. The dataset includes 369 patients and 2,376 longitudinal measurements collected over approximately eight years of follow-up. Each patient contributes between one and twelve repeated measurements, with observation times varying across individuals. In addition to CD4 measurements, the dataset contains baseline covariates and treatment-related information. The AIDS dataset represents a challenging longitudinal setting due to substantial between-patient heterogeneity, irregular measurement schedules, and diverse disease progression trajectories. 
+
+## C Additional Supporting Results C.1 Results on Simulation 1 
+
+See Appendix Figure 6. Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs Conference acronym ’XX, June 03–05, 2018, Woodstock, NY VaDER TS2Vec kml3d DTW fPCA RankWalk 0.00 0.25 0.50 0.75 1.00 Adjusted Rand Index (ARI) Method 0.86 0.6 0 0.85 00.14 0.38 0 0.61 00.4 0.62 0.02 0.72 01 1 0.98 1 0.06 0.15 0.39 0.28 0 01 1 1 0.94 1kml3d fPCA DTW TS2Vec RankWalk VaDER kml3d fPCA DTW TS2Vec RankWalk VaDER WinRate 
+
+> 0.00 0.25 0.50 0.75 1.00
+
+Figure 6: Simulation 1 – Clustering performance on synthetic longitudinal multivariate trajectories (see Section 4.1.1). The subject and variable-specific noise levels were set to 𝜎 𝑖 = 5, where 𝑖 ∈ { 1, ..., 5}. The global measurement error was set to 𝜂 = 3. (a) The number of clusters is set to the known ground-truth 𝐾 = 4. The results are based on 50 iterations. (b) Pairwise dominance heatmap showing the proportion of simulation replicates in which the method on the 𝑥 -axis achieved a higher ARI than the method on the 𝑦 -axis. Ties are excluded from the calculation, with values close to one indicating consistent superiority across simulation runs. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Bastian Pfeifer RankWalk (irregular) RankWalk (regular) 0.7 0.8 0.9 1.0 Adjusted Rand Index (ARI) Method 
+
+Figure 7: Simulation 1 – RankWalk on regular versus irregu-lar time measurenments. RankWalk (irregular) RankWalk (regular) 0.7 0.8 0.9 1.0 Adjusted Rand Index (ARI) Method 
+
+Figure 8: Simulation 2 – RankWalk on regular versus irregu-lar time measurenments. 
+
+## C.2 Regular vs Irregular Time Measures 
+
+See Appendix Figure 7 and 8. 
+
+Received 20 February 2007; revised 12 March 2009; accepted 5 June 2009

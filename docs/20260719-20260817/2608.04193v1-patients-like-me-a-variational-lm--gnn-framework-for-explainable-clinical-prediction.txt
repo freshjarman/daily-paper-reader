@@ -1,0 +1,1286 @@
+Title: Patients-like-me: A Variational LM–GNN Framework for Explainable Clinical Prediction
+
+URL Source: https://arxiv.org/pdf/2608.04193v1
+
+Published Time: Thu, 06 Aug 2026 00:09:28 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Patients-like-me: A Variational LM–GNN Framework for Explainable Clinical Prediction 
+
+Xinyu Wang 1* Yixuan Li 1* Hanwei Wu 2 Qincheng Lu 1
+
+Chi-Kuang Yeh 3 Xiao-Wen Chang 1 Ziyang Song 4†   
+
+> 1McGill University 2Université de Montréal 3Georgia State University 4Ohio University
+
+Abstract 
+
+Language models (LMs) offer strong textual representations for electronic health records (EHRs), but they encode patient sequences in isolation and provide limited explainabil-ity. Graph neural networks (GNNs) comple-ment LMs by incorporating inter-patient re-lationships and enabling reference-patient at-tribution, yet they rely on high-quality pa-tient representations. We propose Patients-like-me (PLM) , a unified LMGNN frame-work that integrates local patient seman-tics with global cohort structure. To train PLM efficiently, we introduce a Variational Expectation-Maximization algorithm that al-ternates LM and GNN updates under a super-vised variational objective. Extensive exper-iments on MIMIC-III and MIMIC-IV show that PLM consistently outperforms state-of-the-art methods, with improvements generaliz-ing across encoder-only and decoder-only LM backbones. These gains are achieved with only modest additional computational over-head. PLM also provides reference-patient ex-planations by retrieving influential similar pa-tients, while edge-masking experiments con-firm that the highest-ranked references have the greatest impact on model predictions. 
+
+1 Introduction 
+
+Electronic health records (EHRs) contain hetero-geneous patient records spanning one or more vis-its, including structured codes (e.g., diagnoses, procedures, medications) and unstructured free-text notes (Xu et al., 2022). The accumulation of large-scale EHR data enables representation learning that supports accurate supervised clinical prediction for clinical decision support, including readmission and length-of-stay (LOS) prediction     
+
+> *Equal contribution. Emails:
+> xinyu.wang5@mail.mcgill.ca and
+> yixuan.li2@mail.mcgill.ca .
+> †Corresponding author: ziyangs@ohio.edu .
+
+as well as personalized medication recommenda-tion (Wang et al., 2024; Shang et al., 2019b; Yang et al., 2021b). Language models (LMs) are a natural backbone for EHR modeling because they can encode struc-tured codes and free-text notes into textual repre-sentations (Wornow et al., 2025). Recent work therefore leverages LMs as patient-level encoders, mapping each patient’s EHR sequence to a rep-resentation for downstream predictions (Makarov et al., 2025; Hegselmann et al., 2025). However, LM-based encoders are inherently local , represent-ing each patient sequence in isolation, thus over-looking global cohort structure such as shared phe-notypes and comorbidities. This hurt tasks that benefit from cohort-level signals, such as personal-ized drug recommendation, where clinically sim-ilar reference patients (i.e., “patients like me”) provide evidence for prediction (Alsentzer et al., 2025; Kauffman et al., 2025). For example, among patients with congestive heart failure, medication selection is often influenced by shared comorbidi-ties such as kidney dysfunction or diabetes. In addition, LMs offer limited explainability, making it difficult to provide explanations linked to refer-ence cases. Graph neural networks (GNNs) complement LMs by modeling inter-patient relations on a text-attributed graph (TAG), where nodes represent pa-tient sequences and edges reflect cohort similarity (Yan et al., 2023; Boll et al., 2024). These struc-tural relationships preserve patient proximity, such that connected patients are more likely to exhibit similar clinical profiles. GNN message passing propagates cohort-level signals to refine patient representations, addressing the locality limitation of LMs. In addition, graph-based attribution meth-ods can link predictions to influential neighboring cases, yielding reference-patient explanations for prediction (Ying et al., 2019). This motivates a unified LMGNN framework in which LMs encode 1arXiv:2608.04193v1 [cs.CL] 4 Aug 2026 patient representations and GNNs refine them us-ing global cohort structure. Existing LM-GNN methods mainly adopt two-stage, end-to-end, or alternating optimization. Two-stage methods train the LM and GNN sep-arately, offering scalability but preventing graph information from iteratively refining the LM (Li et al., 2024). End-to-end methods jointly opti-mize both components, enabling tighter interac-tion but incurring higher memory and computa-tional costs (Huang et al., 2024; Hu et al., 2025). Alternating methods, such as GLEM (Zhao et al., 2023), update the LM and GNN in turn to balance interaction and efficiency, but are primarily devel-oped for semi-supervised node classification with missing labels. Their formulation therefore does not address fully supervised patient-level clinical prediction. In this work, we propose Patients-like-me 
+
+(PLM), a unified LM-GNN framework for clin-ical prediction. PLM formulates a Variational Expectation-Maximization (VEM) algorithm that alternates LM-GNN optimization under a super-vised variational objective, allowing local pa-tient semantics and global cohort structure to it-eratively refine one another with modest com-putational overhead. Experiments on MIMIC-III and MIMIC-IV across readmission predic-tion, length-of-stay prediction, and drug recom-mendation show that PLM consistently outper-forms existing clinical prediction models, LM-based baselines, and alternative LM-GNN training strategies. PLM is backbone-agnostic, improving both encoder-only and decoder-only models with only modest computational overhead. Beyond predictive performance, PLM provides reference-patient explanations that identify influential simi-lar patients, with edge-masking experiments show-ing that the highest-ranked references have the strongest effect on predictions. 
+
+2 Related Work 
+
+2.1 Language Modeling for EHRs 
+
+Modeling EHR sequences is central to clinical prediction. EHRs consist of heterogeneous pa-tient records, where each visit may contain struc-tured clinical codes and free-text notes (Xu et al., 2022). Early probabilistic models are employed to uncover latent structure from EHRs (Song et al., 2022). Subsequent work uses deep neu-ral networks to learn representations from pa-tient records, including multi-layer perceptrons (MLPs) (Miotto et al., 2016), recurrent net-works (Choi et al., 2016a; Pham et al., 2016), convolutional networks (Ma et al., 2020), and attention-based models (Choi et al., 2016b, 2017). Recently, Transformer-based LMs have become the dominant paradigm for encoding EHR data into contextual patient representations (Lee et al., 2020; Huang et al., 2019; Rasmy et al., 2021; Labrak et al., 2024). These models span both encoder-only architectures (e.g., BioBERT (Lee et al., 2020), BioClinical ModernBERT (Sounack et al., 2025)) and decoder-only LMs (e.g., BioMis-tral, Meerkat) (Labrak et al., 2024; Kim et al., 2025). However, these biomedical LMs primar-ily encode local textual representations (Defilippo et al., 2024), motivating the incorporation of inter-patient structure to complement these represen-tations (Alsentzer et al., 2025; Kauffman et al., 2025). 
+
+2.2 Graph-Based Patient Modeling and LMs 
+
+GNNs on patient graphs are widely used to ex-ploit cohort structure for clinical prediction (Boll et al., 2024; Vaida and Huang, 2025). Apply-ing GNNs to EHRs requires mapping heteroge-neous patient records to continuous node features (Gilmer et al., 2017), motivating TAGs and tex-tual representation learning for node initialization (Yan et al., 2023). Prior work computes node embeddings from hand-crafted features or shal-low text features (e.g., bag-of-words) (Kipf and Welling, 2017a). Sequential models have been adopted to map patient sequences into node em-beddings for GNNs (Liu et al., 2021; Rocheteau et al., 2021; Dong et al., 2023). Recent work uses biomedical LMs to produce semantically rich embeddings for GNNs (Chen et al., 2024; Jiang et al., 2024). Most LMGNN pipelines rely on two-stage or end-to-end optimization methods, but the former is often ineffective and the latter is not scalable to large data (Golmaei and Luo, 2021; Hu et al., 2025). Alternating methods iter-atively update LMs and GNNs, but are tailored to semi-supervised node classification with par-tial labels (Zhao et al., 2023). Beyond training, prior GNN explainability methods such as GN-NExplainer (Ying et al., 2019), PGExplainer (Luo et al., 2020), and SubgraphX (Yuan et al., 2021) provide edge- or subgraph-level attributions. In PLM, we leverage graph-based neighbor attribu-tion to provide reference-patient explanations for 2Figure 1: Overview of Patients-like-me. (a) The LM encodes each patient sequence into an embedding, which the GNN refines using patient graph A for prediction and reference patient explanations. (b) The patient graph A      
+
+> retains edges with Aij ≥τ.(c) The variational EM algorithm alternates between an E-step that updates the LM while freezing the GNN and an M-step that updates the GNN while freezing the LM.
+
+clinical prediction. 
+
+3 Methodology 
+
+3.1 Patients-like-me Architecture 
+
+For clinical prediction, each patient n is associ-ated with an EHR sequence xn and a target label 
+
+yn. PLM couples a patient-level LM with a cohort-level GNN within a VEM framework (Fig. 1a). We first serialize each EHR into a text prompt by concatenating demographics with chronologi-cally ordered visits, where each visit includes co-occurring diagnosis, procedure, and medication codes. The LM encodes the prompt into a patient embedding on, which initializes the GNN node feature as h(0)  
+
+> n
+
+= on. The GNN then propagates in-formation over the patient graph to refine node rep-resentations h(L) 
+
+> n
+
+for downstream prediction. Task-specific prompt templates are in Appendix B.1. As illustrated in Fig. 1b, we construct aweighted patient graph from the cohort. We rep-resent it as a TAG G = ( N , A, x ), where N is the set of patient nodes, A ∈ RN ×N is the adja-cency matrix, and each node is associated with a patient EHR sequence. We construct the patient-patient graph using diagnosis-code overlap, fol-lowing prior work (Lu and Uddin, 2021). To pre-vent temporal leakage, edges for each prediction instance are computed only from diagnosis codes available within the corresponding input prefix. Specifically, the edge weight Aij is defined as the number of diagnosis codes shared by patients 
+
+i and j. This graph captures coarse inter-patient comorbidity structure, while patient-specific de-tails are encoded by the LM. To maintain spar-sity and suppress noisy links, we retain an edge only if Aij ≥ τ . We select τ on the validation set and use it across all tasks, as it provides the best trade-off between predictive performance and graph sparsity (Section 5.4). We model the result-ing weighted patient graph with a Graph Convolu-tional Network (GCN) (Kipf and Welling, 2017b), which supports weighted message passing under standard GCN normalization. After the patient-level split, we construct separate training, valida-tion, and test graphs within each split. Details on split-specific graph construction, test-time mes-sage passing, and edge-weight analysis are pro-vided in Appendix C.6. 
+
+3.2 VEM Algorithm 
+
+As illustrated in Fig. 1c, we present a pseudo-likelihood VEM algorithm for PLM. We consider a probabilistic model in which patient sequences 
+
+x are observations and target labels y are latent variables. Our goal is to infer the posterior dis-tribution p(y | x), which is generally intractable (Fox and Roberts, 2012). Variational inference approximates this posterior with a tractable fam-ily qθ(y | x) and optimizes the evidence lower bound (ELBO) (Blei et al., 2017): ELBO =
+
+Eqθ (y|x)
+
+[ log pϕ(x, y ) − log qθ(y | x)], where θ
+
+and ϕ denote the variational and model param-eters, respectively. Following amortized varia-tional inference (Kingma and Welling, 2022), we approximate the intractable posterior with a vari-ational distribution qθ(y | x) parameterized by an LM, which maps each patient sequence xn to a distribution over yn by a single forward pass. We use a mean-field variational family that fac-torizes over the latent variables, qθ(y | x) =∏Nn=1 qθ(yn | xn), where the factorization is im-posed only on the variational family qθ for scal-able amortized inference. We instantiate the dis-3tribution pϕ(y | x) with a GNN and omit the explicit dependence on the patient graph A. We optimize the ELBO using a VEM algorithm that alternates between E-step and M-step. In the E-step, we fix the GNN and update the LM by min-imizing the KL divergence KL (qθ(y | x) ∥ pϕ(y |
+
+x)) = Eqθ (y|x)[log qθ(y | x) − log pϕ(y | x)] .
+
+This injects graph structural signals into the LM representations and yields a tighter ELBO. In the M-step, we fix the LM and update the GNN by maximizing a pseudo-likelihood objective (Besag, 1975), Eqθ (y|x)
+
+[ log pϕ(y |
+
+x)] ≈ Eqθ (y|x)
+
+[∑Nn=1 log pϕ
+
+(yn | x, y N \ n
+
+)]
+
+,
+
+where yN \ n denotes the labels of all nodes except node n. It improves the GNNs modeling of global structural signals using the LM representations. 
+
+3.3 E-Step: LM Optimization 
+
+In the E-step, we fix the GNN and update the LM by maximizing the ELBO, thereby injecting global relational structure into the LM. Under the mean-field factorization, the optimal update for the fac-tor of qθ(yn | xn) for patient n is given by the following theorem. 
+
+Theorem 3.1 (Optimal mean-field update of qθ).
+
+Given the fixed pϕ(yn | xn), the local optimum of the mean-field variational distribution qθ(yn | xn),denoted by q∗ 
+
+> θ
+
+(yn | xn), satisfies 
+
+log q∗ 
+
+> θ
+
+(yn | xn) = Eqθ (y|x)
+
+[ log pϕ(yn | xn, y NB( n))]
+
++ const , (1) 
+
+where the constant term is independent of yn and can be omitted during optimization. 
+
+The proof is provided in Appendix A.2. Based on Theorem 3.1, computing the local optimum 
+
+q∗ 
+
+> θ
+
+(yn | xn) requires evaluating an expectation un-der the current variational distribution qθ(y | x).We estimate this expectation with a single-sample Monte Carlo estimator (Kingma and Welling, 2022). As shown in Appendix C.8, a single sample yields performance comparable to that of multiple samples, so we use a single sample in all exper-iments for efficiency. This Monte Carlo approxi-mation is implemented using a single forward pass of the LM to obtain the patient embedding on for each node, which is then used as the input node feature for the GNN, i.e., h(0)  
+
+> n
+
+= on, yielding 
+
+Eqθ (y|x)
+
+[ log pϕ(yn | xn, y NB( n))]
+
+≃ log pϕ(yn | on, y NB( n)). (2) Given equation 1 and equation 2, the local opti-mum q∗ 
+
+> θ
+
+(yn | xn) can thus be approximated by 
+
+pϕ(yn | on, y NB( n)). This optimality condition indicates that, during the E-step, the LM is opti-mized through the fixed GNN, allowing its patient representations to incorporate both local semantics and neighborhood interactions. The E-step seeks to maximize the ELBO, equiv-alently minimizing KL [qθ(y | x)|| pϕ(y | x)].However, directly optimizing this KL is typically intractable as it requires computing over all pos-sible qθ(y | x). To address this issue, we adopt the wake–sleep algorithm, which updates the in-ference model qθ by minimizing the reverse KL divergence (Hinton et al., 1995), 
+
+θ∗ = arg min  
+
+> θ
+
+KL (pϕ(y | x) ∥ qθ(y | x))
+
+= arg max  
+
+> θ
+
+Epϕ(x,y )
+
+[ log qθ(y | x)]. (3) We omit the constant term independent of θ. Com-bining the above results, we obtain the supervised E-step objective for updating qθ by fine-tuning the LM for label prediction, 
+
+Lq = Epϕ(x,y )
+
+[ log qθ(y | x)]
+
+= Epϕ(x,y )
+
+[ N∑
+
+> n=1
+
+log qθ(yn | on)
+
+]
+
+≈
+
+> N
+
+∑
+
+> n=1
+
+log qθ
+
+(
+
+yn | h(L) 
+
+> n
+
+(o; ¯ϕ)
+
+)
+
+,
+
+(4) where h(L) 
+
+> n
+
+(o; ¯ϕ) denotes the deterministic GNN representation computed from the LM embed-dings o under the frozen GNN parameters ¯ϕ. Since expectation over pϕ(x, y ) is intractable, we esti-mate it by a single-sample Monte Carlo sampling. In the E-step, the LM first generates embeddings 
+
+on, which are passed through the frozen GNN to obtain h(L) 
+
+> n
+
+(o, ¯ϕ). Because the GNN parameters are fixed, the loss is computed on h(L) 
+
+> n
+
+(o, ¯ϕ) in place of on. Gradients backpropagate through the fixed GNN to on, updating only the LM parame-ters θ.
+
+3.4 M-Step: GNN Optimization 
+
+Note that log pϕ(x, y ) = log pϕ(y | x)+log pϕ(x).In the M-step, we fix the LM and update the GNN to maximize the expected log-likelihood 
+
+Eqθ (y|x)
+
+[ log pϕ(x, y )] = Eqθ (y|x)
+
+[ log pϕ(y |
+
+x)] + log pϕ(x), where the second term on the right hand side is independent of ϕ since 4Algorithm 1: VEM Optimization                      
+
+> Input: Patient sequences x, target labels y, LM qθ,GNN pϕ, and patient graph A
+> Output: LM embeddings {on}Nn=1 , GNN node embeddings {h(L)
+> n}Nn=1 , and predictions
+> {ˆyn}Nn=1
+> while not converged do
+> // E-step: update the LM while fixing the GNN
+> update LM qθby minimizing Lqin equation 4;
+> // M-step: update the GNN while fixing the LM
+> update GNN pϕby minimizing Lpin equation 5;
+
+the GNN only parameterizes pϕ(y | x), and is therefore omitted when optimizing ϕ. Directly maximizing log pϕ(y | x) is often intractable because the partition function requires summing over the exponentially large label space to nor-malize the distribution (Wainwright and Jordan, 2008). Following the pseudo-likelihood approx-imation (Besag, 1975), we instead maximize a product of tractable local conditional likeli-hoods, where each term yn is conditioned on the remaining labels yN \ n and the full observed ev-idence x: Eqθ (y|x)
+
+[∑Nn log pϕ(yn | x, y N \ n)
+
+]
+
+=
+
+Eqθ (y|x)
+
+[∑Nn log pϕ(yn | xn, y NB( n))
+
+]
+
+, where the graphical Markov property implies that yn
+
+is conditionally independent of all non-neighbor labels given the evidence and its neighbors, i.e., 
+
+pϕ(yn | x, y N \ n) = pϕ(yn | on, y NB( n)). We estimate the expectation under qθ(y | x) using a single Monte Carlo sample, and represent the node xn by its LM embedding on. The M-step updates the GNN by minimizing the super-vised cross-entropy loss using the LM-encoded representations, 
+
+Lp =
+
+> N
+
+∑
+
+> n
+
+log pϕ(yn | on, y NB( n)). (5) 
+
+3.5 Optimization 
+
+Algorithm 1 summarizes our VEM algorithm, which alternates between updating the LM qθ and the GNN pϕ while fixing the other component. In the E-step, we freeze the GNN parameters ϕ and update the LM by minimizing the loss in equa-tion 4 through the GNN output h(L) 
+
+> n
+
+. Gradients up-date only the LM parameters θ. In the M-step, we freeze the LM parameters θ, use the LM represen-tations on as fixed node features, and update the GNN by minimizing the loss in equation 5. Gradi-ents update only the GNN parameters ϕ. During inference, the LM first encodes xn into on and ini-tializes the node feature as h(0)  
+
+> n
+
+= on, after which the GNN computes h(L) 
+
+> n
+
+for prediction. At vali-dation and test time, both modules are fixed and applied to the corresponding cohort graph for pre-diction. 
+
+3.6 Reference-Patient Attribution 
+
+PLM provides reference-patient explanations by retrieving reference patients for a target patient i
+
+from the patient graph A. For each target patient, we retrieve up to 10 reference patients. When more than 10 neighbors are available, we select the top 10 based on cosine similarity of their embed-dings. For each reference patient j, we quantify its contribution to the prediction for patient i via a gradient-based importance score, Imp( i, j ) = 
+
+∂ logit i/∂ A ij (Simonyan et al., 2014). This is defined as the gradient of the target logit with re-spect to the edge weight Aij , which reflects the contribution of j. We rank reference patients by 
+
+Imp( i, j ) and report the top peers as explanations for prediction. To quantitatively assess the faith-fulness of our reference-patient attribution, we per-form a masking-based evaluation by removing se-lected reference edges and measuring the resulting prediction drop. 
+
+4 Experiments 
+
+4.1 Experimental Setting Datasets and Preprocessing. We use two large-scale, de-identified EHR datasets, MIMIC-III and MIMIC-IV (Johnson et al., 2016, 2023). Each pa-tient is represented as a temporally ordered visit sequence, with diagnoses, procedures, and medi-cations treated as unordered sets within each visit. Data statistics and preprocessing are deferred to Appendix C.1 and C.2. 
+
+Tasks. We evaluate three tasks: readmission within 15 days (AUPRC/AUROC), length-of-stay prediction over 10 classes (AUPRC/F1), and drug recommendation (AUPRC/F1/Jaccard). We use BCE for readmission and drug recommendation, and CE for LOS. Detailed task settings and metric definitions are provided in Appendix C.3. 
+
+Baselines. We compare against representative clinical prediction models, namely Deepr (Nguyen et al., 2017), RETAIN (Choi et al., 2016b), 5GRAM (Choi et al., 2017), StageNet (Gao et al., 2020), AdaCare (Ma et al., 2020), and GRASP (Zhang et al., 2021). We further com-pare with LM-graph models that incorporate ex-ternal medical knowledge or graph, including G-BERT (Shang et al., 2019a), LEADER (Liu et al., 2024), GLEM (Zhao et al., 2023), Graph-Care (Jiang et al., 2024), KARE (Jiang et al., 2025), ColaCare (Wang et al., 2025). For drug recommendation, we also include SafeDrug (Yang et al., 2021b), MICRON (Yang et al., 2021a), GAMENet (Shang et al., 2019b), MoleRec (Yang et al., 2023), UDC (Zhao et al., 2025), and KEHGCN (Zhang et al., 2026). Details about baseline implementations are provided in Ap-pendix C.4. 
+
+4.2 Implementation Details 
+
+To demonstrate that our method is backbone-agnostic and consistently improves performance across backbones, we instantiated the PLM framework with both encoder-only and decoder-only biomedical LMs. For encoder-only back-bone, we used BioClinical ModernBERT-396M (BCMBERT) (Sounack et al., 2025) and fine-tuned the last six Transformer layers with atask-specific prediction head. For decoder-only backbone, we used a Llama-based LLM 
+
+Meerkat-8B , obtained sequence embeddings via LLM2Vec (BehnamGhader et al., 2024), and fine-tuned the model using LoRA adapters on attention projection layers (Hu et al., 2022), while freez-ing the remaining parameters. We used a stan-dard three-layer GCN on the patient graph. Details about model architecture and hyperparameters are provided in Appendix C.5. 
+
+5 Results 
+
+5.1 Clinical Predictions on MIMIC Datasets 
+
+As shown in Table 1, PLM achieves the strongest overall performance across datasets and tasks. Both PLM variants consistently outperform prior clinical prediction models across readmission, LOS, and drug recommendation, with the Meerkat variant performing best in most settings. Mean-while, PLM with BCMBERT remains highly com-petitive and still surpasses the strongest prior base-lines on MIMIC-IV. The gains are particularly consistent for drug recommendation, suggesting that combining patient-level semantics with cohort structure benefits multi-label clinical prediction. Table 7 reports runtime and peak GPU mem-ory on MIMIC-IV with the Meerkat-8B back-bone, showing that VEM achieves substantially better performance than all baselines. VEM out-performs alternating optimization while requiring close training time and GPU memory. Compared with LM-only, VEM adds only 4.1% runtime and 4.7% memory overhead, while remaining more ef-ficient than E2E and two-stage training. Further details are provided in Section C.10. 
+
+5.2 Generalization Across LM Backbones 
+
+To assess the generalization of VEM across back-bones, we further evaluated PLM with four back-bones on MIMIC-IV spanning both encoder-only models (BCMBERT and BioBERT) and decoder-only models (Meerkat and BioMistral). VEM con-sistently improves over each corresponding LM-only baseline across all three tasks, demonstrating that the proposed framework generalizes across different LM backbones rather than depending on a specific backbone. Detailed experimental results are provided in Appendix C.9. 
+
+5.3 Interpretability Analysis 
+
+We assessed interpretability of PLM on insulin pre-diction in drug recommendation. Fig. 2.a shows an ego graph for a target diabetes patient 57139 with ten retrieved reference cases. PLM assigns each reference patient an importance score (Imp); higher scores denote closer distance to the target and darker color. We highlighted in red the CCS codes directly associated with insulin (e.g., 50: Diabetes mellitus with complications ) and annotated indirectly related CCS codes such as endocrine conditions and diabetes complications. Patient 305 with a direct diabetes CCS code has the highest Imp 0.41. Patients 107 and 384 also have high scores (0.33 and 0.29) given their mul-tiple diabetes-related comorbidities. Overall, the retrieved references support insulin prediction by highlighting both direct diabetes cases and cases with diabetes-related complications. We further compared against a baseline that ranks reference patients using only weighted edges Aij (Fig. 5). This edge-weight baseline can miss clinically salient references. Despite being the most influential reference with a direct dia-betes code, patient 305 has an edge weight of 9, only slightly above the neighborhood threshold of 8. Therefore, edge weights mainly reflect shared-code overlap, whereas PLM leverages both tex-6Table 1: Clinical prediction performance on MIMIC-III and IV. We report the mean (standard deviation) per-formance (%) over 10 runs. The best results are highlighted for both datasets, and the second-best results are underlined. N/A indicates not applicable. 
+
+Model (%) Task 1: Readmission Task 2: LOS MIMIC-III MIMIC-IV MIMIC-III MIMIC-IV AUPRC AUROC AUPRC AUROC AUPRC F1 AUPRC F1 
+
+PLM (BCMBERT-396M) 51.7 ± 0.5 81.2 ± 0.4 48.6 ± 0.4 80.6 ± 0.4 83.6 ± 0.2 37.8 ± 0.4 82.8 ± 0.2 35.0 ± 0.3 PLM (Meerkat-8B) 52.2 ± 0.4 81.4 ± 0.4 49.7 ± 0.2 80.3 ± 0.3 84.5 ± 0.3 38.6 ± 0.2 85.3 ± 0.1 35.6 ± 0.2 
+
+Deepr 44.8 ± 0.9 76.1 ± 0.4 42.6 ± 0.2 74.7 ± 0.3 77.9 ± 0.1 35.0 ± 0.4 79.5 ± 0.3 32.3 ± 0.1 RETAIN 40.6 ± 1.0 71.0 ± 0.7 38.5 ± 0.4 69.5 ± 0.5 78.2 ± 0.1 34.9 ± 0.4 78.9 ± 0.3 32.0 ± 0.2 GRAM 43.8 ± 0.7 74.1 ± 0.4 41.4 ± 0.2 73.0 ± 0.3 78.2 ± 0.1 34.5 ± 0.2 78.8 ± 0.2 31.9 ± 0.3 StageNet 42.5 ± 0.6 73.8 ± 0.4 40.2 ± 0.1 72.6 ± 0.1 78.3 ± 0.2 34.4 ± 0.4 79.2 ± 0.3 31.3 ± 0.3 AdaCare 44.0 ± 0.6 74.1 ± 0.3 41.6 ± 0.1 72.9 ± 0.1 N/A N/A N/A N/A GRASP 43.1 ± 0.4 73.4 ± 0.6 40.9 ± 0.3 72.3 ± 0.2 N/A N/A N/A N/A G-BERT 49.6 ± 0.6 79.2 ± 0.8 46.3 ± 0.4 77.1 ± 0.7 79.7 ± 0.4 35.2 ± 0.3 78.6 ± 0.2 32.0 ± 0.1 LEADER 45.8 ± 0.5 76.3 ± 0.4 44.7 ± 0.2 75.3 ± 0.2 79.3 ± 0.3 35.4 ± 0.2 78.2 ± 0.2 31.5 ± 0.2 GLEM 45.7 ± 0.8 75.1 ± 0.9 42.6 ± 0.6 73.9 ± 0.7 78.5 ± 0.3 35.2 ± 0.4 79.0 ± 0.2 32.5 ± 0.3 GraphCare 48.8 ± 0.5 77.6 ± 0.6 45.0 ± 0.4 76.3 ± 0.5 81.4 ± 0.3 37.5 ± 0.5 81.7 ± 0.2 34.2 ± 0.2 KARE 49.5 ± 0.3 78.8 ± 0.3 48.1 ± 0.2 78.2 ± 0.3 80.7 ± 0.4 32.9 ± 0.2 81.3 ± 0.3 33.5 ± 0.2 ColaCare 50.1 ± 0.4 79.0 ± 0.3 47.5 ± 0.4 78.2 ± 0.3 82.3 ± 0.4 35.5 ± 0.4 82.5 ± 0.2 33.7 ± 0.2 
+
+Model (%) Task 3: Drug Recommendation MIMIC-III MIMIC-IV AUPRC F1 Jaccard AUPRC F1 Jaccard 
+
+PLM (BCMBERT-396M) 79.6 ± 0.2 68.4 ± 0.3 51.5 ± 0.3 75.4 ± 0.1 64.8 ± 0.3 48.9 ± 0.3 PLM (Meerkat-8B) 80.3 ± 0.2 69.4 ± 0.3 53.0 ± 0.3 77.1 ± 0.2 65.7 ± 0.4 50.4 ± 0.4 
+
+Deepr 72.3 ± 0.1 60.3 ± 0.4 44.7 ± 0.3 63.7 ± 0.1 53.1 ± 0.4 39.8 ± 0.4 RETAIN 75.1 ± 0.3 65.2 ± 0.2 49.4 ± 0.2 65.7 ± 0.6 56.9 ± 0.4 41.5 ± 0.4 GRAM 74.7 ± 0.1 62.9 ± 0.3 47.9 ± 0.3 65.3 ± 0.2 53.1 ± 0.2 40.3 ± 0.3 StageNet 73.4 ± 0.1 61.4 ± 0.3 45.8 ± 0.4 63.1 ± 0.1 52.2 ± 0.3 37.5 ± 0.4 SafeDrug 75.8 ± 0.2 66.2 ± 0.2 50.5 ± 0.2 67.1 ± 0.3 58.2 ± 0.3 43.0 ± 0.2 MICRON 76.5 ± 0.3 67.4 ± 0.3 51.1 ± 0.2 66.6 ± 0.4 59.5 ± 0.3 44.1 ± 0.3 GAMENet 76.1 ± 0.1 66.0 ± 0.1 50.2 ± 0.2 67.2 ± 0.3 58.7 ± 0.3 43.4 ± 0.3 MoleRec 72.8 ± 0.1 61.1 ± 0.3 46.1 ± 0.3 62.3 ± 0.1 56.3 ± 0.4 41.2 ± 0.3 UDC 78.5 ± 0.3 67.5 ± 0.3 51.7 ± 0.2 71.7 ± 0.2 62.7 ± 0.3 47.8 ± 0.3 KEHGCN 78.8 ± 0.2 68.1 ± 0.3 52.2 ± 0.2 72.3 ± 0.4 64.5 ± 0.3 49.1 ± 0.3 G-BERT 69.0 ± 0.2 61.9 ± 0.2 45.8 ± 0.3 62.4 ± 0.3 51.7 ± 0.2 37.3 ± 0.2 LEADER 78.0 ± 0.2 67.4 ± 0.3 51.8 ± 0.1 71.2 ± 0.2 63.0 ± 0.2 47.8 ± 0.2 GLEM 73.9 ± 0.1 62.1 ± 0.4 46.1 ± 0.4 66.0 ± 0.5 54.5 ± 0.4 41.4 ± 0.3 GraphCare 78.5 ± 0.2 66.2 ± 0.3 49.8 ± 0.4 70.7 ± 0.5 60.4 ± 0.3 45.7 ± 0.4 
+
+tual semantics and graph structure to yield relevant cases as explanations. Additional details and inter-pretability analyses are provided in Appendix C.7. To quantitatively evaluate the faithfulness of our reference-patient attributions, we conducted a masking-based evaluation on the readmission, LOS, and drug recommendation tasks. For each test patient, we removed the three retrieved refer-ence edges selected by a given masking strategy, ran inference on the updated test graph, and mea-sured the resulting change in AUPRC. We consid-ered three selection strategies: top-3 by our impor-tance scores, top-3 by edge weights, and random selection. Fig. 2.b shows that masking the top-3 references ranked by our importance scores consis-tently yields the largest performance drop across all three tasks. This suggests that the computed importance scores more faithfully identify the ref-erence patients that drive the model’s predictions. 
+
+5.4 Sensitivity Analysis 
+
+We study readmission sensitivity to the graph spar-sification threshold τ , where an edge is retained only if Aij ≥ τ . As shown in Figure 3.a, increas-ing τ prunes weaker links, lowers average degree, and improves performance up to τ =8 . Beyond that, the graph becomes overly sparse and perfor-mance degrades. We therefore use τ =8 , which bal-ances efficiency and predictive performance. We also stratify MIMIC-IV drug recommenda-tion performance by visit count. Figure 3.b shows stable performance for one to three visits and a clearer decline beyond three, suggesting that PLM does not rely on long histories for strong perfor-mance; this is consistent with prior work on in-creasing patient complexity (Meng et al., 2024). 7a. Ego-graph for reference-patient attribution  b. Quantitative evaluation of importance score Figure 2: Interpretability of PLM. (a) Ego-graph for reference-patient attribution given a diabetes patient. 
+
+Nodes are positioned closer and colored darker for higher importance scores. Direct diabetes evidence is high-lighted in red, indirectly related endocrine conditions and diabetes complications are also annotated. (b) Quan-titative evaluation of importance scores. We assess explanation faithfulness using a masking-based evaluation, where more negative ∆AUPRC indicates that the masked reference patients were more influential. a. Sensitivity to graph sparsification threshold  b.  Drug recommendation performance by visit number 
+
+Figure 3: Sensitivity analyses. (a) Sensitivity to the graph sparsification threshold τ . Increasing τ produces a sparser graph with lower average degree. The readmission prediction performance peaks around τ = 8 . (b) Drug recommendation performance stratified by visit number on MIMIC-IV. Performance remains stable for one to three visits and declines noticeably for more than three visits, indicating PLM does not rely on long visit histories. 
+
+5.5 Ablation Studies 
+
+We ablated PLM under both BCMBERT and Meerkat backbones by comparing it with LM-only and LM-GNN variants trained using alternating, E2E or in two-stage methods. As shown in Table 2, PLM with VEM achieves the best performance across all tasks under both backbones. These re-sults indicate that the improvements stem from VEM’s probabilistic training scheme, rather than simply adding a GNN, switching LM backbones, or using various optimization methods. 
+
+6 Conclusion 
+
+We propose PLM, a unified LM-GNN frame-work for clinical prediction that integrates patient textual semantics with graph relational structure through a VEM algorithm. Across MIMIC-III and MIMIC-IV, PLM consistently improves readmis-sion prediction, LOS forecasting, and drug rec-ommendation, and these gains generalize across both encoder-only and decoder-only LM back-bones. Compared with other LM-GNN train-ing strategies, VEM achieves these improvements with only modest computational overhead. Qual-itative case studies show that PLM identifies in-fluential similar patients as reference-patient ex-planations, while quantitative edge masking con-firms that the highest-ranked references have the strongest effect on predictions. 
+
+Limitations 
+
+PLM currently constructs patient graphs using diagnosis-code overlap, which may not capture richer clinical relationships available from multi-modal EHR data or external knowledge. In ad-dition, our reference-patient attributions are eval-uated quantitatively for faithfulness, while further clinician assessment is needed before real-world deployment. Future work will explore richer graph construction and evaluate these attributions with clinical stakeholders. 8Table 2: Ablation studies on MIMIC-IV comparing PLM with four training strategies under the BCMBERT and Meerkat backbones. VEM consistently yields the best performance across tasks.                                                                                   
+
+> Backbone Training Readmission LOS Drug Recommendation AUPRC AUROC AUPRC F1 AUPRC F1 Jaccard
+> BCMBERT-396M VEM 48.6 80.6 82.8 35.0 75.4 64.8 48.9
+> Alternating 45.6 76.9 79.8 33.4 69.2 58.2 44.8 E2E 44.2 76.0 78.4 31.6 71.5 62.5 46.4 2-stage 45.5 77.4 78.7 32.0 72.4 62.8 46.3 LM-only 43.6 74.5 77.0 30.7 70.2 61.4 45.5 Meerkat-8B VEM 49.7 80.3 85.3 35.6 77.1 65.7 50.4
+> Alternating 46.4 77.6 81.2 33.1 72.4 60.9 47.1 E2E 44.4 77.2 78.0 30.8 70.4 60.2 45.4 2-stage 46.2 77.3 81.8 32.9 73.2 63.6 47.9 LM-only 43.9 75.4 79.1 30.9 71.3 60.7 45.8
+
+References 
+
+Emily Alsentzer, Michelle M Li, Shilpa N Ko-bren, Ayush Noori, Undiagnosed Diseases Network, Isaac S Kohane, and Marinka Zitnik. 2025. Few shot learning for phenotype-driven diagnosis of pa-tients with rare genetic diseases. NPJ Digit. Med. ,8(1):380. Parishad BehnamGhader, Vaibhav Adlakha, Marius Mosbach, Dzmitry Bahdanau, Nicolas Chapados, and Siva Reddy. 2024. LLM2Vec: Large language models are secretly powerful text encoders. In First Conference on Language Modeling .Julian Besag. 1975. Statistical analysis of non-lattice data. Statistician , 24(3):179–195. David M Blei, Alp Kucukelbir, and Jon D McAuliffe. 2017. Variational inference: A review for statisti-cians. J. Am. Stat. Assoc. , 112(518):859–877. Heloísa Oss Boll, Ali Amirahmadi, Mirfarid Musavian Ghazani, Wagner Ourique de Morais, Edison Pigna-ton de Freitas, Amira Soliman, Farzaneh Etminani, Stefan Byttner, and Mariana Recamonde Mendoza. 2024. Graph neural networks for clinical risk pre-diction based on electronic health records: A survey. 
+
+J. Biomed. Informatics , 151:104616. Jiayuan Chen, Changchang Yin, Yuanlong Wang, and Ping Zhang. 2024. Predictive modeling with tem-poral graphical representation on electronic health records. In IJCAI , pages 5763–5771. ijcai.org. Edward Choi, Mohammad Taha Bahadori, Andy Schuetz, Walter F. Stewart, and Jimeng Sun. 2016a. Doctor ai: Predicting clinical events via recurrent neural networks. In Proceedings of the 1st Machine Learning for Healthcare Conference , volume 56 of 
+
+Proceedings of Machine Learning Research , pages 301–318. PMLR. Edward Choi, Mohammad Taha Bahadori, Le Song, Walter F. Stewart, and Jimeng Sun. 2017. GRAM: graph-based attention model for healthcare represen-tation learning. In KDD , pages 787–795. ACM. Edward Choi, Mohammad Taha Bahadori, Jimeng Sun, Joshua Kulas, Andy Schuetz, and Walter F. Stewart. 2016b. RETAIN: an interpretable predictive model for healthcare using reverse time attention mecha-nism. In NIPS , pages 3504–3512. Annamaria Defilippo, Pierangelo Veltri, Pietro Lió, and Pietro Hiram Guzzi. 2024. Leveraging graph neural networks for supporting automatic triage of patients. 
+
+CoRR , abs/2403.07038. A. P. Dempster, N. M. Laird, and D. B. Rubin. 1977. Maximum likelihood from incomplete data via the em algorithm. Journal of the Royal Statistical Soci-ety. Series B (Methodological) , 39(1):1–38. Xinyu Dong, Rachel Wong, Weimin Lyu, Kayley Abell-Hart, Jianyuan Deng, Yinan Liu, Janos G Hajagos, Richard N Rosenthal, Chao Chen, and Fusheng Wang. 2023. An integrated lstm-heterorgnn model for interpretable opioid overdose risk prediction. Artificial intelligence in medicine ,135:102439. Charles W Fox and Stephen J Roberts. 2012. A tutorial on variational bayesian inference. Artif. Intell. Rev. ,38(2):85–95. Junyi Gao, Cao Xiao, Yasha Wang, Wen Tang, Lu-cas M. Glass, and Jimeng Sun. 2020. Stagenet: Stage-aware neural networks for health risk predic-tion. In Proceedings of The Web Conference 2020 ,WWW ’20, page 530540, New York, NY, USA. As-sociation for Computing Machinery. Justin Gilmer, Samuel S. Schoenholz, Patrick F. Riley, Oriol Vinyals, and George E. Dahl. 2017. Neural message passing for quantum chemistry. In ICML ,volume 70 of Proceedings of Machine Learning Re-search , pages 1263–1272. PMLR. Sara Nouri Golmaei and Xiao Luo. 2021. Deepnote-gnn: predicting hospital readmission using clinical notes and patient network. In BCB , pages 19:1–19:9. ACM. 
+
+9Stefan Hegselmann, Georg von Arnim, Tillmann Rheude, Noel Kronenberg, David Sontag, Ger-hard Hindricks, Roland Eils, and Benjamin Wild. 2025. Large language models are powerful electronic health record encoders. Preprint ,arXiv:2502.17403. G E Hinton, P Dayan, B J Frey, and R M Neal. 1995. The “wake-sleep” algorithm for unsupervised neural networks. Science , 268(5214):1158–1161. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-rank adaptation of large language models. In International Conference on Learning Representations .Shengxiang Hu, Guobing Zou, Song Yang, Shiyi Lin, Yanglan Gan, Bofeng Zhang, and Yixin Chen. 2025. Large language model meets graph neural net-work in knowledge distillation. In Proceedings of the AAAI Conference on Artificial Intelligence , vol-ume 39, pages 17295–17304. Kexin Huang, Jaan Altosaar, and Rajesh Ran-ganath. 2019. Clinicalbert: Modeling clinical notes and predicting hospital readmission. CoRR ,abs/1904.05342. Xuanwen Huang, Kaiqiao Han, Yang Yang, Dezheng Bao, Quanjin Tao, Ziwei Chai, and Qi Zhu. 2024. Can gnn be good adapter for llms? In Proceedings of the ACM Web Conference 2024 , pages 893–904. Pengcheng Jiang, Cao Xiao, Adam Cross, and Jimeng Sun. 2024. Graphcare: Enhancing healthcare predic-tions with personalized knowledge graphs. In Inter-national Conference on Learning Representations .OpenReview.net. Pengcheng Jiang, Cao Xiao, Minhao Jiang, Parminder Bhatia, Taha Kass-Hout, Jimeng Sun, and Jiawei Han. 2025. Reasoning-enhanced healthcare predic-tions with knowledge graph community retrieval. In 
+
+The Thirteenth International Conference on Learn-ing Representations .Alistair EW Johnson, Lucas Bulgarelli, Lu Shen, Alvin Gayles, Ayad Shammout, Steven Horng, Tom J Pol-lard, Sicheng Hao, Benjamin Moody, Brian Gow, et al. 2023. Mimic-iv, a freely accessible electronic health record dataset. Scientific data , 10:1. Alistair EW Johnson, Tom J Pollard, Lu Shen, Li-wei H Lehman, Mengling Feng, Mohammad Ghas-semi, Benjamin Moody, Peter Szolovits, Leo An-thony Celi, and Roger G Mark. 2016. Mimic-iii, a freely accessible critical care database. Scientific data , 3:1–9. Justin Kauffman, Emma Holmes, Akhil Vaid, Alexan-der W Charney, Patricia Kovatch, Joshua Lampert, Ankit Sakhuja, Marinka Zitnik, Benjamin S Glicks-berg, Ira Hofer, and Girish N Nadkarni. 2025. In-fEHR: Clinical phenotype resolution through deep geometric learning on electronic health records. Nat. Commun. , 16(1):8475. Hyunjae Kim, Hyeon Hwang, Jiwoo Lee, Sihyeon Park, Dain Kim, Taewhoo Lee, Chanwoong Yoon, Jiwoong Sohn, Jungwoo Park, Olga Reykhart, Thomas Fetherston, Donghee Choi, Soo Heon Kwak, Qingyu Chen, and Jaewoo Kang. 2025. Small language models learn enhanced reasoning skills from medical textbooks. NPJ Digit. Med. ,8(1):240. Diederik P Kingma and Max Welling. 2022. Auto-encoding variational bayes. Preprint ,arXiv:1312.6114. Thomas N. Kipf and Max Welling. 2017a. Semi-supervised classification with graph convolutional networks. In ICLR (Poster) . OpenReview.net. Thomas N. Kipf and Max Welling. 2017b. Semi-supervised classification with graph convolutional networks. In International Conference on Learning Representations (ICLR) .Yanis Labrak, Adrien Bazoge, Emmanuel Morin, Pierre-Antoine Gourraud, Mickael Rouvier, and Richard Dufour. 2024. Biomistral: A collection of open-source pretrained large language models for medical domains. In ACL (Findings) , volume ACL 2024 of Findings of ACL , pages 5848–5864. Associ-ation for Computational Linguistics. P. Langley. 2000. Crafting papers on machine learn-ing. In Proceedings of the 17th International Con-ference on Machine Learning (ICML 2000) , pages 1207–1216, Stanford, CA. Morgan Kaufmann. Jinhyuk Lee, Wonjin Yoon, Sungdong Kim, Donghyeon Kim, Sunkyu Kim, Chan Ho So, and Jaewoo Kang. 2020. Biobert: a pre-trained biomedical language representation model for biomedical text mining. Bioinform. , 36(4):1234– 1240. Yuhan Li, Zhixun Li, Peisong Wang, Jia Li, Xiangguo Sun, Hong Cheng, and Jeffrey Xu Yu. 2024. A sur-vey of graph meets large language model: progress and future directions. In Proceedings of the Thirty-Third International Joint Conference on Artificial In-telligence , IJCAI ’24. Qidong Liu, Xian Wu, Xiangyu Zhao, Yuanshao Zhu, Zijian Zhang, Feng Tian, and Yefeng Zheng. 2024. Large language model distilling medi-cation recommendation model. arXiv preprint arXiv:2402.02803 .Yong Liu, Susen Yang, Yinan Zhang, Chunyan Miao, Zaiqing Nie, and Juyong Zhang. 2021. Learning hierarchical review graph representations for recom-mendation. IEEE Transactions on Knowledge and Data Engineering , 35:658–671. Haohui Lu and Shahadat Uddin. 2021. A weighted patient network-based framework for predicting chronic diseases using graph neural networks. Sci. Rep. , 11(1):22607. 
+
+10 Dongsheng Luo, Wei Cheng, Dongkuan Xu, Wenchao Yu, Bo Zong, Haifeng Chen, and Xiang Zhang. 2020. Parameterized explainer for graph neural network. In Advances in Neural Information Processing Sys-tems , volume 33. Liantao Ma, Junyi Gao, Yasha Wang, Chaohe Zhang, Jiangtao Wang, Wenjie Ruan, Wen Tang, Xin Gao, and Xinyu Ma. 2020. Adacare: Explainable clin-ical health status representation learning via scale-adaptive feature extraction and recalibration. In 
+
+AAAI , pages 825–832. AAAI Press. Nikita Makarov, Maria Bordukova, Papichaya Queng-daeng, Daniel Garger, Raul Rodriguez-Esteban, Fabian Schmich, and Michael P. Menden. 2025. Large language models forecast patient health tra-jectories enabling digital twins. npj Digit. Medicine ,8(1). Fanjun Meng, Xiaobo Li, Xiaodi Hou, Mingyu Lu, and Yijia Zhang. 2024. MGRN: toward robust drug recommendation via multi-view gating retrieval net-work. Bioinformatics , 40(10). Riccardo Miotto, Li Li, Brian A Kidd, and Joel T Dud-ley. 2016. Deep patient: An unsupervised represen-tation to predict the future of patients from the elec-tronic health records. Sci. Rep. , 6(1). Phuoc Nguyen, Truyen Tran, Nilmini Wickramasinghe, and Svetha Venkatesh. 2017. Deepr : A convolu-tional net for medical records. IEEE J. Biomed. Health Informatics , 21(1):22–30. Trang Pham, Truyen Tran, Dinh Q. Phung, and Svetha Venkatesh. 2016. Deepcare: A deep dynamic mem-ory model for predictive medicine. In PAKDD (2) ,volume 9652 of Lecture Notes in Computer Science ,pages 30–41. Springer. Laila Rasmy, Yang Xiang, Ziqian Xie, Cui Tao, and Degui Zhi. 2021. Med-bert: pretrained contextual-ized embeddings on large-scale structured electronic health records for disease prediction. NPJ digital medicine , 4:86. Emma Rocheteau, Catherine Tong, Petar Veliˇ ckovi´ c, Nicholas Lane, and Pietro Liò. 2021. Predicting patient outcomes with graph representation learning. 
+
+arXiv preprint arXiv:2101.03940 .Junyuan Shang, Tengfei Ma, Cao Xiao, and Jimeng Sun. 2019a. Pre-training of graph augmented trans-formers for medication recommendation. In Pro-ceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence, IJCAI-19 ,pages 5953–5959. International Joint Conferences on Artificial Intelligence Organization. Junyuan Shang, Cao Xiao, Tengfei Ma, Hongyan Li, and Jimeng Sun. 2019b. Gamenet: Graph aug-mented memory networks for recommending med-ication combination. In proceedings of the AAAI Conference on Artificial Intelligence , volume 33, pages 1126–1133. Karen Simonyan, Andrea Vedaldi, and Andrew Zisser-man. 2014. Deep inside convolutional networks: Vi-sualising image classification models and saliency maps. Preprint , arXiv:1312.6034. Ziyang Song, Yuanyi Hu, Aman Verma, David L. Buck-eridge, and Yue Li. 2022. Automatic phenotyping by a seed-guided topic model. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Dis-covery and Data Mining , KDD ’22, page 47134723, New York, NY, USA. Association for Computing Machinery. Thomas Sounack, Joshua Davis, Brigitte Durieux, An-toine Chaffin, Tom J. Pollard, Eric Lehman, Alis-tair E. W. Johnson, Matthew McDermott, Tristan Naumann, and Charlotta Lindvall. 2025. Bioclini-cal modernbert: A state-of-the-art long-context en-coder for biomedical and clinical nlp. Preprint ,arXiv:2506.10896. Maria Vaida and Ziyuan Huang. 2025. Multimodal graph neural networks in healthcare: a review of fu-sion strategies across biomedical domains. Frontiers in Artificial Intelligence , 8:1716706. Martin J Wainwright and Michael I Jordan. 2008. Graphical models, exponential families, and varia-tional inference. Found. Trends® Mach. Learn. , 1(1-2):1–305. Jiaqi Wang, Junyu Luo, Muchao Ye, Xiaochen Wang, Yuan Zhong, Aofei Chang, Guanjie Huang, Ziyi Yin, Cao Xiao, Jimeng Sun, and Fenglong Ma. 2024. Recent advances in predictive modeling with elec-tronic health records. In IJCAI , pages 8272–8280. ijcai.org. Zixiang Wang, Yinghao Zhu, Huiya Zhao, Xiaochen Zheng, Dehao Sui, Tianlong Wang, Wen Tang, Yasha Wang, Ewen Harrison, Chengwei Pan, Junyi Gao, and Liantao Ma. 2025. Colacare: Enhancing electronic health record modeling through large lan-guage model-driven multi-agent collaboration. In 
+
+Proceedings of the ACM on Web Conference 2025 ,WWW ’25, page 22502261, New York, NY, USA. Association for Computing Machinery. Michael Wornow, Suhana Bedi, Miguel Angel Fuentes Hernandez, Ethan Steinberg, Jason Alan Fries, Christopher Ré, Sanmi Koyejo, and Nigam Shah. 2025. Context clues: Evaluating long context mod-els for clinical prediction tasks on EHR data. In 
+
+International Conference on Learning Representa-tions . OpenReview.net. Jiabao Xu, Xuefeng Xi, Jie Chen, Victor S Sheng, Jiem-ing Ma, and Zhiming Cui. 2022. A survey of deep learning for electronic health records. Applied Sci-ences , 12(22):11709. Hao Yan, Chaozhuo Li, Ruosong Long, Chao Yan, Jianan Zhao, Wenwen Zhuang, Jun Yin, Peiyan Zhang, Weihao Han, Hao Sun, Weiwei Deng, Qi Zhang, Lichao Sun, Xing Xie, and Senzhang 
+
+11 Wang. 2023. A comprehensive study on text-attributed graphs: Benchmarking and rethinking. In 
+
+NeurIPS .Chaoqi Yang, Cao Xiao, Lucas Glass, and Jimeng Sun. 2021a. Change matters: Medication change pre-diction with recurrent residual networks. In Pro-ceedings of the Thirtieth International Joint Con-ference on Artificial Intelligence, IJCAI-21 , pages 3728–3734. International Joint Conferences on Ar-tificial Intelligence Organization. Main Track. Chaoqi Yang, Cao Xiao, Fenglong Ma, Lucas Glass, and Jimeng Sun. 2021b. Safedrug: Dual molecular graph encoders for recommending effective and safe drug combinations. In Proceedings of the Thirti-eth International Joint Conference on Artificial Intel-ligence, IJCAI-21 , pages 3735–3741. International Joint Conferences on Artificial Intelligence Organi-zation. Main Track. Nianzu Yang, Kaipeng Zeng, Qitian Wu, and Junchi Yan. 2023. Molerec: Combinatorial drug recom-mendation with substructure-aware molecular repre-sentation learning. In Proceedings of the ACM web conference 2023 , pages 4075–4085. Rex Ying, Dylan Bourgeois, Jiaxuan You, Marinka Zit-nik, and Jure Leskovec. 2019. Gnnexplainer: gen-erating explanations for graph neural networks. In 
+
+Proceedings of the 33rd International Conference on Neural Information Processing Systems , pages 3594–3603, Red Hook, NY, USA. Curran Asso-ciates Inc. Hao Yuan, Haiyang Yu, Jie Wang, Kang Li, and Shui-wang Ji. 2021. On explainability of graph neural networks via subgraph explorations. In Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 12241–12252. PMLR. Chaohe Zhang, Xin Gao, Liantao Ma, Yasha Wang, Jiangtao Wang, and Wen Tang. 2021. Grasp: generic framework for health status representation learning based on incorporating knowledge from similar patients. In Proceedings of the AAAI con-ference on artificial intelligence , volume 35, pages 715–723. Zihan Zhang, Hongzhi Liu, Xiaoshuang Guo, Tianqi Sun, and Zhonghai Wu. 2026. Knowledge-enhanced explainable HyperGraph convolution network for medication recommendation. Proc. Conf. AAAI Ar-tif. Intell. , 40(19):16424–16432. Chuang Zhao, Hui Tang, Jiheng Zhang, and Xiaomeng Li. 2025. Unveiling discrete clues: Superior health-care predictions for rare diseases. In Proceedings of the ACM on Web Conference 2025 , WWW ’25, page 17471758, New York, NY, USA. Association for Computing Machinery. Jianan Zhao, Meng Qu, Chaozhuo Li, Hao Yan, Qian Liu, Rui Li, Xing Xie, and Jian Tang. 2023. Learn-ing on large-scale text-attributed graphs via varia-tional inference. In International Conference on Learning Representations . OpenReview.net. 
+
+12 A Detailed Mathematical Derivations 
+
+A.1 Derivation of Variational EM Algorithm 
+
+We define the ELBO objective of the VI as 
+
+L(θ) := Eqθ (y|x)
+
+[
+
+log pϕ(x, y ) − log qθ(y | x)
+
+]
+
+.
+
+For the variational distribution qθ(y | x), we adopt the mean-field assumption by factorizing latent variable z independently: 
+
+qθ(y | x) = 
+
+> N
+
+∏
+
+> n=1
+
+qθ(yn | xn).
+
+Formally, maximizing the ELBO with respect to the variational distribution qθ(y | x) is equivalent to minimizing the KL divergence between the pos-terior distribution and the variational distribution. The KL divergence is defined as 
+
+KL 
+
+[
+
+qθ(y | x)|| pϕ(y | x)
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log qθ(y | x) − log pϕ(y | x)
+
+]
+
+= ∑
+
+> y
+
+qθ(y | x) log qθ(y | x)
+
+pϕ(y | x) .
+
+Therefore, in the E-step, we update the variational distribution qθ(y | x) (i.e., fine-tuning the LM) by minimizing KL 
+
+[
+
+qθ(y | x)|| pϕ(y | x)
+
+]
+
+. How-ever, this objective is typically intractable because it requires to compute the expectations under qθ(·)
+
+over all possible values. To address this, we use the wake-sleep algorithm (Hinton et al., 1995) to minimize the reverse KL divergence, where the sleep phase minimizes the KL divergence the wrong way round: 
+
+θ∗ := arg min  
+
+> θ
+
+KL 
+
+[
+
+pϕ(y | x)∥qθ(y | x)
+
+]
+
+= arg min  
+
+> θ
+
+Epϕ(y|x)
+
+[
+
+log pϕ(y | x)
+
+− log qθ(y | x)
+
+]
+
+= arg max  
+
+> θ
+
+Epϕ(y|x)
+
+[
+
+log qθ(y | x)
+
+]
+
++ const = arg max  
+
+> θ
+
+Epϕ(x,y )
+
+[
+
+log qθ(y | x)
+
+]
+
+,
+
+where const = Epϕ(y|x)
+
+[
+
+log pϕ(y | x)
+
+]
+
+does not depend on θ and is therefore omitted during opti-mization. 
+
+Lq = Epϕ(x,y )
+
+[
+
+log qθ(y | x)
+
+]
+
+= Epϕ(x,y )
+
+[ N∑
+
+> n
+
+log qθ(yn | xn)
+
+]
+
+= Epϕ(x,y )
+
+[ N∑
+
+> n
+
+log qθ(yn | on)
+
+]
+
+≈
+
+> N
+
+∑
+
+> n
+
+log qθ
+
+(yn | h(L) 
+
+> n
+
+(o, ¯ϕ)), (6) where h(L) 
+
+> n
+
+(o; ¯ϕ) denotes the deterministic GNN representation obtained from the LM embeddings 
+
+o under frozen GNN parameters ¯ϕ. Since the ex-pectation over pϕ(x, y ) is intractable, we estimate it with a single-sample Monte-Carlo sampling. In the E-step, LM first generates embeddings on,which are passed through the frozen GNN to ob-tain h(L) 
+
+> n
+
+. Because the GNN parameters are fixed, the loss is computed on h(L) 
+
+> n
+
+(o, ¯ϕ) in place of on.Gradients then backpropagate through the fixed GNN to on, updating only the LM parameters θ.Thus, optimizing Lq amounts to maximizing the label log-likelihood, which we approximate by re-placing the LM embedding on with the fixed GNN representation h(L) 
+
+> n
+
+(o, ¯ϕ).In the M-step, we then update the GNN model 
+
+pϕ(y | x) towards maximizing the following pseudo-likelihood: 
+
+Eqθ (y|x)
+
+[
+
+log p(x, y )
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log pϕ(y | x) + log p(x)
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log pϕ(y | x)
+
+]
+
++ const 
+
+≈ Eqθ (y|x)
+
+[ N∑
+
+> n
+
+log pϕ(yn | x, y N \ n)
+
+]
+
+(pseudolikelihood) = Eqθ (y|x)
+
+[ N∑
+
+> n
+
+log pϕ(yn | xn, y N \ n)
+
+]
+
+=
+
+> N
+
+∑
+
+> n=1
+
+log pϕ(yn | on, y N \ n)=
+
+> N
+
+∑
+
+> n=1
+
+log pϕ(yn | on, y NB( n)). (7) The details of equation estimated as pseudo like-lihood in that form is because that for pϕ(y |
+
+13 x), there exist node and edge potentials ψn(· |
+
+x), ψ nm (·, · | x) such that 
+
+pϕ(y | x) = 1
+
+Zϕ(x)
+
+> N
+
+∏
+
+> n=1
+
+ψn (yn | xd)
+
+× ∏
+
+> (n,m )∈E
+
+ψnm (yn, y m | xn) .
+
+We also define that for all the nodes x =(x1, . . . , x N ) with labels y = (y1, . . . , y N ) on a graph with neighbor sets NB( n), then by the graphical Markov property we have: 
+
+yn ⊥ yN \ ({n}∪ NB( n)) | (x, y NB( n)
+
+) , n = 1 , . . . , N. 
+
+Given the features x and the labels of n-th node’s neighbors yNB( n), the label yn is statistically inde-pendent of all other non-neighbor labels. Thus, we have: 
+
+pϕ(y | x) ≈
+
+> N
+
+∏
+
+> n=1
+
+pϕ
+
+(yn | xn, y N \ n
+
+)
+
+=
+
+> N
+
+∏
+
+> n=1
+
+pϕ
+
+(yn, y N \ n | xn
+
+)∑ 
+
+> n′
+
+pϕ
+
+(yn′ , y N \ n | xn
+
+)
+
+=                 
+
+> N∏
+> n=1
+> ψn(yn|xn)∏
+> m∈NB( n)
+> ψnm (yn, y m|xn)
+> ∑
+> n′
+> ψn(yn′|xn′)∏
+> m∈NB( n′)
+> ψnm (yn′, y m|xn′)
+
+=
+
+> N
+
+∏
+
+> n=1
+
+pϕ
+
+(yn | xn, y NB( n)
+
+) . (8) The first line follows from the definition of the pseudo-likelihood. The transition from the second line to the third line applies the definition of the full conditional in fractional form, where we can-cel the global normalizing constant Zϕ(x). The transition from the third line to the fourth line uses the Graphical Markov property. For the expectation Eqθ (y|x)[·], we approximate it using Monte-Carlo Sampling with a single sam-ple, replacing the discrete input xn with the LM-encoded embedding on. As a result, pϕ(yn |
+
+on, y N \ n) represents that GNN makes prediction given the LM-encoded embedding on and all sur-rounding nodes yN \ n. As a result, M-step will train a GNN using the following supervised objec-tive on the labelled nodes: 
+
+O(p) = 
+
+> V
+
+∑
+
+> n=1
+
+log p(yn | on, y N \ n). (9) 
+
+A.2 Optimal Mean-Field Variational Update Theorem 4.1 Given the fixed pϕ(yn | xn), the lo-cal optimum upate q∗ 
+
+> θ
+
+(yn | xn) satisfies: 
+
+log q∗ 
+
+> θ
+
+(yn | xn)= Eqθ (y|x)
+
+[
+
+log pϕ(yn | xn, y NB( n))
+
+]
+
+. (10) 
+
+Proof The goal of E-step is to optimize qθ(y | x)
+
+by minimizing KL [qθ(y | x)|| pϕ(y | x)]. There-fore, the objective function for qθ(y | x) could be formulated as follows: 
+
+L(qθ(yn | xn)) = −KL 
+
+[
+
+qθ(y | x)∥pϕ(y | x)
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log pϕ(y | x) − log qθ(y | x)
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log pϕ(y | x)
+
+−
+
+> N
+
+∑
+
+> n′=1
+
+log qθ(yn′ | xn′ )
+
+]
+
+= Eqθ (y|x)
+
+[
+
+log pϕ(y | x)
+
+−
+
+> N
+
+∑ 
+
+> n′̸=n
+
+log qθ(yn′ | xn′ )
+
+− log qθ(yn | xn)
+
+]
+
+= Eqθ (y|x)
+
+[ log pϕ(y | x)
+
+− log qθ(yn | xn)
+
+]
+
++ const = Eqθ (y|x)
+
+[
+
+log pϕ(yn | x, y N \ n)+ log pϕ(yN \ n | x)
+
+− log qθ(yn | xn)
+
+]
+
++ const = Eqθ (y|x)
+
+[
+
+log pϕ(yn | x, y N \ n)
+
+− log qθ(yn | xn)
+
+]
+
++ const = Eqθ (y|x)
+
+[
+
+log pϕ(yn | xn, y NB( n))
+
+− log qθ(yn | xn)
+
+]
+
++ const = −KL [qθ(yn | xn)∥pϕ(yn | xn, y NB( n))]
+
++ const . (11) In GNNs, we leverage the Markov property that node n is conditionally independent of all non-neighbors given its neighbors, reducing yN \ n to 
+
+yNB( n).As a result, the objective O(qθ(yn, | xn)) be-comes the is the KL divergence between qθ(yn |
+
+14 xn) and pϕ(yn | xn, y NB( n)). The local opti-mum satisfies q∗ 
+
+> θ
+
+(yn | xn) ∝ Eqθ (y|x)
+
+[
+
+pϕ(yn |
+
+xn, y NB( n))
+
+]
+
+. With Monte Carlo sampling, this local optimum becomes q∗ 
+
+> θ
+
+(yn | xn) ∝ pϕ(yn |
+
+on, y NB( n)), where on is the LMencoded embed-ding for node n. This indicates that optimal LM learning corresponds to using the GNNs predic-tions for yn based on LMencoded embeddings on
+
+and neighbor labels yNB( n), integrating local tex-tual information and global patient relationships into clinical prediction. 
+
+A.3 Comparison with Classical EM and GLEM Under Full Supervision 
+
+The classical EM algorithm maximizes an observed-data likelihood by introducing an as-sociated complete-data model. In the classical EM formulation (Dempster et al., 1977), the ob-served data are fixed, whereas the complete data include components that are not directly observed. The E-step computes the conditional expectation of the complete-data log-likelihood given the ob-served data and the current parameter estimate, and the M-step maximizes this expected complete-data log-likelihood. Thus, classical EM is tied to an observed-data likelihood and a particular complete-data augmentation. Our proposed VEM algorithm is related to this EM algorithm only at the level of its alternat-ing inference-prediction structure. It is not an incomplete-label EM algorithm in the classical sense: all training labels are observed, and we do not impute missing labels or recover unobserved components of the training data. Instead, PLM in-troduces an auxiliary predictive distribution to cou-ple an LM-based semantic encoder with a GNN-based structured predictor. This distinction is im-portant because the variational object in PLM is not a posterior distribution over missing ground-truth labels. 
+
+Degeneracy of GLEM under full supervision. 
+
+GLEM is formulated for semi-supervised node classification on text-attributed graphs. Let V =
+
+L ∪ U denote the set of all nodes, where L is the labelled set and U is the unlabelled set. The ob-served quantities are the node texts or semantic features sV , the graph structure A, and the labels 
+
+yL of the labelled nodes. The labels yU of the un-labelled nodes are treated as latent variables. Ageneric GLEM-style semi-supervised variational objective can be written as 
+
+LGLEM (θ, ϕ )= Eqθ (yU |sU )
+
+[
+
+log pϕ(yL, y U | sV , A )
+
+− log qθ(yU | sU )
+
+]
+
+,
+
+where qθ(yU | sU ) is the LM-induced varia-tional distribution over the missing labels and 
+
+pϕ(yL, y U | sV , A ) is the GNN-induced graph-structured predictive model. 
+
+Proposition A.1 (Collapse of GLEM’s missing-la-bel variational objective) . Suppose all nodes are labelled, so that U = ∅ and L = V . Then the GLEM-style variational objective reduces to 
+
+LGLEM (θ, ϕ ) = log pϕ(yV | sV , A ).
+
+Consequently, the variational distribution over missing labels (i.e., latent variables) disappears, and the objective contains no nontrivial missing-label inference problem. Proof. If all nodes are labelled, then U = ∅ and hence yU = ∅. The variational distribution over the empty label vector is the degenerate distribu-tion 
+
+qθ(yU | sU ) = qθ(∅ | s∅) = 1 .
+
+Therefore, 
+
+−Eqθ (yU |sU ) log qθ(yU | sU ) = − log 1 = 0 .
+
+Moreover, the expectation with respect to qθ(yU |
+
+sU ) is an expectation over a point mass, so 
+
+Eqθ (yU |sU ) [log pϕ(yL, y U | sV , A )] = log pϕ(yL | sV , A ).
+
+Since L = V , this becomes 
+
+LGLEM (θ, ϕ ) = log pϕ(yV | sV , A ).
+
+Thus, the missing-label latent-variable component of the GLEM objective vanishes under full super-vision. Proposition A.1 shows that the variational in-terpretation of GLEM relies on the existence of unlabelled-node labels. When U = ∅, the latent space is 
+
+Y|U | = Y0 = {∅} ,
+
+a singleton. Hence, there is no nontrivial E-step left for inferring missing labels. Any remain-ing alternating update is then an implementation choice for training LM and GNN components, rather than a non-degenerate missing-label varia-tional EM procedure. 15 Non-degeneracy of PLM under full supervi-sion. PLM differs from GLEM in the role of the variational distribution. In supervised prediction, PLM treats all ground-truth labels as latent vari-ables, while the latent variables in GLEM are van-ished. We denote the ground-truth labels by 
+
+ygt = ( ygt 1 , . . . , y gt  
+
+> N
+
+).
+
+These labels enter the supervised losses. Sepa-rately, PLM introduces an auxiliary predictive la-bel vector 
+
+˜y = (˜ y1, . . . , ˜yN ),
+
+which is used only to couple the LM and GNN components. The LM parameterizes a factorized auxiliary predictive distribution 
+
+qθ(˜ y | x) = 
+
+> N
+
+∏
+
+> n=1
+
+qθ(˜ yn | xn),
+
+where x = {xn}Nn=1 denotes the patient sequences. The GNN parameterizes a graph-structured predic-tive distribution 
+
+pϕ(˜ y | x, A ),
+
+where A is the patient graph. A supervised PLM objective may be written schematically as 
+
+JPLM (θ, ϕ )= LLM sup (θ; ygt ) + LGNN sup (ϕ; ygt )+ γ Lcoup (θ, ϕ ),
+
+where γ ≥ 0 controls the strength of the LM– GNN coupling. The coupling term is 
+
+Lcoup (θ, ϕ )= Eqθ (˜ y|x) [log pϕ(˜ y | x, A ) − log qθ(˜ y | x)] .
+
+Thus, ygt denotes the ground-truth labels, while 
+
+˜y denotes auxiliary predictive labels used for vari-ational coupling. The latter should not be inter-preted as missing ground-truth. When exact maximization of the graph-structured likelihood is intractable, PLM may replace the graph likelihood with a pseudo-likelihood approximation, leading to 
+
+LPLM coup (θ, ϕ )= Eqθ (˜ y|x)
+
+[ N∑
+
+> n=1
+
+log pϕ
+
+(˜yn | xn, ˜yN (n), A )
+
+−
+
+> N
+
+∑
+
+> n=1
+
+log qθ(˜ yn | xn)
+
+]
+
+,
+
+where N (n) denotes the neighbours of node n in the patient graph. 
+
+Proposition A.2 (Non-collapse of the PLM auxil-iary variational space) . Assume that qθ(˜ y | x) is an auxiliary predictive distribution used to couple the LM and GNN components, rather than a pos-terior distribution over unobserved ground-truth labels. Then full supervision alone does not make the PLM variational space collapse. In particular, the PLM coupling objective reduces to ordinary supervised likelihood only if qθ(˜ y | x) is addition-ally constrained to be a point mass at the observed labels. Proof. In GLEM, the variational distribution is de-fined only over the missing labels yU of unlabelled nodes. Thus, when U = ∅, the variational space collapses to a singleton. In PLM, by contrast, PLM defines auxiliary predictive distribution over 
+
+˜y = (˜ y1, . . . , ˜yN ) ∈ Y N .
+
+This space remains nontrivial whenever N > 0
+
+and |Y| > 1. The fact that the ground-truth labels 
+
+yobs are observed does not by itself imply that the auxiliary predictive distribution qθ(˜ y | x) is degen-erate. Consequently, the entropy term 
+
+−Eqθ (˜ y|x) log qθ(˜ y | x)
+
+is generally nonzero, and the coupling term 
+
+Eqθ (˜ y|x) log pϕ(˜ y | x, A )
+
+continues to depend jointly on the LM-induced predictive distribution and the GNN-induced struc-tured predictive distribution. Hence, PLM’s ob-jective contains a nontrivial LM-GNN alignment term even under full supervision. Only under the additional degenerate constraint 
+
+qθ(˜ y | x) = δygt (˜ y)
+
+does the coupling expectation collapse to 
+
+Lcoup (θ, ϕ ) = log pϕ(ygt | x, A ),
+
+up to the zero entropy of the point mass. Therefore, PLM reduces to an ordinary supervised graph-predictive likelihood only after imposing this ad-ditional degeneracy condition on the auxiliary pre-dictive distribution, not merely because all labels are observed. 16 The distinction can therefore be summarized as follows. In GLEM, the variational space is Y|U |,which collapses to the singleton {∅} under full su-pervision. In PLM, the auxiliary predictive space is YN , which remains nontrivial under full supervi-sion. Thus, full supervision removes the missing-label latent variables in GLEM, but it does not re-move the auxiliary predictive distribution used by PLM to align the LM and GNN. Accordingly, PLM should be viewed as a super-vised VEM-inspired coupling framework rather than as a classical incomplete-data EM algorithm. Its novelty is not the use of EM itself, but the con-struction of a supervised variational coupling ob-jective that remains meaningful when all training labels are observed. 
+
+B Details of Patients-Like-Me 
+
+B.1 Prompt Template 
+
+# Prompt Template for Readmis-sion Prediction 
+
+Demographics: Insurance: <INSURANCE> ;Language: <LANGUAGE> ;Religion: <RELIGION> ; Marital status: 
+
+<MARITAL_STATUS> ; Ethnicity: 
+
+<ETHNICITY> .The patient has <VISIT_NUM> ICU visits. In visit 1, diagnoses: <DIAG_NAME> , . . . ; procedures: <PROC_NAME> , . . . ; medications: <MED_NAME> , . . . . . . . Current visit: diagnoses: <DIAG_NAME> ,. . . ; procedures: <PROC_NAME> ,medications: <MED_NAME> . . . . 
+
+Task: Predict whether the patient will be readmitted within 15 days after the current visit. Choose exactly one class from {0,1}, where 0 = no readmission within 15 days and 1 = readmission within 15 days. 
+
+Output format: A single class label in {0,1}. 
+
+# Prompt Template for Length-of-Stay Prediction 
+
+Demographics: Insurance: <INSURANCE> ;Language: <LANGUAGE> ;Religion: <RELIGION> ; Marital status: 
+
+<MARITAL_STATUS> ; Ethnicity: 
+
+<ETHNICITY> .The patient has <VISIT_NUM> ICU visits. In visit 1, diagnoses: <DIAG_NAME> , . . . ; procedures: <PROC_NAME> , . . . ; medications: <MED_NAME> , . . . . . . . Current visit: diagnoses: <DIAG_NAME> ,. . . ; procedures: <PROC_NAME> , . . . ; medications: <MED_NAME> , . . . . 
+
+Task: Predict the ICU length-of-stay (LOS) category for the current visit. Choose exactly one class from {0,1,2,3,4,5,6,7,8,9}, where: 0: LOS < 1 day; 1: LOS = 1 day; 2: LOS = 2 days; 3: LOS = 3 days; 4: LOS = 4 days; 5: LOS = 5 days; 6: LOS = 6 days; 7: LOS = 7 days; 8: LOS = 8-14 days; 9: LOS ≥ 15 days. 
+
+Output format: A single class label in {0,1,2,3,4,5,6,7,8,9}. 17 Table 3: Comparison between Patients-like-me and GLEM. 
+
+Aspect Patients-like-me GLEM Objective Supervised prediction of all labels y Semi-supervised completion of miss-ing labels yU
+
+Observed variables Sequences x Node text features sV and labels on labeled nodes yL
+
+Latent variables Labels y Missing labels yU
+
+ELBO Eqθ (y|x)
+
+[ log pϕ(x, y ) − log qθ(y | x)] Eqθ (yU |sU )
+
+[ log pϕ(yL, y U | sV ) −
+
+log qθ(yU | sU )]
+
+E-step Generate patient embedding via LM 
+
+qθ(y | x) guided by graph structural Fit LM qθ(yU | sU ) given GNN-imputed missing labels M-step Predict targets via GNN pϕ(y | x) us-ing LM embeddings Fit GNN pϕ using LM-imputed miss-ing labels Under full supervi-sion EM maintained via latent targets y EM collapse to joint training due to empty latent variables 
+
+# Prompt Template for Drug Rec-ommendation 
+
+Demographics: Insurance: <INSURANCE> ;Language: <LANGUAGE> ;Religion: <RELIGION> ; Marital status: 
+
+<MARITAL_STATUS> ; Ethnicity: 
+
+<ETHNICITY> .The patient has <VISIT_NUM> ICU visits. In visit 1, diagnoses: <DIAG_NAME> , . . . ; procedures: <PROC_NAME> , . . . ; medications: <MED_NAME> , . . . . . . . Current visit: diagnoses: <DIAG_NAME> ,. . . ; procedures: <PROC_NAME> , . . . . 
+
+Task: Predict the medications to prescribe for the current visit. Output a multi-label set of 3-level ATC codes . Choose any number of codes from the medication vocabulary. Note that a patient may have multiple medications. 
+
+Output format: A multi-label set of ATC level-3 codes. 
+
+C Additional Experimental Details 
+
+C.1 Datasets and Cohort Statistics 
+
+We used two large-scale, de-identified EHR datasets MIMIC-III and MIMIC-IV from Beth Israel Deaconess Medical Center (BIDMC), re-leased via PhysioNet under a credentialed data use agreement (Johnson et al., 2016, 2023). Both datasets contain inpatient EHR records, including diagnoses, procedures, medication prescriptions, and admission/discharge timestamps. Patient iden-tifiers are removed and all timestamps are shifted by a patient-specific offset. This preserves relative temporal ordering within each patient sequence while preventing alignment of absolute calendar time across patients. We construct visit-based pa-tient sequences by treating each inpatient admis-sion as a visit. Table 4 summarizes the basic co-hort statistics after preprocessing. 
+
+C.2 Preprocessing and Concept Normalization 
+
+We applied the same preprocessing pipeline to both MIMIC-III and MIMIC-IV, including cohort selection, code normalization, and data splitting, to obtain consistent visit-based patient EHR se-quences (Jiang et al., 2024). We used the same normalization procedure across datasets to ensure a fair comparison. 
+
+Cohort construction and splitting. We treat each inpatient admission as a visit and represent each patient record as an ordered sequence of vis-its. We perform patient-level train/validation/test splits so that all visits from the same patient ap-18 Table 4: Basic statistics of the preprocessed MIMIC-III and MIMIC-IV datasets. “#” denotes counts and “/patient” denotes the average number of records per-patient.                   
+
+> Dataset #patients #visits #visits/patient #conditions/patient #procedures/patient #drugs/patient MIMIC-III 35,707 44,399 1.24 12.89 4.54 33.71 MIMIC-IV 123,488 232,263 1.88 21.74 4.70 43.89
+
+pear in only one split, avoiding information leak-age across splits. We randomly divide the dataset into training, validation and test sets in a 60%: 20%: 20% ratio. After splitting patients, we inde-pendently construct Gtrain , Gval , and Gtest using patients within each split. 
+
+Diagnosis and procedure codes. For each visit, we extract diagnoses and procedures from the cor-responding MIMIC tables and represent them as unordered sets of codes. We retain the original ICD coding systems (ICD-9-CM and ICD-10-CM for diagnoses; ICD-9 and ICD-10-PCS for pro-cedures) and preserve the recorded ICD version to avoid conflating codes across systems. We map ICD-9/10 diagnosis and procedure codes to CCS categories, and de-duplicate repeated codes within each visit. Specifically, 11,736 ICD-9-CM and 72,446 ICD-10-CM diagnosis codes are mapped to 285 CCS condition categories, while 4,670 ICD-9-PROC and 79,758 ICD-10-PCS pro-cedure codes are mapped to 231 CCS procedure categories, yielding 285 condition and 231 proce-dure concepts in total. 
+
+Medication mapping and normalization. 
+
+Medications are extracted from the prescriptions tables, where drugs are originally recorded as National Drug Codes (NDC). Following GraphCare (Jiang et al., 2024), we standardize medications using a two-stage mapping pipeline: 
+
+NDC → RxNorm (RxCUI) → ATC . We keep 
+
+ATC level-3 codes to preserve fine-grained medi-cation semantics. Unmappable NDC entries (e.g., non-drug supplies, institution-specific packaging codes, or missing references) are excluded from the medication representation. This yields 269 unique drugs represented as ATC level-3 codes. 
+
+Visit-level feature construction. Each visit xi
+
+is represented by three unordered sets: diagno-sis codes, procedure codes, and mapped ATC-3 medication codes. These per-visit sets are then composed into a visit-based patient history 
+
+{x1, . . . , x t} by admission time. Basic cohort statistics after preprocessing are reported in Ap-pendix C.1. 
+
+Task instance generation. Given a patient se-quence {x1, . . . , x t}, we generate training in-stances from visit prefixes (x1: i) and apply super-vision on the subsequent visit, consistent with the task definitions in Appendix C.3. For each task in-stance, to avoid future information leakage, graph edges are computed using only diagnosis codes available within the corresponding input prefix. 
+
+C.3 Task Definitions and Metric Computation 
+
+We follow the task formulation and evalu-ation protocol as prior work (Jiang et al., 2024). Given a multi-visit patient sequence 
+
+{x1, . . . , x t}, we treat each visit xi as the current visit and construct a multi-visit inputs 
+
+{(x1), (x1, x 2), . . . , (x1, . . . , x t)} for prediction. Unless otherwise stated, we report the average metrics and standard deviation over 10 indepen-dent runs, as shown in Table 1. 
+
+Readmission prediction. For each visit xi with 
+
+i ≤ t − 1, τ (xi) denote the admission time of visit xi (in the de-identified timeline, preserving within-patient time intervals). For multi-visit pa-tient sequence (x1: i) with i ≤ t − 1, we define the readmission label as 
+
+yREADM  
+
+> i
+
+= I [τ (xi+1 ) − τ (xi) ≤ σ] , (12) where we set σ = 15 days in our experiments, and the label indicates whether a subsequent visit oc-curs within the readmission window. We evaluate readmission using AUPRC and AUROC on both MIMIC-III and MIMIC-IV datasets. 
+
+LOS prediction. LOS prediction is formulated as a C-category classification problem with C =10 classes, corresponding to stays of < 1 day (0), 
+
+1-7 days (1-7), 8-14 days (8), and ≥ 15 days (9). For each visit xi, the goal is to predict the LOS category of the current visit xi. We report AUPRC and (macro-)F1 scores on both MIMIC-III and MIMIC-IV datasets. 19 Drug recommendation. Drug recommendation is formulated as a multi-label classification task. Let VDRUG denote the medication vocabulary and 
+
+Si ⊆ V DRUG denote the medication set prescribed at the current visit xi. The target is represented as a multi-hot vector yDRUG  
+
+> i
+
+∈ { 0, 1}|V DRUG |. For the cur-rent visit xi, the model input consists of all EHR codes from prior visits {x1, . . . , x i−1}, including their diagnosis, procedure, and medication codes, together with the diagnosis and procedure codes observed at the current visit xi.The medication set prescribed at the current visit, denoted by Si, are excluded from the input and serve as the predic-tion target. We report AUPRC, F1, and Jaccard on both datasets. For F1 and Jaccard, we convert predicted probabilities to a binary set using a fixed threshold of 0.2. Jaccard is computed per instance as |Si∩ ˆSi||Si∪ ˆSi| and averaged over the test set. 
+
+Training objectives. We use binary cross-entropy (BCE) with sigmoid for readmission and drug recommendation, and cross-entropy (CE) with softmax for the multi-class LOS task. 
+
+C.4 Baselines and Reproducibility Notes 
+
+We describe the baseline implementations and the evaluation protocol used to ensure fair compari-son. 
+
+Baselines. We compare against representa-tive patient-level sequence models, namely Deepr (Nguyen et al., 2017), RETAIN (Choi et al., 2016b), GRAM (Choi et al., 2017), Sta-geNet (Gao et al., 2020),AdaCare (Ma et al., 2020), and GRASP (Zhang et al., 2021). We further compare with LM-graph models that incorporate external medical knowledge or graph, including G-BERT (Shang et al., 2019a), LEADER (Liu et al., 2024), GLEM (Zhao et al., 2023), GraphCare (Jiang et al., 2024), KARE (Jiang et al., 2025), ColaCare(Wang et al., 2025). For drug recommendation, we also include task-specific models SafeDrug (Yang et al., 2021b), MICRON (Yang et al., 2021a), GAMENet (Shang et al., 2019b), MoleRec (Yang et al., 2023), and UDC (Zhao et al., 2025). 
+
+Implementation sources and training protocol. 
+
+Where official implementations are available, we follow the authors’ released code and default settings. Otherwise, we re-implement baselines based on the original papers. All methods are trained and evaluated under the same preprocess-ing pipeline, patient-level data split, and task in-stance construction (Appendix C.2-C.3). Hyper-parameters for each baseline are tuned on the val-idation set and the selected configuration is used for final testing. Unless stated otherwise, we use early stopping based on the validation metric cor-responding to each task and report results over multiple runs (Table 1). 
+
+Input alignment across methods. For sequence-based baselines such as Deepr, RE-TAIN, GRAM, and StageNet, each visit is represented with the same set-valued clinical concepts used by our method, and visits are ordered chronologically. LM/graph-enhanced baselines such as G-BERT, LEADER, GLEM, and GraphCare are evaluated using the same normalized concept vocabularies and the same patient-level split to ensure comparability. 
+
+Applicability constraints. AdaCare and GRASP are designed for binary clinical classifi-cation and do not directly apply to the multi-class LOS or multi-label drug recommendation settings under our formulation; therefore, we report their results only on the readmission task, consistent with Table 1. 
+
+Drug-specific knowledge. For drug recommen-dation baselines that rely on drug-drug interaction (DDI) knowledge (e.g., SafeDrug and GAMENet), we follow the original papers and corresponding implementations to construct the required drug graphs/knowledge, while keeping the same ATC-level medication normalization used in our prepro-cessing (Appendix C.2). All methods are evalu-ated on the same target medication space. 
+
+Reproducibility. We fix random seeds for each run and report mean and standard deviation across 10 runs. Complete hyperparameters, training bud-gets, and hardware details are provided in Ap-pendix C.5. 
+
+C.5 Implementation Details and Hyperparameters 
+
+This section summarizes model configurations, op-timization settings, and reproducibility details. 
+
+Backbone language models. We instantiate our framework with two biomedical language mod-els: (i) an encoder-only BioBERT-large model 20 (biobert-large-cased-v1.1 ) and (ii) a decoder-only BioMistral model. For BioBERT-large, we fine-tune the last six Transformer layers together with a task-specific prediction head, while freezing all earlier layers. For BioMis-tral, we extract sequence-level representations us-ing LLM2Vec (BehnamGhader et al., 2024) and fine-tune the model via parameter-efficient LoRA adapters, freezing all non-adapted parameters. 
+
+LLM2Vec configuration. We follow the stan-dard LLM2Vec setup to obtain fixed-length se-quence embeddings from the decoder-only back-bone. Specifically, we use the last-layer hidden states and apply mean pooling over the token di-mension, followed by a linear projection to match the hidden dimension of the downstream graph model. This configuration is shared across all tasks and datasets. 
+
+LoRA configuration (BioMistral). LoRA adapters are applied to the attention projection layers of BioMistral. Unless otherwise stated, we use a uniform configuration across tasks: rank r = 8 , scaling factor α = 16 , and LoRA dropout 0.1. Adapters are inserted into the 
+
+{q_proj, k _proj, v _proj, o _proj } modules of each attention block. 
+
+GNN. We use a standard three-layer GCN with a hidden dimension of 128 and ReLU activation, followed by a softmax classifier (Kipf and Welling, 2017b). The GCN layer updates node representa-tions based on a weighted patient graph with adja-cency A, where Aij ≥ 0 encodes patient similar-ity: 
+
+H(ℓ+1) = σ
+
+( ˜D− 12 ˜A ˜D− 12 H(ℓ)W (ℓ))
+
+,
+
+˜A = A + I, 
+
+(13) where ˜D is the degree matrix of ˜A. Equivalently, for node i (ignoring σ), 
+
+h(ℓ+1)  
+
+> i
+
+= ∑ 
+
+> j∈N (i)∪{ i}
+
+˜Aij 
+
+√ ˜di ˜dj
+
+h(ℓ) 
+
+> j
+
+W (ℓ). (14) This formulation naturally supports weighted pa-tient graphs: the edge weight Aij enters directly through ˜Aij and modulates the strength of mes-sage passing between patients. Since the LM produces higher-dimensional em-beddings (e.g., 768 for BioBERT and 4096 for BioMistral), we use an MLP projection to map them to 128 as the GCN input. 
+
+Optimization and training. All models are op-timized using AdamW. We use separate learning rates for the language model and the graph/predic-tion components: ηLM = 1 × 10 −5 and ηGNN =1×10 −3. Weight decay is set to 1×10 −2. We train with batch size 32 and use gradient accumulation of 2 steps when necessary. The maximum input se-quence length is capped at 512 tokens. We adopt a linear learning-rate scheduler with a warmup ratio of 10% of the total training steps. Early stopping is applied based on the primary validation metric of each task with a patience of 5 epochs. 
+
+Training budget and hardware. All experi-ments are conducted on NVIDIA Dgx Spark GPU with 128GB of memory. We train models for up to 
+
+10 epochs with early stopping. Mixed-precision training (FP16) is used to improve training effi-ciency. 
+
+Random seeds and reporting. We use 10 ran-dom seeds for 10 runs, with one seed assigned to each run. The same seeds are used across all meth-ods and baselines, and we report the mean and standard deviation over the 10 runs. 
+
+C.6 Details of the Weighted Patient Graph 
+
+We provide additional details on the construction of the weighted patient graph. Following prior work (Lu and Uddin, 2021), we first represent the cohort as a bipartite graph between patients and di-agnosis codes. A bipartite graph is a special class of graph consisting of two disjoint sets of vertices. In this study, we use an undirected bipartite graph to represent relationships between patients and dis-eases. Here, we project the bipartite graph into the patient side, to construct a weighted patient net-work: two patients are connected if they share at least one diagnosed disease, and the edge weight equals the number of diseases they have in com-mon (i.e., their number of shared neighbors). To avoid counting repeated occurrences, we compute edge weights using unique diagnosis codes per pa-tient. As illustrated in Fig. 1b, patients 1 and 2
+
+have one EHR code, resulting in a weight of 1 be-tween them; patients 3 and 4 have a weight of 2 due to two shared EHR codes. In the projected graph, each patient node retains its original prop-erties, and two patients are connected if they share at least one neighbor (i.e., a diagnosis code) in the original bipartite graph. Prior studies suggest that diseases that co-occur can reflect shared bi-ological mechanisms (e.g., via diseasegene inter-21 Figure 4: Edge-weight distributions in the weighted pa-tient graphs for the training cohort (6,000 patients) and test cohort (2,000 patients). Edge weights are defined as the number of shared diagnosis codes between two patients and are binned as 1-10 and 10+. The two co-horts exhibit highly similar distributions with Jensen-Shannon Divergence of 0.0097 and Total Variation Dis-tance of 0.0052, suggesting minimal practical distribu-tion shift. 
+
+actions) and that patients with the same chronic conditions often share common risk factors (e.g., smoking history, obesity, and insufficient physi-cal activity) (Lu and Uddin, 2021). Motivated by these observations, we use the weighted patient network to capture latent patientpatient relation-ships induced by shared clinical profiles. We deliberately construct the patient graph from diagnosis overlap only. This design is leakage-safe across our tasks: incorporating current-visit medications would directly leak targets for drug recommendation, while incorporating procedures or other current-visit signals could partially reveal the LOS target. We therefore use diagnosis over-lap as a simple, task-agnostic cohort prior that re-mains compatible with all three prediction settings. Richer graph signals, such as temporality, disease severity, or demographics, may further improve graph quality, but they are not straightforward to use with the MIMIC datasets. Fig. 4 shows the edge-weight distributions of the weighted patient graphs constructed from 6,000 training patients and 2,000 test patients sam-pled from MIMIC-III. The histogram is heavily skewed toward small weights (primarily 13 shared diagnosis codes), and the frequency drops rapidly as the weight increases. This long-tailed pattern in-dicates a sparse graph in which most patient pairs are only weakly connected, with a small minority exhibiting strong similarity through many shared diagnoses.We compare the edge-weight distribu-tions of the training and test patient graphs using a G-test on binned weights. The distributions are highly similar, with JensenShannon Divergence of 0.0097 and Total Variation Distance of 0.0052, in-dicating minimal distribution shift. This indicates similar graph sparsity and edge-weight patterns across the training and test cohorts. To keep the resulting patient graph sparse, we further sparsify the projected graph by retaining an edge only when its weight exceeds a minimum threshold, i.e., Aij ≥ τ . Based on the distribu-tion in Fig. 4, we set τ = 8 to filter out the large number of weak connections. This choice yields a substantially sparser patient graph, with an av-erage node degree on the order of ∼8 in the sam-pled cohort, while preserving clinically meaning-ful links among genuinely similar patients. The training, validation, and test graphs are con-structed independently. The model is trained only on Gtrain . During testing, all test patients are en-coded by the fixed LM and jointly processed by the fixed GNN on Gtest . Test–test edges there-fore enable representation-level message passing, while test labels are never used during inference. 
+
+C.7 Additional Details on Interpretability Analysis 
+
+Figure 5 contrasts two explanations for the same target patient 57139 in the insulin drug recommen-dation task. We visualize an ego-network compris-ing the target node and its 10 reference patients re-trieved by Patients-like-me. Each reference node is labeled with its importance score (Imp). The higher Imp is encoded by a shorter edge length (closer to the target) and a darker blue node color, enabling qualitative comparison across references. In panel (a), the target patient is placed at the center and the 10 reference patients are arranged around it for clarity. Each reference node is an-notated with an importance score that quantifies its influence on the target prediction. To improve interpretability, we additionally annotate a the patient-level clinical evidence using CCS codes: (i) direct diabetes CCS evidence that is strongly associated with insulin use (e.g., 50: Diabetes mellitus with complications ), and (ii) indi-rectly related CCS categories capturing endocrine conditions or diabetes-related complications (e.g., chronic kidney disease). These annotations are ex-tracted from the mapped CCS codes in each pa-tients structured record and shown near each ref-erence node. Panel (b) provides a structural base-line explanation derived from the weighted patient graph used by our model. We use the same target patient and the same set of 10 reference patients, but replace the Patients-like-me importance score 22 a. Importance score from Patients-like-me b. Edge weight from weighted patient graph Figure 5: Comparison of two explanation signals for the same target patient ( 57139 ). (a) Patients-like-me ranks reference patients and assigns a patient-level importance score (Imp) indicating each reference patient’s contribu-tion to the target prediction. (b) Baseline visualization using the weighted patient graph, where the edge weight 
+
+Aij equals the number of shared diagnosis codes between the target patient and each reference patient. 
+
+with the edge weight Aij between patients i and 
+
+j. We visualize the same ego graph, encoding the edge weight Aij by edge length (larger Aij yields a shorter edge, indicating stronger structural prox-imity), and using node color to reflect the same weight for consistency. This structural baseline reflects a common assumption in cohort graphs: patients are considered more related if they share more structured codes. In panel (a), Patients-like-me assigns the high-est importance to patient 305 with an importance score 0.41, which is clinically aligned with the presence of direct diabetes CCS code 50. More-over, patients 107 and 384 also receive high impor-tance scores (0.33 and 0.29), consistent with multi-ple indirectly related endocrine conditions and di-abetes complications annotated near those nodes. Other reference patients have fewer indirectly re-lated CCS codes and therefore receive lower im-portance scores. In contrast, the structural base-line in panel (b) ranks references purely by code overlap, , which can yield less informative ex-planations. For example, patient 305, although the most influential reference in panel (a), has only an edge weight of 9, only slightly above the sparsification threshold. This indicates that edge weights alone only capture structural shared-code overlap and can under-emphasize clinically salient evidence that drives the models prediction. Over-all, Fig. 5 shows that Patients-like-me provides ex-planations by retrieving reference patients that are not only structurally similar in the cohort graph but also clinically and semantically relevant to the target prediction. This comparison highlights that our patient-level importance scores are more infor-mative than explanations based only on graph con-nectivity. 
+
+C.8 Monte Carlo Sampling Analysis 
+
+We next examine sensitivity to the number of Monte Carlo samples used in the E-step. The ex-pectation in Eq. 4 is taken over latent labels y,not over high-dimensional continuous LM embed-dings; the LM embedding on and GNN represen-tation h(L) 
+
+> n
+
+are deterministic forward-pass outputs. Table 5 shows that increasing the estimator from one to five samples on MIMIC-IV readmission yields only modest gains, supporting our default single-sample setting. 
+
+Table 5: Sensitivity to the number of Monte Carlo samples in the E-step. Results are shown on the MIMIC-IV readmission task with the BioBERT back-bone.           
+
+> Number of MC samples AUPRC (%) AUROC (%)
+> Single sample (default) 47.8 ( ±0.4) 80.1 ( ±0.4) Five samples 49.0 ( ±0.2) 80.8 ( ±0.3)
+
+23 C.9 Backbone Generalization 
+
+To assess whether the gains from VEM extend across different LM backbones, we report MIMIC-IV results on readmission, LOS, and drug rec-ommendation for four backbones spanning both encoder-only models (BCMBERT and BioBERT) and decoder-only models (Meerkat and BioMis-tral). Table 6 shows that VEM consistently im-proves performance over the corresponding LM-only baseline across all tasks and all reported met-rics. The gains are especially pronounced for BCMBERT and Meerkat, where VEM improves readmission AUPRC by 5.0–5.8 points, LOS AU-ROC by 5.8–6.2 points, and drug recommendation Jaccard by 3.4–4.6 points. Even for the stronger BioBERT and BioMistral baselines, VEM remains consistently beneficial; for example, it improves BioBERT readmission AUPRC from 45.4% to 47.8% and BioMistral drug recommendation F1 from 58.3% to 62.4%. Overall, these results in-dicate that Patients-like-me is not tied to a specific LM architecture and generalizes well across both encoder-only and decoder-only biomedical back-bones. 
+
+C.10 Efficiency Analysis 
+
+Table 7 reports runtime and peak GPU memory on MIMIC-IV with the Meerkat-8B backbone. Rel-ative to LM-only, VEM increases training time from 2.45 to 2.55 hours per epoch and peak mem-ory from 76.8 to 80.4 GB, i.e., only a 4.1% run-time increase and a 4.7% memory increase. It also has lower runtime than E2E and 2-stage train-ing, while maintaining comparable memory us-age, showing that VEM delivers consistent per-formance gains with only modest computational overhead. Compared with alternating optimiza-tion, VEM requires nearly identical training time (2.55 vs. 2.52 hours per epoch) and slightly less GPU memory (80.4 vs. 80.8 GB), while improv-ing AUPRC, F1, and Jaccard by 4.7, 4.8, and 3.3 %, respectively. 24 Table 6: Generalization of PLM across LM backbones on MIMIC-IV. We evaluate PLM with the VEM al-gorithm across four backbones on readmission, LOS, and drug recommendation. VEM consistently improves performance over the corresponding LM-only baseline, showing that PLM generalizes across backbones. 
+
+Backbone Training Readmission LOS Drug Recommendation AUPRC AUROC AUROC F1 AUPRC F1 Jaccard 
+
+BCMBERT-396M VEM 48.6 80.6 82.8 35.0 75.4 64.8 48.9 
+
+LM-only 43.6 74.5 77.0 30.7 70.2 61.4 45.5 Meerkat-8B VEM 49.7 80.3 85.3 35.6 77.1 65.7 50.4 
+
+LM-only 43.9 75.4 79.1 30.9 71.3 60.7 45.8 BioBERT-300M VEM 47.8 80.1 80.5 33.8 75.1 64.2 48.5 
+
+LM-only 45.4 77.4 78.1 33.7 73.1 61.7 46.8 BioMistral-7B VEM 48.3 78.5 84.8 34.5 74.7 62.4 47.5 
+
+LM-only 42.9 74.7 82.1 31.3 71.9 58.3 45.2 
+
+Table 7: Efficiency on MIMIC-IV with Meerkat-8B. 
+
+Time is hours per epoch, memory is peak GPU memory (GB), and metrics are AUPRC/F1/Jaccard (%).                             
+
+> Training Time (h) Memory (GB) AUPRC F1 Jaccard VEM 2.55 80.4 77.1 65.7 50.4 Alternating 2.52 80.8 72.4 60.9 47.1 E2E 2.61 91.1 70.4 60.2 45.4 2-stage 2.63 80.8 73.2 63.6 47.9 LM-only 2.45 76.8 71.3 60.7 45.8
+
+25

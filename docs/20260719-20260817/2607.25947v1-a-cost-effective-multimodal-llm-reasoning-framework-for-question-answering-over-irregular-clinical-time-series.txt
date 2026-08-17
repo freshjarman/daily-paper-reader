@@ -1,0 +1,500 @@
+Title: A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series
+
+URL Source: https://arxiv.org/pdf/2607.25947v1
+
+Published Time: Wed, 29 Jul 2026 01:15:21 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series 
+
+## Frank Nie ∗
+
+Shandong University China 
+
+## Ethan B. Liu ∗† 
+
+Shandong University China 
+
+## Yuan Zhu ∗
+
+Shandong University China zhu948982@gmail.com 
+
+## Wei Fan 
+
+University of Auckland New Zealand 
+
+## Jindong Han †
+
+Shandong University China jindong.han@sdu.edu.cn 
+
+## Abstract 
+
+Question answering (QA) over irregular clinical time series (ICTS) plays a pivotal role in a wide range of healthcare applications. Al-though recent multimodal time-series large language models (LLMs) have shown considerable promise in general-purpose time-series QA, they remain poorly equipped to model the sparsity, asynchrony, and irregular sampling patterns of clinical observations. To fill this gap, we propose ClinPRISM, a cost-effective multimodal LLM rea-soning framework for question answering over ICTS data. First, we devise an irregularity-aware multi-scale encoder to capture sparse clinical evidence at diverse temporal scales. Then, we propose a temporal evidence distiller to integrate representations across these scales and compress them into a small number of LLM-compatible tokens. Moreover, we introduce a progressive alignment strategy that sequentially aligns the irregular trajectories with the LLM’s textual embedding space. To facilitate training, we construct 30,000 clinical time series paired with multi-scale descriptions, together with 41,000 instruction-tuning instances spanning 11 tasks. Using a 4-billion-parameter LLM backbone, ClinPRISM achieves state-of-the-art performance on the held-out evaluation benchmark while using only 16 time-series tokens and achieving an average inference latency of 0.15 seconds per question. 
+
+ACM Reference Format: 
+
+Frank Nie, Ethan B. Liu, Yuan Zhu, Wei Fan, and Jindong Han. 2018. A Cost-Effective Multimodal LLM Reasoning Framework for Question An-swering over Irregular Clinical Time Series. In Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 12 pages. https: //doi.org/XXXXXXX.XXXXXXX 
+
+> ∗Equal Contribution.
+> †Corresponding author. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference acronym ’XX, Woodstock, NY
+> © 2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2018/06 https://doi.org/XXXXXXX.XXXXXXX
+
+## 1 Introduction 
+
+Irregular clinical time series (ICTS) provide detailed records of pa-tient status, disease progression, and treatment responses, making them central to clinical analysis and decision-making [7, 8]. Exist-ing ICTS models are mainly developed for predefined tasks, such as classification or forecasting [15, 16, 29, 30], which produce outputs in fixed, task-specific formats. In clinical practice, however, users may ask diverse natural-language questions about a patient’s tra-jectory [9, 18], such as when deterioration occurred or whether the patient’s condition improved after an intervention. Answering such questions requires models not only to capture temporal patterns but also to identify relevant clinical evidence and express reasoning via language interface. Recent advances in large language models (LLMs) have demon-strated great potential as a unified interface for temporal data un-derstanding and reasoning [11–13]. Existing approaches mainly fall into three categories. Text-serialization methods convert numerical sequences into textual prompts that can be directly processed by LLMs [26]. However, such methods often require large numbers of tokens and inference costs, and struggle to preserve numerical precision. Representation-adaptation methods overcome this lim-itation by mapping learned time series representations into the embedding space of LLMs [5, 14]. For example, Time-LLM [5] re-programs time-series patches through textual prototypes to enable forecasting with frozen LLMs. More recent multimodal time-series LLMs, such as Chat-TS [25] and ITFormer [23], further connect temporal encoders with language models via trainable tokens and instruction tuning. Despite fruitful progress, most existing methods focus on regularly sampled sequences and overlook the sparse and asynchronous nature of clinical records. Specifically, reasoning over irregular clinical trajectories poses three interrelated challenges. (1) Irregular temporal modeling : Clin-ical time series are recorded at nonuniform and variable-specific intervals, and the observation process itself may be informative. Thus, a model needs to jointly capture temporal dynamics and observation patterns. (2) Sparse multi-scale evidence localization :Evidence relevant to a clinical question is often sparse and unevenly distributed across a long patient trajectory. Moreover, as illustrated in Figure 1(a), different questions may depend on evidence at differ-ent temporal scales, ranging from global trajectory trends to local event dynamics and individual measurements. The challenge is to arXiv:2607.25947v1 [cs.AI] 28 Jul 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+(a) Meso Scale  
+
+> How did MAP and heart rate change during the hypotensive episode?
+> Macro Scale
+> What is the overall pattern of the full time series?
+> Micro Scale
+> What is the MAP at 8 hours and the heart rate at 18 hours?
+
+(b) 26.5 
+
+> 26.6
+> 20.0
+> 20.8
+> 42.9
+> 15.7
+> 45.1
+> 24.5 24.5
+> 18.8
+> 18.4
+> 21.4
+> 22.8
+> 23.5
+> 27.7
+> 23.0
+> 20.5
+> 30.3
+> 29.2
+> 26.8
+> 21.3
+> 21.9
+> 23.6
+> 24.2
+> 24.5
+> 23.4
+> 32.8
+> 15.0
+> 22.7
+> 32.9
+> 37.2
+> 30.0
+> 21.8
+> 41.5
+> 29.5
+> 36.7
+> 54.2
+> 36.2
+> 28.0
+> 24.0
+> 43.0
+> 70.0
+> 44.0
+> 18.2
+> Qwen family ITFormer family ChatTS family t-PatchGNN
+> Ours
+> TG ASR TPR MA TSS TF NIF CVR IR IID MED
+> 47.2
+> 33.7
+> 32.8
+> 87.0
+> 57.8
+> 28.7
+> 24.2
+> 58.8
+> 58.5
+> 96.7
+> 22.8
+
+Figure 1: Motivation and empirical results for ClinPRISM. (a) Clinical questions require evidence at different temporal scales. (b) Existing model families exhibit limited performance across 11 clinical temporal reasoning tasks, suggesting that they fail to consistently capture the sparse and asynchronous nature of irregular clinical time series. 
+
+identify and preserve complementary evidence across scales while avoiding unnecessary information that increases computational cost. (3) Irregular temporal-language alignment : Clinical meaning often emerges from combinations of observations rather than iso-lated values. However, existing methods provide limited supervision for connecting irregular temporal patterns with language seman-tics. In addition, large-scale paired datasets containing irregular trajectories and textual descriptions are scarce, making effective temporal-language alignment challenging. To tackle the above challenges, we propose ClinPRISM, a cost-effective multimodal LLM reasoning framework for Question An-swering (QA) over ICTS data. Specifically, we first introduce an 
+
+irregularity-aware multi-scale encoder , which effectively captures global trajectory patterns, local event dynamics, and fine-grained observations, respectively. After that, we propose a temporal ev-idence distiller that integrates the outputs at diverse scales and compresses the fused representation into a fixed number of LLM-compatible tokens, enabling efficient interaction between irregu-lar temporal data and language reasoning. Moreover, we devise a progressive temporal-language alignment strategy that includes multi-scale encoder pre-training, hierarchical caption alignment, and QA-oriented LLM adaptation. To support effective training, we construct three complementary resources from de-identified ICU records. First, we curate 30,000 irregular clinical trajectories for multi-scale encoder pre-training. Second, we associate these trajectories with hierarchical descrip-tions at global, local, and fine-grained levels, providing multi-scale supervision for temporal-language alignment. Third, we construct 41,000 QA instances for QA-oriented instruction tuning, covering 11 tasks across four capabilities. On an independent held-out bench-mark for irregular clinical time-series QA, ClinPRISM achieves state-of-the-art performance while using only a 4-billion-parameter LLM backbone, 16 temporal tokens per question, and an average inference latency of 0.15 seconds. Our contributions are summarized as follows. (1) We propose an irregularity-aware multi-scale interface that captures sparse temporal evidence and distills variable-length irregular trajectories into a compact sequence of LLM-compatible tokens for efficient reasoning. (2) We develop a progressive training strategy that se-quentially aligns irregular temporal representations with the se-mantic space of LLMs. (3) We construct a suite of training resources, including 30,000 clinical trajectories paired with hierarchical tex-tual descriptions and 41,000 instruction-tuning instances. (4) We conduct extensive experiments on a held-out irregular clinical time-series question answering benchmark. The results show that our framework is both effective and efficient. 
+
+## 2 Methodology 2.1 Problem Formulation 
+
+An irregular clinical time series can be represented as a collection of univariate sequences, denoted by X = {x𝑛 }𝑁 𝑛 =1, where 𝑁 is the number of clinical variables. Each sequence x𝑛 = {( 𝑡 𝑖 , 𝑥 𝑖 )} 𝐿 𝑛 
+
+> 𝑖 =1
+
+contains 𝐿 𝑛 observations of the 𝑛 -th variable, where 𝑡 𝑖 and 𝑥 𝑖 are the observed time and value respectively. Building upon this, we define question answering over irregular clinical time series as the task of generating a natural language answer A conditioned on (1) a natural language question 𝑞 , (2) a patient-specific irregular clinical time series X, and (3) optional intervention context c, such as treatment and medication. Formally, the task can be expressed as F : (𝑞, X, c) ↦ → A , which requires the model F (·) to interpret the question 𝑞 and reason over irregular trajectory X and optional context c in order to produce the answer A.A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series Conference acronym ’XX, June 03–05, 2018, Woodstock, NY (A) Multi-Scale Temporal Interface 
+
+> Macro-Scale Encoder (E g)Meso-Scale Encoder (E p)Micro-Scale Encoder (E m)
+> Macro Tokens
+> ...
+> Meso Tokens
+> ...
+> Micro Tokens
+> ...
+> Scale Projection
+> Macro Projection Meso Projection Micro Projection
+> Hierarchical Fusion Query-Based Resampler
+> Compressed Time-Series Tokens
+> ...
+> Join with Text Tokens
+> ...
+> LARGE LANGUAGE MODEL
+> Answer
+
+(B) Progressive Temporal-Language Alignment    
+
+> Macro-Scale Encoder Meso-Scale Encoder Micro-Scale Encoder Stage 2: Hierarchical Caption Alignment
+> Macro Encoder Meso Encoder
+> Micro Encoder
+> Three-Level Representation Alignment
+> Macro Tokens
+> ...
+> Meso Tokens
+> ...
+> Micro Tokens
+> ...
+> Temporal Evidence Distiller
+> Aligned Time-Series Tokens
+> ...
+> Macro Caption Meso Caption In the early dense observation segment around 0.77 to 8.36 hours, heart_rate ...
+> Micro Caption heart_rate ranged from 50 to 76 bpm and increased from 57 to 76 ... During these ICU hours, heart rate gradually increased ... Text Encoder
+> Stage 3: QA-Oriented Adaptation
+> Eg
+> Ep
+> Em
+> Temporal Evidence Distiller LLM
+> Step 1: QA-Oriented Distiller Tuning
+> LLM
+> Step 2: Joint LoRA–Distiller Adaptation Eg
+> Ep
+> Em
+> Text Input
+> In first 48 hours, compare the first HR decrease with the first temperature decrease ...
+> Text Encoder
+> Tokens
+> ...
+> Text Embedding (caption encoding)
+> ...
+> Irregular Temporal Input
+> Stage 1: Multi-Scale Encoder Pretraining
+> Temporal Evidence Distiller Irregularity-Aware Multi-Scale Encoder
+> Temporal Evidence Distiller
+
+Figure 2: Overview of ClinPRISM. 
+
+## 2.2 Framework Overview 
+
+Figure 2 illustrates the overall framework of ClinPRISM, which consists of three major modules. First, an irregularity-aware multi-scale encoder captures sparse temporal evidence at the macro, meso, and micro scales directly from clinical records. Then, a temporal evidence distiller connects the multi-scale encoder and LLM by transforming the learned evidence into a fixed number of temporal tokens. Finally, a progressive temporal–language alignment strat-egy maps the temporal tokens into the LLM’s semantic space and sequentially adapts them for downstream multi-task reasoning. During inference, the temporal tokens are inserted into the textual prompt, enabling the LLM to select question-relevant evidence and generate the answer. 
+
+## 2.3 Irregularity-Aware Multi-Scale Encoder 
+
+Clinical evidence in an irregular trajectory is distributed unevenly across time and variables. A single temporal scope may therefore miss short-lived events or discard the broader context needed to interpret them. We address this limitation by formulating temporal encoding as a scale-conditioned transformation of a common ob-servation set. Each valid measurement is first represented under a shared timestamp-aware event schema; scale-specific aggrega-tion then organizes these events over the complete trajectory at the macro scale, density-adaptive segments at the meso scale, and fine-grained reference times at the micro scale. This design changes how evidence is organized while preserving common observation semantics across scales, providing the temporal evidence distiller with a coherent multi-scale interface. Because every scale operates directly on the irregular sequences defined in Section 2.1, the en-coder preserves the original timestamps and requires neither grid resampling nor explicit imputation. 
+
+Observation-Centric Interface. We first convert every valid measurement into a timestamp-aware event representation. For 
+
+(𝑡 𝑖 , 𝑥 𝑖 ) ∈ x𝑛 , we normalize 𝑡 𝑖 within the trajectory and compute the elapsed time since the previous observation of variable 𝑛 . A scale-specific MLP then encodes the observed value together with a learnable variable embedding, the normalized timestamp, and the observation gap as z𝑛,𝑠 𝑖 . Since x𝑛 contains only observed mea-surements, missing or imputed values never enter the encoder. We use 𝑠 ∈ { 𝑔, 𝑝, 𝑚 } to index the macro, meso, and micro scale condi-tions. Applying the corresponding aggregation at each scale yields a macro vector h𝑔 ∈ R𝑑 𝑔 , a meso sequence H𝑝 ∈ R𝑃 ×𝑑 𝑝 , and a micro sequence H𝑚 ∈ R𝑅 ×𝑑 𝑚 , where 𝑃 and 𝑅 denote the numbers of meso windows and micro reference times. 
+
+Macro-Scale Encoding. To retain whole-trajectory context, the macro pathway first applies learnable-query attention pool-ing within each variable sequence, producing one vector per clini-cal variable. Multi-head self-attention then models dependencies among variables [10], and a second attention-pooling operation summarizes them as h𝑔 . This representation captures long-range trends and cross-variable context that cannot be inferred reliably from an isolated temporal neighborhood. 
+
+Shared Support-Aware Aggregation. Localized evidence is not equally reliable across an irregular trajectory: one temporal region may contain many nearby observations, whereas another may be supported by only a few distant measurements. The localized scale conditions therefore use a common aggregation rule that encodes both the local state and its observation support, with scale-specific Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+parameters. For 𝑠 ∈ { 𝑝, 𝑚 }, ℓ𝑛,𝑠 𝑗,𝑖 measures the relevance of the 
+
+𝑖 -th observation of variable 𝑛 to temporal location 𝑗 . We define 
+
+𝑤 𝑛,𝑠 𝑗,𝑖 = exp (ℓ𝑛,𝑠 𝑗,𝑖 ) and 𝜌 𝑠 𝑗,𝑛 = Í𝐿 𝑛  
+
+> 𝑖 =1
+
+𝑤 𝑛,𝑠 𝑗,𝑖 , where 𝜌 𝑠 𝑗,𝑛 quantifies the support available for variable 𝑛 around location 𝑗 . We then compute                  
+
+> u𝑠 𝑗,𝑛 =MLP 𝑠 𝑎
+> Í𝐿 𝑛
+> 𝑖 =1𝑤 𝑛,𝑠 𝑗,𝑖 z𝑛,𝑠 𝑖
+> 𝜌 𝑠 𝑗,𝑛 +𝜖 ∥log (1+𝜌 𝑠 𝑗,𝑛 )
+> !
+> ,
+> h𝑠 𝑗 =AttPool
+> 
+> {u𝑠 𝑗,𝑛 :𝜌 𝑠 𝑗,𝑛 >0}
+> 
+> .
+> (1)
+
+The weighted average estimates the local state of variable 𝑛 , while log (1 + 𝜌 𝑠 𝑗,𝑛 ) informs the encoder how strongly that estimate is supported by actual observations. Attention pooling then com-bines the supported variable-level states into h𝑠 𝑗 . We define 𝜇 𝑠 𝑗 =
+
+I[Í𝑁 𝑛 =1 𝜌 𝑠 𝑗,𝑛 ≥ 𝜂 𝑠 ], where 𝜂 𝑠 is a branch-specific support threshold, and mask locations with 𝜇 𝑠 𝑗 = 0 before evidence distillation. The op-erator thus prevents weakly supported local estimates from being treated as equivalent to densely observed evidence. 
+
+Meso-Scale Encoding. To capture episode-level dynamics, the meso pathway instantiates the temporal locations as 𝑃 learnable soft windows. Each window has a trainable center and positive width and assigns Gaussian relevance according to normalized temporal distance [16]. The windows are initialized from an approximately uniform partition and adapt to the empirical observation density during training. Substituting these relevance scores into Equation 1 produces H𝑝 , whose tokens encode segment-level trends and tran-sitions together with their observation support. 
+
+Micro-Scale Encoding. To retain fine-grained temporal states, the micro pathway places 𝑅 reference times across the normalized observation interval [20]. It computes observation-to-reference rel-evance through scaled dot-product attention between their time encodings. The resulting scores are substituted into Equation 1, yielding the micro-scale sequence H𝑚 . The sequence H𝑚 conse-quently preserves fine-grained states together with the sampling gaps and observation support around each reference time. Together, h𝑔 , H𝑝 , and H𝑚 form a coherent evidence hierarchy for the same irregular trajectory. Their shared event schema and validity semantics allow the temporal evidence distiller to combine broad clinical context, segment-level dynamics, and fine-grained states without reconciling incompatible input representations. 
+
+## 2.4 Temporal Evidence Distiller 
+
+The macro, meso, and micro encoders produce representations with heterogeneous structures and dimensions. We therefore introduce a temporal evidence distiller that projects the three scales into a shared LLM space, performs hierarchical cross-scale fusion, and compresses all valid temporal evidence into a fixed-length sequence of temporal tokens. 
+
+Scale Projection. We first map the three encoder outputs into the LLM hidden space using scale-specific projection modules:                
+
+> z𝑔 =𝑃 𝑔 (h𝑔 ),Z𝑝 =𝑃 𝑝 (H𝑝 ),Z𝑚 =𝑃 𝑚 (H𝑚 ).(2)
+
+Here, 𝑃 𝑔 , 𝑃 𝑝 , and 𝑃 𝑚 are trainable projection modules, with 𝑃 𝑝 and 
+
+𝑃 𝑚 applied independently to each meso and micro token. 
+
+Hierarchical Fusion. We use the meso scale as a bridge be-tween macro context and micro temporal evidence. Let 𝝁 𝑝 and 𝝁 𝑚 
+
+denote the validity masks of the meso and micro representations, respectively, and let ¯ z𝑚 = MaskedMean (Z𝑚 ; 𝝁 𝑚 ) denote the pooled micro summary. For the 𝑗 -th meso token, we form the cross-scale context c𝑝 𝑗 = z𝑔 ∥z𝑝 𝑗 ∥¯z𝑚 and compute        
+
+> ˜z𝑝 𝑗 =LN
+> 
+> z𝑝 𝑗 +𝐹 fuse (c𝑝 𝑗 )
+> 
+> .(3)
+
+Here, LN (·) denotes layer normalization, ∥ is feature-wise concate-nation, and 𝐹 fuse is a lightweight MLP. The residual connection preserves the original meso evidence while incorporating macro and micro context. Applying this operation to all valid meso win-dows yields the refined sequence ˜ Z𝑝 .
+
+Query-Based Resampling. Although the numbers of meso and micro positions are fixed, the number of valid tokens varies across trajectories. We concatenate the projected representations along the token dimension as C = [z𝑔 ; ˜ Z𝑝 ; Z𝑚 ]tok and construct the corresponding validity mask as 𝝁 = [1; 𝝁 𝑝 ; 𝝁 𝑚 ]. A learned-query resampler then computes          
+
+> T=Resampler (Q,C;𝝁 ) ∈ R𝐾 ×𝑑 LLM ,(4)
+
+where Q ∈ R𝐾 ×𝑑 LLM is a bank of learned, question-independent query tokens. Through masked cross-attention, the resampler ex-tracts information only from valid entries of C and produces a fixed-length sequence T = [t1, . . . , t𝐾 ]. The resampler is designed to retain compact trajectory-level evidence rather than select evidence for a specific question. Question-conditioned selection occurs subse-quently inside the LLM, whose self-attention jointly processes T, the question, and the candidate answers. For fused-caption alignment in Stage 2, we use the mean-pooled representation z𝑓 = 𝐾 −1 Í𝐾 𝑘 =1 t𝑘 .
+
+LLM Interface. The temporal-token sequence T replaces a re-served time-series placeholder in the LLM input. The remaining prompt contains the question, candidate answers, and optional aux-iliary context. In this way, the LLM accesses the irregular trajectory through a compact sequence of continuous temporal embeddings rather than a long textual serialization of the raw observations. 
+
+## 2.5 Progressive Temporal-Language Alignment 
+
+We train the framework progressively in three stages. Stage 1 learns scale-specialized representations from unlabeled irregular time se-ries. Stage 2 aligns the temporal evidence distiller with hierarchical language supervision while keeping the temporal encoders and the LLM frozen. Stage 3 adapts the aligned temporal tokens to down-stream QA through distiller tuning followed by joint LoRA–distiller optimization. 
+
+2.5.1 Stage 1: Multi-Scale Encoder Pretraining. We independently pretrain the macro, meso, and micro branches on the irregular ICU time-series corpus described in Section 3.1, using a scale-specific self-supervised objective for each branch. Separate optimization encourages each branch to specialize in its intended temporal scope before cross-scale fusion. No parameters or gradients are shared across branches at this stage, and no caption, QA, or LLM supervi-sion is used. After pretraining, the task-specific heads are removed and the multi-scale encoder remains frozen in all subsequent stages. 
+
+2.5.2 Stage 2: Hierarchical Caption Alignment. The pretrained en-coders capture irregular temporal structure, but their outputs are not yet aligned with the contextual language representation space of the LLM. We therefore optimize the temporal evidence distiller using hierarchical captions while keeping both the temporal en-coders and the LLM frozen. For each trajectory, the macro, meso, A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+and micro captions are denoted by 𝑐 𝑔 , 𝑐 𝑝 , and 𝑐 𝑚 , and their con-catenation forms the fused caption 𝑐 𝑓 = concat (𝑐 𝑔 , 𝑐 𝑝 , 𝑐 𝑚 ). We pass each caption through the frozen LLM and mean-pool its final-layer contextual hidden states over non-padding caption tokens, followed by normalization, yielding e𝑔 , e𝑝 , e𝑚 , and e𝑓 . On the temporal side, we define ¯ z𝑔 = z𝑔 , obtain ¯ z𝑝 and ¯ z𝑚 by masked mean pooling over valid tokens in Z𝑝 and Z𝑚 , and set ¯ z𝑓 = z𝑓 .We use a bidirectional contrastive loss to align each temporal representation with its scale-matched caption representation:               
+
+> Ltext =1
+> | S | ∑︁ 𝑠 ∈S
+> LNCE (¯z𝑠 ,e𝑠 ),S={𝑔, 𝑝, 𝑚, 𝑓 },(5)
+
+where matched temporal–caption pairs are treated as positives and other pairs in the same mini-batch as negatives. Because independent caption alignment does not explicitly en-force semantic agreement across temporal scales, we additionally regularize adjacent-scale representations:                  
+
+> Lscale =12
+> 1−cos  ¯z𝑚 ,¯z𝑝 +1−cos  ¯z𝑝 ,¯z𝑔  .(6)
+
+The Stage-2 objective is Lalign = Ltext + 𝜆 scale Lscale . This regu-larizer acts only on pooled summaries and therefore aligns their coarse semantic direction without forcing individual meso or mi-cro tokens to coincide. Scale-specific caption losses preserve the distinct information associated with each branch, while the frozen, independently pretrained encoders prevent the consistency term from collapsing their underlying temporal representations. Only the temporal evidence distiller is optimized in this stage. The cap-tions serve as training-time semantic supervision and are not used during inference. 
+
+2.5.3 Stage 3: QA-Oriented Adaptation. Stage 2 produces language-aligned temporal tokens, but the framework has not yet been op-timized for answering questions. We therefore adapt it to the QA corpus in two steps. 
+
+Step 1: QA-Oriented Distiller Tuning. We first optimize only the temporal evidence distiller while keeping the temporal encoders and the LLM frozen. For QA instances with matched caption super-vision, we retain the Stage-2 objectives as auxiliary regularization:          
+
+> LQA =Lans +𝜆 text Ltext +𝜆 scale Lscale ,(7)
+
+where Lans is the autoregressive answer language-modeling loss. 
+
+Step 2: Joint LoRA–Distiller Adaptation. We then introduce LoRA modules into the LLM and jointly optimize the LoRA parameters and the temporal evidence distiller using Lans . The temporal en-coders and the original LLM backbone remain frozen. This step allows the temporal-token interface and the LLM-side reasoning parameters to co-adapt without full LLM fine-tuning. At inference time, the frozen multi-scale encoder and the trained distiller transform X into the fixed-length temporal-token sequence 
+
+T, which replaces the reserved time-series placeholder in the lan-guage prompt. The LLM generates A from the temporal tokens, question 𝑞 , and optional intervention context c; captions and align-ment losses are not required. 
+
+## 3 Training Corpus Construction 
+
+To support the three-stage training strategy described in Section 2.5, we construct three complementary corpora from the same collec-tion of MIMIC-IV ICU records [7]: an irregular time-series corpus for temporal encoder pretraining, a hierarchical caption corpus for temporal-language alignment, and a multi-task QA corpus for downstream adaptation. The resulting data consist of 30,000 ICU-stay trajectories, 30,000 matched hierarchical caption records, and approximately 41,000 four-way multiple-choice QA instances. 
+
+## 3.1 Irregular Clinical Time-Series Corpus 
+
+We first construct irregular multivariate time-series instances from MIMIC-IV ICU records, treating each ICU stay as an independent temporal trajectory. When a hospital admission contains multiple ICU stays, each stay is processed separately. Measurements asso-ciated with the same stay are mapped to a unified schema of 11 temporal variables, and their timestamps are converted into elapsed hours relative to ICU admission and sorted chronologically. We pre-serve the original observation times rather than resampling the tra-jectories onto a regular temporal grid. For each trajectory, we retain the observed values, variable-level observation masks, and avail-able intervention or event records. This representation preserves nonuniform sampling intervals, variable-specific missingness, and heterogeneous observation frequencies. After preprocessing and leakage control, we select 30,000 ICU-stay trajectories as the shared foundation of all three training corpora. Stage 1 uses their irregular temporal observations for self-supervised pretraining of the three temporal encoders. Variable definitions, preprocessing procedures, benchmark de-overlap checks are provided in Appendix B.1. 
+
+## 3.2 Hierarchical Caption Corpus 
+
+We next construct one hierarchical caption record for each of the 30,000 selected trajectories. The construction process first applies deterministic programs to the timestamped observations and obser-vation masks, producing structured summaries at three temporal scales. The global summary describes the complete trajectory, in-cluding its duration, observation density, overall trends, and major threshold-defined abnormalities. The segment summary charac-terizes sufficiently observed local segments distributed across the trajectory. The micro summary records variable-specific behavior, including observation counts, value ranges, start-to-end changes, threshold crossings, and missingness patterns. GPT-5.5 then verbalizes the three structured summaries into global, segment-level, and micro-level captions. It is explicitly in-structed to preserve the supplied variable names, relative times-tamps, numerical values, temporal trends, and abnormality indi-cators, while avoiding diagnoses, causal interpretations, and un-supported clinical information. The fused caption is formed by concatenating the three generated captions rather than by an addi-tional generation step. Finally, the generated records undergo auto-matic checks for structural completeness and consistency with the underlying summaries. During Stage 2, the global, segment-level, micro-level, and fused captions provide scale-matched semantic supervision for their corresponding temporal representations. The captions are used only as training-time semantic anchors and are not included in the model input at inference time. Further details Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Table 1: Model names and values shown in gray denote systems excluded from ranking. Among open-source models with 3–27B parameters, the best and second-best results in each column are shown in bold and underlined, respectively. Model Params. Understanding Forecasting Reasoning Decision-Making Overall TG ASR TPR MA TSS TF NIF CVR IR IID MED                                                                                                                                                                                                                                                           
+
+> ▼Closed-source LLMs
+> Gemini-2.5-flash –41.67 43.33 25.00 23.33 91.67 20.00 10.00 43.33 60.00 60.00 25.00 40.30 GPT-5.4 mini –58.33 63.33 35.00 45.00 93.33 33.33 6.67 63.33 51.67 76.67 25.00 50.15
+> ▼Open-source General LLMs
+> DeepSeek-V4-flash 284B 28.33 36.67 25.00 45.00 25.00 38.33 18.33 18.33 91.67 41.67 26.67 35.91 KiMi-2.6 1T 50.00 56.67 26.67 73.33 58.33 36.67 16.67 15.00 93.33 91.67 21.67 49.09 Gemma3-27B-it 27B 22.33 27.21 25.00 33.17 21.67 31.67 20.50 16.00 77.83 39.67 24.50 30.87 Gemma4-12B-it 12B 45.00 39.50 21.17 34.33 17.67 22.17 18.50 6.17 60.33 39.67 23.50 29.82 Qwen3.6-27B [19] 27B 23.17 27.50 12.33 14.00 74.00 10.50 43.33 21.67 23.83 14.33 10.50 25.01 Qwen3.5-9B [21] 9B 27.17 25.33 26.53 23.67 30.00 18.33 45.67 27.50 27.17 20.00 21.67 26.64 Qwen3.5-4B [21] 4B 29.17 26.83 21.17 24.67 24.83 18.17 46.17 24.33 22.50 22.00 23.17 25.73
+> ▼Time Series Language Models
+> TimeOmni-1-7B [4] 7B 23.67 29.00 16.50 12.33 14.33 14.50 15.33 10.50 11.67 25.33 7.67 16.44 TS-Reasoner-7B [28] 7B 29.67 28.33 27.00 28.33 26.33 27.50 23.33 27.00 38.33 35.00 25.00 28.71 ITFormer-3B [23] 3B 22.25 22.17 21.69 26.91 22.67 22.67 31.67 23.92 24.18 20.19 21.50 23.62 ITFormer-7B [23] 7B 20.46 23.43 25.30 28.44 23.29 18.33 28.88 34.58 29.35 22.40 22.33 25.16 ChatTS-8B [25] 8B 21.83 23.00 25.33 20.17 25.83 13.00 24.67 33.83 42.67 25.67 21.50 25.23 ChatTS-14B [25] 14B 25.33 25.33 23.67 26.67 39.67 17.00 20.67 32.00 31.67 34.33 22.17 27.14 Time-LLM [5] 7B 24.17 24.83 28.67 24.83 23.17 24.50 24.83 22.17 24.17 25.00 24.50 24.62 AutoTime [17] 7B 23.33 21.50 27.33 24.33 26.33 26.00 26.83 21.84 25.83 24.67 21.67 24.51 t-PatchGNN [30]+Qwen3 4B 4B 41.50 29.50 36.67 54.17 36.17 28.00 24.00 43.00 70.00 44.00 18.17 38.65
+> ClinPRISM 4B 47.17 33.67 32.83 87.00 57.83 28.67 24.17 58.83 58.50 96.67 22.83 49.83
+
+on structured summarization, generation constraints, and quality control are provided in Appendix B.2. 
+
+## 3.3 Multi-Task Time-Series QA Corpus 
+
+We further construct approximately 41,000 four-way multiple-choice QA instances from the selected ICU trajectories. A single trajectory may produce multiple instances when it satisfies the requirements of different task schemas. The corpus covers four complementary capabilities—temporal understanding, temporal forecasting, tempo-ral reasoning, and temporal decision-making—which are further divided into 11 task types. For each task type, we first define an executable schema specifying the queried variables, model-visible time range, reasoning objective, evidence rule, and answer format. Deterministic programs then instantiate the schema over eligible trajectories and compute the temporal anchors, evidence windows, gold answers, and initial question–option structures directly from the timestamped observations or intervention records. After the temporal evidence and gold labels have been fixed, GPT-5.5 is used only to paraphrase the questions and answer options, increase linguistic diversity, reduce superficial lexical cues, and strengthen the distractors. It is constrained to preserve the original reasoning objective, temporal scope, option meanings, supporting evidence, and gold answer. The rewritten instances subsequently undergo automatic consistency and leakage checks, followed by human verification of task suitability, linguistic quality, evidence support, and answer-label consistency. Instances with unresolved ambiguity or insufficient evidence are removed. The validated QA instances are used for QA-oriented distiller tuning and joint LoRA-distiller adaptation in Stage 3. The complete task taxonomy and validation protocol are provided in Appendix B.3. 
+
+## 4 Experiment 4.1 Experimental Setup 
+
+Datasets and metrics. We train ClinPRISM on the QA corpus con-structed in Section 3 and evaluate it on CLIR-Bench [18], a held-out benchmark for irregular multivariate time-series QA. CLIR-Bench contains 11 tasks grouped into four capability dimensions: temporal understanding, including Temporal Grounding (TG), Anchor-State Retrieval (ASR), Trend Pattern Recognition (TPR), Missingness Awareness (MA), and Clinical Time-Series Summarization (TSS); temporal reasoning, including Asynchronous Cross-Variable Rea-soning (CVR) and Intervention Response (IR); temporal forecasting, including Threshold Forecasting (TF) and Next-Value Interval Fore-casting (NIF); and temporal decision-making, including Immediate Intervention Decision (IID) and Monitoring/Escalation Decision (MED). Since all questions follow a multiple-choice format, we report accuracy as the evaluation metric. 
+
+Baselines. We compare ClinPRISM with a diverse set of base-line models, including (1) closed-source LLMs: Gemini-2.5-flash and GPT-5.4 mini; (2) open-source general LLMs: DeepSeek-V4-flash, KiMi-2.6, Gemma3-27B-it, Gemma4-12B-it, Qwen3.5-4B [21], Qwen3.5-9B [21], and Qwen3.6-27B [19]; (3) time-series LLMs: A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 2: Ablation study of different model variants. The best result in each column is shown in bold. Variant Understanding Forecasting Reasoning Decision-Making Overall TG ASR TPR MA TSS TF NIF CVR IR IID MED                                                                                       
+
+> Only Macro 46.00 32.17 37.00 78.83 54.50 23.33 20.83 45.67 56.50 98.17 23.67 46.97 Macro + Meso 49.17 32.17 33.50 81.83 55.83 25.67 24.00 47.00 62.67 95.50 23.33 48.24 Without Stage 2 47.33 31.33 33.67 83.33 55.67 27.00 22.67 56.17 53.17 98.00 22.67 48.27 Without Stage 3 Step 1 46.33 30.67 37.50 81.50 51.17 26.83 21.50 48.50 59.83 97.33 21.83 47.55 Without Stage 3 Step 2 35.33 26.17 31.00 24.33 32.00 26.50 23.33 47.83 68.33 60.00 25.00 36.35 Stage 3 Step 1 with Lans Only 44.50 32.50 35.00 87.00 47.00 26.83 23.00 50.67 63.33 96.33 24.00 48.20
+> ClinPRISM 47.17 33.67 32.83 87.00 57.83 28.67 24.17 58.83 58.50 96.67 22.83 49.83
+
+Table 3: Sensitivity to temporal-token budget 𝐾 .
+
+𝐾 8 16 32 64 128 
+
+Average 46.02 49.83 47.79 47.59 47.45 TimeOmni-1 [4], TS-Reasoner [28], ITFormer [23], ChatTS [25], AutoTime [17], and TimeLLM [5]; and (4) an irregular time series LLM using t-PatchGNN [30] as the time-series encoder. For Au-toTime and TimeLLM, we follow the ITFormer [23] adaptation setting, so that they can process time-series inputs under a unified configuration. In addition, the t-PatchGNN baseline is implemented on Qwen3-4B [27] and follows the same training pipeline as Clin-PRISM. The only difference is that this baseline uses t-PatchGNN as the time-series encoder without caption alignment. 
+
+Training Details. We train the full framework in three stages as shown in Figure 2. In Stage 1, the temporal encoders are pretrained on the irregular time-series corpus constructed in Section 3.1. In Stage 2, the pretrained encoders are frozen, and the hierarchical cap-tion data constructed in Section 3.2 are used to train the time-series connector for temporal-textual alignment. The connector outputs a fixed-length sequence 𝑇 of LLM-compatible time-series tokens, with |𝑇 | = 16, which are inserted into the LLM input. In Stage 3, we use the multi-task QA corpus, which contains approximately 41,000 multiple-choice questions grounded in irregular multivariate time-series records, to tune the connector and adapt the language model with LoRA, respectively. Both Stage 3 steps are trained for 2 epochs, 𝜆 scale = 0.05 in Stage 2, 𝜆 text = 0.1 and 𝜆 scale = 0.01 in Stage 3 Step 1. All language-model stages are built on Qwen3-4B [27]. 
+
+## 4.2 Main Results 
+
+Table 1 reports the results on CLIR-Bench. ClinPRISM achieves the highest macro-average accuracy among all open-source systems, reaching 49.83. It outperforms the strongest time-series-oriented baseline, t-PatchGNN, by 11.18 points and the best open-source general LLM, KiMi-2.6, by 0.74 points. Despite using only a 4B LLM backbone, ClinPRISM trails GPT-5.4 mini by only 0.32 percentage points and exceeds Gemini-2.5-flash by 9.53 points. The gains are especially clear on MA, CVR and IID, suggesting that hierarchical temporal representations and caption-guided alignment help the model capture sparse observations, multi-scale trends, and clinically relevant temporal evidence. 
+
+## 4.3 Ablation Studies 
+
+Table 2 reports the ablation results for the multi-scale encoders and progressive training strategy. The macro-only, macro-plus-meso, and full models achieve average accuracies of 46.97, 48.24, and 49.83, respectively, showing that meso- and micro-scale representa-tions provide complementary temporal evidence. Removing Stage 2, Stage 3 Step 1, or Stage 3 Step 2 reduces the average accuracy to 48.27, 47.55, and 36.35, respectively, with the largest drop occur-ring without joint LoRA–connector adaptation. Using only Lans in Stage 3 Step 1 yields 48.20, indicating that the auxiliary alignment objectives remain beneficial during QA adaptation. As shown in Table 3, we further analyze the sensitivity to the temporal-token sequence length 𝐾 = |T|. The best overall performance is achieved with 𝐾 = 16, and additional task-level results are in Appendix C.1. Figure 3 decomposes capability-level gains across successive en-coder variants. Macro measures the improvement over t-PatchGNN, whereas Meso and Micro measure the gains from adding the corre-sponding encoders. Macro contributes most to understanding and decision-making ( +10 .1 and +29 .8 points), indicating the impor-tance of whole-record context. Meso contributes most to forecasting (+2.8), while Meso and Micro contribute nearly equally to reasoning (+3.8 each). These patterns show that broad context and localized dynamics provide complementary evidence across QA capabilities. 
+
+## 4.4 Robustness to Observation Density 
+
+To evaluate robustness under varying sparsity, we group CLIR-Bench samples by observation density, defined as the proportion of observed variable–time cells in each trajectory. After normalizing the observed density range, we divide it into four equal-width intervals and report QA accuracy within each interval. We quantify stability as (𝐴 max − 𝐴 min )/ ¯𝐴 , where 𝐴 max , 𝐴 min , and ¯ 𝐴 denote the maximum, minimum, and mean interval accuracies, respectively; lower values indicate less sensitivity to observation density. As shown in Figure 4, ClinPRISM outperforms t-PatchGNN in all four intervals and exhibits substantially lower relative variation, with 1.6% compared with 12 .7%. These results indicate that ClinPRISM maintains stable QA performance across trajectories with different observation densities, including highly sparse inputs. 
+
+## 4.5 Accuracy–Efficiency Trade-off 
+
+Figure 5 compares QA accuracy, mean per-question inference la-tency, and token consumption. ClinPRISM achieves 49 .83% accu-racy with a latency of 0 .15 seconds and only 16 temporal tokens Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. Macro Meso Micro  
+
+> 0510 15
+> Contribution (pts.)  +10.1
+> +0.8 +1.2
+> Dominant: Macro
+
+A Understanding    
+
+> Macro Meso Micro
+> −10 −5 0510
+> -5.4
+> +3.8 +3.8
+> Co-dominant: Meso & Micro
+
+B Reasoning    
+
+> Macro Meso Micro
+> −5 05
+> -3.9
+> +2.8 +1.6
+> Dominant: Meso
+
+C Forecast    
+
+> Macro Meso Micro
+> 020 40 +29.8
+> -1.5
+> +0.3
+> Dominant: Macro
+
+D Decision-making 
+
+Figure 3: Capability-level reliance on hierarchical temporal representations. Panels show bootstrapped accuracy-point con-tributions from Macro, Meso, and Micro representations. Points denote bootstrap samples, boxes summarize quartiles, and half-violins show density. Panel-specific vertical scales emphasize the strongest scale, with ties reported jointly. 0-25% 25-50% 50-75% 75-100%  
+
+> Observation Density
+> 35.0 37.5 40.0 49.5 50.0 50.5
+> Accuracy (%)
+> 0.79/49.96=1.6% 4.83/38.11=12.7%
+> t-PatchGNN Ours
+
+Figure 4: Accuracy under different observation-density ranges. ClinPRISM maintains robust performance across observation-density levels. 0.1 0.3 1 3 10 30     
+
+> Mean inference latency (s, log scale)
+> 20 30 40 50
+> Accuracy (%)
+> 1 s Q3.5-4B Q3.5-9B Q3.6-27B ChatTS-14B ChatTS-8B ITF-3B ITF-7B
+> Ours
+> t-PatchGNN
+> Input tokens (log-scaled radius)
+> 16 25 130 21K
+
+Figure 5: Accuracy-efficiency trade-off. 
+
+per question. Under the same 16-token budget, t-PatchGNN is 0 .03 seconds faster but achieves 11 .18 percentage points lower accuracy. ClinPRISM also substantially outperforms ITFormer and ChatTS while using comparable or lower inference latency and fewer tem-poral tokens. The text-serialized Qwen baselines require approx-imately 21K input tokens and 6 .6–40 seconds per question, yet achieve only 25 .01%–26 .64% accuracy. In comparison, ClinPRISM reaches 49 .83% accuracy with only 16 temporal tokens and 0 .15 sec-onds of inference latency. Overall, ClinPRISM achieves the highest QA accuracy while retaining low inference latency and a compact temporal-token interface. Detailed configurations are provided in the Appendix C.2. 
+
+## 5 Related Work 5.1 Time-Series Question Answering 
+
+Time-Series Question Answering (TSQA) has recently shown great promise for querying temporal data with LLMs [3, 12, 31]. Re-cent work has begun to formulate TSQA as a unified temporal-textual learning problem. Time-MQA [9] builds a large multi-task TSQA corpus covering forecasting, imputation, anomaly detection, classification, and open-ended reasoning across multiple domains. Chat-TS [25] introduces time-series tokens and instruction data to support multi-task QA over time-series and textual inputs. MT-Bench [2] evaluates temporal reasoning and question answering over paired time-series and textual context in finance and weather domains. ChatTime [22] studies multi-task time-series QA over syn-thetic temporal patterns. EngineMT-QA [23] focuses on aero-engine signal question answering for temporal understanding, reasoning, and decision-making. TSAQA [6] broadens TSQA evaluation with diverse analysis tasks such as characterization, comparison, trans-formation, and temporal relationship analysis. ARFBench [24] eval-uates anomaly-oriented TSQA for software incident response using production telemetry. Despite recent progress, most TSQA settings assume regularly sampled inputs, leaving question answering over irregular clinical trajectories underexplored. 
+
+## 5.2 Time-Series Multimodal LLMs 
+
+Time-series MLLMs bridge temporal signals and LLMs beyond raw-text serialization. GPT4TS [32] adapts pretrained language models to general time-series analysis by reusing frozen backbone lay-ers. UniTime [14] uses domain instructions and a Language-TS Transformer for cross-domain time-series representation learning. TEMPO [1] incorporates textual information or prompt-based adap-tation for multimodal time-series forecasting. ITFormer [23] intro-duces learnable instruction tokens and temporal-channel attention to align time-series representations with frozen LLMs. However, most existing time-series MLLMs are designed for regularly sam-pled inputs or fixed prediction tasks. In this paper, we propose ClinPRISM, a multimodal LLM reasoning framework for irregular A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+time-series QA that combines multi-scale temporal modeling with progressive temporal-language alignment. 
+
+## 6 Conclusion 
+
+In this work, we proposed ClinPRISM, a cost-effective multimodal LLM framework for question answering over irregular clinical time series. By combining global, event-level, and point-level tempo-ral representations, ClinPRISM captures complementary evidence from sparse and asynchronous observations and distills it into a small set of LLM-compatible tokens. A progressive alignment strategy further connects temporal representations with language semantics and downstream reasoning tasks. Experiments show that ClinPRISM achieves strong accuracy and an effective accu-racy–efficiency trade-off using only a 4B LLM, 16 temporal tokens, and 0.15 seconds of inference time per question. Future work will extend the framework to open-ended questions, uncertainty-aware reasoning, and evaluation across broader clinical settings. 
+
+## References 
+
+[1] Defu Cao, Furong Jia, Sercan O Arik, Tomas Pfister, Yixiang Zheng, Wen Ye, and Yan Liu. 2024. TEMPO: Prompt-based Generative Pre-trained Transformer for Time Series Forecasting. arXiv:2310.04948 [cs.LG] https://arxiv.org/abs/2310. 04948 [2] Jialin Chen, Aosong Feng, Ziyu Zhao, Juan Garza, Gaukhar Nurbek, Cheng Qin, Ali Maatouk, Leandros Tassiulas, Yifeng Gao, and Rex Ying. 2026. MTBench: A Multimodal Time Series Benchmark for Temporal Reasoning and Question Answering. arXiv:2503.16858 [cs.CL] https://arxiv.org/abs/2503.16858 [3] Felix Divo, Maurice Kraus, Anh Q. Nguyen, Hao Xue, Imran Razzak, Flora D. Salim, Kristian Kersting, and Devendra Singh Dhami. 2025. QuAnTS: Question Answering on Time Series. arXiv:2511.05124 [cs.LG] https://arxiv.org/abs/2511. 05124 [4] Tong Guan, Zijie Meng, Dianqi Li, Shiyu Wang, Chao-Han Huck Yang, Qing-song Wen, Zuozhu Liu, Sabato Marco Siniscalchi, Ming Jin, and Shirui Pan. 2026. TimeOmni-1: Incentivizing Complex Reasoning with Time Series in Large Lan-guage Models. arXiv:2509.24803 [cs.LG] https://arxiv.org/abs/2509.24803 [5] Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y. Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, and Qingsong Wen. 2024. Time-LLM: Time Series Forecasting by Reprogramming Large Language Models. arXiv:2310.01728 [cs.LG] https://arxiv.org/abs/2310.01728 [6] Baoyu Jing, Sanhorn Chen, Lecheng Zheng, Boyu Liu, Zihao Li, Jiaru Zou, Tianxin Wei, Zhining Liu, Zhichen Zeng, Ruizhong Qiu, Xiao Lin, Yuchen Yan, Dongqi Fu, Jingchao Ni, Jingrui He, and Hanghang Tong. 2026. TSAQA: Time Series Analysis Question And Answering Benchmark. arXiv:2601.23204 [cs.AI] https: //arxiv.org/abs/2601.23204 [7] Alistair Johnson, Lucas Bulgarelli, Tom Pollard, Brian Gow, Benjamin Moody, Steven Horng, Leo Anthony Celi, and Roger Mark. 2024. MIMIC-IV. PhysioNet 
+
+(Oct. 2024). Version 3.1. doi:10.13026/kpb9-mt58 [8] Alistair EW Johnson, Lucas Bulgarelli, Lu Shen, Alvin Gayles, Ayad Shammout, Steven Horng, Tom J Pollard, Sicheng Hao, Benjamin Moody, Brian Gow, et al. 2023. MIMIC-IV, a freely accessible electronic health record dataset. Scientific data 10, 1 (2023), 1. [9] Yaxuan Kong, Yiyuan Yang, Yoontae Hwang, Wenjie Du, Stefan Zohren, Zhangyang Wang, Ming Jin, and Qingsong Wen. 2025. Time-mqa: Time se-ries multi-task question answering with context enhancement. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 29736–29753. [10] Boyuan Li, Yicheng Luo, Zhen Liu, Junhao Zheng, Jianming Lv, and Qianli Ma. 2025. HyperIMTS: Hypergraph Neural Network for Irregular Multivariate Time Series Forecasting. arXiv:2505.17431 [cs.LG] https://arxiv.org/abs/2505.17431 [11] Yuxuan Liang, Haomin Wen, Yuqi Nie, Yushan Jiang, Ming Jin, Dongjin Song, Shirui Pan, and Qingsong Wen. 2024. Foundation models for time series analysis: A tutorial and survey. In Proceedings of the 30th ACM SIGKDD conference on knowledge discovery and data mining . 6555–6565. [12] Chenxi Liu, Shaowen Zhou, Qianxiong Xu, Hao Miao, Cheng Long, Ziyue Li, and Rui Zhao. 2025. Towards Cross-Modality Modeling for Time Series Analytics: A Survey in the LLM Era. arXiv:2505.02583 [cs.LG] https://arxiv.org/abs/2505.02583 [13] Haoxin Liu, Harshavardhan Kamarthi, Zhiyuan Zhao, Shangqing Xu, Shiyu Wang, Qingsong Wen, Tom Hartvigsen, Fei Wang, and B Aditya Prakash. 2025. How can time series analysis benefit from multiple modalities? a survey and outlook. 
+
+arXiv preprint arXiv:2503.11835 (2025). [14] Xu Liu, Junfeng Hu, Yuan Li, Shizhe Diao, Yuxuan Liang, Bryan Hooi, and Roger Zimmermann. 2024. Unitime: A language-empowered unified model for cross-domain time series forecasting. In Proceedings of the ACM Web Conference 2024 .4095–4106. [15] Xvyuan Liu, Xiangfei Qiu, Hanyin Cheng, Xingjian Wu, Chenjuan Guo, Bin Yang, and Jilin Hu. 2025. Astgi: Adaptive spatio-temporal graph interactions for irregular multivariate time series forecasting. arXiv preprint arXiv:2509.23313 
+
+(2025). [16] Xvyuan Liu, Xiangfei Qiu, Xingjian Wu, Zhengyu Li, Chenjuan Guo, Jilin Hu, and Bin Yang. 2026. Rethinking irregular time series forecasting: A simple yet effective baseline. In Proceedings of the AAAI Conference on Artificial Intelligence ,Vol. 40. 23873–23881. [17] Yong Liu, Guo Qin, Xiangdong Huang, Jianmin Wang, and Mingsheng Long. 2024. AutoTimes: Autoregressive Time Series Forecasters via Large Language Models. arXiv:2402.02370 [cs.LG] https://arxiv.org/abs/2402.02370 [18] Frank Nie, Ethan B. Liu, Yuan Zhu, Loe Yan, Wei Fan, and Jindong Han. 2026. CLIR-Bench: Benchmarking Multimodal Question Answering over Irregular Clinical Time Series. arXiv:2607.09880 [cs.CL] https://arxiv.org/abs/2607.09880 [19] Qwen Team. 2026. Qwen3.6-Plus: Towards Real World Agents. https://qwen.ai/ blog?id=qwen3.6 [20] Satya Narayan Shukla and Benjamin M. Marlin. 2024. Heteroscedastic Temporal Variational Autoencoder For Irregular Time Series. arXiv:2107.11350 [cs.LG] https://arxiv.org/abs/2107.11350 [21] Qwen Team. 2026. Qwen3.5: Accelerating Productivity with Native Multimodal Agents. https://qwen.ai/blog?id=qwen3.5 [22] Chengsen Wang, Qi Qi, Jingyu Wang, Haifeng Sun, Zirui Zhuang, Jinming Wu, Lei Zhang, and Jianxin Liao. 2024. ChatTime: A Unified Multimodal Time Series Foun-dation Model Bridging Numerical and Textual Data. arXiv:2412.11376 [cs.CL] https://arxiv.org/abs/2412.11376 [23] Yilin Wang, Peixuan Lei, Jie Song, Yuzhe Hao, Tao Chen, Yuxuan Zhang, Lei Jia, Yuanxiang Li, and Zhongyu Wei. 2025. ITFormer: Bridging Time Series and Natural Language for Multi-Modal QA with Large-Scale Multitask Dataset. In 
+
+International Conference on Machine Learning . PMLR, 63324–63344. [24] Stephan Xie, Ben Cohen, Mononito Goswami, Junhong Shen, Emaad Khwaja, Chenghao Liu, David Asker, Othmane Abou-Amal, and Ameet Talwalkar. 2026. ARFBench: Benchmarking Time Series Question Answering Ability for Software Incident Response. arXiv:2604.21199 [cs.LG] https://arxiv.org/abs/2604.21199 [25] Zhe Xie, Zeyan Li, Xiao He, Longlong Xu, Xidao Wen, Tieying Zhang, Jianjun Chen, Rui Shi, and Dan Pei. 2025. ChatTS: Aligning Time Series with LLMs via Synthetic Data for Enhanced Understanding and Reasoning. Proceedings of the VLDB Endowment 18, 8 (2025), 2385–2398. [26] Hao Xue and Flora D Salim. 2023. Promptcast: A new prompt-based learning paradigm for time series forecasting. IEEE Transactions on Knowledge and Data Engineering 36, 11 (2023), 6851–6864. [27] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu. 2025. Qwen3 Technical Report. arXiv:2505.09388 [cs.CL] https://arxiv.org/abs/2505.09388 [28] Fangxu Yu, Hongyu Zhao, and Tianyi Zhou. 2025. TS-Reasoner: Aligning Time Series Foundation Models with LLM Reasoning. arXiv:2510.03519 [cs.CL] https: //arxiv.org/abs/2510.03519 [29] Jiawen Zhang, Shun Zheng, Wei Cao, Jiang Bian, and Jia Li. 2023. Warpformer: A multi-scale modeling approach for irregular clinical time series. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining .3273–3285. [30] Weijia Zhang, Chenlong Yin, Hao Liu, Xiaofang Zhou, and Hui Xiong. 2024. Irregular multivariate time series forecasting: A transformable patching graph neural networks approach. In Forty-first International Conference on Machine Learning .[31] Xiyuan Zhang, Ranak Roy Chowdhury, Rajesh K. Gupta, and Jingbo Shang. 2024. Large Language Models for Time Series: A Survey. arXiv:2402.01801 [cs.LG] https://arxiv.org/abs/2402.01801 [32] Tian Zhou, PeiSong Niu, Xue Wang, Liang Sun, and Rong Jin. 2023. One Fits All:Power General Time Series Analysis by Pretrained LM. arXiv:2302.11939 [cs.LG] https://arxiv.org/abs/2302.11939 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+## A Ethics and Privacy Statement 
+
+This study uses de-identified MIMIC-IV ICU records and involves no direct interaction with patients. All data were accessed and processed in accordance with the applicable MIMIC-IV and Phy-sioNet data-use requirements. Patient, admission, and ICU-stay identifiers were excluded from the inputs provided to language models. Only task-relevant temporal records, timestamps, and in-tervention information were used. The generated captions were automatically checked, while QA instances were further verified by human reviewers. ClinPRISM is intended solely for research and is not designed for autonomous clinical decision-making. Any real-world deployment would require independent external valida-tion, privacy and fairness assessment, and continuous oversight by qualified healthcare professionals. 
+
+## B Details of Training Corpus Construction 
+
+This appendix provides the implementation details of the three corpus-construction procedures summarized in Section 3. We de-scribe the preprocessing and leakage control used for the irregular ICU time-series corpus, the structured summarization and con-strained verbalization used for the hierarchical caption corpus, and the rule-grounded generation and validation procedures used for the multi-task QA corpus. 
+
+## B.1 Construction Details of the Irregular ICU Time-Series Corpus 
+
+We construct the irregular time-series corpus from MIMIC-IV ICU records [7]. Each instance corresponds to a single ICU stay rather than an entire hospital admission. Measurements and events asso-ciated with the same ICU stay are collected from the source tables and mapped to a unified variable schema. Their timestamps are converted into elapsed hours relative to ICU admission and sorted chronologically. We preserve the original observation times and do not resample the trajectories onto a regular temporal grid. The corpus contains the 11 temporal variables summarized in Table 4. Each processed trajectory contains an ordered sequence of ICU-relative timestamps, the values of the 11 variables at those timestamps, and a corresponding observation mask for each vari-able. At a given timestamp, the mask is set to one when the variable is observed and zero otherwise. Unobserved entries are stored as missing values and are distinguished from valid numerical mea-surements through the masks. For each variable, we additionally record the elapsed time since its previous valid observation. When available, intervention and event records occurring during the ICU stay are retained as auxiliary information. After timestamp conversion, chronological ordering, and mask construction, we select 30,000 ICU-stay trajectories to form the final corpus. The resulting trajectories preserve the nonuniform sampling intervals, variable-specific missingness, and heteroge-neous observation frequencies of the original ICU records. The data partitions are fixed before any captions or QA instances are constructed, and all derived records inherit the partition of their source trajectory. 
+
+Table 4: Clinical variables used in the irregular ICU time-series corpus.             
+
+> Variable Meaning
+> heart_rate Heart rate map Mean arterial pressure systolic_bp Systolic blood pressure diastolic_bp Diastolic blood pressure spo2 Peripheral oxygen saturation resp_rate Respiratory rate temperature Body temperature lactate Blood lactate level creatinine Serum creatinine level wbc White blood cell count urine_output Urine output
+
+Each trajectory retains valid subject_id , hadm_id , and stay_id 
+
+identifiers for leakage control. To ensure separation from CLIR-Bench, we compare the selected corpus with the benchmark us-ing all three identifiers. None of the selected trajectories shares a 
+
+subject_id , hadm_id , or stay_id with any CLIR-Bench trajectory. Therefore, the training corpus and CLIR-Bench contain no shared patients, hospital admissions, or ICU stays. 
+
+## B.2 Construction Details of the Hierarchical Caption Corpus 
+
+We construct one hierarchical caption record for each of the 30,000 selected ICU trajectories. The construction procedure consists of de-terministic temporal summarization, constrained natural-language verbalization, and automatic quality control. For each trajectory, we first compute structured summaries di-rectly from its timestamps, observed values, and observation masks. Missing entries are excluded from all numerical calculations. The summaries are organized at three temporal scales. The global sum-mary records the start and end times, total duration, overall obser-vation density, sequence-level trends, and threshold-defined abnor-malities of the complete trajectory. The patch summary describes sufficiently observed local segments distributed chronologically across the trajectory, including their temporal ranges, observed variables, dominant changes, and threshold events. The micro sum-mary describes each variable separately, including its valid obser-vation count, value range, first and last observed values, overall direction of change, threshold crossings, and missingness pattern. Only information recoverable from valid observations is included in the structured summaries. Variables or local segments with in-sufficient measurements are marked as unavailable and are not assigned a temporal trend. Patient, hospital-admission, and ICU-stay identifiers are excluded from the generation input. GPT-5.5 receives only an anonymous episode identifier and the three struc-tured temporal summaries. GPT-5.5 then converts the global, segment-level, and micro-level summaries into their corresponding natural-language captions. The generation prompt requires it to preserve all supplied variable names, relative timestamps, numerical values, temporal trends, and abnormality indicators. It is explicitly instructed not to introduce A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+diagnoses, causal interpretations, unobserved events, or other un-supported clinical information. The generated output contains three fields: global_caption , patch_caption , and micro_caption . The fused caption is subsequently constructed by concatenating the val-idated global, segment-level, and micro-level captions; it is not generated independently by GPT-5.5. Each generated record undergoes automatic structural and fac-tual consistency checks. We verify that the record contains a valid anonymous episode identifier, all required output fields, nonempty captions, and only variables present in the structured input. Numer-ical values, temporal ranges, trend descriptions, and abnormality indicators appearing in the captions are compared with the corre-sponding structured summaries. Outputs containing unsupported variables, altered numerical information, inconsistent timestamps, malformed fields, or additional clinical conclusions are rejected and regenerated. After validation, the hierarchical caption corpus contains 30,000 records paired one-to-one with their source trajec-tories. Each record contains global, segment-level, micro-level, and fused descriptions of the same irregular ICU trajectory. In addition to automatic validation, we sampled 3,000 hierarchical-caption records, accounting for 10% of the caption corpus, for hu-man verification. Three master’s students specializing in artificial intelligence and with strong English proficiency independently reviewed the sampled records for numerical and temporal consis-tency with the source observations, the absence of unsupported clinical information, and consistency across the global-, segment-, and micro-level captions. Any disagreements were resolved through discussion until consensus was reached. 
+
+## B.3 Construction Details of the Multi-Task Time-Series QA Corpus 
+
+We construct approximately 41,000 four-way multiple-choice QA instances from the selected ICU trajectories. A single trajectory may produce multiple QA instances when it satisfies the eligibility requirements of different task schemas. Each instance contains a time-series identifier, a natural-language question, four candidate answers, one gold option, and task-specific temporal anchors or evidence metadata. The QA corpus covers four complementary capabilities and 11 task types, as summarized in Table 5. Temporal understanding eval-uates the localization, retrieval, recognition, and summarization of observed temporal states. Temporal forecasting requires predicting future measurements from observations available before a prede-fined cutoff. Temporal reasoning evaluates relationships across variables and intervention events. Temporal decision-making asso-ciates recent temporal evidence with intervention or monitoring choices. For each task type, we first define an executable schema specify-ing the trajectory eligibility criteria, queried variables, model-visible time range, reasoning objective, evidence rule, and answer format. Deterministic programs instantiate these schemas over eligible tra-jectories and identify the temporal anchors and evidence windows required by the task. The gold answer is then computed directly from the corresponding timestamped observations or intervention records. The initial question and candidate options are generated only after the evidence window and gold label have been fixed. 
+
+Table 5: Overview of the 11 task types in the multi-task time-series QA corpus.     
+
+> Capability Task
+> Temporal Understanding Temporal Grounding Anchor-State Retrieval Trend Pattern Recognition Missingness Awareness Clinical Time-Series Summarization Temporal Forecasting Threshold Forecasting Next-Value Interval Forecasting Temporal Reasoning Cross-Variable Reasoning Intervention Response Temporal Decision-Making Immediate Intervention Decision Monitoring / Escalation Decision
+
+Distractors are selected from plausible alternatives within the same task family, including nearby value intervals, adjacent tem-poral windows, confusable trend patterns, and plausible but un-supported intervention choices. Because the evidence and gold answer are determined programmatically before linguistic rewrit-ing, GPT-5.5 does not independently infer or modify the answer label. For forecasting tasks, each instance contains a cutoff time that strictly separates the model-visible history from the future label window. Only observations occurring before the cutoff are included in the model input, whereas the gold answer is computed exclu-sively from valid observations in the future window. Trajectories without sufficient pre-cutoff context or valid post-cutoff evidence are excluded. After the initial questions, options, evidence metadata, and gold labels have been fixed, GPT-5.5 performs meaning-preserving rewrit-ing. It paraphrases the questions and candidate answers, increases linguistic diversity, reduces superficial lexical cues, and improves the plausibility of distractors. The rewriting prompt explicitly re-quires preservation of the original task type, reasoning objective, temporal scope, option meanings, supporting evidence, and gold answer. GPT-5.5 therefore modifies only the linguistic expression of an instance and does not generate or revise its underlying evidence or label. The rewritten instances next undergo automatic consistency checks. We remove samples containing inconsistent timestamps, invalid evidence windows, insufficient observations, missing inter-vention context, duplicated or malformed options, multiple valid answers, or evidence that cannot be recovered from the source trajectory. We also verify that every instance contains exactly four mutually exclusive options and one valid gold label. For forecasting tasks, an additional leakage check ensures that post-cutoff observa-tions are absent from the model-visible input. The answer options are then randomly shuffled to reduce position bias, and the gold-option index is updated accordingly. Finally, the remaining instances are verified by three master’s students specializing in artificial intelligence and possessing strong English proficiency. Before verification, the reviewers are famil-iarized with task-specific guidelines and representative examples Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Table 6: Sensitivity to the temporal-token budget 𝐾 on CLIR-Bench. Here, 𝐾 = |T| denotes the number of tokens in the resampled temporal-token sequence T. Avg. denotes the macro-average accuracy across all 11 tasks, and bold indicates the best result in each column.                                                                             
+
+> 𝑇 Understanding Forecasting Reasoning Decision-Making Overall TG ASR TPR MA TSS TF NIF CVR IR IID MED Avg.
+> 848.83 31.50 33.00 70.33 52.50 26.17 24.50 48.83 52.00 97.83 20.67 46.02
+> 16 47.17 33.67 32.83 87.00 57.83 28.67 24.17 58.83 58.50 96.67 22.83 49.83
+> 32 46.00 31.50 33.67 84.33 46.67 28.17 23.67 54.67 53.67 97.17 26.17 47.79 64 46.00 32.50 37.33 75.50 42.33 28.17 24.17 51.00 61.00 96.00 29.50 47.59 128 47.00 30.67 31.00 84.67 46.83 26.83 26.00 53.00 56.67 95.83 23.50 47.45
+
+covering task definitions, evidence rules, option validity, and com-mon generation errors. Each instance is independently examined by all three reviewers with respect to task suitability, linguistic quality, temporal-evidence support, and answer-label consistency. The reviewers verify that each rewritten question preserves its in-tended reasoning objective, that the four candidate options are clear and mutually exclusive, and that the gold answer can be recovered from the corresponding timestamped observations or intervention records. They additionally check that GPT-5.5-based rewriting and option shuffling do not alter the original evidence rule or answer label. Disagreements are resolved through discussion until consen-sus is reached. Instances with unresolved ambiguity, insufficient evidence, inconsistent source-record alignment, or incorrect labels are removed. The validated instances are then converted into the instruction format used for Stage 3 training. 
+
+## C Details of Experiments C.1 Sensitivity to the Temporal-Token Budget 
+
+We analyze the effect of the temporal-token budget 𝐾 , where 𝐾 =
+
+|T| denotes the number of tokens produced by the learned-query resampler. We vary 𝐾 ∈ { 8, 16 , 32 , 64 , 128 } while keeping all other model and training settings unchanged. As shown in Table 6, the optimal budget varies across individual tasks, but 𝐾 = 16 achieves the highest macro-average accuracy of 49.83. Reducing the budget to 8 lowers the average accuracy to 46.02, whereas increasing it to 32, 64, and 128 yields 47.79, 47.59, and 47.45, respectively. These results show that QA accuracy does not increase monotonically with the number of temporal tokens. We therefore use 𝐾 = 16 in all main experiments, as it provides the strongest overall performance while retaining a compact temporal-token interface. 
+
+## C.2 Details of Inference Latency 
+
+All latency experiments were conducted on NVIDIA RTX 4090 GPUs with a batch size of 32. We report the average inference time per question, calculated by dividing the total time required to generate complete answers by the number of evaluated samples. The measurement covers the full inference pipeline, including time-series encoding, temporal evidence distillation, and LLM answer generation. Under this setting, ClinPRISM achieves an average latency of 0.15 seconds per question.

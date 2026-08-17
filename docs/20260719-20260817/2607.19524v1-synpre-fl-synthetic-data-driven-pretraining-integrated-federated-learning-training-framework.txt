@@ -1,0 +1,934 @@
+Title: SynPre-FL: Synthetic data-driven pretraining integrated Federated Learning training framework
+
+URL Source: https://arxiv.org/pdf/2607.19524v1
+
+Published Time: Thu, 23 Jul 2026 00:13:20 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Highlights 
+
+## SynPre-FL: Synthetic data-driven pretraining integrated Federated Learning training framework 
+
+Akarsh K Nair, Muhammad Arifur Rahman, Nicholas Shopland, Andy Burton, Jun He, Yuan Shen, David Baldwin, Emma O’Dowd, Amna Burzic, Mufti Mahmud, David J. Brown • Hybrid autoencoder–diffusion model for high-fidelity synthetic EHR generation • A synthetic-pretraining integrated training framework (SynPre-FL) for improving federated learning under non-IID settings • Comprehensive privacy and utility evaluation for synthetic clinical data • Federated-safe explainability framework for feature level contribution interpretation without data exposure • Reproducible benchmark for clinical tabular federated learning arXiv:2607.19524v1 [cs.LG] 21 Jul 2026 SynPre-FL: Synthetic data-driven pretraining integrated Federated Learning training framework 
+
+## Akarsh K Nair a,∗, Muhammad Arifur Rahman a, Nicholas Shopland a, Andy Burton a, Jun He a,Yuan Shen a, David Baldwin b, Emma O’Dowd b, Amna Burzic b, Mufti Mahmud c,d and David J. Brown a
+
+> a
+
+Department of Computer Science, Nottingham Trent University, Nottingham, United Kingdom 
+
+> b
+
+Division of Epidemiology and Public Health, University of Nottingham, Nottingham, United Kingdom 
+
+> c
+
+Information and Computer Science Department, King Fahd University of Petroleum and Minerals, Dhahran, Saudi Arabia 
+
+> d
+
+SDAIA-KFUPM Joint Research Center for AI, King Fahd University of Petroleum and Minerals, Dhahran, Saudi Arabia 
+
+A R T I C L E I N F O 
+
+Keywords :Federated Learning Data privacy Synthetic data generation Lung cancer prediction Electronic health records Privacy preserving AI 
+
+A B S T R A C T 
+
+Federated learning (FL) has emerged as a promising paradigm for privacy-preserving clinical risk prediction, yet its practical deployment in healthcare remains constrained by limited data shareability, strong client heterogeneity, class imbalance, and the lack of realistic benchmark datasets for tabular electronic health records (EHRs). In parallel, while synthetic data generation offers a potential solution to data scarcity, its integration with federated optimisation pipelines has not been systematically studied. In this work, we propose SynPre-FL, a unified framework that combines high-fidelity synthetic EHR generation with synthetic-pretrained FL for robust clinical prediction in non-IID settings. The framework employs a latent autoencoder–diffusion model to generate privacy-preserving synthetic EHR cohorts, which are used to warm-start federated training through a synthetic pretraining phase. This initialisation is followed by heterogeneity-aware federated optimisation incorporating class-balanced local objectives, proximal regularisation, and adaptive server-side aggregation. Post-hoc probability calibration and federated-safe explainability are integrated to ensure reliable and interpretable clinical risk estimates. Extensive experiments demonstrate that the proposed synthetic generator preserves the univariate, bivariate, and multivariate statistical structure while providing strong privacy protection against membership inference and reconstruction attacks. Synthetic data exhibit high downstream utility under TSTR/TRTS protocols and model-based evaluations. In federated experiments with 5, 10, and 15 heterogeneous clients, SynPre-FL consistently improves robustness and scalability compared to baselines, particularly under severe non-IID fragmentation. Calibration further enhances the reliability of probability estimates, and SHAP-based explainability reveals stable and clinically coherent feature attributions across federation sizes. In overview, SynPre-FL provides a practical and reproducible framework for integrating synthetic data generation with FL, enabling privacy-aware, interpretable, and robust clinical prediction from distributed tabular EHR data. 
+
+## 1. Introduction 
+
+Artificial intelligence (AI) for healthcare care is in-creasingly based on large-scale, high-dimensional electronic health record (EHR) data to enable accurate risk prediction, early disease detection, and robust clinical decision support. However, the development of such models remains severely constrained due to privacy regulations [1, 2], restricted data  
+
+> ⋆
+
+The author(s) declare that financial support was received for the research and/or publication of this article. This study was supported by UKRI through the Horizon Europe Guarantee Scheme (project number: 10078953) for the European Commission-funded PHASE IV AI project (grant agreement number: 101095384) under the Horizon Europe Pro-gramme. 
+
+> ∗
+
+Corresponding author  
+
+> akarsh.kongasserynair@ntu.ac.uk
+
+(A.K. Nair);  
+
+> arif.rahman@ntu.ac.uk
+
+(M.A. Rahman); nicholas.shopland@ntu.ac.uk (N. Shopland); andrew.burton@ntu.ac.uk (A. Burton); jun.he@ntu.ac.uk (J. He); yuan.shen@ntu.ac.uk (Y. Shen); david.baldwin@nottingham.ac.uk (D. Baldwin); emma.odowd@nottingham.ac.uk (E. O’Dowd);  
+
+> amna.burzic@nottingham.ac.uk
+
+(A. Burzic); mufti.mahmud@kfupm.edu.sa (M. Mahmud); david.brown@ntu.ac.uk (D.J. Brown) 
+
+> ORCID
+
+(s): 0000-0002-7734-0367 (A.K. Nair); 0000-0002-6774-0041 
+
+(M.A. Rahman); 0000-0003-2082-9070 (N. Shopland); 0000-0002-9073-8310 
+
+(A. Burton); 0000-0002-5616-4691 (J. He); 0000-0002-2037-8348 (M. Mahmud); 0000-0002-1677-7485 (D.J. Brown) 
+
+sharing between institutions, and the scarcity of publicly available benchmark datasets for tabular clinical prediction tasks. These limitations hinder the reproducibility of the research, slow methodological innovation, and prevent fair and consistent comparisons between algorithms. As a re-sult, synthetic data generation has emerged as a promising alternative, offering the potential to reproduce statistical properties of real EHR populations [3] while eliminating patient-identifiable information. In parallel, federated learning (FL) has gained traction as a privacy-preserving paradigm that enables collabora-tive model training without exchanging raw patient data. However, FL in healthcare faces substantial practical chal-lenges, including strong inter-institutional heterogeneity, se-vere outcome imbalance, uneven client sizes, and the lack of high-quality tabular datasets that can be openly shared for benchmarking federated optimisation strategies. Further-more, while interpretability is critical for clinical adoption, most explainable AI techniques are not designed to operate under the distributed settings. 
+
+A.K.Nair et al.: Preprint submitted to Elsevier Page 1 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+Thus, this work attempts to address several challenges in realistic synthetic data generation, robust federated optimi-sation under heterogeneity, and interpretability of privacy-compatible models. First, strict privacy regulations and in-stitutional data governance severely limit the availability of sharable, real-world EHR datasets, hindering reproducible research and systematic benchmarking of FL methods. Sec-ond, while synthetic data generation has gained attention, many existing approaches for tabular clinical data fail to preserve multivariate feature dependencies or reconstruct engineered medical variables that are critical for down-stream risk prediction. Third, current FL benchmarks rarely exploit synthetic data as a principled pretraining mecha-nism, despite its potential to stabilise optimisation under strong non-Independent and Identically Distributed (IID) client heterogeneity. Finally, most explainable AI techniques assume centralised access to patient-level features and are therefore incompatible with the privacy constraints of FL environments. Motivated by these challenges, we propose a unified methodological framework that enables privacy-preserving development of clinical prediction models in realistic fed-erated settings. The framework generates high-fidelity syn-thetic EHR data that capture clinically meaningful structure while avoiding patient-identifiable information, and lever-ages these synthetic data to warm-start FL via a synthetic pretraining phase. This initialisation conditions subsequent federated optimisation, improving robustness under non-IID client distributions. In addition, the framework integrates heterogeneity-aware local objectives, parameter aggregation conditioned on synthetic initialisation, post-hoc probability calibration, and privacy-compatible model explainability to ensure that the resulting models are reliable, interpretable, and clinically coherent across varying federation sizes. 
+
+1.1. Contributions 
+
+This work makes the following key contributions: • A hybrid autoencoder–diffusion model for high-fidelity synthetic EHR generation: The proposed generator preserves univariate, bivariate, and multi-variate clinical structure, reconstructs engineered fea-tures, and demonstrates strong fidelity across distribu-tional, correlational, and manifold-based evaluations. • A synthetic-pretrained federated learning frame-work (SynPre-FL): The synthetic pretraining strat-egy provides a clinically meaningful global initialisa-tion, stabilising federated optimisation, and improves performance under non-IID settings. SynPre-FL inte-grates local optimisation strategies, customised regu-larisation, synthetic-aware parameter aggregation, and post-hoc probability calibration. • A privacy and utility evaluation suite for syn-thetic EHR assessment: Synthetic data quality is accessed using membership inference attacks, nearest-neighbour analysis, anomaly-based outlier detection, and classical Train on Synthetic, Test on Real (TSTR)/ Train on Real, Test on Synthetic (TRTS) utility tests. • A federated-safe explainability framework: Ker-nelSHAP [4] is applied using privacy-preserving back-ground selection, enabling global and local inter-pretability without exposing raw client data. • A reproducible benchmark for tabular clinical FL: 
+
+To our knowledge, this is among the first studies to combine latent diffusion–based synthetic EHR gener-ation with FL and federated-safe explainability in a unified methodological pipeline. 
+
+## 2. Background and Related Work 
+
+2.1. Synthetic Data for Healthcare 
+
+Synthetic data has emerged as a key enabler for mit-igating data scarcity, privacy constraints, and regulatory barriers in AI in healthcare. Giuffre and Shung [3] provide a broad conceptual overview of generative approaches, in-cluding GANs, VAEs, and agent-based models, highlighting their potential for privacy-preserving innovation. However, they identify critical unresolved challenges such as bias amplification, limited interpretability, inadequate auditing, and regulatory gaps under HIPAA and GDPR, motivating the need for explainability, privacy-by-design, and lifecycle governance. Subsequent work focuses on technical limitations in real-istic data synthesis. Sun et al. [5] address tabular healthcare data generation under class imbalance and mixed data types, proposing DP-CGANs with dependency-aware conditioning and differential privacy guarantees. Their results reveal an inherent privacy–utility trade-off and show that dependency preservation is largely confined to pairwise relationships. Li et al. [6] extend this line of work to mixed-type longitudinal EHR data, introducing EHR-M-GAN, which combines dual-VAE latent alignment with a coupled recurrent GAN archi-tecture to better capture temporal and cross-modal depen-dencies, achieving improved fidelity and predictive utility at increased computational cost. Beyond data realism, the reliability of inference on syn-thetic data is a growing concern. El Emam et al. [7] evaluate whether analyses conducted on fully synthetic datasets repli-cate conclusions drawn from real data, demonstrating that naive use of synthetic data can lead to misleading inferences despite low privacy risk. At a broader level, Pezoulas et al. [8] provide a PRISMA-guided review covering tabu-lar, time-series, imaging, omics, and multimodal healthcare data. Their taxonomy highlights the dominance of GAN- and VAE-based methods while emphasising that high distribu-tional fidelity alone does not ensure privacy, utility, or fair-ness. Persistent challenges include the lack of standardised benchmarks, bias propagation, high computational cost, and regulatory ambiguity. In overview, the literature reflects a progression from conceptual ideas to technical implementations and critical evaluation, converging on the view that synthetic data can   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 2 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+
+support privacy-preserving healthcare analytics only with rigorous evaluation, replicability-aware analysis, explain-ability, and clear governance frameworks. 
+
+2.2. Federated Learning for Tabular Health Data 
+
+Ganzinger et al. [9] introduce federated electronic data capture (fEDC), an architectural framework for collaborative clinical data collection that preserves institutional control over EHRs. Rather than enabling FL directly, fEDC achieves federation through standardised metadata exchange using CDISC ODM–encoded electronic case report forms, pro-viding essential infrastructure for privacy-preserving, har-monised tabular data collection and reducing practical issues to future federated analytics in healthcare. Wang et al. [10] propose SurvMaximin, a one-shot fed-erated transfer learning framework for survival analysis in high-dimensional EHR data. By optimising worst-case per-formance across heterogeneous institutions using summary-level Cox regression statistics, the method yields trans-portable risk models robust to inter-site heterogeneity, miss-ing features, and limited target-site data. Evaluation of multi-national EHR data from the 4CE COVID-19 consortium demonstrates strong generalisation, establishing a statisti-cally grounded approach to federated clinical risk modelling. Li et al. [11] present FedScore, a privacy-preserving federated framework to construct interpretable and parsi-monious clinical scoring systems from tabular EHR data. The approach decomposes score development into feder-ated variable ranking, transformation, score derivation, and model selection, leveraging a communication-efficient one-shot distributed logistic regression algorithm (ODAL2). Ex-periments on multi-site emergency department data show performance comparable to centralised models, with im-proved cross-site stability and interpretability, addressing key clinical deployment requirements often overlooked in federated learning. Thakur et al. [12] address data view heterogeneity in federated clinical settings through a knowledge abstrac-tion and filtering–based framework. The method employs a global trainable knowledge vector with client-specific filtering modules to map heterogeneous local EHR repre-sentations into a shared latent space without manual feature alignment. Extensive evaluations of the CURIAL, eICU, and MIMIC-III datasets demonstrate consistent gains over FedAvg, Hypernetwork-based FL, LG-FedAvg, and AGAT EHR data in tabular, time-series, and graph-based EHR data. 
+
+2.3. Explainable AI in Federated Settings 
+
+Early work on explainability in federated environments focuses on enabling interpretation under strict privacy and data-partitioning constraints. Chen et al. [13] introduce Explainable Vertical Federated Learning (EVFL), an early explainable framework for vertical FL that provides ex-planations without sharing raw features. By combining a prediction-flipping objective with latent-space KL-divergence constraints and an Importance Rate metric, EVFL demon-strates that meaningful feature-level explanations can be obtained from distributed tabular data while preserving privacy. Further works extend explainability to system-level FL deployments. Bárcena et al. [14] propose an FL as-a-Service framework for Beyond-5G/6G networks using interpretable Takagi–Sugeno–Kang fuzzy rule-based models trained via federated aggregation. Their results show near-centralised performance, transparent rule-level explanations, and re-duced edge latency, highlighting the feasibility of explain-able FL systems in real-world infrastructures. Explainable FL has also been explored in healthcare-specific tasks us-ing post-hoc techniques. Briola et al. [15] present a FED-XAI framework for breast cancer classification, showing that federated XGBoost and neural networks can match centralised performance while maintaining interpretability through aggregated SHAP explanations. The consistency of clinically relevant feature importance across settings sug-gests that post-hoc explainability remains effective under data decentralisation. Moving beyond tabular classification, Ducange et al. [16] study Parkinson’s disease progression prediction, comparing interpretable-by-design federated fuzzy models with SHAP-explained federated neural networks. Their analysis reveals a trade-off between accuracy and explanation stability, with inherently interpretable models providing more consistent global explanations under non-IID data, underscoring ex-planation stability as a critical requirement. Beyond model-centric explanations, Zhao et al. [17] address explainability at both the model and the system-security levels in federated smart healthcare. By integrating gradient-based contribution analysis with verifiable secure aggregation, their framework supports transparent interpre-tation while detecting malicious or low-quality client up-dates, linking explainability with trust and robustness. Fi-nally, Chaddad et al. [18] synthesise explainable AI, domain adaptation, and FL in medical applications, claiming that isolated adoption is insufficient for clinical deployment. The study highlights open challenges, including global explain-ability, handling non-IID data, and regulatory compliance, positioning explainable FL as a core component of trustwor-thy medical AI. 
+
+2.4. Gaps in the Literature 
+
+Despite advances in FL for privacy-preserving medi-cal analytics, practical deployment remains constrained by data heterogeneity, limited local sample sizes, class imbal-ance, and restricted feature overlap across institutions. FL pipelines assume the existence of sufficient and well-aligned local datasets, which is often violated in real-world health-care settings where data are sparse, non-IID, and shaped by site-specific clinical practices. In addition, explainable federated models reveal that unstable or biased local data distributions can undermine explanation consistency, model robustness, and clinical trust, even when privacy is pre-served. Synthetic data generation offers a complementary mech-anism to address these limitations by enabling controlled   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 3 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+
+data augmentation, distribution alignment, and representa-tion balancing without exposing sensitive patient records. When integrated with FL, synthetic data can mitigate lo-cal data scarcity, support harmonisation between heteroge-neous sites, and improve both predictive performance and explanation stability. Moreover, synthetic data can facili-tate pre-training, simulation of rare conditions, and stress-testing of FL models under diverse scenarios, while re-maining compatible with regulatory and privacy constraints. These considerations motivate the development of unified pipelines that combine synthetic data generation with FL and explainability, positioning synthetic-FL frameworks as a building block for scalable, trustworthy, and deployment-ready medical AI systems. 
+
+## 3. Proposed Model 
+
+This work introduces SynPre-FL , a unified framework that integrates high-fidelity synthetic EHR generation with privacy-preserving FL for clinical risk prediction. SynPre-FL primarily focuses on conditioning FL through task-aware synthetic initialisation, heterogeneity-aware local objectives, and adaptive server-side optimisation. The central idea of SynPre-FL is to decouple data availability constraints from model initialisation and op-timisation. Synthetic data are first generated to capture a clinically meaningful population structure without exposing patient-identifiable information. These synthetic samples are then used to warm-start FL, placing the global model in a favourable region of the parameter space before exposure to heterogeneous client data. Subsequent federated optimi-sation incorporates class-balanced local losses, proximal regularisation, and adaptive aggregation to stabilise training under non-IID distributions. SynPre-FL is designed as a modular pipeline composed of three tightly coupled stages: (i) synthetic EHR generation and validation, (ii) synthetic-pretrained federated optimisa-tion, and (iii) post-hoc calibration and explainability. Each module can be independently analysed while contributing to the full pipeline for privacy-aware clinical prediction. 
+
+3.1. SynPre-FL Pipeline 
+
+Figure 1 illustrates the operation of the SynPre-FL pipeline. The pipeline begins with a real-world EHR dataset that remains entirely local and is never shared between institutions. From these data, a synthetic cohort is generated using a latent autoencoder–diffusion model that preserves the multivariate clinical structure while removing patient-identifiable information. Synthetic records are completed through a task-aware label transfer mechanism, producing a fully labelled synthetic dataset compatible with the down-stream prediction task. 
+
+Synthetic data locality and federated constraints Through-out the SynPre-FL pipeline, raw real-world EHR data remain strictly local to each client and are never transmitted to the server. The synthetic dataset used for pretraining is generated offline and does not correspond to identifiable pa-tient records. Thus, it is treated as an auxiliary privacy-safe dataset available to the server before federated optimisation. Synthetic pretraining occurs only once, before federated rounds begin, and the synthetic data are not used during client-side updates. This design preserves standard FL as-sumptions while allowing for informed global initialisation. In the second stage, the synthetic dataset is used to perform a short centralised pretraining phase. This synthetic pretraining step initialises the global model with clinically meaningful representations before FL training begins. Im-portantly, synthetic pretraining is not intended to replace learning from real data, but rather to provide a stable and privacy-safe initialisation to mitigate early-round instability under strong client heterogeneity. In the third stage, FL is performed across multiple non-IID clients. Each client optimises a class-balanced local objective augmented with a proximal regularisation term to limit drift from the global model. Client updates are aggregated on the server using weighted averaging and adaptive Adam-style server optimization [19]. This combi-nation improves convergence stability without altering the fundamental FL protocol. Finally, the trained global model undergoes post-hoc probability calibration and threshold optimisation to ensure reliable clinical risk estimates. The behavior of the model is further analysed using federated-safe explainability tools that operate exclusively on the global predictor, preserving data privacy throughout the pipeline. 
+
+3.2. Design Rationale 
+
+The design of SynPre-FL is guided by three practical challenges commonly encountered in federated clinical pre-diction tasks: limited data shareability, strong cross-client heterogeneity, and the need for trustworthy model output. 
+
+Synthetic pretraining as initialisation In non-IID FL settings, random initialisation can lead to unstable early updates and slow convergence, particularly when client sizes and label distributions differ substantially. By pretraining the global model on task-consistent synthetic data, SynPre-FL provides an informed initialisation that captures the population-level clinical structure while remaining indepen-dent of any single client. This strategy improves the stability of the optimisation without leaking real patient information. 
+
+Heterogeneity-aware local optimisation Clinical datasets are typically imbalanced and client-level label distributions vary widely under realistic partitioning. SynPre-FL ad-dresses this through class-balanced local loss functions and proximal regularisation, reducing label imbalance issues and preventing dominance by large or skewed clients. Although these components are well-studied individually, their com-bination within a synthetic-pre-trained pipeline improves robustness under severe non-IID conditions. 
+
+Adaptive aggregation without altering the FL proto-col SynPre-FL adopts an Adam-inspired server update to   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 4 of 18
+
+SynPre-FL: Synthetic data-driven pretraining integrated FL training framework Warm Initialised Global Model Client 1  Client N Independent Real-World EHR Dataset Latent Autoencoder + 
+
+> Diffusion Model
+> (Offline Training Only) Synthetic EHR Generation
+> (Fully De-identified)
+> Auxillary, One-Time Use) Privacy-Safe Synthetic Dataset
+> (Fully De-identified,
+> Auxiuary, One-Time Use) Stage 1 : Offline Synthetic Data
+> Preparation Short Centralised
+> Pretraining Stage 2 : Centralised Warm-Start
+> Pretraining Final Global
+> Model Post-Training (Server-Side) Post-hoc
+> Calibration &
+> Threshold
+> Optimisation Central Server
+> Aggregation Stage 3 : Federated Learning on
+> Real EHR Proximal-Regularised
+> Local Training
+> Local Real EHR
+> Client 2 Privacy Boundary
+
+Figure 1: Stage-wise overview of the SynPre-FL framework illustrating the integration of synthetic EHR generation, synthetic pretraining, and heterogeneity-aware FL optimisation. The pipeline depicts the separation between offline synthetic data preparation and privacy-preserving FL training, followed by calibration and explainability modules for reliable risk prediction. 
+
+adaptively scale aggregated client updates. This formula-tion improves convergence smoothness and stability while preserving the standard synchronous FL structure. The pro-posed framework does not primarily focus on redefining aggregations; rather, it presents how adaptive aggregation is conditioned on synthetic initialisation and heterogeneity-aware local updates. 
+
+Clinical reliability and interpretability Since clinical deployments require reliable probability estimates, SynPre-FL incorporates post-hoc calibration and threshold optimi-sation as mandatory components of the pipeline. Explain-ability is performed exclusively on the global model using privacy-compatible SHAP analysis, ensuring transparency without violating federated constraints. Together, these design choices position SynPre-FL as a practical and systematically designed framework that bridges synthetic data generation and FL for privacy-preserving clinical risk modelling. 
+
+## 4. Synthetic Data Preparation Pipeline 
+
+This section describes the offline synthetic data gen-eration process used to construct the auxiliary dataset for SynPre-FL.The complete synthetic generation workflow is summarised in Algorithm 1. The pipeline is executed prior to federated training and does not involve any interaction with federated clients. Its purpose is to generate clinically coherent, task-compatible synthetic records that can be used for model initialisation. 
+
+4.1. Source Dataset and Feature Scope 
+
+The real EHR dataset [20] consists of 𝑁 patient records, from which a unified 29-feature schema was extracted com-prising demographic attributes, comorbidities, respiratory symptoms, and engineered clinical risk indicators. From these records, a subset of 𝑑 0 = 22 primitive features is retained for generative modelling. Engineered features are excluded during generation and deterministically recon-structed after sampling to preserve clinical consistency. 
+
+4.2. Preprocessing and Encoded Representation 
+
+Let 𝑥 ∈ ℝ𝑑 0 denote a real patient record. Features are partitioned into categorical variables  (age group, gender, smoking category) and binary clinical indicators . A fixed column transformer 𝜙 (⋅) maps the raw features into an en-coded space: 
+
+𝑧 𝑥 = 𝜙 (𝑥 ) = [OHE  (𝑥  ), 𝑥 
+
+] ∈ ℝ𝐷 , (1) where OHE denotes one-hot encoding and 𝐷 = 26 in our implementation. The transformer 𝜙 is stored and reused for decoding synthetic samples and for all downstream evalua-tions. 
+
+4.3. Latent Autoencoder 
+
+To obtain a compact representation suitable for gener-ative modelling, an autoencoder is trained on encoded real 
+
+A.K.Nair et al.: Preprint submitted to Elsevier Page 5 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+features. The encoder 𝑓 enc ∶ ℝ𝐷 → ℝ𝐿 maps the encoded records to a latent space of dimension 𝐿 = 32 , and the decoder 𝑓 dec reconstructs the encoded features. The autoen-coder is trained by minimising the reconstruction loss: 
+
+AE = 1
+
+𝑁 
+
+> 𝑁
+
+∑
+
+> 𝑖 =1
+
+‖‖‖𝑧 𝑥 𝑖 − 𝑓 dec (𝑓 enc (𝑧 𝑥 𝑖 )) ‖‖‖ 
+
+> 22
+
+, (2) using Adam with learning rate 10 −3 . The trained encoder is subsequently frozen. 
+
+4.4. Latent Diffusion Model 
+
+A denoising diffusion model is trained directly in the la-tent space. Let 𝑧 0 = 𝑓 enc (𝑧 𝑥 ) denote a latent representation. A linear noise schedule {𝛽 𝑡 }𝑇 𝑡 =1 with 𝑇 = 300 defines the forward diffusion process: 
+
+𝑞 (𝑧 𝑡 ∣ 𝑧 0) = 
+
+(√̄𝛼 𝑡 𝑧 0, (1 − ̄𝛼 𝑡 )𝐼 
+
+)
+
+,̄ 𝛼 𝑡 =
+
+> 𝑡
+
+∏
+
+> 𝜏 =1
+
+(1 − 𝛽 𝜏 ).
+
+(3) A neural denoiser 𝜀 𝜃 (𝑧 𝑡 , 𝑡 ) is trained to predict injected noise by minimising: 
+
+dif f = 𝔼 𝑧 0,𝑡,𝜖 
+
+[‖‖𝜖 − 𝜀 𝜃 (𝑧 𝑡 , 𝑡 )‖‖22
+
+]
+
+. (4) 
+
+4.5. Synthetic Record Construction 
+
+Synthetic latent samples are obtained by reversing the diffusion process starting from 𝑧 𝑇 ∼  (0 , 𝐼 ):
+
+𝑧 𝑡 −1 = 1
+
+√𝛼 𝑡 
+
+(𝑧 𝑡 − 𝛽 𝑡 𝜀 𝜃 (𝑧 𝑡 , 𝑡 )) . (5) The resulting 𝑧 0 is decoded via 𝑓 dec and mapped back to interpretable features using inverse transformations. Cate-gorical attributes are recovered by argmax decoding, and binary features are thresholded. Engineered clinical features (e.g., respiratory severity, diabetes complication count, MI severity) are then recomputed deterministically using the same rules applied to real data, yielding full 29-feature synthetic records. 
+
+4.6. Task-Aware Label Assignment 
+
+As the generative model is unconditional, outcome la-bels are assigned post hoc using a label-transfer model. A gradient boosting classifier ℎlab is trained on real data to estimate 𝑝 (𝑦 = 1 ∣ 𝑥 ). Synthetic labels are obtained as: ̃𝑦 𝑗 = 𝕀 (ℎlab (̃𝑥 𝑗 ) ≥ 0.5), (6) producing a task-consistent synthetic dataset syn .
+
+## 5. Proposed Federated Learning Methodology 
+
+This section details the FL training strategy used in SynPre-FL. All real patient data remain strictly local to participating clients. Synthetic data are used exclusively for global model initialisation and are not accessed during federated rounds. 
+
+5.1. Client Partitioning 
+
+The real dataset is partitioned into 𝐾 ∈ {5 , 10 , 15} non-IID client datasets with heterogeneous sizes. Each client 
+
+𝑘 holds local data 𝑘 with 𝑛 𝑘 samples. No raw data or intermediate statistics are exchanged. 
+
+5.2. Base Prediction Model 
+
+The global predictor is a multilayer perceptron that ac-cepts 29 input features, followed by three hidden layers with 128, 64, and 32 neurons, respectively. The network used ReLU activations and a final sigmoid output. 
+
+5.3. Class-Balanced Local Objective 
+
+Each client optimises a class-balanced binary cross-entropy loss. Let 𝑤 + = 𝑁 neg ∕𝑁 pos be the positive-class weight. For logit 𝑠 and label 𝑦 :
+
+𝓁 CB (𝑠, 𝑦 ) = − 𝑤 +𝑦 log 𝜎 (𝑠 ) − (1 − 𝑦 ) log(1 − 𝜎 (𝑠 )) . (7) 
+
+5.4. FedProx Regularisation 
+
+To mitigate client drift, a proximal penalty is added to the local objective: 
+
+𝑘 (𝑤 ) = 1
+
+𝑛 𝑘 
+
+∑
+
+> (𝑥,𝑦 )∈ 𝑘
+
+𝓁 CB (𝑓 𝑤 (𝑥 ), 𝑦 ) + 𝜇 
+
+2 ‖𝑤 − 𝑤 (𝑟 )‖22. (8) 
+
+5.5. Adaptive Server Optimisation 
+
+Client updates are aggregated using weighted averaging. The server applies an Adam-style adaptive update: 
+
+𝑚 (𝑟 ) = 𝛽 1𝑚 (𝑟 −1) + (1 − 𝛽 1)𝑔 (𝑟 ), (9) 
+
+𝑣 (𝑟 ) = 𝛽 2𝑣 (𝑟 −1) + (1 − 𝛽 2)( 𝑔 (𝑟 ))2, (10) 
+
+𝑤 (𝑟 +1) = 𝑤 (𝑟 ) − 𝜂 𝑚 (𝑟 )
+
+√
+
+𝑣 (𝑟 ) + 𝜖 , (11) where 𝑔 (𝑟 ) denotes the aggregated update direction. 
+
+5.6. Synthetic Pretraining and Training Workflow 
+
+Before federated training, the global model is pretrained on syn for 10 epochs. FL training then proceeds for 𝑅 
+
+rounds. 
+
+## 6. Probability Calibration 
+
+Existing studies have shown that neural network classi-fiers produce poorly calibrated probability estimates, partic-ularly with class imbalance, heterogeneous training distri-butions, and non-convex optimisation dynamics. In the FL context, these effects become more evident where client-specific data biases and non-IID aggregation can distort the global logit scale. Since the SynPre-FL model is intended for risk-sensitive clinical decision support, post-hoc probability calibration is required to ensure that output scores corre-spond to reliable empirical event likelihoods. The calibration and threshold optimisation procedure used in this study is summarised in Algorithm 3.   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 6 of 18
+
+SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+Algorithm 1 Synthetic EHR Generation via Autoencoder + Latent Diffusion 
+
+Require: Real dataset real = {( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑁 𝑖 =1 , number of syn-thetic samples 𝑀 , latent dimension 𝐿 , diffusion steps 𝑇  
+
+> 1:
+
+Fit column-transformer 𝜙 on 22 primitive real features and encode 𝑧 𝑥 𝑖 = 𝜙 (𝑥 𝑖 ) 
+
+> 2:
+
+Train autoencoder (𝑓 enc , 𝑓 dec ) on {𝑧 𝑥 𝑖 } by minimising 
+
+AE  
+
+> 3:
+
+Encode real data latents 𝑧 0,𝑖 = 𝑓 enc (𝑧 𝑥 𝑖 ) 
+
+> 4:
+
+Train diffusion model 𝜀 𝜃 on {𝑧 0,𝑖 } using loss dif f  
+
+> 5:
+
+Train label model ℎlab on (𝑥 𝑖 , 𝑦 𝑖 ) using gradient boosting  
+
+> 6:
+
+for 𝑗 = 1 to 𝑀 do  
+
+> 7:
+
+Sample 𝑧 𝑇 ∼  (0 , 𝐼 𝐿 ) 
+
+> 8:
+
+for 𝑡 = 𝑇 , … , 1 do  
+
+> 9:
+
+Compute 𝜀 𝜃 (𝑧 𝑡 , 𝑡 ) 
+
+> 10:
+
+𝑧 𝑡 −1 ← 1
+
+> √𝛼 𝑡
+
+(𝑧 𝑡 − 𝛽 𝑡 𝜀 𝜃 (𝑧 𝑡 , 𝑡 )) 
+
+> 11:
+
+end for 
+
+> 12:
+
+̂ 𝑧 𝑥 ← 𝑓 dec (𝑧 0) 
+
+> 13:
+
+Decode categorical blocks of ̂𝑧 𝑥 via argmax; thresh-old binary dimensions at 0.5 to obtain 22 primitive features ̃𝑥 (22)  
+
+> 𝑗
+> 14:
+
+Recompute 5 engineered clinical features from ̃𝑥 (22) 
+
+> 𝑗
+
+to obtain full ̃𝑥 𝑗 ∈ ℝ29  
+
+> 15:
+
+Compute ̃𝑝 𝑗 = ℎlab (𝜓 (̃𝑥 𝑗 )) and set ̃𝑦 𝑗 = 𝕀 (̃𝑝 𝑗 ≥ 0.5)  
+
+> 16:
+
+end for  
+
+> 17:
+
+return Synthetic dataset syn = {( ̃𝑥 𝑗 ,̃𝑦 𝑗 )} 𝑀 𝑗 =1 
+
+6.1. Need for Calibration in Health Models 
+
+Medical classification tasks often require threshold-based decision-making (e.g., identifying high-risk patients), where the reliability of the predicted probabilities directly in-fluences clinical utility and fairness. Despite strong discrim-inative performance, federated neural models frequently exhibit systematic miscalibration due to: • Label imbalance , which biases sigmoid outputs to-ward the majority class. • Client-level heterogeneity , which leads to inconsis-tent logit scaling. • Non-IID aggregation effects that perturb global de-cision boundaries. • Distributional shifts induced by synthetic initiali-sation .These issues jointly motivate a principled calibration mech-anism applied to the final global model after completion of the full SynPre-FL training pipeline. 
+
+6.2. Logistic Recalibration 
+
+We adopt a Platt-style logistic recalibration scheme [21, 22], adding a lightweight logistic regression over the raw logits of the final global model using a held-out real-data 
+
+Algorithm 2 SynPre-FL: Synthetic Pretraining + Federated Optimisation 
+
+Require: Real client datasets {𝑘 }𝐾 𝑘 =1 , synthetic dataset 
+
+syn , number of rounds 𝑅 , local epochs 𝐸 , server learn-ing rate 𝜂  
+
+> 1:
+
+Initialise global model weights 𝑤 (0) randomly  
+
+> 2:
+
+Synthetic pretraining:  
+
+> 3:
+
+Train 𝑤 (0) on syn for 10 epochs with class-balanced BCE to obtain 𝑤 (0)  
+
+> pre
+> 4:
+
+Set 𝑤 (0) ← 𝑤 (0) 
+
+> pre
+
+, initialise 𝑚 (0) = 0 , 𝑣 (0) = 0  
+
+> 5:
+
+for round 𝑟 = 0 to 𝑅 − 1 do  
+
+> 6:
+
+for each client 𝑘 = 1 , … , 𝐾 in parallel do  
+
+> 7:
+
+Receive current global model 𝑤 (𝑟 ) 
+
+> 8:
+
+Set local weights 𝑤 𝑘 ← 𝑤 (𝑟 ) 
+
+> 9:
+
+for 𝐸 local epochs do  
+
+> 10:
+
+for mini-batch (𝑢, 𝑦 ) ⊂ 𝑘 do  
+
+> 11:
+
+Compute class-balanced FedProx loss 
+
+𝑘 (𝑤 𝑘 ; 𝑤 (𝑟 )) 
+
+> 12:
+
+Update 𝑤 𝑘 with Adam on ∇𝑤 𝑘 𝑘  
+
+> 13:
+
+end for  
+
+> 14:
+
+end for  
+
+> 15:
+
+Send updated weights 𝑤 (𝑟 ) 
+
+> 𝑘
+
+← 𝑤 𝑘 to server  
+
+> 16:
+
+end for  
+
+> 17:
+
+Compute weighted average ̄ 𝑤 (𝑟 ) = ∑𝑘 𝑛 𝑘  
+
+> 𝑛
+
+𝑤 (𝑟 ) 
+
+> 𝑘
+> 18:
+
+Form pseudo-gradient 𝑔 (𝑟 ) = 𝑤 (𝑟 ) −̄ 𝑤 (𝑟 ) 
+
+> 19:
+
+Update Adam moments 𝑚 (𝑟 ), 𝑣 (𝑟 ) and compute 𝑤 (𝑟 +1) 
+
+as in FedAdam  
+
+> 20:
+
+end for  
+
+> 21:
+
+return Final global model 𝑤 (𝑅 )
+
+Algorithm 3 Calibration and Threshold Optimisation 
+
+Require: Trained global model 𝑓 𝑤 (𝑅 ) , validation set  
+
+> 1:
+
+Compute raw probabilities 𝑝 𝑖 = 𝑓 𝑤 (𝑅 ) (𝑢 𝑖 ) for all 
+
+(𝑢 𝑖 , 𝑦 𝑖 ) ∈  
+
+> 2:
+
+Fit logistic recalibration model (𝑎, 𝑏 ) on (𝑝 𝑖 , 𝑦 𝑖 ) 
+
+> 3:
+
+Obtain calibrated scores ̃𝑝 𝑖 = 𝜎 (𝑎 log( 𝑝 𝑖 ∕(1 − 𝑝 𝑖 )) + 𝑏 ) 
+
+> 4:
+
+Define a grid of thresholds  ⊂ [0 , 1]  
+
+> 5:
+
+for each 𝜏 ∈  do 
+
+> 6:
+
+̂ 𝑦 (𝜏 ) 
+
+> 𝑖
+
+← 𝕀 (̃𝑝 𝑖 ≥ 𝜏 ) 
+
+> 7:
+
+Compute F1( 𝜏 ) on  
+
+> 8:
+
+end for 
+
+> 9:
+
+̂ 𝜏 ← arg max 𝜏 ∈ F1( 𝜏 ) 
+
+> 10:
+
+return Calibrated decision rule (𝑓 𝑤 (𝑅 ) ,̂𝜏 )
+
+validation set. Given the uncalibrated logit output 𝑓 (𝑥 ) from the final global model, the calibrated probability is defined as: ̃𝑝 (𝑥 ) = 𝜎 (𝑎𝑓 (𝑥 ) + 𝑏 ), (12) where 𝜎 (⋅) denotes the sigmoid function, and the param-eters (𝑎, 𝑏 ) are estimated by minimising the negative log-likelihood over the validation split. Compared to temper-ature scaling, logistic recalibration introduces an additive 
+
+A.K.Nair et al.: Preprint submitted to Elsevier Page 7 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+bias term and is better suited for tabular models whose logit distributions may not be symmetric or unimodal. Calibration was performed strictly on the validation set to avoid leakage of test information, and the resulting cali-brated model was used for all downstream threshold selec-tion and evaluation. 
+
+6.3. Threshold Optimisation for F1 
+
+After obtaining calibrated probability scores, we per-form grid search over candidate thresholds 𝑇 ∈ [0 .1, 0.9] 
+
+to identify the operating point that maximises the F1 score on the validation set. Extreme thresholds near 0 and 1 were excluded to avoid unstable metric estimates under strong class imbalance. The optimal threshold is defined as 
+
+𝑇 ∗ = arg max   
+
+> 𝑇 ∈[0 .1,0.9]
+
+F1( 𝑇 ), (13) where F1( 𝑇 ) is computed by thresholding the calibrated probabilities ̃𝑝 (𝑥 ) at level 𝑇 .The selected threshold 𝑇 ∗ is fixed after validation and applied during evaluation on the held-out test data, produc-ing the calibrated metrics reported in Sec. 8. 
+
+## 7. Explainability Framework 
+
+The SynPre-FL framework incorporates a privacy-preserving explainability module based on SHAP (Shapley additive explanations), enabling both global and local in-terpretability without exposing patient-level records. This section details the explainability constraints, the SHAP attribution pipeline, and the methodology for aggregating explanations across distributed clients. 
+
+7.1. Federated Explainability Constraints 
+
+In FL, as the raw patient features and labels remain localised, explainability methods must operate under the following constraints: • No access to raw client data: Attribution methods cannot rely on centralised pooling of individual pa-tient records. • Model-centric explainability: Explanations must be derived solely from the global model, model outputs, and optional privacy-safe surrogate data. • Client invariance: Explanations should remain stable across varying client counts ( 5, 10 , 15 ), reflecting con-sistent global reasoning despite data fragmentation. These constraints motivate a federated-safe explainabil-ity pipeline that enables transparent model auditing while maintaining strict privacy guarantees. 
+
+7.2. KernelSHAP-Based Attribution 
+
+KernelSHAP was selected for explainability due to its model-agnostic nature, robustness to heterogeneous feature interactions, and compatibility with federated privacy re-quirements. SHAP values were computed on the raw prob-ability outputs of the global model prior to post-hoc cali-bration. Calibration was applied only for decision threshold optimisation and evaluation, while explainability analysis focused on the underlying predictive behaviour of the trained model. 
+
+Background Dataset Selection 
+
+SHAP requires a reference distribution to estimate con-ditional expectations. To obtain a privacy-safe and compu-tationally efficient background set, a fixed subset of 200 representative samples from a global held-out real dataset was used as the background distribution. This ensures that key regions of the feature space are covered while preventing data leakage from individual clients. 
+
+Global SHAP Aggregation 
+
+A set of 300 evaluation samples was used to compute SHAP values for the calibrated global model. For each sam-ple, KernelSHAP estimates a vector of feature contributions 
+
+𝜙 𝑗 such that: 
+
+𝑓 (𝑥 ) = 𝑓 (𝑥 baseline ) + 
+
+> 𝑑
+
+∑
+
+> 𝑗 =1
+
+𝜙 𝑗 ,
+
+where 𝑑 is the dimensionality of the input feature vector after deterministic preprocessing. Global feature importance is then computed as: 
+
+Imp( 𝑗 ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑
+
+> 𝑖 =1
+
+|𝜙 𝑖,𝑗 |,
+
+where 𝑁 = 300 in our evaluations. This aggregation captures the dominant predictors learned collectively from all federated clients, enabling direct com-parison of feature relevance across different federation sizes. 
+
+Top-Features Ranking 
+
+Features were ranked using their mean absolute SHAP contributions. Across all client configurations, a consistent set of clinically meaningful predictors emerged, including: • Gender 
+
+• Age category 
+
+• Ischemic heart disease (IHD) 
+
+• Smoking severity 
+
+• Diabetic conditions 
+
+• Respiratory distress, cough, and dyspnea 
+
+• Hypertension 
+
+The consistency of these rankings across the 5-, 10-, and 15-client SynPre-FL models demonstrates that the federated training process preserves underlying clinical relationships captured by the model, even under severe data fragmentation and heterogeneity.                    
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 8 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+> 010 20 30 40 024
+> ⋅10 −2
+> Epoch Reconstruction Loss (MSE)
+> Figure 2: Training loss of the autoencoder used for latent representation learning within the synthetic EHR generation pipeline. The reduction in reconstruction loss across 40 epochs indicates stable convergence
+> 010 20 30 40 0.60.8
+> Epoch Diffusion Training Loss
+> Figure 3: Training loss of the latent diffusion model over 40 epochs. The gradual decrease demonstrates successful learning of the latent feature distribution and stable optimisation behaviour during synthetic data generation.
+
+## 8. Results 
+
+This section presents a comprehensive evaluation of the proposed synthetic EHR generation pipeline and its downstream application to federated learning. We report three main categories of analyses: (i) fidelity, (ii) privacy, and (iii) utility. We further demonstrate the impact of syn-thetic pretraining under multi-client FL using 5, 10, and 15 heterogeneous clients, followed by model calibration and explainability analyses. 
+
+8.1. Synthetic Data Generation Performance 
+
+Autoencoder Training 
+
+The autoencoder was trained for 40 epochs. As presented in Figure 2, reconstruction loss showed rapid convergence, reaching a final MSE of 3.5 × 10 −5 .
+
+Diffusion Model Training 
+
+The latent diffusion model similarly converged as ex-pected, reducing training loss from 0.92 to 0.49 (Figure 3).                
+
+> Table 1
+> JSD values for categorical/binary features. Lower values in-dicate closer alignment between real and synthetic marginal distributions.
+> Feature JSD
+> age 30–50 0.0986 age 50–70 0.1195 age >70 0.0433 gender (f/m) 0.0095 smoking former 0.0277 smoking never 0.0271 COPD 0.0083 emphysema 0.0708 hypertension 0.0808 respiratory cough 0.1074 dm retinopathy (proliferative) 0.1836 dm macular edema 0.1358 IHD 0.0060
+
+8.2. Fidelity Evaluation 
+
+We evaluated fidelity using three complementary anal-ysis methods: (i) univariate distribution similarity, (ii) bi-variate correlation structure, and (iii) multivariate manifold similarity. These analyses quantify how closely the synthetic EHR data reproduces the statistical properties of the real dataset. 
+
+Univariate Fidelity 
+
+For univariate analysis, the categorical Jensen–Shannon Divergence (JSD) [23] value was computed between the real and synthetic marginal distributions for all categorical and binary features. As shown in Table 1, all JSD values remain below 0.20, indicating strong alignment between real and synthetic univariate distributions, with the lowest divergence observed in demographic variables (e.g., gender, age) and slightly higher divergence in rare disease indicators. 
+
+Bivariate Fidelity 
+
+Bivariate fidelity was analysed by comparing the corre-lation structure of real and synthetic datasets. Figure 4 shows heatmaps of Pearson correlation matrices. The global differ-ence between these matrices, measured using the Frobenius norm, was: 
+
+|| 𝐶 real − 𝐶 syn || 𝐹 = 2 .5488 
+
+A lower value indicates better preservation of pairwise dependencies. Visual inspection confirms that major cor-relation blocks (e.g., respiratory and diabetic complication clusters) are well preserved. 
+
+Multivariate Fidelity 
+
+To evaluate high-dimensional manifold similarity, we trained a propensity-score classifier to distinguish real from synthetic samples. The classifier achieved an AUROC of 0.7043 , indicating moderate distinguishability but substan-tial overlap of joint distributions. Figure 5 shows a UMAP projection of the encoded feature space, where real and synthetic samples form overlapping clusters, demonstrating            
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 9 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+> Figure 4: Comparison of real vs. synthetic correlation matrices. The synthetic data preserves major correlation structures, including clusters of respiratory symptoms and diabetic complications.
+> Figure 5: UMAP projection of real vs. synthetic samples in latent feature space. The strong overlap across clusters indicates preservation of global multivariate structure.
+
+that the diffusion model captures the global structure of patient phenotypes. 
+
+8.3. Privacy Evaluation 
+
+We evaluated privacy using two complementary ap-proaches: (i) Membership Inference Attack (MIA) and (ii) nearest-neighbour (NN) distance analysis in the encoded latent space. 
+
+Membership Inference Attack A classifier was trained to distinguish whether a given sample belonged to the real training set. The resulting AUROC was 0.5064, very close to random guessing (0.50), indicating no detectable mem-bership leakage. 
+
+Nearest-Neighbor Distance Analysis We computed the mean NN distance between samples in the encoded latent space:             
+
+> Table 2
+> Classical utility evaluation using baseline model.
+> Setting AUC ACC F1
+> Real with Real 0.8858 0.8432 0.6696 TSTR 0.8354 0.8557 0.6011 TRTS 0.9968 0.9316 0.8346
+
+• Real with Real mean distance: 0.0718 • Synthetic with Real mean distance: 1.3816 The ratio of synthetic-to-real NN distance was 19.23, indi-cating that synthetic points lie significantly farther from real samples than real samples lie from each other. This suggests strong protection against reconstruction or linkage attacks. 
+
+8.4. Utility Evaluation 
+
+To assess the usefulness of the generated synthetic EHR data for further predictive modelling, a comprehensive utility analysis was performed, consisting of (i) classical TSTR/TRTS evaluation, and (ii) ML model-based utility. All experiments were conducted using real and synthetic datasets encoded into a 26-dimensional latent feature space. 
+
+Classical Utility Evaluation 
+
+The synthetic dataset was first evaluated using the stan-dard Train-on-Synthetic, Test-on-Real and Train-on-Real, Test-on-Synthetic protocols. Results are shown in Table 2. Synthetic data achieved strong generalisation to real test cases, while TRTS performance achieved high discrimina-tion due to the synthetic data being less noisy. 
+
+Model-Based Utility Evaluation 
+
+To further assess robustness, we evaluated synthetic data utility using categories of ML: XGBoost, a shallow neural network with focal loss and batch normalisation,                                 
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 10 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+> Table 3
+> Utility Evaluation Results
+> Setting AUC ACC F1
+> XGBoost
+> Real with Real 0.8806 0.7696 0.6336 TSTR 0.8611 0.8355 0.6616 TRTS 0.9833 0.7112 0.5510
+> Shallow Neural Network
+> Real with Real 0.8598 0.2441 0.3924 TSTR 0.8268 0.2441 0.3924 TRTS 0.9136 0.1790 0.3036
+> Deep neural network
+> Real with Real 0.8646 0.8382 0.6657 TRTS 0.9143 0.8852 0.6877 Mixed with Real 0.8650 0.8429 0.6686
+
+and a deep neural network. Each model was trained under the same three settings as the previous test. For the deep network, we additionally evaluated a mixed data distribution validated against real data. The comparative performance across model families and evaluation settings is summarised in Table 3. The fully connected deep neural network is designed for tabular clinical data, consisting of four sequential linear layers of widths 128, 64, 32, and 1. Each hidden layer uses ReLU activation to introduce non-linearity and allow the model to capture complex interactions among heterogeneous EHR features. The final layer outputs a single logit represent-ing the predicted probability of the clinical outcome, and training is performed using a class-balanced binary cross-entropy loss to counter the substantial positive–negative label imbalance present in the real dataset. This architecture is intentionally lightweight to facilitate efficient deployment across resource-constrained clients while remaining expres-sive enough to model nonlinear relationships common in high-dimensional clinical phenotypes. The same model will also be used for further experimentation in the SynPre-FL pipeline. Rather than memorisation or privacy leakage, the con-sistently high TRTS performance across all model fami-lies reflects the reduced label noise and smoother decision boundaries present in the synthetic dataset, which is gen-erated to preserve clinically relevant structure while main-taining necessary variability as in real-world records. This interpretation is further supported by the privacy evaluations in Section 8, where membership inference attacks achieve near-random performance and NN distance analysis con-firms strong separation between real and synthetic samples. Together, these results indicate that high TRTS scores arise from distributional regularisation rather than unintended information leakage. 
+
+Summary of Utility Findings 
+
+Across all models, synthetic data exhibited strong pre-dictive utility:          
+
+> Table 4
+> Outlier Proportion Difference (OPD) between real and syn-thetic data.
+> Method 𝑝 real 𝑝 syn OPD
+> Isolation Forest (IF) 0.0100 0.0236 0.0136
+> Local Outlier Factor (LOF) 0.0099 0.0344 0.0245
+
+• TSTR performance closely approached Real with Real performance, with utility retention between 0.94 and 0.98 across models. • TRTS performance was consistently high, reflecting that synthetic data preserves discriminative structure while being less noisy. • Deep models confirmed that synthetic and mixed data do not degrade performance when evaluated on real test sets. These results collectively demonstrate that the generated synthetic EHR data is highly usable for downstream machine learning tasks and preserves clinically relevant predictive structure. 
+
+8.5. Outlier Detection Analysis 
+
+Outlier detection forms an important component of synthetic data validation, as high-quality synthetic datasets should reproduce not only the central distribution of the real population but also its rare and extreme cases. Thus, the synthetic dataset is evaluated against the real dataset using two commonly applied unsupervised anomaly detectors: Isolation Forest (IF) and Local Outlier Factor (LOF). For each method, we report the outlier proportion in real data (𝑝 real ), the proportion in synthetic data ( 𝑝 syn ), and their absolute difference (Outlier Proportion Difference- OPD). 
+
+Isolation Forest Real and synthetic outlier rates were 
+
+0.0100 and 0.0236 respectively, yielding an OPD of 0.0136 .This low OPD indicates that the synthetic dataset reproduces the real-data anomaly structure with high fidelity. Even though the generative model injects stochastic variability to preserve privacy, resulting in deviations, the deviation remains within the expected range. 
+
+Local Outlier Factor LOF yielded real and synthetic outlier rates of 0.0099 and 0.0344 , corresponding to an OPD of 0.0245 . A slightly higher deviation is expected since LOF remains sensitive to local density fluctuations, which can vary modestly across synthetic samples. However, this pattern confirms that synthetic data does not contain more anomalies than the real dataset. Thus, as shown in Table 4, both methods produce OPD values below 0.03 , indicating that the synthetic data does not introduce extreme outlier patterns and carefully reproduces the rare case structure observed in real data. Combining the findings of the distributional compar-isons, utility evaluations (TSTR/TRTS), privacy analyses, and the outlier results, the experiments validate the usability   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 11 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+
+of the synthetic data generation pipeline. The low OPD values obtained from IF and LOF ( < 0.03 ) align closely with the distributional fidelity and classification utility mea-surements, confirming that the synthetic data preserve both central and peripheral structure of the real population. Over-all, the synthetic data exhibit strong alignment with real-world structure across all reliable DOTS axes, demonstrating that the generative pipeline produces usable, coherent, and privacy-conscious synthetic clinical data. 
+
+## 9. Federated Learning Analysis 
+
+This section evaluates the proposed SynPre-FL frame-work, which integrates (i) synthetic pretraining, (ii) hetero-geneous multi-client federated learning, (iii) class-balanced local optimisation, (iv) FedProx regularisation, (v) Adam-based adaptive aggregation, and (vi) post-hoc probability calibration and threshold optimisation. Results are reported for 5, 10 , and 15 client configurations, reflecting increasing levels of heterogeneity and data fragmentation. 
+
+9.1. Dataset Description 
+
+All experiments in this study are conducted using a pub-licly available EHR dataset generated with the Synthea pa-tient simulator for lung cancer risk prediction [20]. The data comprise populations of up to 150,000 patients, from which subsets containing lung cancer cases and matched controls were constructed. Continuous variables are discretised into categorical values, yielding a fully tabular representation suitable for standard classifiers. The dataset was subjected to an initial screening and feature engineering to develop the 29-feature schema consisting of demographic attributes, smoking-related variables, comorbidities, respiratory symp-toms, and derived clinical risk indicators. The prediction task is a binary classification, where the label indicates lung cancer presence. We restrict our study to a single dataset because publicly shareable EHR datasets with such high level of clinical structure, feature completeness, and compatibility with FL remain extremely limited. Since the primary goal of this work is to evaluate synthetic pretraining and federated op-timisation strategies rather than population-level generaliz-ability, focusing on a well-established synthetic benchmark is appropriate and sufficient for methodological analysis. 
+
+Client Heterogeneity Real EHR datasets were partitioned into 𝐾 = {5 , 10 , 15} non-IID shards to simulate imbalanced client sizes proportional to realistic cross-institution hetero-geneity. The client configurations is visualised using Lorenz curves and inequality statistics in Fig. 7. For instance, data distribution for the 15-client setting includes 3193, 2737, 2281, 2052, 1824, 1596, 1368, 1368, 1140, 1140, 912, 912, 912, 684, 692 samples per client. Each client retained its private subset throughout training, and no raw data were shared at any stage. 
+
+Federated Optimisation At the beginning of each com-munication round, the server transmitted the current global                     
+
+> Table 5
+> Synthetic pretraining performance (10 epochs). Epoch AUC ACC Precision Recall F1 10.7801 0.7024 0.7620 0.6881 0.7231 50.8469 0.7488 0.8015 0.7102 0.7534 10 0.8844 0.7794 0.8324 0.7337 0.7796
+
+model to all clients. Then, every client initialised from the current global model and performed a local update on its private dataset using mini-batch gradient descent. We ran a total of 10 global communication rounds for all FL configu-rations. After federated training, the final global model was optionally fine-tuned on the full real training set to assess performance recovery. To analyse the effect of aggregation protocol on training convergence, different aggregation pro-tocols were employed: • Weighted FedAvg using updated variant of the clas-sical local SGD aggregation. • Hybrid Aggregation : The aggregation approach in-tegrated features of FedProx and FedAdam, combin-ing proximal regularisation with Adam-based optimi-sation for improved stability under heterogeneity. • SynPre-FL : The proposed pipeline combines a syn-thetic data-based pre-training mechanism with a cus-tomised FL aggregation framework. 
+
+Synthetic Pretraining (SynPre-FL) Before federated training, the global model was pretrained for 10 epochs on a synthetically generated dataset (5,000 samples) obtained from the proposed diffusion–autoencoder pipeline. This pre-training was designed to improve initialisation and conver-gence stability. The full training workflow is discussed in Algorithm 2. 
+
+9.2. Synthetic Pretraining Performance 
+
+Table 5 summarises model performance during the syn-thetic pretraining stage. Across epochs, the model exhibits a clear and monotonic improvement in AUROC, accuracy, and F1, indicating that the synthetic dataset carries sufficient sig-nal to produce a meaningful initialisation prior to federated optimisation. The steady improvement confirms that synthetic pre-training effectively brings the model into a favourable op-timisation region before federated training begins. Impor-tantly, we intentionally restricted pretraining to only 10 epochs. This design choice serves two purposes: • Preventing overfitting to synthetic artefacts : Ex-cessive optimisation on purely synthetic data risks em-bedding synthetic-specific patterns into model weights, which could negatively impact real-client updates. A short warm-up reduces this risk while still providing informative initialisation. • Maintaining computational efficiency: The pre-training phase is executed once, before federated   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 12 of 18
+
+SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+1 2 3 4 5 6 7 8 9 10 0.87 0.87 0.87 0.87 0.88 
+
+Federated Round Global AUC 5 Clients 10 Clients 15 Clients 
+
+Figure 6: Global AUC plot over 10 FL rounds under varying client numbers in SynPre-FL configurations. The trajectory illustrates stable convergence behaviour and consistent per-formance improvement. 
+
+rounds start. Running it substantially longer would increase total computation without proportionate gain in downstream performance, especially since the pur-pose of pretraining is not to maximise synthetic accu-racy but to stabilise the start of FL. Thus, the synthetic pretraining phase is used as a lightweight initialisation mechanism rather than a full-fledged training stage, ensuring that the subsequent federated optimisation remains the primary driving factor of real-world perfor-mance. 
+
+9.3. Client-Level Performance and Heterogeneity 
+
+To quantify heterogeneity, we evaluated performance for each client at every round. Figure 6 are included for the per-round global trajectory and per-client variation. Across all configurations, performance variability in-creased with the number of clients (greater non-IID frag-mentation), but adaptive aggregation and FedProx regular-isation reduced inter-client divergence. 
+
+9.4. Global Performance Across different Client numbers 
+
+For performing the the scalability and robustness of the proposed SynPre-FL framework, three main configura-tions were compared: FedAvg — Standard baseline without proximal regularisation or adaptive aggregation. FedProx + FedAdam — Stronger optimisation baseline incorporating both a proximal constraint and adaptive server updates. SynPre-FL (Ours) — Our full pipeline incorporating syn-thetic pretraining, class-balanced optimisation, FedProx reg-ularisation, and Adam-based server aggregation. Table 6 summarises the final global performance (AUC, ACC, and F1) for all federation sizes and configurations. This cross-client comparison highlights how performance changes with increasing client heterogeneity and demonstrates the stabil-ity advantages provided by synthetic pretraining. 
+
+0 0.2 0.4 0.6 0.8 100.20.40.60.81
+
+Cumulative Proportion of Clients Cumulative Proportion of Data Perfect Equality 5 Clients 10 Clients 15 Clients             
+
+> Clients Gini CV Max/Min
+> 50.334 0.564 7.99 10 0.174 0.242 2.80 15 0.148 0.226 4.67
+
+Figure 7: Lorenz curves and heterogeneity statistics for the 5-, 10-, and 15-client SynPre-FL configurations. Smaller Gini coefficients in 10- and 15-client settings indicate more evenly divided total data volume, but the longer left-tail in the 15-client curve reflects greater fragmentation—capturing the rise in statistical heterogeneity despite improved balance. 
+
+Table 6 
+
+Final performance (5 clients).                                      
+
+> Client Model AUC ACC F1
+> Five Clients FedAvg 0.8925 0.8565 0.6875 FedAvg + Finetune 0.8931 0.8565 0.6875 FedProx + FedAdam 0.8908 0.7820 0.6485 FedProx + Adam + Finetune 0.8934 0.7785 0.6471 SynPre-FL (Ours) 0.8746 0.8548 0.6848 Ten Clients FedAvg 0.8862 0.8497 0.6772 FedProx + FedAdam 0.8839 0.8011 0.6528 SynPre-FL (Ours) 0.8895 0.8541 0.6814
+> Fifteen Clients FedAvg 0.8921 0.8565 0.6875 FedProx + FedAdam 0.8894 0.8126 0.6610 SynPre-FL (Ours) 0.8943 0.8590 0.6894
+
+Across all federation sizes, SynPre-FL achievesstrongest performance, demonstrating that synthetic pretraining con-tributes a robust initialisation that improves convergence and generalisation in heterogeneous FL settings. For 5 clients, FedAvg with fine-tuning obtains the highest AUC (0.8931), but SynPre-FL remains highly competitive (AUC 0.8746) while maintaining a strong F1 of 0.6848—matching the performance of FedAvg before fine-tuning. This illustrates that synthetic pretraining already places the global model close to optimal performance without requiring additional fine-tuning. For 10 clients, where data heterogeneity and imbalance increase, SynPre-FL provides the best overall results, achieving an AUC of 0.8895 and the highest ACC (0.8541). For 15 clients, SynPre-FL again achieves the best performance across all metrics, with an AUC of 0.8943 and 
+
+A.K.Nair et al.: Preprint submitted to Elsevier Page 13 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+an F1 of 0.6894—the highest recorded across all federation sizes. Notably, FedAvg performance oscillates minimally between 5 and 15 clients, while FedProx shows larger vari-ability. Overall, Table 6 demonstrates that SynPre-FL achieves strongest performance across all federation size. The im-provements in AUC and F1, especially in the 10- and 15-client settings underscore the benefit of introducing synthetic pretraining prior to federated optimisation. 
+
+9.5. Calibration and Threshold Optimisation 
+
+Following federated training, we calibrated the output probabilities of the final global model using logistic regres-sion (Platt scaling). Calibration was performed on the held-out validation split derived from the real dataset, ensuring that the post-hoc correction did not leak test information. This step is particularly important in federated medical prediction settings, where raw model logits often exhibit miscalibration due to heterogeneous client distributions and class imbalance. We additionally performed threshold sweeping over the calibrated probability scores to identify the operating point that maximises the F1 score. The optimal threshold was found to be 0.380 , substantially lower than the default 0.5, indicating a natural tendency of the model toward conserva-tive positive predictions prior to calibration. Compared to the uncalibrated outputs from FL (Sec-tion 6), calibration adjusted the decision threshold, and yielded a more stable and clinically meaningful operating point. The improvement in F1 demonstrates that calibration not only enhances probability reliability but also improves downstream decision performance. 
+
+9.6. Statistical Robustness of Calibration and Threshold Optimisation 
+
+To further evaluate the robustness of the post-hoc cali-bration and threshold optimisation procedure, we performed an additional repeated-seed statistical analysis using 50 inde-pendent runs. This analysis was designed to assess whether the observed calibration behaviour is stable across random initialisations and whether the calibrated decision rule pro-vides consistent improvements in reliability and operating-point performance. Table 7 summarises the aggregate results across all runs. The uncalibrated model evaluated at the default threshold of 0.5 achieved an AUROC of 0.8896 ± 0 .0050 and an F1-score of 0.5505 ± 0 .0615 . After threshold optimisation, the F1-score increased to 0.6802 ± 0 .0099 , with the optimal threshold concentrated around 0.3820 ± 0 .0535 . Applying logistic recalibration followed by threshold optimisation pre-served the AUROC, as expected for a monotonic probability transformation, while improving probability reliability, re-ducing the expected calibration error from 0.0269 ± 0 .0107 
+
+to 0.0178 ± 0 .0063 and the Brier score from 0.1030 ± 0 .0022 
+
+to 0.1024 ± 0 .0022 .As observed in Table 7, threshold optimisation sub-stantially improves the operating-point F1-score, while cal-ibration primarily improves probability and reliability, as       
+
+> 0.20.30.40.50.60.50.55 0.60.65 0.7
+> Decision threshold F1-score Mean F1 across runs Default threshold Optimal threshold
+> Figure 8: Mean F1-score trend across decision thresholds. The optimal operating point is consistently below the default threshold of 0.5, with the calibrated tuned threshold centred around 0.38.
+
+reflected by lower ECE and Brier scores. AUROC remains unchanged across settings, as expected. This behaviour is desirable in clinical risk prediction, where the calibrated score should reflect a meaningful event probability, while the final operating threshold can be selected according to the clinical trade-off between sensitivity and precision. To confirm whether these improvements were stable, statistical tests were performed between the calibrated tuned model and the uncalibrated model at the default threshold. As shown in Table 8, calibration with threshold optimisation produced a significant increase in F1-score and recall, while also significantly reducing ECE and Brier score. Since sev-eral metrics deviated from normality, Wilcoxon signed-rank was also included for additional analysis. Figure 8 illustrates the operating-point shift induced by threshold optimisation. The default threshold of 0.5 leads to lower recall and reduced F1-score, whereas the optimal threshold is consistently located near 0.38. This confirms that the calibrated model benefits from a lower decision threshold under the class imbalance present in the lung-related risk prediction task. Overall, this repeated-seed analysis confirms that cali-bration and threshold optimisation are not single-run arte-facts. Instead, the operating threshold remains stable across random seeds, and the calibrated model consistently im-proves probability reliability. These findings strengthen the reliability component of SynPre-FL by showing that the final decision rule is statistically stable and clinically better aligned with threshold-based risk prediction. 
+
+9.7. Ablation Analysis 
+
+To further analyse the individual contribution of each component in the SynPre-FL pipeline, we performed an ab-lation study across 20 repeated-seed runs. The full SynPre-FL model was compared against four variants: removing synthetic pretraining, removing post-hoc calibration, re-moving threshold optimisation, and a vanilla training base-line. This analysis helps identify which components con-tribute primarily to discrimination, probability reliability, and decision-threshold performance.                                         
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 14 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+> Table 7
+> Repeated-seed stability analysis of threshold optimisation and logistic recalibration over 50 random initialisations. Values are reported as mean ±standard deviation. Setting AUROC Accuracy F1 ECE ↓Threshold Uncalibrated (𝑇 = 0 .5) 0.8896 ± 0 .0050 0.8437 ± 0 .0043 0.5505 ± 0 .0615 0.0269 ± 0 .0107 0.5000
+> Uncalibrated tuned 0.8896 ± 0 .0050 0.8489 ± 0 .0051 0.6802 ± 0 .0099 0.0269 ± 0 .0107 0.3820 ± 0 .0535
+> Calibrated tuned 0.8896 ± 0 .0050 0.8489 ± 0 .0051 0.6802 ± 0 .0099 0.0178 ± 0 .0063 0.3803 ± 0 .0581
+> Table 8
+> Repeated-seed stability comparison between calibrated tuned outputs and uncalibrated outputs at the default threshold over 50 random initialisations. Mean difference denotes absolute metric change after calibration and threshold optimisation. Metric Mean Difference Wilcoxon 𝑝
+> Accuracy +0 .0053 6.45 × 10 −6
+> Recall +0 .2519 1.63 × 10 −9
+> F1-score +0 .1298 4.80 × 10 −9
+> Brier score −0 .0006 6.62 × 10 −12
+> ECE −0 .0090 1.45 × 10 −9
+
+Table 9 summarises the ablation results. Removing syn-thetic pretraining produced only a marginal change in AU-ROC and F1-score, suggesting that synthetic initialisation contributes mainly to stabilisation rather than large discrim-inative gains in this setting. In contrast, removing calibration caused a substantial degradation in probability reliability, increasing ECE from 0.0159 to 0.1355 and Brier score from 
+
+0.1006 to 0.1290 . Removing threshold optimisation resulted in the largest reduction in F1-score, decreasing performance from 0.6789 to 0.6172 . These results indicate that calibration and threshold optimisation are essential for reliable clinical deployment, while synthetic pretraining provides a modest but stable contribution to the full pipeline. The statistical comparisons further confirm that the strongest component-level effects arise from calibration and threshold optimisation. Compared with the full SynPre-FL model, removing calibration significantly worsened ECE and Brier score, whereas removing threshold optimisation significantly reduced F1-score. The difference between full SynPre-FL and the no-synthetic-pretraining variant was not statistically significant, indicating that the synthetic pretraining stage should be interpreted as a stabilising warm-start component rather than the sole driver of final predictive performance. 
+
+9.8. Explainability (SHAP) 
+
+To interpret the behaviour of the final calibrated global model and assess consistency across federated configura-tions, we performed an extensive KernelSHAP analysis on the 5-, 10-, and 15-client SynPre-FL models. SHAP values were computed using 200 background samples and 300 explained instances to ensure stable and unbiased attribu-tions for nonlinear neural predictors. This setup allows us to evaluate both global feature importance and local decision pathways while preserving model fidelity in the federated setting.        
+
+> Figure 9: Global SHAP summary visualisation for 15-client federated configuration. The distribution highlights consistent attribution patterns and preservation of clinically relevant predictors even with heterogeneous data partitions.
+
+Across all client counts, the global SHAP profiles re-vealed a highly consistent ranking of clinically relevant predictors. Table 10 summarises the top-ranked features for the 15-client configuration, where the final model achieved its highest calibrated performance. These patterns align with known cardiometabolic and respiratory risk factors, indicat-ing that the federated model captures medically meaningful relationships. SHAP rankings for the 5- and 10-client set-tings also exhibited similar ordering and magnitude, demon-strating cross-client stability of model explanations. To understand prediction mechanisms at the individual level, we examined local SHAP explanations for repre-sentative patient cases from each federated setting. These local plots showed that high-risk predictions were primar-ily driven by coherent combinations of advanced age, car-diometabolic disease history, and respiratory compromise. Likewise, low-risk predictions aligned with protective pat-terns such as younger age and absence of chronic disease. This consistency highlights that the SynPre-FL framework preserves interpretability even under data heterogeneity and synthetic pretraining. Figures 9 and 10 provide the combined global and representative local SHAP visualisations for 5-, 10-, and 15-client FL. From the results, no evident differences were observable between the SHAP distributions across the three federated                                          
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 15 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+> Table 9
+> Ablation analysis of the SynPre-FL pipeline over 20 repeated-seed runs. Values are reported as mean ±standard deviation. Variant AUROC Accuracy F1 ECE ↓
+> Full SynPre-FL 0.8943 ± 0 .0050 0.8432 ± 0 .0193 0.6789 ± 0 .0151 0.0159 ± 0 .0087
+> No synthetic pretraining 0.8946 ± 0 .0051 0.8389 ± 0 .0263 0.6734 ± 0 .0185 0.0179 ± 0 .0090
+> No calibration 0.8943 ± 0 .0050 0.8430 ± 0 .0193 0.6728 ± 0 .0151 0.1355 ± 0 .0104
+> No threshold optimisation 0.8943 ± 0 .0050 0.8521 ± 0 .0046 0.6172 ± 0 .0461 0.0159 ± 0 .0087
+> Vanilla baseline 0.8949 ± 0 .0048 0.8299 ± 0 .0307 0.6677 ± 0 .0253 0.0174 ± 0 .0063
+> Table 10
+> Top 10 SHAP-ranked features for the 15-client SynPre-FL model. Values represent mean absolute SHAP contributions.
+> Feature Mean |SHAP|
+> gender 0.00854 age 0.00754 IHD 0.00406 smoking severity 0.00282 dm_macular_edema 0.00207 dm_retinopathy_np 0.00199 resp_distress 0.00185 hypertension 0.00178 resp_cough 0.00173 resp_dyspnea 0.00146
+> Figure 10: Representative local SHAP explanations illustrating patient-level prediction rationale. Individual feature contribu-tions demonstrate coherent risk attribution patterns across federated client configurations.
+
+setups. This indicates that the decision patterns learned from the synthetic-pretrained global initialisation remain stable, even as the number of clients increases. 
+
+## 10. Discussion 
+
+10.1. Key Insights 
+
+The results collectively demonstrate that the proposed synthetic data generation pipeline and the SynPre-FL frame-work address three fundamental challenges in distributed clinical model development: (i) data scarcity, (ii) privacy-preserving training under institutional heterogeneity, and (iii) interpretability of learned models. First, the autoencoder–diffusion pipeline yields synthetic EHR records that faithfully reconstruct the statistical struc-ture of the real population. Low JSD values, well-aligned correlation matrices, and substantial overlap in UMAP space indicate that the generative model captures both central ten-dencies and clinically relevant dependencies. Importantly, the moderate propensity AUROC ( 0.70 ) suggests sufficient divergence to prevent overfitting while still ensuring high utility. Second, synthetic pretraining contributes a meaningful warm start to the FL process. We observe a monotonic improvement during synthetic pretraining and consistently better performance in 10- and 15-client systems, where heterogeneity is more severe. The SynPre-FL pipeline im-proves performance stability relative to standard baselines, particularly in 15-client setting. This highlights the value of a synthetic global initialisation in mitigating client drift and improving robustness. Finally, calibrated probabilistic outputs and SHAP ex-planations reveal that the final global model remains clini-cally coherent despite the introduction of synthetic pretrain-ing and federated heterogeneity. Additional ablation and statistical analyses further demon-strated that the strongest gains within SynPre-FL arise from calibration-aware optimisation and decision-threshold adaptation, which substantially improve reliability and clin-ical usability while maintaining competitive discriminative performance under heterogeneous federated settings. These findings suggest that the principal value of synthetic pre-training lies in enabling privacy-preserving and reproducible model initialisation rather than producing large improve-ments in raw classification performance. 
+
+10.2. Interpretability Implications 
+
+KernelSHAP analysis conducted reveales the stability in global feature importance. Although federated learning in-troduces non-IID data shifts, the model consistently empha-sises physiologically acceptable risk factors. The top SHAP-ranked features, such as age, gender, ischemic heart disease, diabetic macular oedema, non-proliferative retinopathy, hy-pertension, and respiratory symptoms, match established relationships in cardiometabolic and respiratory disease pro-gression. Local SHAP explanations further demonstrate that indi-vidual predictions are supported by intuitive combinations of risk indicators. High-probability predictions are driven by additive effects of chronic cardiometabolic burden and respiratory compromise, whereas protective patterns such   
+
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 16 of 18 SynPre-FL: Synthetic data-driven pretraining integrated FL training framework
+
+as younger age or lack of comorbidities shift the model toward negative predictions. These findings underscore that privacy-preserving federated training does not degrade in-terpretability and that synthetic initialisation does not distort core predictive mechanisms. 
+
+10.3. Why Synthetic Data Still Provides Value 
+
+Even though performance on real data remains the gold standard, the use of synthetic samples provides three impor-tant benefits: • Stabilised optimisation under non-IID heterogene-ity. Synthetic pretraining delivers a more favourable initialisation, reducing early-round drift and improv-ing optimisation stability, especially in large federa-tions. • Safe and reproducible method development. As synthetic data contain no identifiable patient informa-tion, they can be freely shared, enabling benchmarking and replicability-major limitations in clinical machine learning. • Controlled exploration of extreme or rare-case variations. The diffusion model samples across the latent space, increasing the diversity of presented clin-ical patterns while maintaining privacy-awareness, which can improve the robustness of downstream models. These advantages illustrate that synthetic data serve not as a replacement for real data but as a complementary mechanism that enhances FL efficiency, safety, and inter-pretability. 
+
+10.4. Limitations 
+
+Several limitations can aslo be identified. First, although the synthetic data generator captures population-level struc-ture, it is still trained on a single-centre dataset. Thus, results cannot be interpreted as multicenter clinical validation. Ex-tending the generator to multi-hospital cohorts and cross-site generalisation remains future work. Second, explainability is performed centrally after model aggregation. While SHAP values can be computed locally, our current study does not implement a fully federated explainability protocol. As such, client-specific nuances in feature attribution are not captured during training. Third, although privacy metrics such as membership inference AUROC and NN distance analysis demonstrate strong resilience, formal privacy preserving mechanisms such as differential privacy is not applied. Incorporating structured noise or DP-aware diffusion sampling may further strengthen privacy guarantees. Finally, the federated setup assumes synchronous partic-ipation and does not address system-level constraints such as straggler mitigation, client dropout, or communication failures, which may arise in real-world deployments. 
+
+10.5. Future Work 
+
+Future extensions of this work will proceed in several directions. Generative modelling will be enhanced by in-tegrating conditional or hierarchical diffusion architectures, enabling task-aware synthetic sampling and improved fi-delity for underrepresented subpopulations. Synthetic pre-training may also be combined with meta-learning strategies to further reduce sensitivity to client heterogeneity. From FL perspective, extending SynPre-FL to cross-silo hospital networks, incorporating partial participation, asynchronous aggregation, and communication-efficient op-timisation will increase applicability in large clinical sys-tems. Finally, we aim to develop a fully federated explain-ability framework in which clients compute local SHAP or feature attribution summaries that are securely aggregated without sharing raw feature vectors. Such capabilities would support transparent and trustworthy deployment of privacy-preserving models in real-world healthcare settings. 
+
+## 11. CONCLUSION 
+
+This paper presented SynPre-FL, a unified framework that bridges high-fidelity synthetic EHR generation and FL for privacy-preserving clinical risk prediction under realistic, heterogeneous settings. The proposed framework demonstrates that latent autoencoder–diffusion–based syn-thetic data generation can produce clinically coherent and privacy-preserving tabular EHR data, preserving statistical structure across univariate, bivariate, and multivariate analy-ses while resisting membership inference and reconstruction attacks. Building on this foundation, SynPre-FL introduces synthetic pretraining as a principled initialisation strategy for federated optimisation. Experimental results across 5-, 10-, and 15-client show that synthetic pretraining improves con-vergence stability and robustness under increasing hetero-geneity, outperforming standard FL baselines, particularly in highly fragmented settings. Post-hoc probability calibra-tion further enhances clinical reliability, yielding calibrated decision thresholds that improved F1 performance and reduced conservative bias. Federated-safe SHAP analysis demonstrated that SynPre-FL preserves stable and clinically meaningful feature attributions across federation sizes, sup-porting transparent model auditing without violating privacy constraints. Together, these results indicate that synthetic data can play a vital role in FL—not as a replacement for real patient data, but as a privacy-safe mechanism for improving initialisation, benchmarking, and robustness. Future work will explore conditional and temporally-aware synthetic gen-eration, integration of privacy mechanisms, and extension of the SynPre-FL framework to longitudinal and multimodal clinical data. 
+
+## References    
+
+> [1] S. Pati, S. Kumar, A. Varma, B. Edwards, C. Lu, L. Qu, J. J. Wang, A. Lakshminarayanan, S. han Wang, M. J. Sheller, K. Chang, P. Singh, D. L. Rubin, J. Kalpathy-Cramer, S. Bakas, Privacy preservation for federated learning in health care, Patterns 5 (2024) 100974.
+> A.K.Nair et al.: Preprint submitted to Elsevier Page 17 of 18
+
+SynPre-FL: Synthetic data-driven pretraining integrated FL training framework 
+
+[2] Z. L. Teo, L. Jin, N. Liu, S. Li, D. Miao, X. Zhang, W. Y. Ng, T. F. Tan, D. M. Lee, K. J. Chua, J. Heng, Y. Liu, R. S. M. Goh, D. S. W. Ting, Federated machine learning in healthcare: A systematic review on clinical applications and technical architecture, Cell Reports Medicine 5 (2024) 101419. [3] M. Giuffrè, D. L. Shung, Harnessing the power of synthetic data in healthcare: innovation, application, and privacy, NPJ digital medicine 6 (2023) 186. [4] S. M. Lundberg, S.-I. Lee, A unified approach to interpreting model predictions, in: I. Guyon, U. V. Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, R. Garnett (Eds.), Advances in Neural Information Processing Systems, volume 30, Curran Associates, Inc., 2017. [5] C. Sun, J. van Soest, M. Dumontier, Generating synthetic personal health data using conditional generative adversarial networks com-bining with differential privacy, Journal of Biomedical Informatics 143 (2023) 104404. [6] J. Li, B. J. Cairns, J. Li, T. Zhu, Generating synthetic mixed-type longitudinal electronic health records for artificial intelligent applications, NPJ digital medicine 6 (2023) 98. [7] K. El Emam, L. Mosquera, X. Fang, A. El-Hussuna, An evaluation of the replicability of analyses using synthetic health data, Scientific Reports 14 (2024) 6978. [8] V. C. Pezoulas, D. I. Zaridis, E. Mylona, C. Androutsos, K. Aposto-lidis, N. S. Tachos, D. I. Fotiadis, Synthetic data generation methods in healthcare: A review on open-source tools and methods, Compu-tational and Structural Biotechnology Journal 23 (2024) 2892–2910. [9] M. Ganzinger, M. Blumenstock, A. Fürstberger, L. Greulich, H. A. Kestler, M. Marschollek, C. Niklas, T. Schneider, C. Spreckelsen, E. Tute, J. Varghese, M. Dugas, Federated electronic data capture (fedc): Architecture and prototype, Journal of Biomedical Informatics 138 (2023) 104280. [10] X. Wang, H. G. Zhang, X. Xiong, C. Hong, G. M. Weber, G. A. Brat, C.-L. Bonzel, Y. Luo, R. Duan, N. P. Palmer, M. R. Hutch, A. Gutiérrez-Sacristán, R. Bellazzi, L. Chiovato, K. Cho, A. Dagliati, H. Estiri, N. García-Barrio, R. Griffier, D. A. Hanauer, Y.-L. Ho, J. H. Holmes, M. S. Keller, J. G. Klann MEng, S. L’Yi, S. Lozano-Zahonero, S. E. Maidlow, A. Makoudjou, A. Malovini, B. Moal, J. H. Moore, M. Morris, D. L. Mowery, S. N. Murphy, A. Neuraz, K. Yuan Ngiam, G. S. Omenn, L. P. Patel, M. Pedrera-Jiménez, A. Prunotto, M. Jebathilagam Samayamuthu, F. J. Sanz Vidorreta, E. R. Schriver, P. Schubert, P. Serrano-Balazote, A. M. South, A. L. Tan, B. W. Tan, V. Tibollo, P. Tippmann, S. Visweswaran, Z. Xia, W. Yuan, D. Zöller, I. S. Kohane, P. Avillach, Z. Guo, T. Cai, Survmaximin: Robust federated approach to transporting survival risk prediction models, Journal of Biomedical Informatics 134 (2022) 104176. [11] S. Li, Y. Ning, M. E. H. Ong, B. Chakraborty, C. Hong, F. Xie, H. Yuan, M. Liu, D. M. Buckland, Y. Chen, N. Liu, Fedscore: A privacy-preserving framework for federated scoring system develop-ment, Journal of Biomedical Informatics 146 (2023) 104485. [12] A. Thakur, S. Molaei, P. C. Nganjimi, F. Liu, A. Soltan, P. Schwab, K. Branson, D. A. Clifton, Knowledge abstraction and filtering based federated learning over heterogeneous data views in healthcare, npj Digital Medicine 7 (2024) 283. [13] P. Chen, X. Du, Z. Lu, J. Wu, P. C. Hung, Evfl: An explainable vertical federated learning for data-oriented artificial intelligence systems, Journal of Systems Architecture 126 (2022) 102474. [14] J. L. Corcuera Bárcena, P. Ducange, F. Marcelloni, G. Nardini, A. Noferi, A. Renda, F. Ruffini, A. Schiavo, G. Stea, A. Virdis, Enabling federated learning of explainable ai models within beyond-5g/6g networks, Computer Communications 210 (2023) 356–375. [15] E. Briola, C. C. Nikolaidis, V. Perifanis, N. Pavlidis, P. Efraimidis, A federated explainable ai model for breast cancer classification, in: Proceedings of the 2024 European Interdisciplinary Cybersecurity Conference, EICC ’24, Association for Computing Machinery, New York, NY, USA, 2024, p. 194–201. URL: https://doi.org/10.1145/ 3655693.3660255 . doi: 10.1145/3655693.3660255 .[16] P. Ducange, F. Marcelloni, A. Renda, F. Ruffini, Federated learning of xai models in healthcare: a case study on parkinson’s disease, Cognitive Computation 16 (2024) 3051–3076. [17] L. Zhao, H. Xie, L. Zhong, Y. Wang, Explainable federated learning scheme for secure healthcare data sharing, Health Information Science and Systems 12 (2024) 49. [18] A. Chaddad, Q. Lu, J. Li, Y. Katib, R. Kateb, C. Tanougast, A. Bouri-dane, A. Abdulkadir, Explainable, domain-adaptive, and federated artificial intelligence in medicine, IEEE/CAA Journal of Automatica Sinica 10 (2023) 859–876. [19] S. Reddi, Z. Charles, M. Zaheer, Z. Garrett, K. Rush, J. Konečný, S. Kumar, H. B. McMahan, Adaptive federated optimization, 2021. URL: https://arxiv.org/abs/2003.00295 . arXiv:2003.00295 .[20] A. Chen, D. O. Chen, Simulation of a machine learning enabled learning health system for risk prediction using synthetic patient data, Scientific Reports 12 (2022) 17917. [21] B. Van Calster, D. J. McLernon, M. Van Smeden, L. Wynants, E. W. Steyerberg, Calibration: the achilles heel of predictive analytics, BMC medicine 17 (2019) 230. [22] C. Guo, G. Pleiss, Y. Sun, K. Q. Weinberger, On calibration of modern neural networks, in: International conference on machine learning, PMLR, 2017, pp. 1321–1330. [23] R. Dorent, P. Golland, W. W. III, Connecting jensen-shannon and kullback-leibler divergences: A new bound for representation learning, 2025. URL: https://arxiv.org/abs/2510.20644 .
+
+> arXiv:2510.20644
+
+.
+
+A.K.Nair et al.: Preprint submitted to Elsevier Page 18 of 18

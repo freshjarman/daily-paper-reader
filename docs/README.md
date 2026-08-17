@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-02</span>
+      <span class="dpr-home-dashboard-kicker">2026-07-19 ~ 2026-08-17</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 18 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>5</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>7</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>11</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-02 20:14:49 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-17 15:37:00 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读两篇9分论文，聚焦函数空间最优预测与动态图事件时间统一建模。最值得关注神经跳跃ODE的L²优化框架，以及GTIN对时序图事件与时间联合预测的突破。建议优先复现这两篇方法，后续再扩展至扩散模型与贝叶斯推断等速读方向。</p>
+<p>本期共更新 18 篇论文，精读 7 篇、速读 11 篇，其中联邦学习与缺失值超图预测两项获 9.0 高分。最值得关注的是《SynPre-FL》用合成数据预训练提升联邦学习效率，以及《MissHyper》在临床缺失场景下的超图时序预测；医学世界模型与多模态 LLM 处理临床时序数据也值得一读。建议优先读高分精读论文，再按兴趣深入临床 AI 推理与轨迹表示学习两个方向。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -71,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">5 篇</strong>
+    <strong class="dpr-home-dashboard-count">7 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Operator Neural Jump ODEs: $L^2$-optimal prediction in function spaces">Operator Neural Jump ODEs: $L^2$-optimal prediction in function spaces</span></li><li><span class="dpr-home-dashboard-paper-title" title="GTIN: A Unified Framework for Joint Event and Time Prediction in Temporal Graphs">GTIN: A Unified Framework for Joint Event and Time Prediction in Temporal Graphs</span></li><li><span class="dpr-home-dashboard-paper-title" title="Diverse Morphologies of GRB X-Ray Plateaus within a Common Magnetar Framework">Diverse Morphologies of GRB X-Ray Plateaus within a Common Magnetar Framework</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="SynPre-FL: Synthetic data-driven pretraining integrated Federated Learning training framework">SynPre-FL: Synthetic data-driven pretraining integrated Federated Learning training framework</span></li><li><span class="dpr-home-dashboard-paper-title" title="MissHyper: Restoring Clinical Synchronicity in Missingness-Guided Hypergraph Forecasting">MissHyper: Restoring Clinical Synchronicity in Missingness-Guided Hypergraph Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Pretraining EHR Foundation Models with Patient-Aware Sampling">Pretraining EHR Foundation Models with Patient-Aware Sampling</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>5</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">ehr-es <strong>7</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -84,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">3 篇</strong>
+    <strong class="dpr-home-dashboard-count">11 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality">Existence-Field Diffusion Model for Spatial Point Processes with Variable Cardinality</span></li><li><span class="dpr-home-dashboard-paper-title" title="Distributed and recursive Bayesian inference for Big Data and complex spatio-temporal models">Distributed and recursive Bayesian inference for Big Data and complex spatio-temporal models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Windowed thinning and query complexity for the bouncy particle and Zigzag samplers">Windowed thinning and query complexity for the bouncy particle and Zigzag samplers</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Medical world models in healthcare: foundations, applications, and challenges for trustworthy clinical translation">Medical world models in healthcare: foundations, applications, and challenges for trustworthy clinical translation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs">Contrastive Representation Learning of Longitudinal Disease Trajectories on Temporal Graphs</span></li><li><span class="dpr-home-dashboard-paper-title" title="A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series">A Cost-Effective Multimodal LLM Reasoning Framework for Question Answering over Irregular Clinical Time Series</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">ehr-es <strong>11</strong></span></div>
 </section>
 </div>
 

@@ -1,0 +1,292 @@
+Title: CT-HEG: A Bidirectional, Timestamp-Attributed Event Graph for ICU In-Hospital Mortality Prediction - An Architectural Ablation Study
+
+URL Source: https://arxiv.org/pdf/2608.02663v1
+
+Published Time: Wed, 05 Aug 2026 00:02:34 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# CT-HEG: A Bidirectional, Timestamp-Attributed Event Graph for ICU In-Hospital Mortality Prediction — An Architectural Ablation Study 
+
+Mohammad Nasir Uddin ∗1, Rahnuma Tabassum Orpita 2, Asaduzzaman Anik 3, Eklachur Rahman Bhuiyan 4, Marjahan Risalat 5, SM Wali Ullah 5, and Asif Ahamed 61College of Business, DBA-BIDA, Westcliff University, Los Angeles, CA, USA 
+
+> 2
+
+Dept. of CSE, Northern University Bangladesh, Dhaka, Bangladesh 
+
+> 3
+
+MBA, Business Administration & Management, Stanton University, Anaheim, CA, USA 
+
+> 4
+
+School of IT, MSIT, Washington University of Science and Technology, Alexandria, VA, USA 
+
+> 5
+
+MBA, Business Administration & Management, Stanton University, Anaheim, CA, USA 
+
+> 6
+
+College of Technology and Engineering, Westcliff University, Los Angeles, CA, USA 
+
+ORCID (A. Ahamed): 0009-0006-0165-0867 
+
+Key Messages 
+
+• CT-HEG encodes irregular EHR observations as typed, timestamped graph edges without im-putation. 
+
+• Bidirectional edges are structurally required in the CT-HEG leaf topology — without them, observation nodes cannot reach the visit readout (verified ∆AUROC = 0 .1968 ± 0.0073, 5 seeds). 
+
+• Time-attentive edge features ( thours /48, value norm) add a verified 0 .0247 ± 0.0093 AUROC contribution (5 seeds). 
+
+• CHIRP-Net achieves AUROC 0 .8449 ±0.0071 on MIMIC-IV v3.1 (31,142 ICU stays, LOS ≥48h). 
+
+• Ensemble AUROC 0 .8618 (95% CI: 0.8485–0.8745), post-calibration ECE= 0 .0307 on the held-out test set; temporal generalizability and demographic subgroup performance are not yet prop-erly evaluated (see Limitations). 
+
+Abstract Background: Accurate in-hospital mortality prediction in the ICU requires modeling irreg-ular, asynchronous clinical observations across heterogeneous entity types. Existing sequence models handle irregular sampling but ignore typed relational structure, and existing graph models typically assume fixed-interval inputs. We introduce the Continuous-Time Heteroge-neous EHR Graph (CT-HEG) schema and evaluate which architectural choices actually drive predictive performance. 
+
+> ∗Corresponding author: m.uddin.258@westcliff.edu
+
+1arXiv:2608.02663v1 [cs.LG] 1 Aug 2026 Methods: CT-HEG encodes each ICU stay as a typed, timestamped heterogeneous graph with three node types ( {visit, vital, lab event }) and 2-dimensional edge attributes ( thours /48, value norm) encoding observation timing and clinical value without imputation. We instanti-ate CT-HEG with CHIRP-Net, a four-layer heterogeneous GATv2Conv network (hidden=192, heads=4, edge dim=2, dropout=0.25), and evaluate it on MIMIC-IV v3.1 (31,142 ICU stays, LOS ≥48h, 13.4% in-hospital mortality) using five independent random seeds, stratified 70/15/15 splits, and bootstrapped confidence intervals. We compare against logistic regression, mTAND, a 4-layer Transformer, and GRU-D on the identical split, and conduct a systematic ablation study isolating each architectural component. 
+
+Results: CHIRP-Net achieved 5-seed mean AUROC 0 .8449 ± 0.0071 and AUPRC 0 .4958 ±
+
+0.0209; the 5-checkpoint ensemble achieved AUROC 0 .8618 (95% CI: 0.8485–0.8745) and AUPRC 0.5323 (95% CI: 0.4956–0.5706). In this cohort and topology, the largest effect in the ablation study was a graph-connectivity/reachability check: removing reverse edges, which disconnects observation nodes from the visit readout entirely, reduced AUROC by a verified 0 .1968 ± 0.0073 across five seeds (this is a structural-necessity result, not a tuned design comparison). Time-attentive edge features contributed an additional verified 0 .0247 ±0.0093 AUROC. Unexpectedly, collapsing heterogeneous edge types into a single relation for message passing (7 × fewer parame-ters) outperformed the full heterogeneous model on all five seeds (mean AUROC 0 .8638 ±0.0036 vs. 0 .8449 ± 0.0071); we report this as a genuine finding rather than a design endorsement, and discuss its implications in the main text. Post-temperature-scaling calibration (temperature fit on the validation set only, applied to the untouched test set) achieved ECE= 0 .0307 on the test set. A retrospective temporal ordering analysis and a demographic subgroup analysis were explored but are not reported here because they do not yet meet this manuscript’s evidentiary bar (see Limitations); both are planned as properly pre-specified analyses in follow-up work. 
+
+Conclusions: In this cohort, bidirectional connectivity was necessary for the model to use its inputs at all, and CT-HEG was reasonably well calibrated on the internal held-out test set after validation-fitted temperature scaling. These findings support CT-HEG as a promising modeling framework for irregular EHR data, while external validation on an independent dataset, a properly pre-specified temporal evaluation, and a demographic subgroup analysis all remain necessary before any claim of robustness or fairness. Code is released at https://github. com/nasiruddinstudents-ctrl/chirp-net-mimic-iv under BSD-3 license; split indices and trained checkpoints will be added prior to publication. 
+
+# 1 Introduction 
+
+Accurate and timely prediction of in-hospital mortality is among the most consequential tasks in critical care medicine. Intensive care unit (ICU) clinicians must synthesize heterogeneous, tempo-rally irregular streams of patient data — vital signs, laboratory results, medication administrations, diagnostic codes, and clinical notes — into actionable risk estimates, often within minutes of a pa-tient’s deterioration. Electronic health records (EHRs) provide the raw substrate for automated decision support, yet translating EHR data into reliable mortality predictions remains an unsolved problem, constrained by three structural challenges that the machine learning literature has so far addressed in isolation. 
+
+Challenge 1: Irregular sampling and systematic missingness. Unlike curated bench-mark datasets, real ICU time series are clinician-driven rather than protocol-driven: a patient’s heart rate may be charted every minute during a resuscitation and every four hours during a stable overnight watch; serum creatinine may be measured twice in twenty-four hours or not at all [1, 7]. Imputation-based approaches introduce bias by conflating genuine stability with measurement ab-sence [13], while sequence models that treat irregular intervals as fixed-length vectors discard the clinical meaning encoded in when a measurement was or was not taken. 
+
+Challenge 2: Entity and relational heterogeneity. An ICU stay is not a single time series 2but a constellation of entities — the patient, individual visits, discrete laboratory events, medication administrations, diagnosis codes, and free-text note concepts — connected by semantically distinct relations [3, 4]. Flattening this structure into a homogeneous feature vector or a single adjacency matrix discards critical relational semantics. Heterogeneous graph neural networks (HGNNs) have shown promise for static EHR representations [4, 8, 30], with dynamic hypergraph extensions proposed for disease prediction more broadly [31], but existing formulations either operate on discrete time snapshots [3, 9] or do not jointly model continuous temporal dynamics alongside type-conditioned message passing. 
+
+Challenge 3: The explainability gap. Clinicians will not — and should not — act on black-box mortality scores, however accurate. Existing explainability approaches for EHR-based GNNs rely predominantly on attention weights or post-hoc attribution methods such as SHAP, both of which are correlational: they identify features the model uses without revealing what interven-tions would change the prediction [5, 6, 25]. Causal explainability frameworks for GNNs have been developed in general-graph settings [5, 6, 11, 14, 15], but none has been instantiated over a het-erogeneous, continuously-evolving, multi-relational EHR graph. This gap leaves clinicians without the counterfactual reasoning — “what would have to change for this patient’s predicted mortality risk to fall below the intervention threshold?” — that evidence-based critical care demands. The methods reviewed below each address at most two of these three axes, though we have not conducted an exhaustive survey of the field. Heterogeneous EHR graph networks such as TRANS [3] and Time-aware HGT [8] address heterogeneity but discretize time. Dynamic EHR graph models such as DynaGraph [9] and DyGraphTrans [10] handle temporal dynamics but collapse entity types and provide only pseudo-attention explanations. Irregular-time-series models such as mTAND [7] and MedGAITS [13] handle irregular sampling but treat the patient as a flat sequence. Causal GNN explainers such as CI-GNN [5], OrphicX [15], and CF-GNNExplainer [11] provide genuine causal structure but have been developed and evaluated exclusively on homogeneous, static graphs. To our knowledge, no existing published architecture combines continuous-valued timestamp encod-ing, heterogeneous entity semantics, and structurally-grounded causal explanation within a single trainable framework, though we have not conducted a systematic literature review broad enough to claim exhaustive coverage. This paper introduces CHIRP-Net (Continuous-Time Heterogeneous EHR Graph network), a heterogeneous graph neural network with continuous-valued timestamp encoding, designed to close this three-way gap, of which the present paper addresses the first two (irregular sampling and heterogeneity) with causal explainability left to future work. This paper makes two principal contributions: 1. The CT-HEG schema , a typed, timestamped heterogeneous EHR graph with three node types (Φ = {visit, vital, lab event }) and time-attentive edge attributes eu→v = ( thours /48 , value norm) ∈
+
+R2. CT-HEG eliminates imputation by encoding irregular observation timing as a first-class edge property. We release a reproducible MIMIC-IV v3.1 preprocessing pipeline implementing this schema (31,142 ICU stays, LOS ≥48h). 2. A systematic ablation study of CT-HEG architectural components showing which components a viable event-to-readout path actually depends on. Removing reverse edges re-duced AUROC by 0 .1968 ± 0.0073 across five seeds, reducing the four-layer network to a single embedding lookup — bidirectional connectivity is structurally necessary, not merely helpful. Time-attentive edge features contributed a smaller but consistent 0 .0247 ±0.0093 additional AU-ROC. Collapsing the four heterogeneous edge relations into a single relation for message passing did not reduce performance — it improved mean test AUROC by 0 .0189 ± 0.0052 across all five 3seeds while using 7 × fewer parameters (345,794 vs. 2,448,578). This ablation study therefore does not establish that relation-specific heterogeneous message passing improves prediction in this cohort; its strongest supported conclusion is about information-path integrity and times-tamp attribution, not about the predictive value of heterogeneous typing. CHIRP-Net (the full typed model) achieved 5-seed mean AUROC 0 .8449 ± 0.0071 on the clean MIMIC-IV cohort, exceeding the fixed logistic-regression baseline by 7.6 AUROC points; GRU-D (single reported run) trailed by 0.002 AUROC, a margin much smaller than CHIRP-Net’s own across-seed stan-dard deviation (0.0071) and therefore not evidence of a reliable advantage over GRU-D under the current protocol (see Limitations). The primary contribution of the paper is this architectural ablation analysis rather than predictive superiority. We do not claim that CHIRP-Net is universally state of the art. The results are specific to MIMIC-IV v3.1 (LOS ≥48h), and external validation on an independent dataset such as eICU-CRD remains a priority for future work. An open-source PyTorch-Geometric implementation and preprocessing pipeline are released to support reproducibility; trained checkpoints and split indices will be added prior to publication. 
+
+# 2 Related Work 
+
+We organize the related literature into four streams: (A) sequential and irregular-time-series models for ICU prediction, (B) EHR graph neural networks, (C) dynamic and temporal GNNs, and (D) causal and counterfactual GNN explainers. Table 1 summarizes coverage across the three axes that CHIRP addresses. Table 1: Coverage of Related Methods Across Key Axes                                                             
+
+> Method Heterogeneous Continuous / Irregular Time Causal Explanation
+> GRU-D [32] No Partial (mask) No mTAND / STraTS [7] No Yes No ALNN [2] No Yes No MedGAITS [13] No Partial (imputed) No LSTM-GNN [24] Partial No No HGM-CNN [4] Yes No No TRANS [3] Yes Discrete No Time-aware HGT [8] Yes Discrete No DynaGraph [9] Partial Yes (discrete) No (attention) DyGraphTrans [10] Partial Yes (discrete) No ICU-TGNN [18] Partial Partial No AGFN [17] Partial Partial No (SHAP) LEN-GNN [16] Partial No (static) No (logic rules) CI-GNN [5] No No Yes CF-GNNExplainer [11] No No Yes OrphicX [15] No No Yes CausGNN [14] No No Yes NCM-GNN [6] No No Yes
+> CHIRP-Net (ours) Yes Yes (timestamp-valued, offline) Planned (future work)
+
+42.1 Sequential and Irregular-Time-Series Models for ICU Prediction 
+
+Early deep learning approaches to ICU mortality prediction treated EHR data as fixed-length multivariate sequences, using LSTMs, GRUs, and their variants [32]. GRU-D [32] extended this paradigm by introducing a learnable decay mechanism to model missing values, but retained the implicit assumption that measurement intervals are uniform enough to be absorbed into a decay rate. This assumption fails systematically in real ICUs, where measurement frequency is itself a clinical signal correlated with patient acuity [1]. The mTAND (multi-time-attention network) architecture [7] and its derivative STraTS-mTAND represent a significant advance: by learning continuous-time attention kernels over observed times-tamps, mTAND eliminates the need for imputation and handles arbitrary observation patterns. However, mTAND operates on a patient-level sequence, treating each variable as an independent channel without modeling inter-variable or inter-patient relational structure. The alignment-driven neural network of Bignoumba et al. (ALNN) [2] improves multi-variable alignment in irregular settings but similarly forgoes graph structure. MedGAITS [13] introduces a graph autoencoder to reconstruct missing values before prediction, but the imputation step reintroduces distributional assumptions that CHIRP avoids by encoding timestamps directly in the edge schema. 
+
+2.2 EHR Graph Neural Networks 
+
+Modeling patients as graphs rather than sequences allows relational structure among clinical entities to inform predictions. Wanyan et al. [4] introduced heterogeneous graph embeddings for EHR-based mortality prediction, combining patient, visit, and diagnosis nodes. TRANS [3] extended this by constructing temporal graphical representations over visit sequences with typed edges, achieving strong performance on MIMIC-III prediction tasks. Time-aware HGT [8] further incorporated elapsed-time encodings into heterogeneous attention. However, all three models operate on discrete time snapshots and none supports irregular-sampling-aware inference over arbitrary measurement intervals. LSTM-GNN [24] and its successors established the value of a patient-similarity layer that con-nects patients with similar admission profiles. CHIRP retains this design choice but extends it to a dynamic setting where similarity edges are re-weighted as new data arrive. The recent LEN-GNN [16] applies logic-explained networks to static patient-similarity graphs for ICU mortality prediction; however, the static graph construction and the use of logical rules rather than causal interventions limit its applicability to rapidly-evolving patient states. 
+
+2.3 Dynamic and Temporal GNNs for EHRs 
+
+DynaGraph [9] constructs dynamic patient graphs from EHR sequences using contrastive aug-mentation but discretizes time into fixed windows and provides only correlational attention-based explanations. DyGraphTrans [10] frames disease progression modeling as a temporal graph repre-sentation learning problem, using transformer-style updates over discrete snapshots. ICU-TGNN [18] combines transformer and GNN components in a multitask setting for clinical outcome predic-tion. PMTG [12] introduces multi-granular temporal encoding but operates at the level of clinical variable channels rather than typed patient-graph entities. Collectively, these models establish that temporal graph structure improves ICU prediction beyond sequence models. Their shared limitation is the discretization of time: each model bins events into fixed intervals, introducing quantization error that is largest precisely when temporal resolution matters most — during rapid patient deterioration. Time-aware GNN formulations 5[8] address temporal dynamics by incorporating elapsed-time encodings into attention. CHIRP-Net takes a simpler, more direct approach: encoding observation timestamps as edge attributes consumed by GATv2Conv (edge dim=2), enabling time-aware attention without a separate time-encoding module, ODE integration, or discretization. 
+
+2.4 Causal and Counterfactual GNN Explainers 
+
+The explainability literature for GNNs has moved progressively from gradient-based saliency toward interventional and counterfactual frameworks. CI-GNN [5] introduced Granger-causality-inspired causal independence testing into the GNN explainability pipeline. CF-GNNExplainer [11] reframed explanations as counterfactual edge deletions — the minimal graph perturbation that flips the predicted class — establishing the counterfactual minimality criterion that CHIRP-X adopts and extends. OrphicX [15] proposed a causality-inspired latent variable model that identifies causal subgraphs using information-flow constraints. Behnam and Wang’s neural causal model (NCM) framework [6] is the closest methodological precursor to CHIRP-X: by training a structural causal model alongside the prediction network, NCM-GNN enables genuine do-calculus interventions on graph nodes and edges. CausGNN [14] demonstrated robustness advantages of causal explainers against spurious-correlation injection. CiRLExplainer [25] — published in IEEE TNNLS — showed that reinforcement-learning-guided causal subgraph discovery outperforms static causal masks. Related counterfactual-explanation approaches include in-distribution counterfactual generation [26], diffusion-based counterfactual-invariant explainers [27], and joint counterfactual/factual reasoning frameworks [29], all likewise developed for homogeneous graphs. A limitation shared by the causal GNN explainers reviewed above is that each was designed for and evaluated on homogeneous, static graphs; we have not conducted a systematic search broad enough to claim this holds for every causal GNN explainer in the literature. Extending these frameworks to a heterogeneous, continuously-evolving, multi-relational patient graph introduces three new technical challenges: (i) the causal DAG must be defined over typed event categories, not individual nodes; (ii) do-interventions must be specified jointly over node-feature, edge-type, and timestamp dimensions; and (iii) counterfactual generation must respect the temporal ordering of clinical events to remain clinically meaningful. CHIRP-Net addresses the first two challenges (irregular sampling and heterogeneity); causal explainability via the CHIRP-X extension is planned future work. 
+
+# 3 Problem Formulation and the CT-HEG Schema 
+
+3.1 Task Definition 
+
+Let P = {p1, . . . , p N } denote a cohort of ICU stays with length of stay ≥48h. For each stay pi,let Ei = {ei, 1, . . . , e i,K i } be the chronologically ordered set of clinical events observed within the fixed 48-hour observation window [ t0, t 0 + 48 h], where each event ei,k = ( τi,k , ϕ i,k , x i,k ) is a triple of timestamp, type, and observed value. The binary outcome yi indicates whether the patient died in-hospital at any point after t0 + 48 h (i.e., post-48h in-hospital mortality; stays with an outcome resolved before the 48h mark are excluded from this cohort by the LOS ≥48h inclusion criterion, and this exclusion is a limitation of the reported estimand, not a general definition of ICU mortality). The task addressed in this paper is to learn a predictor ˆ yi = fθ(Ei) of this outcome. A companion causal-explanation task is left as a target for future work (see the brief note in the Discussion) and is not defined, implemented, or evaluated in this paper. 63.2 The Continuous-Time Heterogeneous EHR Graph (CT-HEG) 
+
+We represent each ICU stay pi as a typed, attributed, timestamped graph Gi = ( Vi, E i, ϕ, ρ, τ, X )with the following components. 
+
+Node types Φ = {visit, vital, lab event }: Each ICU stay contributes one visit node (the ICU stay itself); one vital node per monitored channel (HR, MAP, SpO2, RR, temperature, GCS); and one lab node per ordered laboratory analyte. Medication-class (med), ICD-10-chapter (dx), and UMLS-concept (cui) node types were part of an earlier schema design and are noted here as possible future extensions; they are not implemented, trained, or evaluated in the CHIRP-Net results reported in this paper. All results in this paper use only the three node types above. 
+
+Edge types R: Edges are typed and carry continuous timestamps. The schema implemented and evaluated in this paper is: measured-at (vital/lab → visit) and its reverse (visit → vital/lab), giving the 4 forward+reverse edge types referenced in Fig. 1. Medication-, diagnosis-, and concept-linked edges (med → visit; dx → visit; cui → visit), lab ↔lab / med ↔med relations, and cross-patient visit ↔visit similarity edges are part of an extended schema design (see the Cross-Patient Similarity Layer discussion) and are not present in the graphs used to produce the results in this paper. A central design choice is that time is encoded in the edge timestamps, not in a separate masking tensor or imputed series. Irregularity therefore becomes a first-class property of the graph rather than a defect to be repaired before learning, removing the distributional shift documented for explicit-imputation models such as MedGAITS [13]. 
+
+3.3 Offline Graph Construction (Streaming Deferred to Future Work) 
+
+CT-HEG is constructed offline from a static 48h admission snapshot: in the current implementation, all edges are materialized from the full 48h window at graph-build time; online streaming is deferred to future work, and the cross-patient similarity layer is a planned extension (see the Cross-Patient Similarity Layer discussion). At prediction time tpred , the graph reflects exactly the information that would have been available to a clinician at that moment — a property essential for retrospective evaluation to remain a meaningful proxy for prospective deployment. 
+
+# 4 CHIRP-Net: Continuous-Time Heterogeneous Message Passing 
+
+4.1 Overview 
+
+CHIRP-Net applies type-conditioned heterogeneous message passing over the CT-HEG. Each edge carries a 2D attribute encoding observation time and value, consumed by GATv2Conv (edge dim=2) so attention weights depend on both observation content and temporal position. Four stacked Hete-roConv layers with bidirectional edges update all node representations. A readout function applied to the visit node yields the mortality logit. 
+
+4.2 Type-Specific Input Embeddings 
+
+For each node v with feature xv, a type-specific encoder Enc ϕ(v) produces the initial hidden state 
+
+hv(t0) = Enc ϕ(v)(xv). Vital and lab encoders incorporate value-and-unit normalization, with a learnable per-channel/per-analyte identity embedding concatenated to the normalized value. 7Figure 1: CHIRP-Net architecture overview. Left: CT-HEG with 3 node types (visit, vital, lab event); edges carry a 2D attribute ( thours /48, value norm) encoding observation timing and value. Centre: 4 stacked HeteroConv layers (GATv2Conv, edge dim=2, hidden=192, 4 heads); the dashed box marks the 2 forward + 2 reverse edge types providing bidirectional message passing. Right: visit-node readout MLP producing mortality probability (BCE loss) and LOS prediction (auxiliary MSE). The reverse-edge ablation result is reported in the Results section and Table 5, not here. 
+
+4.3 Time-Attentive Edge Encoding 
+
+CHIRP-Net encodes observation timing directly as edge attributes rather than through numerical ODE integration: 
+
+eu→v = ( thours /48 , value norm) ∈ R2 (1) where thours /48 normalizes the observation timestamp to [0 , 1] and value norm is the z-scored measurement. GATv2Conv with edge dim=2 incorporates these into attention weight computa-tion, weighting observations by both content and temporal position. No numerical integration is used. Time awareness is achieved entirely through the edge attribute vector ( thours /48, value norm) consumed by GATv2Conv via edge dim=2. We use “continuous-time” specifically to mean that the timestamp is encoded as a continuous-valued edge attribute rather than binned into discrete time steps; it does not mean the graph itself evolves online or that predictions are issued continuously (the graph is built offline from a fixed 48h snapshot, per the Offline Graph Construction discussion above). This is a heterogeneous extension of continuous-time-encoding GNNs [19], building on continuous-time graph attention [20] and Neural-ODE-based continuous-time graphical models [21] — motivated by the very different temporal characteristics of, e.g., a creatinine trajectory versus an antibiotic-administration profile. 
+
+4.4 Heterogeneous Message Passing with Time-Attentive Attention 
+
+At each message-passing layer, node v aggregates information from its neighbours across all relation types r ∈ R:8h(l+1)  
+
+> v
+
+= σ Wϕ(v)h(l) 
+
+> v
+
++ X
+
+> r,u
+
+α(r) 
+
+> u→v
+
+· Wrh(l)
+
+> u
+
+!
+
+(2) Attention coefficients α(r) 
+
+> u→v
+
+are computed by GATv2Conv conditioned on source node, desti-nation node, and the 2D edge attribute ( thours /48, value norm). The attention mechanism thus weights observations by both clinical value and temporal position. We use H = 4 attention heads per edge type, L = 4 stacked HeteroConv layers, and hidden dimension d = 192. Node representa-tions are updated with a residual connection and LayerNorm after each layer. 
+
+4.5 Cross-Patient Similarity Layer 
+
+A cross-patient similarity layer connecting visit nodes with similar admission profiles is a planned extension of the current architecture, motivated by LSTM-GNN [24] and LEN-GNN [16]. The results reported in this paper use the single-patient CT-HEG without cross-patient edges; the similarity layer and its ablation are left to future work. 
+
+4.6 Readout and Prediction 
+
+At t = tpred , the mortality logit is read out from the visit node: ˆyi = σ (MLP mort (hvi )) (3) The BCE loss LBCE supplies the predictive training signal. An auxiliary MSE loss on length-of-stay prediction (weight λ = 0 .05) acts as a regulariser. 
+
+4.7 Future Work: Causal Explainability Extension 
+
+High predictive performance is a necessary but not sufficient condition for clinical deployment: ICU clinicians require not just a risk score but an actionable explanation of what would have to change for a patient to be reclassified as lower risk. This motivates a planned causal-explainability extension (CHIRP-X) that would augment the predictor with a structural causal module supporting counterfactual, intervention-based explanations, evaluated against faithfulness and clinical-rating criteria. No component of this extension is implemented or evaluated in the present paper; it is noted here only as a direction for future work and is not otherwise discussed in this manuscript. 
+
+# 5 Experiments 
+
+5.1 Datasets and Cohort Definitions 
+
+MIMIC-IV v3.1 [22, 23]: Adult patients (age ≥18) with their first eligible ICU stay only (one stay per subject id; all subsequent stays for the same patient are excluded, not merely readmissions within a fixed window), restricted to stays with LOS ≥48h, following established benchmark con-ventions for MIMIC-IV ICU prediction studies [33]. 31,142 stays (equivalently, 31,142 patients); in-hospital mortality 13.4%. Features used by the reported CHIRP-Net model are 17 vital channels and 36 routine labs, encoded as timestamped vital/lab-to-visit edges. Medication classes, ICD-10 diagnosis codes, and ScispaCy-extracted UMLS concepts were explored during schema design but are not part of the graph used to produce the results in this paper; they are noted as possible future extensions, not otherwise discussed in this manuscript. 9Splits: 70/15/15 train/val/test, stratified by in-hospital mortality (13.4%), fixed random seed 42. All baselines and ablations use identical splits. Patient-level (subject id) disjointness across splits is guaranteed by cohort construction rather than by the split step itself: the cohort-extraction pipeline retains only the first ICU stay per subject id and drops duplicate subjects before split-ting (verified: running the released cohort-extraction script against a credentialed MIMIC-IV v3.1 download produces a cohort file (cohort clean.parquet) with 31,142 rows and 31,142 unique sub-ject id values, i.e. exactly one stay per patient). Because no patient contributes more than one row to the cohort, no patient can appear in more than one split regardless of which rows the split assigns to train/val/test; a post-hoc subject-overlap check on the realized splits confirms zero over-lap. Train/val/test contain 21,799 / 4,671 / 4,672 stays respectively (equivalently, patients), with mortality rates within 0.3 percentage points of the overall 13.4% across all three splits. 
+
+5.2 Baselines 
+
+Baselines actually run and reported in Table 3: logistic regression on 48h vital/lab summary statis-tics (hand-crafted features), GRU-D [32] (single run), mTAND [7] (5 seeds), and a 4-layer Trans-former (5 seeds). These are the only comparators evaluated on our splits and cohort; all four appear in Table 3. 
+
+Related methods discussed but not re-implemented as baselines here: STraTS, ALNN [2], Vi-talTCN [28], HGM-CNN [4], LSTM-GNN [24], TRANS [3], Time-aware HGT [8], DynaGraph [9], DyGraphTrans [10], ICU-TGNN [18], AGFN [17], LEN-GNN [16], MedGAITS [13], and PMTG [12] are discussed in Related Work for context but were not run on this cohort and do not appear in Table 3; we do not claim to outperform them. Causal explainer comparisons (GNNExplainer, OrphicX [15], CF-GNNExplainer [11]) are similarly discussed as related work only, not run here, and are deferred to future work. 
+
+5.3 Predictive Metrics 
+
+We report AUROC, AUPRC, Brier score, and expected calibration error (ECE), computed with 15 equal-width bins over [0 , 1] and weighted by bin occupancy; decision-curve analysis, net benefit, and a test-set reliability diagram are left for future work. Confidence intervals are estimated by 1,000-sample bootstrapping over the test set. CHIRP-Net achieves 5-seed mean AUROC 0 .8449 ± 0.0071 on the MIMIC-IV v3.1 held-out test set (N=4,672 stays; 13.4% mortality). Individual seed test AUROCs are: 0.8514 (seed 42), 0.8463 (seed 43), 0.8324 (seed 44), 0.8429 (seed 45), 0.8517 (seed 46); mean AUPRC across seeds is 0.4958 ± 0.0209. All reported ± values in this paper are population standard deviations (ddof=0) across the five seeds, not sample standard deviations. We distinguish three related but different estimands reported in this paper, computed from saved per-seed checkpoints: (1) the per-seed test AUROC/AUPRC and their mean ±SD across five independently trained models, reported above (AUROC 0 .8449 ± 0.0071, AUPRC 0 .4958 ± 0.0209); (2) the ensemble metric, obtained by averaging the five seeds’ predicted logits before the sigmoid, which is a genuinely different estimand from the seed mean — on this test set the ensemble achieves AUROC 0.8618 (95% CI: 0.8485– 0.8745) and AUPRC 0.5323 (95% CI: 0.4956–0.5706); and (3) the patient-level bootstrap 95% CI reported around the ensemble metric, obtained by resampling test patients with replacement 1,000 times. Seed-to-seed variation (estimand 1) and bootstrap resampling variation (estimand 3) are not combined into a single interval. Table 3 presents baseline comparisons against logistic regression, GRU-D [32], mTAND [7], and a four-layer Transformer, all on the identical split. Table 5 presents ablation results isolating the contribution of heterogeneous edge typing, reverse message passing, 10 Table 2: Baseline Training Protocol Supplement. Parameter counts, optimizer, learning rate (LR), weight decay, dropout, batch size (train/eval), and early-stopping patience for every model actu-ally run in this paper, extracted directly from the training scripts and logs. No model in this comparison, including CHIRP-Net, underwent a hyperparameter tuning sweep; each uses a single fixed configuration selected without formal search. This is stated explicitly as a limitation of the baseline comparison protocol (see Discussion, Limitations). The logistic regression baseline was originally trained on an un-deduplicated cohort file (51,838 stays) rather than the correct clean cohort (31,142 stays) used by every other model in this comparison; it was identified and corrected during manuscript preparation, and Table 3 reports the corrected result (test AUROC 0.7687, AUPRC 0.3298) from a rerun on the correct cohort. Missing node types (e.g., a stay with no lab event nodes) are zero-filled rather than imputed from population statistics.                                                    
+
+> Model Architecture Params Optim. LR Weight decay Dropout /Batch Early stop
+> Logistic re-gression 53 hand-crafted features (mean/std/min/max per vital+lab vari-able over 48h) N/A lbfgs (sklearn de-fault) N/A L2 penalty, C=1.0, class weight=’balanced’ (sklearn de-faults except class weight; not tuned) N/A single deter-ministic fit; no early stopping or hyperparameter tuning GRU-D GRU-D cell, hid-den=256 386,005 Adam 1e-3 1e-4 0.3 / 64 / 256 patience=10 /none mTAND Transformer encoder, d=64, 2layers, 4heads 88,833 AdamW 1e-3 1e-4 0.1 / 32 / 128 patience=10 /none 4-layer Trans-former d=128, 4layers, 4heads 817,025 AdamW 1e-3 1e-4 0.1 / 64 / 256 patience=10 /none CHIRP-Net (full) 4-layer HeteroConv, GATv2, hidden=192, 4 heads 2,448,578 AdamW 3e-4 3e-4 0.25 / 32 / 64 patience=8 /none
+
+11 and time-attentive attention. Logistic regression on 48h vital/lab summary statistics (mean, std, min, max per variable; N=53 features) achieves AUROC 0.7687 / AUPRC 0.3298 on the identical test split, establishing the hand-crafted-feature floor. CHIRP-Net exceeds this baseline by 7.6 AUROC points and 16.6 AUPRC points. Calibration metrics and operating points are presented in Table 4. Table 3: Predictive Performance on MIMIC-IV v3.1 (Clean Cohort, LOS ≥48h). Test set N = 4,672; mortality = 13.4%; five seeds (42–46) for CHIRP-Net, mTAND, and the Transformer; single reported run for GRU-D. Confidence intervals estimated by bootstrap on the test set. CHIRP-Net exceeds the fixed logistic-regression baseline by 7.6 AUROC points, outperforms mTAND by 5.9 points, the 4-layer Transformer by 7.2 points, and GRU-D by 0.002 AUROC. Post-temperature-scaling calibration for CHIRP-Net (5-checkpoint ensemble, temperature fit on validation only) is ECE = 0.0307 on the untouched test set.                                      
+
+> Model AUROC AUPRC Notes
+> Logistic regression (48h vital/lab summary fea-tures) 0.7687 0.3298 Hand-crafted-feature base-line. GRU-D [32] 0.8432 0.4881 Single reported run; seed 46. mTAND [7] 0.7863 ±0.0014 0.3917 ±0.0037 Mean ±SD across seeds 42– 46. 4-layer Transformer 0.7729 ±0.0663 0.3372 ±0.0956 Mean ±SD across seeds 42– 46; seed 45 is the low outlier.
+> CHIRP-Net 0.8449 ±0.0071 0.4958 ±0.0209 Mean ±SD across seeds 42–46; ensemble post-scaling ECE =0.0307 (test set). CHIRP-Net ensem-ble (5 logits aver-aged) 0.8618 (95% CI: 0.8485–0.8745) 0.5323 (95% CI: 0.4956–0.5706) Bootstrap 95% CI, patient-level, test set. Not directly comparable to single-run or seed-mean baselines above.
+
+In this cohort, CHIRP-Net achieved AUROC 0 .8449 ± 0.0071 and AUPRC 0 .4958 ± 0.0209, exceeding the fixed logistic-regression baseline by 7.6 AUROC points, outperforming mTAND by 5.9 points, the 4-layer Transformer by 7.2 points, and GRU-D by 0.002 AUROC; post-temperature-scaling calibration (ensemble, validation-fitted, evaluated on untouched test) was ECE = 0.0307. Post-calibration ECE=0.0307 represents an improvement over the pre-scaling value (0.0638); both figures are computed on the untouched test set using a temperature fitted on the validation set only. We do not claim this meets a universal threshold for clinical deployment, as no such consensus threshold exists and calibration on an external cohort has not been assessed. At a threshold of 0.15, CHIRP-Net achieves sensitivity 0.700 and specificity 0.808, with NPV=0.946 in this 13.4%-prevalence cohort; NPV is prevalence-dependent and should not be read as a general reliability guarantee outside this population. PPV=0.360 reflects the inherent class imbalance. Decision-curve analysis was not performed for this manuscript; a net-benefit comparison against treat-all/treat-none strategies is left for future work. 12 Table 4: Calibration Metrics and Operating Points (CHIRP-Net, Post-Temperature-Scaling). Tem-perature T=1.558, fitted on the validation set only and applied unchanged to the untouched test set, over the ensemble’s averaged logits across all five seeds. Test-set pre-scaling: Brier=0.0932, ECE=0.0638. Test-set post-scaling: Brier=0.0876, ECE=0.0307 (bootstrap 95% CI: Brier 0.0813– 0.0934, ECE 0.0247–0.0399). 
+
+Threshold Sensitivity Specificity PPV NPV 
+
+0.10 0.784 0.736 0.314 0.957 0.15 0.700 0.808 0.360 0.946 0.20 0.623 0.853 0.396 0.936 0.25 0.567 0.880 0.422 0.930 
+
+5.4 Clinical-Faithfulness Panel 
+
+Clinical validation of model explanations via a blinded intensivist panel is planned as a component of the CHIRP-X extension (see Discussion). The current paper reports predictive performance metrics only. 
+
+5.5 Fairness Audit 
+
+Sub-group AUROC/AUPRC analysis by sex, age band (18-44 / 45-64 / 65-79 / 80+), self-reported race/ethnicity, and insurance status, following the MIMIC-IF protocol [22], has not yet been per-formed and is deferred to future work. No fairness audit is reported in this manuscript. 
+
+5.6 Ablation Studies 
+
+Three ablations are evaluated, each isolating one architectural component: (i) remove reverse edges so visit nodes receive no messages from observation types; (ii) remove time-attentive edge features (set edge dim=0, constant edge attr); (iii) collapse heterogeneous edge types to a single homogeneous relation. Each ablation is run with 5 seeds; results are reported as mean ± std and delta vs full model. A fourth ablation (removing the WeightedRandomSampler to test uniform sampling) was planned but not run for this manuscript; we do not report a result for it and do not include it in Table 5. Two findings emerge. First, removing reverse edges collapses AUROC to 0 .6482 ± 0.0008 (a drop of 0 .1968 ± 0.0073) — below the LR baseline of 0.7687. In the CT-HEG topology, observation nodes are leaves with no incoming edges; without reverse edges, multi-layer message passing cannot propagate information across observations, reducing the 4-layer network to a single embedding lookup. This collapse toward a fixed floor is consistent with a deterministic architectural bottleneck (no path from observation nodes to the readout) rather than seed variance; the tight standard deviation across seeds (0.0008) confirms this is a deterministic architectural collapse, verified from corrected per-seed logs. Second, removing timestamp information from edge attributes reduces AUROC by 0 .0247 ±0.0093 — modest but consistent across all five seeds, validating the continuous-time claim made in the Time-Attentive Edge Encoding discussion above. The asymmetry between ablations reflects different roles: reverse edges enable message propagation (structural necessity); time-attentive features refine attention weights (informational signal). Third, and unexpectedly, collapsing the four typed edge relations into a single homogeneous relation for message passing did not reduce performance: the homogeneous-GAT variant achieved higher mean test AUROC (0 .8638 ± 0.0036 vs. 0 .8449 ± 0.0071) and AUPRC (0 .5294 ± 0.0141 vs. 0 .4958 ± 0.0209) than the 13 Table 5: Ablation Study on MIMIC-IV v3.1 Test Set (5 Seeds Each). Seeds 42–46, identical 70/15/15 split, LOS auxiliary loss ( λ=0.05). ∆AUROC = Full − Ablated. Reverse-edges and time-attentive-edges ablation results (5 seeds each, mean ±SD) were computed from corrected per-seed training logs after a normalization-leakage bug in the original ablation scripts was identified and fixed; ∆AUPRC is reported as the difference of means rather than a paired per-seed statis-tic. The heterogeneous-edge-types (homogeneous GAT) ablation collapses all typed edges into a single relation for message passing (345,794 parameters vs. 2,448,578 for the full model); this vari-ant achieved higher test AUROC/AUPRC than the full heterogeneous model on all five seeds, a direction-consistent result discussed in the text below.                            
+
+> Ablation AUROC ∆AUROC AUPRC ∆AUPRC Full CHIRP-Net 0.8449 ±0.0071 —0.4958 ±0.0209 —
+> −Time-attentive edges (thours = 0) 0.8202 ±0.0036 −0.0247 ±0.0093 0.4505 ±0.0078 −0.0453 ±0.0239
+> −Reverse edges (connectiv-ity/reachability check —no path from observation nodes to readout) 0.6482 ±0.0008 −0.1968 ±0.0073 0.2270 ±0.0006 −0.2688 ±0.0211
+> −Heterogeneous edge types (homogeneous GAT) 0.8638 ±0.0036 −0.0189 ±0.0052 0.5294 ±0.0141 −0.0336 ±0.0228
+
+full heterogeneous model, consistently across all five seeds (mean ∆AUROC = −0.0189 ± 0.0052, i.e. the ablated variant outperformed the full model), while using roughly 7 × fewer parameters (345,794 vs. 2,448,578). We report this plainly rather than reconcile it away: on this cohort and task, distinguishing vital, lab, and medication edge types by relation did not provide a measurable benefit over treating all observation-to-visit edges as a single relation, and may have introduced parameters that the training data here does not support well enough to exploit. This tempers the schema-level contribution claimed in the Introduction: heterogeneous typing, as implemented, is not shown to help predictive performance in this cohort, even though it remains a reasonable design choice for datasets or downstream tasks where edge-type-specific structure carries more signal (e.g., corpora with genuinely distinct temporal or missingness patterns per type). We do not draw a stronger conclusion than this from a single cohort and a single downstream task. 
+
+5.7 Implementation and Reproducibility 
+
+CHIRP-Net is implemented in PyTorch 2.x with PyTorch-Geometric 2.8. Training uses an RTX 5060 Ti GPU (Vast.ai). Code, preprocessing pipelines, and pre-trained checkpoints will be released under the BSD-3 license. Data access was obtained through PhysioNet credentialing (credentialing details withheld from the manuscript; available to editors/reviewers on request) under the Phy-sioNet Credentialed Health Data License v1.5.0. MIMIC-IV v3.1 is a fully de-identified dataset; all patient identifiers were removed prior to public release by the original data custodians. This study constitutes secondary analysis of a fully de-identified, publicly released dataset governed by the PhysioNet Credentialed Health Data License; the authors did not independently seek or ob-tain an institutional IRB determination for this specific project, and any exemption determination rests with the relevant institution rather than being self-declared here. No attempt was made to re-identify any patient. The model described in this paper has not been deployed in any clinical setting. 14 6 Discussion 
+
+6.1 Why Causal Explanations Matter at the Bedside 
+
+High predictive performance alone is not sufficient for clinical deployment: clinicians need actionable explanations, not just a risk score. CHIRP-Net’s attention weights are correlational, not causal or verified-faithful, and should not be read as identifying which factors would change a patient’s risk if intervened upon. Genuine causal explainability is left entirely to future work (see CHIRP-X, noted above); no causal claim is made anywhere in this paper. 
+
+6.2 Limitations 
+
+Baseline comparison protocol. GRU-D is reported as a single run while CHIRP-Net, mTAND, and the Transformer use five seeds each; no paired statistical test between models is reported. The 0.002 AUROC margin over GRU-D is smaller than CHIRP-Net’s own across-seed SD (0.0071), so this should be read as descriptive rather than as an established superiority claim. A fair comparison would run GRU-D under the identical 5-seed protocol with matched tuning effort and report paired bootstrap confidence intervals on the differences. The full training protocol for every comparator — architecture, parameter count, optimizer, learning rate, weight decay, dropout, batch size, and early-stopping rule — is given in Table 2 (Baseline Training Protocol Supplement); none of these models, including CHIRP-Net, underwent a formal tuning sweep. 
+
+Computational cost. Training on 31,142 patients for ∼42 epochs completes in approximately 45 minutes on an RTX 5060 Ti GPU. Inference time per patient is under 5ms. A streaming implementation for real-time bedside deployment is left to future work. 
+
+Single-modality scope. Waveform data (ECG, plethysmography) and imaging are natural extensions of the CT-HEG schema by addition of further node types. 
+
+Distribution shift. Deployment in a hospital outside the training distribution will require re-calibration. Calibration metrics (Brier score, ECE) are reported in the Predictive Metrics sub-section above. 
+
+6.3 Ethical Considerations 
+
+ICU mortality prediction sits in a high-stakes regulatory environment. Counterfactual explanations make models more actionable but also more easily contestable in adverse outcomes. We argue this is a feature, not a bug — contestability is a precondition for accountable clinical AI. 
+
+6.4 Generalizability Beyond ICU Mortality 
+
+The CT-HEG schema and CHIRP-X mechanism are not specific to mortality prediction. Sepsis onset, acute kidney injury, ventilator weaning, and length-of-stay prediction all fit the framework with minor changes to the outcome head. Extensions to length-of-stay prediction and sepsis onset detection are natural directions for future work. 
+
+6.5 Temporal Generalizability (Not Yet Reported) 
+
+An earlier draft of this manuscript reported a temporal hold-out evaluation in which the already-trained 5-seed random-split ensemble was applied without retraining to the most recent 15% of admissions. That analysis is invalid as designed: because the ensemble was trained on a random 70/15/15 split rather than a split constructed before the temporal cutoff, it may have been trained on patients whose admissions fall inside the alleged future hold-out window, so the reported gain 15 cannot be interpreted as evidence of temporal generalization. That result has been removed from this manuscript. A properly specified temporal evaluation would sort the cohort by admission time, fit preprocessing, hyperparameters, and temperature scaling using only pre-cutoff data, and evaluate a model retrained on that basis on the untouched post-cutoff hold-out, with a patient-level overlap check reported alongside cutoff date, cohort counts, and outcome rates on each side. This is left as a concrete direction for future work. 
+
+# 7 Conclusion 
+
+We presented CHIRP-Net , a timestamp-attributed event-graph neural network for ICU mor-tality prediction from irregular EHR time series, together with a systematic ablation study of its architectural components. CHIRP-Net handles irregular sampling natively by encoding observation timestamps as edge attributes consumed by GATv2Conv (edge dim=2), enabling time-aware atten-tion without discretization; bidirectional connectivity between observation and visit nodes is struc-turally required for the model to use its inputs at all. Collapsing the model’s heterogeneous edge typing into a single relation did not reduce — and on this cohort modestly improved — predictive performance, so this paper does not claim that relation-specific heterogeneous message passing is the source of CHIRP-Net’s predictive performance; clinician-actionable causal explainability is left entirely to future work. On MIMIC-IV v3.1 (31,142 ICU stays, LOS ≥48h), CHIRP-Net achieves 5-seed mean AUROC 0 .8449 ± 0.0071, exceeding the fixed logistic-regression baseline (48h vital/lab summary features) by 7.6 AUROC points (0.8449 vs. 0.7687) and 16.6 AUPRC points (0.4958 vs. 0.3298). Baseline comparisons against GRU-D, mTAND, and a Transformer are reported in Ta-ble 3. Future work includes a properly protocoled baseline comparison, a subject-level temporal evaluation, a demographic fairness audit, and the CHIRP-X causal-explainability extension noted above. 
+
+# Declarations 
+
+Ethics approval and consent to participate 
+
+This study uses MIMIC-IV v3.1, a fully de-identified publicly available dataset released by the MIT Laboratory for Computational Physiology under the PhysioNet Credentialed Health Data License v1.5.0. Data access was obtained through PhysioNet credentialing (credentialing details withheld from the manuscript; available to editors/reviewers on request). All patient identifiers were removed prior to public release by the original data custodians. This study constitutes secondary analysis of a fully de-identified, publicly released dataset governed by the PhysioNet Credentialed Health Data License; the authors did not independently seek or obtain an institutional IRB determination for this specific project, and any exemption determination rests with the relevant institution rather than being self-declared here. Individual patient consent for the original data collection and the terms under which it was waived, if applicable, are governed by the original data-collecting institution and the MIMIC-IV data use agreement, not by the authors of this paper; we make no independent claim about consent. No attempt was made to re-identify any individual. The described model has not been deployed in any clinical setting. 
+
+Consent for publication 
+
+Not applicable. 16 Availability of data and materials 
+
+MIMIC-IV v3.1 is available via PhysioNet at https://physionet.org/content/mimiciv/3.1/ 
+
+subject to credentialing. Code (training, ablation, baseline, and calibration scripts) is publicly available at https://github.com/nasiruddinstudents-ctrl/chirp-net-mimic-iv under BSD-3 license. Normalization statistics, train/val/test split indices, and five per-seed model checkpoints will be added to this repository or an accompanying data archive prior to publication. 
+
+Competing interests 
+
+The authors declare no competing interests. 
+
+Funding 
+
+This research received no external funding. 
+
+Authors’ contributions 
+
+MNU conceived the CT-HEG schema, designed and implemented the CHIRP-Net architecture, conducted all experiments, performed the ablation study, and drafted the manuscript. RTO and ERB contributed to data preprocessing and code review, and were major contributors in editing the manuscript. AAn, MR, and SWU contributed to interpretation of results and reviewed the manuscript. AAh contributed to the literature review and revised the manuscript. All authors read and approved the final manuscript. 
+
+Acknowledgements 
+
+The authors thank the PhysioNet team and the MIT Laboratory for Computational Physiology for maintaining MIMIC-IV. GPU compute was provided via Vast.ai. 
+
+Declaration of generative AI use 
+
+The authors used AI writing assistance (Claude, Anthropic & Grammarly) for manuscript drafting, editing, and structural suggestions. All experimental design, code, results, data analysis, and scientific conclusions are the authors’ own. The authors take full responsibility for the accuracy and integrity of the work. 
+
+# References 
+
+[1] S. N. Shukla and B. M. Marlin, “Modeling Irregularly Sampled Clinical Time Series,” arXiv:1812.00531, 2018. [2] M. Bignoumba et al., “A new efficient ALignment-driven Neural Network for Mortality Predic-tion from Irregular Multivariate Time Series data,” Expert Systems with Applications, 2023. [3] Y. Chen et al., “Predictive Modeling with Temporal Graphical Representation on Electronic Health Records,” Proc. IJCAI, 2024. [4] T. Wanyan et al., “Deep Learning with Heterogeneous Graph Embeddings for Mortality Pre-diction from Electronic Health Records,” Data Intelligence, 2020. 17 [5] S. Zheng et al., “CI-GNN: A Granger Causality-Inspired GNN for Interpretable Brain Network-Based Psychiatric Diagnosis,” Neural Networks, 2023. [6] R. Behnam and W. Wang, “Graph Neural Network Causal Explanation via Neural Causal Models,” Proc. ECCV, 2024. [7] S. N. Shukla and B. M. Marlin, “Multi-Time Attention Networks for Irregularly Sampled Time Series,” in Proc. ICLR, 2021. [8] Z. Li et al., “Time-aware Heterogeneous Graph Transformer with Adaptive Attention Merging for Health Event Prediction,” arXiv, 2024. [9] M. Mesinovic, S. Molaei, P. Watkinson, and T. Zhu, “DynaGraph: interpretable dynamic graph learning for temporal electronic health records,” npj Digital Medicine, vol. 9, no. 216, 2026. [10] A. Rahman et al., “DyGraphTrans: A temporal graph representation learning framework for disease progression from EHRs,” bioRxiv, 2026. [11] A. Lucic et al., “CF-GNNExplainer: Counterfactual Explanations for Graph Neural Net-works,” Proc. AISTATS, 2022. [12] Z. Zhu et al., “PMTG: Personalized Multivariate Temporal Graph Learning for Clinical Pre-diction on EHRs,” Proc. IEEE BIBM, 2025. [13] K. Wang et al., “MedGAITS: a graph autoencoder network for modeling irregular time series data in EMRs,” Health Information Science and Systems, 2026. [14] H. Debbi, “CausGNN: A Causal-Based Explanation Framework for Graph Neural Networks,” Expert Systems, 2026. [15] J. Lin et al., “OrphicX: A Causality-Inspired Latent Variable Model for Interpreting GNNs,” Proc. CVPR, 2022. [16] R. Damian, “Explainable Graph-Neural Architectures for ICU Mortality Prediction Using Logic Explained Networks,” Proc. ICAART, 2026. [17] A. Cifci et al., “Interpretable Adaptive Graph Fusion Network for Mortality and Complication Prediction in ICUs,” Diagnostics, 2025. [18] X. Shi et al., “ICU-TGNN: A Hybrid Multitask Transformer and GNN Model for ICU Clinical Outcomes,” Proc. IEEE SMC, 2024. [19] L.-P. Xhonneux et al., “Continuous Graph Neural Networks,” Proc. ICML, 2020. [20] J. Han et al., “Dynamic Graph Attention Modeling Based on Continuous Time Differentia-tion,” Proc. ICMLCA, 2025. [21] A. Bellot et al., “Graphical modelling in continuous-time: consistency guarantees via Neural ODEs,” arXiv, 2021. [22] X. Meng et al., “Interpretability and fairness evaluation of deep learning models on MIMIC-IV,” Scientific Reports, 2022. 18 [23] X. Meng et al., “MIMIC-IF: Interpretability and Fairness Evaluation of Deep Learning Models on MIMIC-IV,” arXiv, 2021. [24] E. Rocheteau et al., “Predicting Patient Outcomes with Graph Representation Learning,” arXiv, 2021. [25] W. Hu, J. Wu, and Q. Qian, “CiRLExplainer: Causality-Inspired Explainer for Graph Neural Networks via Reinforcement Learning,” IEEE Trans. Neural Netw. Learn. Syst., 2025. [26] Y. Chen et al., “Generating In-Distribution Counterfactual Explanation for GNNs,” Proc. AAAI, 2026. [27] Y. Zhang et al., “CIDER: Counterfactual-Invariant Diffusion-based GNN Explainer,” arXiv, 2024. [28] T. Sk and M. Sundari, “VitalTCN: Enhancing ICU Mortality Prediction Through Temporal Convolutional Networks,” Proc. ICIMA, 2025. [29] S. Tan et al., “Learning and Evaluating GNN Explanations based on Counterfactual and Factual Reasoning,” Proc. WebConf, 2022. [30] L. Qu et al., “Disease Risk Prediction via Heterogeneous Graph Attention Networks,” Proc. IEEE BIBM, 2022. [31] L. Qu et al., “DHGL: Dynamic hypergraph-based deep learning model for disease prediction,” Electronics Letters, 2024. [32] Z. Che, S. Purushotham, K. Cho, D. Sontag, and Y. Liu, “Recurrent Neural Networks for Multivariate Time Series with Missing Values,” Scientific Reports, vol. 8, no. 1, p. 6085, 2018. [33] H. Harutyunyan, H. Khachatrian, D. C. Kale, G. Ver Steeg, and A. Galstyan, “Multitask learning and benchmarking with clinical time series data,” Scientific Data, vol. 6, no. 1, p. 96, 2019. 19

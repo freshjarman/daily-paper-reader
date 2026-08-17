@@ -1,0 +1,647 @@
+Title: xMICD: Explainable Representation of Multiple ICD Codes
+
+URL Source: https://arxiv.org/pdf/2608.00935v1
+
+Published Time: Tue, 04 Aug 2026 01:01:26 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# xMICD: Explainable Representation of Multiple ICD Codes 
+
+Pat Vatiwutipong a,b,c , Kumkup Keeratisiwakul d, Albert Phuoc Kien Van Truong d, Nutcha Yodrabum f, Wasin Pansiritanachot e, Marvin N. Wright b,c , Thanapon Noraset a, ∗
+
+> aFaculty of Information and Communication Technology, Mahidol University, Nakhon Pathom, Thailand
+> bFaculty of Mathematics and Computer Science, University of Bremen, Bremen, Germany
+> cLeibniz Institute for Prevention Research and Epidemiology - BIPS, Bremen, Germany
+> dDepartment of Transdisciplinary Science and Engineering, School of Environment and Society, Institute of Science Tokyo, Tokyo, Japan
+> eDepartment of Emergency Medicine, Faculty of Medicine Siriraj Hospital, Mahidol University, Bangkok, Thailand
+> fDepartment of Surgery, Faculty of Medicine Siriraj Hospital, Mahidol University, Bangkok, Thailand
+
+Abstract Background: Electronic Health Records (EHRs) are widely used for clinical risk predic-tion using machine learning. International Classification of Diseases (ICD) codes provide structured information about patient diagnoses, but representing them effectively remains challenging. Existing approaches often face a trade-off between predictive performance and interpretability: grouping-based representations are interpretable but may lose information, while embedding-based representations achieve strong predictive performance but are diffi-cult to interpret. 
+
+Methods: We propose Explainable Representation of Multiple ICD Codes (xMICD), a method for constructing low-dimensional patient representations from sets of ICD codes. xMICD combines clinically meaningful diagnostic groupings with similarity in a pre-trained ICD embedding space. Instead of using binary group membership, the method assigns codes to groups via similarity-based relative assignments, yielding features that reflect how closely a patient’s diagnoses align with each clinical group. 
+
+Results: Experiments on large-scale EHR datasets demonstrate that xMICD achieves predictive performance comparable to embedding-based representations such as ICD2Vec across multiple clinical prediction tasks. At the same time, the resulting features remain clinically interpretable because each dimension corresponds to a recognizable diagnostic group. xMICD therefore provides a practical way to integrate embedding-based semantic relationships into interpretable clinical feature spaces for machine learning models. 
+
+Keywords: International Classification of Diseases codes, Electronic Health Records, Medical code embeddings, Interpretable features, Explainable AI   
+
+> ∗Corresponding author
+> Email address: thanapon.nor@mahidol.ac.th (Thanapon Noraset) arXiv:2608.00935v1 [cs.LG] 2 Aug 2026
+
+1. Introduction 
+
+Electronic Health Records (EHRs) are widely used to develop machine learning (ML) models for clinical risk prediction and decision support. Among the many elements recorded in EHRs, International Classification of Diseases (ICD) codes play a key role, as they sum-marize patients’ diagnoses in a standardized format [25, 30, 38]. However, using ICD codes directly in ML models is not straightforward. The large number of distinct codes results in high-dimensional and sparse feature spaces when one-hot encoded, which can increase model complexity and reduce generalization performance. Existing methods for representing ICD codes generally follow two directions. The first uses clinically defined groupings, such as comorbidity indices or ICD chapters and blocks. These representations are compact and easy to understand, but they often lose detailed information and may not achieve strong predictive performance [4, 42]. The second direction relies on deep learning–based embeddings, which learn dense vector representations that capture relationships between codes. These approaches often perform well in prediction tasks, but the learned dimensions are abstract and difficult to interpret in clinical terms [11, 44]. This creates a trade-off between interpretability and predictive accuracy. Interpretability is especially important in healthcare, where ML models may influence high-stakes decisions. It is not enough for a model to be interpretable at the algorithm level; the input features should also be understandable to clinicians and other stakeholders [34, 45]. Even simple models can be difficult to explain if their input features lack clear clinical meaning. Therefore, designing ICD representations that are both informative and interpretable is an important step toward trustworthy clinical ML systems. In this work, we propose xMICD (Explainable Representation of Multiple ICD Codes), a method that aims to balance predictive performance and interpretability. xMICD represents a patient’s set of ICD codes as a single, low-dimensional vector. Each dimension corresponds to a clinically meaningful group of codes (e.g., ICD-10-CM blocks). Instead of using only binary indicators for group membership, xMICD employs a relative assignment mechanism based on similarity in a pre-trained ICD embedding space. Specifi-cally, the value of each dimension reflects the similarity between a patient’s diagnoses and a predefined clinical reference group, allowing each dimension to capture graded relatedness rather than simple presence or absence. Conceptually, this representation is inspired by anchor-based interpretable embeddings, where each dimension reflects similarity to predefined reference anchors in the representation space [27, 37]. By anchoring each dimension to clinically defined diagnostic groups, xMICD produces a compact and interpretable relative representation of ICD codes. Our contributions are as follows: • We introduce xMICD, a method that converts multiple ICD codes into a low-dimensional, clinically structured feature vector for standard ML models. • We integrate pre-trained ICD embeddings with clinically defined groupings to retain semantic relationships while preserving feature-level interpretability. 2• We evaluate xMICD on a large-scale EHR dataset against common ICD representa-tions across predictive performance in several downstream tasks, similarity preserva-tion, and interpretability. xMICD achieves performance comparable to embedding-based methods while retaining clinically grounded structure absent in dense black-box embeddings. 
+
+2. Background 
+
+2.1. Challenges of Using ICD Codes With Machine Learning 
+
+The International Classification of Diseases (ICD) was first introduced in 1900 as a system for recording causes of death. Since then, the World Health Organization (WHO) has revised it multiple times, leading to ICD-9 and ICD-10, which are still widely used today [30, 38]. ICD-10 contains more than 12,000 codes, and extended versions such as ICD-10-CM include around 70,000 codes [26, 39]. ICD-10-CM codes follow a structured format. The first three characters represent a broad disease category. Codes are grouped into chapters based on the first letter, and further divided into blocks within each chapter. Additional characters provide more detailed information, such as anatomical site, severity, or type of encounter. For example, in the code S52.001A, “S” indicates injury-related conditions, “52” refers to a fracture of the forearm, and the remaining characters specify further details, including side and encounter type. ICD-10 codes have a similar structure but are generally less detailed than ICD-10-CM [26, 39]. While ICD codes are clinically meaningful, they create practical challenges for machine learning. When represented as one-hot vectors, the large number of distinct codes leads to very high-dimensional and sparse feature spaces. This can increase computational cost and make it harder for models to generalize well [6, 42]. For this reason, many studies have proposed transforming ICD codes into lower-dimensional representations. These approaches are reviewed in Section 3. 
+
+2.2. Interpretable Features 
+
+In machine learning, interpretability generally refers to how easily humans can under-stand how a model works, while explainability focuses on how well the reasons behind a model’s predictions can be communicated [14, 21, 32]. In healthcare, limited interpretabil-ity may reduce trust, slow adoption, and raise ethical or legal concerns [36, 43]. Clinicians who cannot clearly understand how a model reaches its conclusions may hesitate to rely on it in practice. Importantly, interpretability is not only about the model itself but also about the features it uses. Even simple models, such as linear regression, can be difficult to interpret if their input features lack clear meaning [21]. Therefore, in clinical ML applications, features should be understandable and clinically relevant to domain experts [45]. According to Zytek et al. [45], feature properties can be grouped into three categories. The first includes properties needed for effective modeling, such as predictive strength and compatibility with the chosen algorithm. The second includes properties related to inter-pretability, such as readability, clear descriptions, and alignment with real-world clinical 3concepts. The third includes general properties relevant to all stakeholders, such as mean-ingfulness, traceability back to the original data, and the ability to reason about how changes in inputs affect outputs [29]. These considerations show that choosing an appropriate feature representation is as im-portant as selecting the learning algorithm itself. This motivates our development of xMICD, which aims to produce features that are both model-ready and clinically interpretable. 
+
+3. Related Work 
+
+Existing approaches for representing ICD codes in machine learning fall into two main categories: grouping-based binary representations and embedding-based representations. 
+
+3.1. Grouping-Based Binary Representations 
+
+Grouping-based representations reduce the dimensionality of ICD codes by mapping them into clinically defined categories and representing each category using binary indicators. The ICD coding system itself defines a hierarchical structure consisting of chapters and blocks, which group related diagnoses within the taxonomy. These hierarchical levels can be encoded as binary features indicating whether a visit contains at least one diagnosis code within each group [7, 12]. Beyond the native ICD hierarchy, several derived grouping systems have been developed. The Clinical Classifications Software (CCS) aggregates ICD-9-CM codes into mutually ex-clusive clinical categories [1]. For ICD-10-CM, the related Clinical Classifications Software Refined (CCSR) provides a similar mapping that organizes diagnosis codes into clinically meaningful groups [2]. Another widely used approach focuses specifically on comorbidity measurement. The Charlson Comorbidity Index (CCI) summarizes diagnoses into 17 predefined comorbidity groups [8]. The Elixhauser Comorbidity Index (ECI) later expanded this framework to 31 comorbidity categories derived from ICD-9-CM codes, where each category is typically encoded as a binary indicator [13]. These indices were originally designed for severity ad-justment and outcome comparison in clinical and epidemiological studies [5, 22, 35]. These representations are easy to interpret and align with clinical reasoning. However, by reducing each group to a binary indicator, they treat heterogeneous diseases within the same category as equivalent. This simplification may obscure differences in severity or subtype and can limit predictive performance in some tasks [3, 9, 17]. 
+
+3.2. Deep Learning-Based Embedding Methods 
+
+Embedding-based methods aim to learn dense vector representations for ICD codes that capture semantic relationships beyond manual groupings. Med2Vec is one of the early ap-proaches, learning code embeddings from patient visit data [10]. ICD2Vec further leverages textual descriptions of ICD codes to generate embeddings, and patient-level representations are typically formed by averaging code vectors within a visit [19]. More recent work incorporates temporal context. Models such as BEHRT and Med-BERT adapt Transformer architectures to represent sequences of visits, capturing disease 4progression and longitudinal dependencies [20, 31]. In these approaches, embeddings become context-dependent rather than static. Graph-based methods provide another direction. For example, GraphSAGE-MC models ICD codes as nodes in a graph defined by hierarchical relationships and introduces multi-code nodes to represent combinations of diagnoses [23]. This design allows the model to represent unseen code combinations without retraining. Embedding-based methods generally achieve strong predictive performance because they capture complex relationships between codes. However, their learned dimensions are ab-stract and do not correspond directly to clinically meaningful categories. This limits their transparency at the feature level, especially in high-stakes clinical settings. 
+
+4. xMICD: The Proposed Method 
+
+A common way to represent multiple ICD codes is to rely on clinical groupings. Let a visit be associated with ICD codes {C1, C 2, . . . , C n}. Assume that m clinically meaningful groups (for example ICD Blocks or comorbidity categories) are available. A standard grouping-based representation defines, for each group j,
+
+Gj =
+
+(
+
+1 if any Ci belongs to group j, 
+
+0 otherwise. This representation is straightforward to interpret, as each dimension corresponds to a known clinical concept. However, it treats all codes within a group as equivalent and does not differentiate between, for example, mild and severe manifestations or between codes that are similar but assigned to different groups. The xMICD framework relaxes this hard membership assumption. Instead of using bi-nary group membership, it relies on similarity between ICD codes and a set of representative “anchors”. The resulting representation can still be read at the level of clinical groups, but each dimension reflects how strongly the codes in a visit relate to the corresponding anchor. 
+
+4.1. xMICD Formulation 
+
+Let {A1, . . . , A m} be a set of anchors. Anchors may correspond to individual ICD codes or to vectors in an ICD embedding space, as discussed further. We first compute a raw similarity between each code Ci and each anchor Aj ,
+
+sij = Sim( Ci, A j ), i = 1 , . . . , n, j = 1 , . . . , m, 
+
+where Sim( ·, ·) is a chosen code–anchor similarity measure. This yields an n × m similarity matrix. To remove scale differences between codes and to focus on the relative importance of anchors for each code, we normalize similarities within each row. For a fixed code Ci, we apply min–max scaling across all anchors, 
+
+s′ 
+
+> ij
+
+= sij − min j sij 
+
+max j sij − min j sij 
+
+.
+
+5Figure 1: Overview of the xMICD computation process. A set of ICD codes is mapped into an embedding space, similarities to anchor groups are computed, normalized within each code, and aggregated across codes to produce the final anchor-based representation. 
+
+Under this transformation, the anchor with the highest similarity to Ci is mapped to 1, the anchor with the lowest similarity is mapped to 0, and other anchors take values between 0 and 1 according to their relative distances. The normalized values s′ 
+
+> ij
+
+describe, for each code, the relative strength of each anchor compared to the others, rather than absolute similarity in the embedding space. This emphasizes contextual dominance within each code. We then aggregate across codes at the anchor level. For each anchor Aj , we define 
+
+Sj = max  
+
+> i=1 ,...,n
+
+s′ 
+
+> ij
+
+.
+
+The vector S = ( S1, . . . , S m) is the xMICD representation of the set of ICD codes. The quantity Sj does not measure absolute geometric proximity between codes and anchor Aj . Instead, it captures whether Aj is relatively dominant for at least one of the codes in the visit. If Sj = 1 , then Aj is the top-ranked anchor for at least one code. If 
+
+Sj < 1, Aj never attains the highest normalized similarity, and low values indicate that it is consistently outperformed by other anchors within all codes in the visit. In this way, xMICD encodes contextual dominance of anchors across the codes rather than global similarity. Figure 1 illustrates the overall computation process of xMICD, from a set of ICD codes to the final anchor-based representation. So far, two components remain to be specified: the similarity function Sim and the construction of the anchor set. We describe these choices next. 
+
+4.2. Similarity Measures 
+
+The similarity function Sim( ·, ·) can be defined at the code level or in an embedding space. We distinguish between these two perspectives. 6Code similarity. The first approach defines similarity directly between ICD codes. Such measures typically exploit structural or semantic information inherent in the ICD hierar-chy. For example, ontology-based semantic similarity measures such as Wu–Palmer [40] and Leacock–Chodorow [18] compute similarity based on the relative positions of concepts in the taxonomy. These measures operate directly on the coding system and preserve relationships encoded in the ontology rather than relying on data-driven co-occurrence patterns. They have been used in prior work to compute semantic similarity between ICD codes when comparing patient diagnosis sets [33]. 
+
+Embedding-based similarity. The second approach defines similarity in a learned embedding space. Each ICD code is represented as a dense vector learned from clinical data, and similarity is computed using a standard vector similarity measure such as cosine similarity. Pre-trained models such as Med2Vec or ICD2Vec provide such embeddings (see Section 3.2). Unlike code-level measures, embedding-based similarity captures statistical relationships derived from data and may reflect co-occurrence or contextual patterns that are not explicit in the ICD hierarchy. In this work, we primarily focus on embedding-based similarity, specifically ICD2Vec. This choice is motivated by the ability of embedding methods to capture richer relationships between diseases that may not be explicitly represented in the ICD hierarchy [16, 24]. In addition, using ICD2Vec as the similarity backbone allows us to directly compare the rep-resentations produced by xMICD with its underlying embedding space, providing a natural baseline for evaluating how the proposed method transforms and aggregates the original ICD2Vec representations. 
+
+4.3. Anchor Selection 
+
+Anchors act as reference points in the code space. We consider both clinically defined and data-driven constructions. 
+
+Clinically defined anchors. Anchors may be derived from established clinical groupings such as CCI, ECI, or ICD Blocks. When a group contains multiple codes, a single representative can be selected as the most central element in the embedding space. For a group k, we define its anchor as 
+
+Ak = argmax  
+
+> A∈group k
+
+X  
+
+> V∈group k
+
+Sim( A, V ),
+
+that is, the code whose embedding has the highest average similarity to other codes in the same group. 
+
+Data-driven anchors. Anchors can also be defined directly from the embedding space with-out relying on predefined groupings. One option is farthest point sampling, which iteratively selects anchors that are maximally distant from those already chosen, thereby covering the space with diverse representatives. Another option is clustering, where a clustering algo-rithm is applied to the embeddings and cluster medoids are used as anchors. Such anchor 7selection strategies have been used in interpretable text embedding models such as LDIR [37]. The overall construction process combines a chosen similarity measure with either clini-cally defined or data-driven anchors. Through this design, xMICD provides a flexible frame-work for constructing clinically structured representations from ICD codes. 
+
+4.4. Positioning of xMICD 
+
+xMICD occupies an intermediate position between grouping-based binary representations and embedding-based dense representations. Compared to binary grouping methods, xMICD preserves graded semantic relationships through similarity-based relative assignment. Compared to dense embedding methods, xMICD constrains each dimension to correspond to a clinically interpretable anchor, im-proving feature-level transparency. This positioning allows xMICD to balance semantic expressiveness and interpretabil-ity within a clinically structured representation space. Figure 2 compares xMICD with grouping-based and embedding-based representations. Note that xMICD values should be interpreted with care. Each dimension reflects the relative prominence of the corresponding anchor under the chosen similarity function, not a probability of belonging to that group and not a measure of disease severity. Because similarities are normalized across anchors for each ICD code and then aggregated across codes, a high xMICD value indicates that the anchor is relatively prominent for at least one diagnosis code in the visit. 
+
+5. Experimental Setup 
+
+5.1. Setting Dataset and Preprocessing. Experiments are conducted using two publicly available clinical datasets: MIMIC-IV-ED [15] and the eICU Collaborative Research Database (eICU-CRD) [28]. The MIMIC-IV-ED dataset contains 448,972 emergency department visits from 215,736 patients at Beth Israel Deaconess Medical Center between 2011 and 2019. Patients under 18 years of age or with missing triage acuity information were excluded, and outlier vital signs were removed. After preprocessing, 418,490 ED visits remained. The eICU-CRD is a multi-center intensive care dataset collected from hospitals across the United States. Records without ICD diagnosis codes or without discharge information were removed to ensure that both diagnostic features and outcome labels were available. All ICD-9-CM codes were mapped to ICD-10-CM using the General Equivalence Map-ping (GEM) to ensure consistency within a single coding system. 
+
+Baseline. We compare several configurations of xMICD against established baselines, includ-ing raw ICD features, grouping-based binary representations, and embedding-based repre-sentations. 8Figure 2: Positioning of xMICD between grouping-based and embedding-based representations for multi-ICD feature construction. 
+
+9The raw ICD representation is constructed by one-hot encoding diagnosis codes appear-ing in the dataset. Although the ICD-10-CM system contains 24,354 diagnosis codes in total, only a subset appears in each dataset. In MIMIC-IV-ED, 10509 distinct codes oc-cur in diagnoses recorded during the current ED visit and 14874 additional codes occur in inpatient admissions within the preceding five years, resulting in 25383 dimensions when combined. In contrast, the eICU-CRD dataset contains only 811 unique diagnosis codes. Grouping-based baselines map ICD codes into predefined clinical groups and encode them as binary indicators, resulting in 31 dimensions for Elixhauser, 209 for ICD-10-CM Blocks, and 553 for CCSR. For embedding-based baselines, we use ICD2Vec embeddings with 1024 dimensions, where visit-level representations are obtained by averaging code embeddings. For MIMIC-IV-ED, diagnoses from the current visit and the preceding five years are encoded separately and concatenated, doubling the dimensionality (62, 418, 1106, and 2048 respectively). In eICU, only diagnoses from the current ICU stay are used, so the dimen-sionality remains 31, 209, 553, and 1024. 
+
+xMICD configurations. We construct xMICD under cosine similarity computed from ICD2Vec embeddings. For anchors, we evaluate four strategies: medoids of ECI groups (31 anchors), medoids of ICD-10-CM Blocks (209 anchors), medoids of CCSR (553 anchors), and anchors selected using farthest point sampling (209 and 553 anchors). 
+
+5.2. Evaluation 
+
+We evaluate xMICD against other representations in terms of predictive performance on downstream tasks and similarity preservation. 
+
+Downstream tasks. Representations of ICD codes are used as features for predictive tasks on both datasets. For MIMIC-IV-ED, we follow the benchmark tasks introduced in [41]: critical outcome prediction, hospitalization requirement, and revisit in 72h. ICD features are constructed using diagnoses from the current ED visit together with diagnoses recorded during inpatient admissions in the preceding five years to capture comorbidities. The dataset is randomly split into 80% training and 20% testing. For eICU-CRD, we consider two commonly studied ICU outcomes: in-ICU mortality and prolonged ICU stay (defined as a length of stay greater than 3 days). ICD features are derived only from diagnoses recorded during the corresponding ICU stay. The split is performed at the hospital level, assigning hospitals exclusively to either the training or test set, thereby providing external validation across institutions. The experimental pipeline, predictive models, and evaluation procedures are kept consis-tent across both datasets. We evaluate two models, XGBoost and a multilayer perceptron (MLP) trained with Adam. Performance is measured using AUROC, and uncertainty is estimated via bootstrap resampling of the test set (200 replicates), following [41]. 
+
+Similarity preservation. In natural language processing, representation quality is often eval-uated by comparing representation-induced similarity with a human-annotated ground-truth 10 similarity. However, in the clinical domain, no such gold-standard similarity exists at the patient level. We therefore evaluate similarity preservation by assessing the consistency of patient-level similarity structures across representations. For each representation, patient-level similarity was computed using cosine similarity between visit-level feature vectors. We then computed Spearman’s rank correlation between the resulting similarity matrices across representations. This evaluates the consistency of patient similarity structures across different representations. 
+
+5.3. Interpretability Assessment 
+
+Unlike predictive performance and similarity, feature-level interpretability does not have a widely accepted quantitative metric. Instead, prior work has proposed qualitative criteria that characterize whether features are actionable and clinically meaningful. We therefore adopt the framework introduced in Section 2.2 to evaluate interpretability using a set of qualitative properties. Each property is assessed using three ordinal levels, indicating whether it is present, partially present, or absent for a given representation. This allows us to systematically compare baseline representations and xMICD in terms of their interpretability characteristics. The evaluated properties are: Readable: Features are expressed in recognizable, domain-appropriate vocabulary rather than opaque or coded representations. Understandable: Fea-tures refer to real-world quantities that users can reason about in context. Meaningful: 
+
+Features align with clinically plausible or domain-relevant concepts. Trackable: Features have clear data lineage and can be traced back to the original input data. Simulatable: 
+
+The feature computation process can be reconstructed or reasoned about from available information. A detailed discussion of these criteria is provided in [45]. 
+
+6. Results 
+
+6.1. Predictive performance on downstream tasks 
+
+We evaluate xMICD constructed using cosine similarity computed from ICD2Vec embed-dings with different types of anchors. We compare these variants with Raw ICD features, ICD2Vec embeddings, and several binary grouping features. Figures 3 and 4 present the results on the MIMIC-IV-ED dataset for the tasks of Critical Outcome, Hospitalization, and Revisit in 72h using XGBoost and MLP models, respectively. Figures 5 and 6 show the results on the eICU-CRD dataset for the tasks of Mortality and Prolonged Stay using the same two models. Error bars represent the 95% confidence intervals. The complete set of results is reported in Table 2 and Table 3 in the Appendix. Overall, we observe that binary grouping representations, which reduce dimensionality by assigning codes to discrete clinical groups, generally lead to lower predictive performance compared to using Raw ICD features. In contrast, embedding-based representations such as ICD2Vec consistently improve predictive performance across most tasks and models, suggesting that continuous representations capture richer relationships between diagnoses than binary indicators. 11 Figure 3: Predictive performance of different ICD representations on the MIMIC-IV-ED dataset using XGBoost. 
+
+Figure 4: Predictive performance of different ICD representations on the MIMIC-IV-ED dataset using MLP. 
+
+12 Figure 5: Predictive performance of different ICD representations on the eICU-CRD dataset using XGBoost. 
+
+Figure 6: Predictive performance of different ICD representations on the eICU-CRD dataset using MLP. 
+
+13 Among the different xMICD variants constructed using different anchor sets, most con-figurations yield very similar predictive performance. In particular, the difference between clinically defined anchors (such as ICD blocks or CCSR categories) and data-driven anchor (FPS) appears to be relatively small when the dimensionality is comparable. The main exception is xMICD based on ECI anchors. Because ECI contains only 31 groups, the resulting representation has a much lower dimensionality and therefore captures less diag-nostic information, leading to substantially lower predictive performance than other xMICD variants. Finally, we find that xMICD representations built on ICD2Vec embeddings, except for the ECI-based variant, achieve predictive performance comparable to ICD2Vec itself. For XGBoost models, xMICD occasionally slightly exceeds ICD2Vec, whereas for MLP models ICD2Vec typically remains marginally better. However, the differences between the two representations are generally small, indicating that xMICD preserves most of the predictive power of ICD2Vec while providing a more structured and interpretable representation. These patterns hold consistently across nearly all tasks and models considered in our experiments. For the eICU-CRD dataset, it can be observed that Raw ICD codes perform comparably to both ICD2Vec and xMICD. This is largely due to the fact that the dataset contains only 811 unique codes, which is even fewer than the dimensionality of the ICD2Vec embeddings. As a result, dimensionality reduction provides limited benefit in this setting. In contrast, in the MIMIC-IV-ED dataset the number of distinct codes reaches the order of tens of thousands, making dimensionality reduction substantially more important. This contrast suggests that xMICD is particularly useful in settings with a large number of unique ICD codes, such as MIMIC-IV-ED, where dimensionality reduction becomes im-portant for improving model performance. At the same time, the results show that xMICD can preserve predictive performance at a level close to ICD2Vec while providing a more structured and interpretable representation. 
+
+6.2. Similarity preservation 
+
+To understand why xMICD based on ICD2Vec retains strong predictive performance, we analyze how well different representations preserve the similarity structure between pa-tients. Figure 7 shows the pairwise Spearman correlation between patient–patient similarity matrices derived from each representation. The results indicate that xMICD variants remain substantially closer to ICD2Vec than binary grouping-based representations. In particular, xMICD-FPS shows the highest agree-ment with ICD2Vec (0.7961), followed by xMICD-CCSR (0.7446), xMICD-Block (0.6546), and xMICD-ECI (0.6464). By contrast, the correlations between ICD2Vec and the binary grouping features are considerably lower: 0.2123 for ECI, 0.3300 for Block, and 0.2656 for CCSR. These findings suggest that xMICD preserves much of the relational structure captured by ICD2Vec. Although xMICD replaces the dense latent dimensions of ICD2Vec with clin-ically interpretable anchor-based features, the resulting patient similarity relationships re-main strongly aligned with those induced by ICD2Vec. This helps explain why xMICD can 14 maintain predictive performance close to ICD2Vec while providing a more structured and interpretable representation. 
+
+> Figure 7: Pairwise Spearman correlation between patient–patient similarity matrices induced by different ICD representations. Higher values indicate that two representations preserve more similar patient similarity structures.
+
+6.3. Interpretability 
+
+We evaluate the interpretability of different ICD code representations according to the criteria introduced in Section 5.3: readability, understandability, meaningfulness, trackabil-ity, and simulatability. 
+
+6.3.1. Readability, Understandability, and Meaningfulness 
+
+Binary grouping representations are generally readable because their features correspond to clinically familiar concepts such as diagnoses, comorbidities, or disease categories. In con-trast, embedding-based representations such as ICD2Vec are not directly readable because their dimensions correspond to latent numerical components without interpretable labels. The xMICD representation largely preserves readability because each dimension is anchored to a clinically meaningful diagnostic group. As a result, clinicians can associate each feature with recognizable disease categories even though the values themselves are derived from similarity calculations. A similar contrast appears in terms of understandability. Binary grouping representa-tions are directly understandable because their features correspond to concepts clinicians routinely use in reasoning. ICD2Vec lacks this property since its latent dimensions capture 15 statistical relationships rather than explicit medical concepts. In xMICD, each feature rep-resents the similarity between a patient’s diagnoses and a clinically defined group. Although these values do not correspond to a direct clinical quantity, they can be interpreted as in-dicators of diagnostic relatedness, allowing clinicians to reason about the representation in practice. Meaningfulness is more nuanced. Binary grouping representations are meaningful be-cause each feature corresponds to a specific clinical entity. ICD2Vec lacks this property since embedding dimensions do not have inherent clinical interpretation. In xMICD, the dimensions correspond to recognizable disease groups, but feature values reflect ‘diagnostic proximity’ or ‘phenotypic similarity’ rather than explicit membership. Unlike traditional binary encoding, xMICD captures the clinical neighborhood of a patient. Consequently, a patient may obtain a non-zero value for a group even if no diagnosis belongs to that group directly. This allows clinicians to identify patients who are leaning toward specific critical states. While this requires careful interpretation, the representation still preserves clinically meaningful reference concepts and provides more interpretable signals than pure embeddings. The choice of anchors also affects interpretability. When anchors correspond to clinically defined groupings such as ICD blocks or curated disease categories, each dimension maps to a recognizable clinical concept. In contrast, anchors selected using data-driven procedures such as farthest point sampling may correspond to individual ICD codes that are less clinically intuitive. In this case the features remain interpretable as similarity to reference diagnoses, but their clinical meaning may be less immediately apparent. 
+
+6.3.2. Trackability and Simulatability 
+
+Regarding trackability, binary grouping representations can be traced directly to the original ICD codes through explicit mappings. ICD2Vec and xMICD are only partially trackable because they depend on embeddings derived from the code corpus. In terms of simulatability, binary grouping representations are fully simulatable because they follow deterministic rules. ICD2Vec is not simulatable without training an embedding model, whereas xMICD lies between these extremes: it depends on embeddings but uses explicitly defined similarity and aggregation rules. Overall, the comparison reveals a clear trade-off. Binary grouping representations offer strong readability and traceability but may lose information. ICD2Vec captures rich se-mantic relationships but provides little interpretability. xMICD occupies an intermediate position, preserving much of the predictive signal of embedding-based representations while mapping explanations back to clinically meaningful diagnostic groups. 
+
+6.3.3. Example of Model Explanations 
+
+To examine interpretability empirically, we analyze global SHAP (Shapley Additive ex-Planations) values aggregated across the dataset. Figure 8 shows SHAP summary plots for predicting in-ICU mortality on the eICU-CRD dataset using an XGBoost model. Each plot displays the most influential features across the dataset, where the horizontal axis represents the SHAP value and color indicates the feature value. 16 Using the Raw ICD representation, the model highlights individual diagnosis codes as the most influential predictors. Severe conditions such as respiratory failure (J96.00), cardiac arrest (I46.9), and acute kidney failure (N17.9) show strong positive contributions, reflecting clinically intuitive drivers of mortality risk in the ICU. However, explanations based on raw codes are highly fragmented because each diagnosis appears as an independent sparse feature. When ICD codes are aggregated into clinically defined groups, as in the CCSR represen-tation, explanations become more structured. Influential predictors correspond to broader disease categories such as respiratory disorders, infections, and circulatory conditions, pro-viding a clearer clinical overview. By contrast, ICD2Vec produces explanations based on embedding dimensions rather than medical concepts. Although these dimensions capture meaningful statistical relationships, they lack direct clinical interpretation. The xMICD representations provide an intermediate form of explanation by combining embedding-based similarity with clinically meaningful anchors. In the xMICD-CCSR rep-resentation, each feature corresponds to the similarity between a patient’s diagnoses and a specific disease group, allowing explanations to remain clinically interpretable while still reflecting relationships learned in the embedding space. Two observations further illustrate this behavior. First, the ranking of important disease groups remains broadly consistent between CCSR and xMICD-CCSR. Groups such as respi-ratory failure (RSP012), infections and sepsis (INF002), and renal failure (GEN002) appear among the most influential predictors in both representations, indicating that xMICD pre-serves the core clinical signals present in the data. At the same time, some groups change their relative importance because xMICD distributes similarity across related disease groups rather than using binary membership. This suggests that xMICD captures broader physio-logical states rather than relying solely on discrete diagnosis labels. Second, the comparison between Raw ICD and xMICD-FPS reveals how embedding-based similarity can expose latent clinical relationships. In the Raw ICD representation, the code Z66 (Do Not Resuscitate) does not appear among the most influential predictors, likely because it is rare or inconsistently recorded. Instead, the model relies on diagnoses such as cardiac arrest, respiratory failure, or severe infection to infer critical patient status. In contrast, the ability of xMICD to link Z66 with critical anchors demonstrates its capacity for phenotype discovery. In clinical practice, a Do Not Resuscitate order is rarely an isolated event but rather a proxy for multi-organ failure or terminal illness. xMICD’s interpretability allows the model to surface these latent clinical contexts which are often lost in traditional sparse representations. This does not imply that the patient explicitly has a Z66 diagnosis, but rather that the patient’s diagnoses occupy a similar region of the embedding space associated with terminal or critical conditions. 
+
+7. Discussion 
+
+The results from experiments on predictive performance and interpretability analyses of different ICD code representations are summarized in Table 1. In addition to predictive performance, the table compares dimensionality and several interpretability-related criteria. Raw ICD codes and grouping-based vectorization methods exhibit high interpretability but 17 (a) Raw ICD (b) CCSR  
+
+> (c) ICD2Vec (d) xMICD-CCSR
+> (e) xMICD-FPS
+
+Figure 8: Global SHAP summary plots showing the most influential features for predicting in-ICU mortality using different ICD representations. Each point represents a patient observation. The horizontal axis shows the SHAP value indicating the impact of a feature on the prediction, while color represents the feature value. 
+
+18 relatively limited predictive power. In contrast, deep learning–based embedding methods such as ICD2Vec achieve strong predictive performance but are difficult to interpret, sug-gesting that high interpretability often comes at the cost of predictive performance. This observation aligns closely with findings reported in prior literature discussed in Section 3.                                                
+
+> Table 1: Comparison of ICD code representations in terms of dimensionality, predictive power, and five interpretability-related properties: readability, understandability, meaningfulness, trackability, and simu-latability. Symbols indicate the extent to which each property is present: ●means present, ◗means partially present, and – means absent or not present. Symbols provide a qualitative high-level summary based on the findings of this study.
+> Raw ECI Block/CCSR ICD2Vec xMICD
+> Low-Dimension –●●◗●
+> Predictive ◗–◗●●
+> Readable ●●●–●
+> Understandable ●●●–●
+> Meaningful ●●●–◗
+> Trackable ●●●◗◗
+> Simulatable ●●●–◗
+
+However, we demonstrate that xMICD, except for the ECI-based variant, achieves pre-dictive performance comparable to ICD2Vec across most prediction tasks. This relatively small performance gap supports the central hypothesis of this work: high interpretability does not necessarily require sacrificing predictive power. One reason for this comparable performance lies in semantic information preservation. xMICD is built upon the semantic structure captured by ICD2Vec embeddings. By us-ing these embeddings to compute similarity between ICD codes and clinically meaningful anchors, xMICD incorporates latent relationships learned by the embedding model while organizing them into an interpretable feature space. In this sense, xMICD can be viewed as a structured projection of ICD2Vec representations onto clinically interpretable disease groups. Furthermore, the strong performance of xMICD when used with XGBoost highlights a practical advantage. Tree-based models are well suited to capturing nonlinear interactions and handling sparse or heterogeneous clinical features. The xMICD representation provides structured similarity signals across disease groups, allowing these models to leverage both clinical grouping information and embedding-based relationships. As observed in several prediction tasks, including Hospitalization and Revisit within 72 hours, XGBoost models using xMICD features often achieve the best or near-best predictive performance. xMICD also has limitations that should be acknowledged. Because the representation depends on pre-trained embeddings such as ICD2Vec, it cannot be fully simulatable from the raw ICD codes alone. This reflects a trade-off between interpretability and representa-tional richness. In addition, although xMICD anchors its features to clinically meaningful constructs such as ICD blocks or CCSR groups, the similarity-based representation may introduce ambiguity in terms of meaningfulness. A high value in a particular dimension 19 does not necessarily indicate the direct presence of diseases within that group, but rather reflects semantic similarity between the patient’s ICD codes and the anchor diseases. Without careful interpretation, this may lead to overly literal or incorrect clinical conclu-sions. Therefore, when applying xMICD in practice, the resulting features and explanations should be interpreted with caution and with awareness of the underlying similarity mecha-nism. This is crucial for building trust in AI-assisted systems, as it allows practitioners to verify the model’s reasoning against their own clinical intuition. Nevertheless, because the anchors correspond to medically meaningful disease groupings, the resulting representation remains substantially more interpretable than purely embedding-based approaches. 
+
+8. Conclusion 
+
+In this work, we proposed xMICD, an explainable representation of multiple ICD codes designed to balance predictive performance with clinical interpretability. xMICD is a flexible framework built upon two core components: a pre-trained ICD embedding model (e.g., ICD2Vec) and a set of clinically defined groupings (e.g., Blocks, CCSR). By combining these elements through a relative assignment mechanism, xMICD represents a patient’s diagnoses as a low-dimensional vector that captures semantic relationships among co-occurring ICD codes while remaining interpretable to clinicians. Experiments on large-scale EHR datasets demonstrate that xMICD achieves predic-tive performance comparable to embedding-based representations and other state-of-the-art approaches. At the same time, the representation maintains a clear connection to clini-cally meaningful diagnostic groups, enabling more interpretable explanations than purely embedding-based features. Overall, xMICD provides a practical way to integrate the semantic power of ICD em-beddings into clinically interpretable feature spaces. This approach contributes toward the development of more transparent and trustworthy machine learning models for AI-assisted clinical decision support. 
+
+Acknowledgment 
+
+This research project has been supported by Mahidol University (Fundamental Fund: fiscal year 2026 by National Science Research and Innovation Fund (NSRF), grant number FF-027/2569). 
+
+References 
+
+[1] Agency for Healthcare Research and Quality, 2017. Clinical classifications software (ccs) for icd-9-cm. Available at: https://www.hcup-us.ahrq.gov/toolssoftware/ccs/ccs.jsp. [2] Agency for Healthcare Research and Quality, 2020. Clinical classifications soft-ware refined (ccsr) for icd-10-cm diagnoses. Available at: https://www.hcup-us.ahrq.gov/toolssoftware/ccsr/ccs_refined.jsp. 20 [3] Askar, M., Småbrekke, L., Holsbø, E., Bongo, L.A., Svendsen, K., 2024. Using net-work analysis modularity to group health code systems and decrease dimensionality in machine learning models. Exploratory Research in Clinical and Social Pharmacy 14, 100463. [4] Atutxa, A., Pérez, A., Casillas, A., 2017. Machine learning approaches on diagnostic term encoding with the ICD for clinical documentation. IEEE Journal of Biomedical and Health Informatics 22, 1323–1329. [5] Bannay, A., Chaignot, C., Blotière, P.O., Basson, M., Weill, A., Ricordeau, P., Alla, F., 2016. The best use of the charlson comorbidity index with electronic health care database to predict mortality. Medical Care 54, 188–194. [6] Bishop, C.M., 2006. Pattern Recognition and Machine Learning. Springer, New York. [7] Cartwright, D.J., 2013. ICD-9-CM to ICD-10-CM codes: What? why? how? [8] Charlson, M.E., Pompei, P., Ales, K.L., MacKenzie, C.R., 1987. A new method of classifying prognostic comorbidity in longitudinal studies: Development and validation. Journal of Chronic Diseases 40, 373–383. [9] Chervu, N.L., Balian, J., Verma, A., Sakowitz, S., Cho, N.Y., Mallick, S., Russell, T.A., Benharash, P., 2024. Development of a surgery-specific comorbidity score for use in administrative data. Annals of Surgery , 10–1097. [10] Choi, E., Bahadori, M.T., Searles, E., Coffey, C., Thompson, M., Bost, J., Tejedor-Sojo, J., Sun, J., 2016. Multi-layer representation learning for medical concepts, in: Proceed-ings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, pp. 1495–1504. [11] Deimazar, G., Sheikhtaheri, A., 2023. Machine learning models to detect and predict patient safety events using electronic health records: A systematic review. International Journal of Medical Informatics , 105246. [12] Dugan, J., Shubrook, J., 2017. International classification of diseases, 10th revision, coding for diabetes. Clinical Diabetes 35, 232–238. [13] Elixhauser, A., Steiner, C., Harris, D.R., Coffey, R.M., 1998. Comorbidity measures for use with administrative data. Medical Care 36, 8–27. [14] Hakkoum, H., Abnane, I., Idri, A., 2022. Interpretability in the medical field: Asystematic mapping and review study. Applied Soft Computing 117, 108391. [15] Johnson, A., Bulgarelli, L., Pollard, T., Horng, S., Celi, L.A., Mark, R., 2023. MIMIC-IV-ED (version 2.2). 21 [16] Johnson, R., Gottlieb, U., Shaham, G., Eisen, L., Waxman, J., Devons-Sberro, S., Ginder, C.R., Hong, P., Sayeed, R., Su, X., et al., 2025. Clinvec: unified embeddings of clinical codes enable knowledge-grounded ai in medicine. medRxiv , 2024–12. [17] Kansal, A., Gao, M., Balu, S., Nichols, M., Corey, K., Kashyap, S., Sendak, M., 2021. Impact of diagnosis code grouping method on clinical prediction model performance: A multi-site retrospective observational study. International Journal of Medical Infor-matics 151, 104466. [18] Leacock, C., Chodorow, M., 1998. Combining local context and WordNet similarity for word sense identification. WordNet: An Electronic Lexical Database , 265. [19] Lee, Y.C., Jung, S.H., Kumar, A., Shim, I., Song, M., Kim, M.S., Kim, K., Myung, W., Park, W.Y., Won, H.H., 2023. Icd2vec: Mathematical representation of diseases. Journal of Biomedical Informatics 140, 104361. [20] Li, Y., Rao, S., Solares, J.R.A., Hassaine, A., Ramakrishnan, R., Canoy, D., Zhu, Y., Rahimi, K., Salimi-Khorshidi, G., 2020. Behrt: Transformer for electronic health records. Scientific Reports . [21] Longo, L., Brcic, M., Cabitza, F., Choi, J., Confalonieri, R., Ser, J.D., Guidotti, R., Hayashi, Y., Herrera, F., Holzinger, A., Jiang, R., Khosravi, H., Lecue, F., Malgieri, G., Páez, A., Samek, W., Schneider, J., Speith, T., Stumpf, S., 2024. Explainable artificial intelligence (XAI) 2.0: A manifesto of open challenges and interdisciplinary research directions. Information Fusion 106, 102301. [22] Ludvigsson, J.F., Appelros, P., Askling, J., Byberg, L., Carrero, J.J., Ekström, A.M., Ekström, M., Smedby, K., Hagström, H., James, S., et al., 2021. Adaptation of the charlson comorbidity index for register-based research in sweden. Clinical Epidemiology , 21–41. [23] Lui, S.J., Cheng, X., Krishnaswamy, S., 2022. Inductive representation learning of multiple ICD codes for healthcare, in: 2022 IEEE 17th International Conference on Control & Automation (ICCA), pp. 498–503. [24] Luo, J., Wang, X., Wang, J., Chang, A., Wang, Y., Ma, F., 2024. Corelation: Boosting automatic icd coding through contextualized code relation learning, in: Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2024), pp. 3997–4007. [25] Menachemi, N., Collum, T.H., 2011. Benefits and drawbacks of electronic health record systems. Risk Management and Healthcare Policy 4, 47–55. [26] National Center for Health Statistics (U.S.), 2022. ICD-10-CM Tabular List of Diseases and Injuries. Centers for Disease Control and Prevention. 22 [27] Opitz, J., Moeller, L., Michail, A., Padó, S., Clematide, S., 2025. Interpretable text embeddings and text similarity explanation: A survey, in: Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing, pp. 22314–22330. [28] Pollard, T.J., Johnson, A.E.W., Raffa, J.D., Celi, L.A., Mark, R.G., Badawi, O., 2018. The eicu collaborative research database, a freely available multi-center database for critical care research. Scientific Data 5, 180178. [29] Preece, A., Harborne, D., Braines, D., Tomsett, R., Chakraborty, S., 2018. Stakeholders in explainable AI. CoRR abs/1810.00184. [30] Quan, H., Li, B., Saunders, L.D., Parsons, G.A., Nilsson, C.I., Alibhai, A., IMECCHI investigators, 2008. Assessing validity of ICD-9-CM and ICD-10 administrative data in recording clinical conditions in a unique dually coded database. Health Services Research 43, 1424–1441. [31] Rasmy, L., Wu, Y., Wang, N., Geng, X., Xu, H., Zhi, D., 2021. Med-bert: Pretrained contextualized embeddings on large-scale structured electronic health records for disease prediction. NPJ Digital Medicine . [32] Rudin, C., 2019. Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead. Nature Machine Intelligence 1, 206–215. [33] Schneider, J.J., Adler, M., Ammer-Herrmenau, C., König, A.O., Sax, U., Hügel, J., 2023. Improving icd-based semantic similarity by accounting for varying degrees of comorbidity. arXiv preprint arXiv:2308.07359 . [34] Şenel, L.K., Utlu, İ., Şahinuç, F., Ozaktas, H.M., Koç, A., 2020. Imparting inter-pretability to word embeddings while preserving semantic structure. Natural Language Engineering 27, 721–746. [35] Sharma, N., Schwendimann, R., Endrich, O., Ausserhofer, D., Simon, M., 2021. Com-paring Charlson and Elixhauser comorbidity indices with different weightings to predict in-hospital mortality: An analysis of national inpatient data. BMC Health Services Re-search 21, 13. [36] Vellido, A., 2019. The importance of interpretability and visualization in machine learn-ing for applications in medicine and health care. Neural Computing and Applications 32, 18069–18083. [37] Wang, Y., Shen, Z., Huang, H., 2025. Ldir: Low-dimensional dense and interpretable text embeddings with relative representations, in: Findings of the Association for Com-putational Linguistics: ACL 2025, pp. 14397–14409. [38] World Health Organization, 1978. International Classification of Diseases: Ninth Revi-sion, Basic Tabulation List with Alphabetic Index. World Health Organization. 23 [39] World Health Organization, 2016. International Statistical Classification of Diseases and Related Health Problems, 10th Revision, Fifth Edition. World Health Organization. [40] Wu, Z., Palmer, M., 1994. Verb semantics and lexical selection, in: 32nd Annual Meeting of the Association for Computational Linguistics, pp. 133–138. [41] Xie, F., Zhou, J., Lee, J.W., Tan, M., Li, S., Rajnthern, L.S.O., Chee, M.L., Chakraborty, B., Wong, A.K.I., Dagan, A., Ong, M.E.H., Gao, F., Liu, N., 2022. Benchmarking emergency department prediction models with machine learning and public electronic health records. Scientific Data 9, 658. [42] Xu, K., Lam, M., Pang, J., Gao, X., Band, C., Mathur, P., Papay, F., Khanna, A.K., Cywinski, J.B., Maheshwari, K., Xie, P., Xing, E.P., 2019. Multimodal machine learning for automated ICD coding, in: Proceedings of the 4th Machine Learning for Healthcare Conference, pp. 197–215. [43] Zárdai, I.Z., 2023. Why autonomous agents should not be built for war. Journal of Philosophy of Life 13, 64–96. [44] Zikos, D., Shrestha, A., Fegaras, L., 2021. A cross-sectional study to predict mortality for Medicare patients based on the combined use of HCUP tools. Journal of Healthcare Informatics Research 5, 300–318. [45] Zytek, A., Arnaldo, I., Liu, D., Berti-Équille, L., Veeramachaneni, K., 2022. The need for interpretable features: Motivation and taxonomy. SIGKDD Explorations 24, 1–12. 
+
+Appendix 
+
+Tables 2 and 3 summarize the predictive performance of different ICD representations. Table 2 reports the main results on the MIMIC-IV-ED dataset, including Raw ICD, binary grouping features, ICD2Vec, and xMICD variants. Table 3 presents the corresponding eval-uation on the eICU-CRD dataset. All results are reported as mean AUC with the half-width of the 95% bootstrap confidence interval based on 200 resamples of the test set. 24 Table 2: Predictive performance (AUC) of different ICD representations on the MIMIC-IV-ED dataset using XGBoost and multilayer perceptron (MLP) models. Features are constructed from diagnoses in the current emergency department visit and inpatient diagnoses from the preceding five years. 
+
+Critical Outcome Hospitalization Revisit in 72h Dim. XGBoost MLP XGBoost MLP XGBoost MLP 
+
+Raw ICD 25383 0.861 
+
+> ±0.005
+
+0.774 
+
+> ±0.006
+
+0.806 
+
+> ±0.004
+
+0.784 
+
+> ±0.003
+
+0.692 
+
+> ±0.009
+
+0.568 
+
+> ±0.013
+
+ECI 62 0.595 
+
+> ±0.006
+
+0.598 
+
+> ±0.007
+
+0.599 
+
+> ±0.003
+
+0.597 
+
+> ±0.003
+
+0.554 
+
+> ±0.010
+
+0.552 
+
+> ±0.010
+
+Block 418 0.839 
+
+> ±0.005
+
+0.812 
+
+> ±0.006
+
+0.804 
+
+> ±0.003
+
+0.823 
+
+> ±0.003
+
+0.687 
+
+> ±0.010
+
+0.620 
+
+> ±0.015
+
+CCSR 1106 0.855 
+
+> ±0.004
+
+0.857 
+
+> ±0.005
+
+0.809 
+
+> ±0.002
+
+0.836 
+
+> ±0.002
+
+0.639 
+
+> ±0.011
+
+0.602 
+
+> ±0.011
+
+ICD2Vec Avg. 2048 0.893 
+
+> ±0.005
+
+0.901 
+
+> ±0.004
+
+0.864 
+
+> ±0.003
+
+0.883 
+
+> ±0.003
+
+0.697 
+
+> ±0.010
+
+0.685 
+
+> ±0.011
+
+xMICD-ECI 62 0.868 
+
+> ±0.006
+
+0.818 
+
+> ±0.005
+
+0.838 
+
+> ±0.003
+
+0.806 
+
+> ±0.003
+
+0.690 
+
+> ±0.008
+
+0.664 
+
+> ±0.011
+
+xMICD-Block 418 0.893 
+
+> ±0.003
+
+0.864 
+
+> ±0.005
+
+0.861 
+
+> ±0.003
+
+0.848 
+
+> ±0.003
+
+0.702 
+
+> ±0.010
+
+0.684 
+
+> ±0.009
+
+xMICD-CCSR 1106 0.893 
+
+> ±0.004
+
+0.871 
+
+> ±0.004
+
+0.860 
+
+> ±0.003
+
+0.843 
+
+> ±0.003
+
+0.701 
+
+> ±0.009
+
+0.681 
+
+> ±0.009
+
+xMICD-FPS 418 0.891 
+
+> ±0.004
+
+0.868 
+
+> ±0.005
+
+0.860 
+
+> ±0.003
+
+0.844 
+
+> ±0.003
+
+0.706 
+
+> ±0.008
+
+0.686 
+
+> ±0.009
+
+xMICD-FPS 1106 0.892 
+
+> ±0.004
+
+0.872 
+
+> ±0.005
+
+0.861 
+
+> ±0.003
+
+0.848 
+
+> ±0.003
+
+0.699 
+
+> ±0.009
+
+0.680 
+
+> ±0.010
+
+25 Table 3: Predictive performance (AUC) of different ICD representations on the eICU-CRD dataset using XGBoost and multilayer perceptron (MLP) models. 
+
+Mortality Prolonged Stay Dim. XGBoost MLP XGBoost MLP 
+
+Raw ICD 811 0.841 
+
+> ±0.010
+
+0.793 
+
+> ±0.012
+
+0.742 
+
+> ±0.007
+
+0.719 
+
+> ±0.007
+
+ECI 31 0.653 
+
+> ±0.014
+
+0.647 
+
+> ±0.012
+
+0.643 
+
+> ±0.008
+
+0.640 
+
+> ±0.007
+
+Block 209 0.801 
+
+> ±0.010
+
+0.780 
+
+> ±0.011
+
+0.727 
+
+> ±0.007
+
+0.722 
+
+> ±0.006
+
+CCSR 553 0.830 
+
+> ±0.011
+
+0.799 
+
+> ±0.011
+
+0.732 
+
+> ±0.007
+
+0.717 
+
+> ±0.006
+
+ICD2Vec Avg. 1024 0.833 
+
+> ±0.010
+
+0.835 
+
+> ±0.010
+
+0.735 
+
+> ±0.007
+
+0.733 
+
+> ±0.007
+
+xMICD-ECI 31 0.829 
+
+> ±0.010
+
+0.798 
+
+> ±0.010
+
+0.735 
+
+> ±0.007
+
+0.725 
+
+> ±0.007
+
+xMICD-Block 209 0.841 
+
+> ±0.010
+
+0.824 
+
+> ±0.010
+
+0.742 
+
+> ±0.007
+
+0.733 
+
+> ±0.007
+
+xMICD-CCSR 553 0.840 
+
+> ±0.010
+
+0.824 
+
+> ±0.009
+
+0.738 
+
+> ±0.006
+
+0.726 
+
+> ±0.007
+
+xMICD-FPS 209 0.837 
+
+> ±0.010
+
+0.807 
+
+> ±0.011
+
+0.739 
+
+> ±0.007
+
+0.728 
+
+> ±0.007
+
+xMICD-FPS 553 0.840 
+
+> ±0.010
+
+0.828 
+
+> ±0.010
+
+0.743 
+
+> ±0.007
+
+0.732 
+
+> ±0.007
+
+26

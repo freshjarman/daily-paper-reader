@@ -1,0 +1,648 @@
+Title: Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness
+
+URL Source: https://arxiv.org/pdf/2608.12592v1
+
+Published Time: Fri, 14 Aug 2026 00:21:40 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+August 14, 2026 
+
+# Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Haochen Zhang 1 , Jiaheng Guo 1 , Yu-Chao Huang 1 , Nicholas Konz 1 and Tianlong Chen 1 B 
+
+> 1
+
+UNITES Lab, University of North Carolina at Chapel Hill {haochenz,morris,nick124, tianlong}@cs.unc.edu, jiaheng@unc.edu  
+
+> B
+
+Corresponding Author Continuous physiological time series underpin modern clinical monitoring, yet many of the most informative signals are invasive, expensive, or simply unavailable for a given patient. Conditional generation offers a remedy: an absent signal can be synthesized from co-recorded signals and routine clinical variables. Existing generators, however, are built around a single conditioning modality and degrade when forced to handle the heterogeneous, irregularly missing mix of time-variant signals and static covariates seen in practice. We propose ReCoGen ( Re present Co nditions, then Gen erate), a two-stage framework that decouples multimodal condition representation from target generation. Stage I trains one masked autoencoder per modality, distilling each time-variant condition into a compact and missingness-tolerant token sequence. Stage II trains a flow-matching generator that fuses these tokens with static conditions to synthesize the target signal. Across three physiological benchmarks, including continuous glucose monitoring on AI-READI and arterial blood pressure generation on MIMIC-III and MIMIC-IV, ReCoGen attains the best downstream utility on all sixteen (dataset, task, metric) settings, surpassing six representative conditional generators; on thirteen of them its utility also reaches or exceeds the utility measured on the real signal, a reference we read as an approximate anchor rather than a ceiling. Ablations trace the gains to the conditioning path: learnable cross-attention over the frozen per-modality encoders, and a dual token-plus-AdaLN route for the static conditions. ReCoGen thus turns routinely collected signals into informative surrogates for invasive or unavailable ones, a step toward less invasive, lower-cost continuous clinical monitoring. 
+
+1 Introduction 
+
+Continuous physiological time series have become a foundation of modern medicine (Topol, 2019; Dunn et al., 2018): bedside monitors and consumer wearables now collect cardiac, respiratory, and metabolic signals that trace a patient’s health state and support diagnosis, risk stratification, and the early warning of adverse events. Intensive-care vital-sign streams support prediction of in-hospital mortality (Harutyunyan et al., 2019; Alghatani et al., 2021), early sepsis onset (Nemati et al., 2018), and impending circulatory failure (Hyland et al., 2020); wearable continuous glucose monitoring enables more precise screening for diabetes (Hall et al., 2018; Lu et al., 2025). However, many informative signals are difficult and costly to obtain. Continuous arterial blood pressure (ABP) acquisition is invasive and carries procedural risk, so it is used for only a minority of patients (Nuttall et al., 2016); and signals that are easy to collect often arrive with irregular missingness, which  
+
+> BCorresponding authors: {tianlong}@cs.unc.edu
+> Preprint. Under review. arXiv:2608.12592v1 [cs.LG] 12 Aug 2026 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness
+
+materially complicates downstream use (Che et al., 2018). Conditional time series generation is a remedy: synthesize the hard-to-measure target from available co-recorded modalities, as in cross-modal biosignal synthesis (Sarkar & Etemad, 2021) and generative augmentation of physiological recordings (Li et al., 2022), so that monitoring and analysis extend to settings where the target is unavailable or hard to access (Lai et al., 2025). 
+
+Figure 1: Motivation and overview. (A) Existing conditional generators ingest multimodal physiolog-ical conditions directly and fail on heterogeneous modalities with irregular missingness. (B) ReCo-Gen first represents each condition modality with missingness-aware encoders, then generates the tar-get with a conditional flow-matching model. Conditional time series generation methods have been studied for handling a wide range of condi-tioning signals (Narasimhan et al., 2024). Label-conditioned methods synthesize time series from discrete class labels (Li et al., 2022; Lee et al., 2023). Attribute-conditioned methods condi-tion on structured metadata (Jing et al., 2024; Shankar et al., 2025). Text-conditioned models convert the conditions into natural language de-scription to enable flexibly controllable genera-tion (Gu et al., 2025; Li et al., 2025; Lai et al., 2025). Imputation methods infill the missing part conditioned on the observed proportion of a mul-tivariate time series (Tashiro et al., 2021; Yuan & Qiao, 2024; Naiman et al., 2024). However, these methods are mainly built for a single con-ditioning modality, whereas clinical conditioning signals are inevitably multimodal: the target must be generated jointly from several co-recorded time series together with static tabular and categorical clinical variables. Even methods designed for het-erogeneous covariates (Narasimhan et al., 2024) do not address irregularly sampled covariates or modality missingness, which characterize wearable and ICU data (Che et al., 2018). Representing and merging conditions across modalities to build a robust conditional generator remains an open problem. The most straightforward way to build such a system from existing methods is to fold the conditions from multiple modalities directly into the generator: treating every co-recorded time series as observed context, as in imputation methods (Tashiro et al., 2021; Yuan & Qiao, 2024; Naiman et al., 2024), and handling the static conditions with attribute-conditioned methods (Narasimhan et al., 2024). Multimodal physiological conditions are precisely where this shortcut breaks down (Figure 1A), for two reasons. First, co-recorded time series arise from distinct physiological processes with their own dynamics and clinical meaning (Baltrušaitis et al., 2018; Acosta et al., 2022), so an in-painting mechanism that treats them as homogeneous context cannot represent these modality-specific semantics. Second, each modality has its own irregular sampling grid and missingness pattern, making it hard to learn representations of the time-variant conditions while performing generation. Indeed, handing the raw, partially observed streams straight to the generator measurably degrades the synthesized target on the harder downstream tasks (Figure 4). This leads us to a simple hypothesis: properly representing a condition deserves as much attention as generating the target. We validate this hypothesis and propose ReCoGen: a two-stage framework for multimodal-conditioned physiological time-series generation that decouples condition representation from target generation (Figure 1B). In Stage I we learn one masked autoencoder per modality (He et al., 2022), so each encoder imputes from context and distills an irregular, time-variant modality into a compact, robust token sequence. In Stage II we freeze these encoders and train a flow-matching model (Lipman et al., 2023; Liu et al., 2022) that synthesizes the target from both static and time-variant conditions, where we find the conditioning-path design has a substantial effect on downstream utility. Our contributions are as follows: • We show that the current methods for conditional time-series generation perform poorly under multimodal physiological conditioning; and we trace the failure to the absence of a dedicated, 2Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+missingness-aware condition representation. • We propose ReCoGen, a two-stage framework that decouples condition representation from genera-tion: per-modality masked autoencoders distill each irregular modality into missingness-tolerant tokens; and the conditional generator can merge conditioning features in a separate training stage. • We conduct comprehensive experiments across three physiological datasets, showing that ReCo-Gen outperforms six representative conditional generators in downstream task utility; through a systematic ablation study, we explain the intuition behind the design of ReCoGen. 
+
+2 Method 
+
+2.1 Problem Setup 
+
+We study the generation of a physiological time series from the other signals and clinical variables recorded for the same subject. The target X is valued in RV ×T (V channels of length T ). The conditions come in two forms: M co-recorded time-variant modalities, the m-th valued in RTm and possibly irregularly sampled, each paired with a binary observed mask o(m) ∈ { 0, 1}Tm (1 at observed steps, 0 at missing ones); and a static descriptor s in an abstract space S — questionnaire responses, laboratory tests, or medical history, varying across cohorts. Writing c = ( c(1) , o (1) , . . . , c (M ), o (M ), s ) for a realization of the joint condition C, the goal is to learn bPθ(X | C) ≈ P (X | C) from i.i.d. samples {(xi, c i)}Ni=1 of the unknown joint distribution P .We take a data-augmentation view of generation quality: generated signals should be as useful as real ones for a downstream clinical predictor. Fix a label space Y, a hypothesis class H of predictors 
+
+h : RV ×T → Y and a loss L; write RQ(h) = E(x,ℓ )∼Q[L(h(x), ℓ )] for the risk under a distribution Q over signal–label pairs, and let h⋆ = arg min h∈H RP (h) be the predictor a practitioner would train on real data. Our generator induces a synthetic distribution bPθ, under which a signal is generated from the real conditions and paired with the same label. Generation serves augmentation well when the generalization gap 
+
+∆( θ) = E(c,ℓ )Ebx∼ bPθ (·| c)
+
+L(h⋆(bx), ℓ ) − RP (h⋆) (2.1) is small in magnitude; we estimate both risks on held-out subjects and report them as AUROC and AUPRC, for which a lower risk is a higher value. Three qualifications fix how ∆( θ) should be read: the quantity to control is |∆( θ)|, since the gap is signed and a large negative gap is not better than a zero gap; it is informative only when RP (h⋆) is itself non-trivial, as otherwise both risks sit near the floor and their agreement certifies nothing; and it is necessary but not sufficient for fidelity, since a generator preserving only the label-relevant component of x also attains ∆( θ) ≈ 0. In particular ∆( θ) < 0 calls for scrutiny rather than celebration: it is the signature one would expect if the generator re-expressed the conditions in a form the predictor reads more easily than the measured waveform, a point we return to with the main results. 
+
+2.2 Overview of ReCoGen 
+
+ReCoGen generates a target from its conditions in two decoupled stages (Figure 2). For each irregular time-variant modality, Stage I learns a robust encoder by training a lightweight Transformer encoder– decoder over the full-length event stream under a masked-reconstruction objective that forces the encoder to impute from context. Stage II freezes those encoders and trains a conditional flow-matching generator that combines the time-variant and the static conditions to synthesize the target series. Both stages operate in the observation domain: the generator represents a 1-D series as a 2-D image through an invertible delay embedding (Naiman et al., 2024) and models it with a vision transformer. ReCoGen rests on two core designs. The first is the decoupled training just outlined: the feature extractor for the time-variant conditions is trained on its own masked-reconstruction objective and then frozen, so the generator is optimized on top of fixed conditioning features instead of having to learn how to encode irregular, partially observed series jointly with generation. The second is the conditioning path. Each time-variant modality is summarized by a bank of learnable per-modality query tokens that cross-attend over its frozen autoencoder latents, giving a compact set of in-context condition tokens; the 3Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness Masking  
+
+> [missing]
+> Encoder 1Decoder 1
+
+Reconstruction Loss 
+
+Modality 
+
+> [missing]
+
+... Modality 
+
+Stage I: PER-MODALITY MASKED AUTOENCODER TRAINING 
+
+> [missing] [missing]
+
+Static Descriptors Transformer Transformer Encoder M Decoder M
+
+Stage II: CONDITIONAL FLOW-MATCHING GENERATOR TRAINING & INFERENCE     
+
+> Time-Variant Modalities (to )Static Descriptors MLP Encoder s
+> Cross-Attention Combined
+> Conditions
+> Reconstructed Seq. Reconstructed Seq.
+
+Conditions 
+
+> (2-D) (1-D)
+
+Target Series     
+
+> noise
+> Interpolant Prediction
+> ODE Integration
+> Conditioned on Generated Seq.
+> Not Trained in Stage I
+> Passed to Stage II
+> DiT/SiT
+> Backbone
+
+Multi-Modal, Irregularly-Sampled, Partially-Observed 
+
+Conditions 
+
+> No Yes
+> (Stage I)
+> Encoder i
+> In-Context Token AdaLN Modulation
+> on additional masked steps
+> Missing Mod. Token
+> Missing?
+
+Figure 2: Overview of ReCoGen. Stage I trains one masked autoencoder per time-variant conditioning modality; Stage II freezes them and trains a conditional flow-matching generator fusing the time-variant and static conditions to synthesize the target series. static descriptor enters through two complementary routes, as an additional in-context token and as an adaptive layer-norm (AdaLN) modulation. This path accounts for most of the generation quality. 
+
+2.3 Stage I: Masked Autoencoder Training 
+
+We learn the representation of each time-variant conditioning modality with a masked autoencoder. Take one modality and write its series as u = ( u1, . . . , u L) with observed mask o ∈ { 0, 1}L (a generic c(m) and 
+
+o(m)), where ot = 1 marks a genuinely observed step and ot = 0 a step that is missing. The observed steps 
+
+O = {t : ot = 1 } already leave a modality-dependent fraction of the series missing; on top of this natural missingness we sample a random subset M ⊆ O with mask ratio ρ and hold it out for reconstruction. Every naturally missing or held-out step is replaced by a single shared learnable [missing] token, so the encoder always sees a regular-length sequence. Following masked autoencoding (He et al., 2022), the loss is the mean squared error on the held-out steps only, 
+
+LAE = 1
+
+|M| 
+
+X
+
+> t∈M
+
+ but − ut
+
+2. (2.2) Reconstructing unseen points forces the encoder to infer from context rather than copy its input, which keeps it robust when a modality is sparsely observed. We train one autoencoder AE m per modality m,freeze it for Stage II, and use ρ=0 .3 by default. 
+
+2.4 Stage II: Conditional Flow-Matching Training 
+
+Stage II trains a conditional generator on top of the frozen Stage I encoders, which now act as fixed feature extractors; on the conditioning side only the injection modules remain trainable, which also stabilizes training. A time series x ∈ RV ×T is mapped to a square image Φ = D(x) ∈ RV ×e×e by a delay embedding (Naiman et al., 2024), whose i-th column is the non-overlapping length-e window 
+
+x[ ie : ( i+1) e ] (embedding dimension e), padded to an e × e square. The map D is invertible on the valid region, so a generated image is read back to a series by D−1, and a binary mask Φmask marks the non-padded pixels, on which alone the flow-matching loss is computed. We investigate the conditioning-path design for multimodal conditional time-series generation. For modal-ity m, the frozen encoder yields a latent sequence H(m) = AE enc  
+
+> m
+
+(c(m), o (m)), which a bank of n learnable per-modality query tokens Q(m) summarizes by cross-attention, A(m) = CrossAttn( Q(m), H (m), H (m)) ∈
+
+Rn×d, giving M·n time-variant condition tokens; a missing modality falls back to a per-modality learnable missing-token sequence eA(m) ∈ Rn×d. These tokens enter the generator in context. How they are injected is a key design choice: learnable cross-attention pooling outperforms plain in-context tokens, 4Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+modulation-only injection, and an in-painting alternative, especially on the harder ABP tasks (Figure 4). The static descriptor is likewise encoded (with its missingness made visible) into one or two tokens, depending on the cohort’s static schema, and injected through both routes, which together outperform either alone (Table 3). The denoiser backbone fθ is a DiT/SiT-style vision transformer (Peebles & Xie, 2023), trained with the 
+
+x-prediction v-loss flow-matching formulation (Li & He, 2026). With noise ϵ ∼ N (0 , σ 2I) and t ∈ (0 , 1) 
+
+from a logit-normal schedule, we form the interpolant zt = t Φ + (1 − t) ϵ with target velocity v⋆ = Φ − ϵ;the network predicts the clean signal bΦ = fθ(zt, t, c ), which gives bv = ( bΦ − zt)/(1 − t), and we minimize the mask-normalized error EΦ,ϵ,t 
+
+∥Φmask ⊙ (bv − v⋆)∥22/∥Φmask ∥1
+
+. At inference we integrate the ODE 
+
+dz t/dt = bv from noise ( t=0 ) to data ( t=1 ) with a fixed number of Euler or second-order Heun steps (the last always Euler), encoding the conditions once and mapping the final image back to a series with D−1.
+
+3 Experiment 
+
+3.1 Experiment Setup Datasets and tasks We evaluate on three tasks spanning two domains: one wearable/glycemic cohort and two critical-care databases. All windows are 24 hours at 5-minute resolution ( T =288 ). (i) AI-READI (AI-READI Consortium, 2024), a multimodal type-2-diabetes cohort: we generate a subject’s CGM trace from four co-recorded wearable modalities (heart rate, calorie expenditure, physical activity, respiratory rate) and static tabular clinical features. (ii) MIMIC-III (Johnson et al., 2016): we generate the mean ABP trace from three co-recorded vitals (heart rate, respiratory rate, SpO 2) and a static clinical vector, all taken from the Waveform Database Matched Subset numerics. (iii) MIMIC-IV (Johnson et al., 2023) poses the same task on a distinct cohort, but from bedside charted measurements rather than waveforms, giving a dual-resolution setup with the sparsely charted vitals on an hourly grid ( Tcond =24 ). 
+
+Baselines We compare against six representative conditional generators, grouped by the conditioning interface their architecture exposes; all generate the same target as ReCoGen. Signal-conditioned: 
+
+Diffusion-TS (Yuan & Qiao, 2024) and ImagenTime (Naiman et al., 2024) stack the target and the co-recorded series into one multivariate series and in-paint the target, supervising the target channel only; neither admits a label or static features, so both consume the conditioning series alone. Attribute-conditioned: TimeWeaver (Narasimhan et al., 2024) fuses the conditioning series as time-varying metadata into a CSDI-style denoiser, and WaveStitch (Shankar et al., 2025) pins the co-recorded channels as RePaint anchors on an SSSD-S4 backbone; neither has a path for the tabular static vector. We take both from ConTSG-Bench (Lan et al., 2026), a public benchmark whose ports condition on discrete attributes alone, and add back each paper’s own mechanism: TimeWeaver’s continuous metadata path and WaveStitch’s anchor conditioning. Text-conditioned: VerbalTS (Gu et al., 2025) and Bridge (Li et al., 2025) accept text only, so we verbalize the complete conditioning set and embed it with a frozen LongCLIP text encoder; Bridge additionally draws a same-label real target window as its prototype. These two therefore receive our full conditioning set. Per-method settings are in the supplement. 
+
+Fairness of the comparison Everything outside that interface is held fixed: all baselines reuse our dataset builder, split, windowing and valid-window filter verbatim, generate on the same evaluation windows, are scored by the same probe, and train for 1000 epochs at learning rate 10 −4 with the optimizer of their reference implementation. Each receives the largest subset of the conditioning set its architecture admits — complete for VerbalTS and Bridge, and Bridge in fact receives strictly more, since its prototype is a real target window. That the other four cannot ingest heterogeneous static conditions is the limitation this work targets, not an artifact of our setup; Figure 4 isolates it with an in-painting variant of ReCoGen that changes only how the conditioning series enter. 
+
+Evaluation protocol Because no ground-truth “clean” target exists for held-out subjects, we assess generation quality by downstream clinical utility rather than by point-wise reconstruction error. Following a train-on-real, test-on-synthetic protocol, a classifier trained on real signals scores each method’s generated signals against their true labels; every method faces the same probe, so results are directly 5Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Generative baselines ReCoGen Ref. Task Metric Diffusion -TS Imagen Time Verbal TS Bridge Time Weaver Wave Stitch 
+
+Real-Valid ∗
+
+MIMIC-III : diagnosis and mortality prediction with ABP only Sepsis AUROC 0.566 0.513 0.515 0.505 0.510 0.525 0.677 0.633 
+
+AUPRC 0.360 0.316 0.321 0.311 0.315 0.324 0.494 0.436 
+
+HF AUROC 0.523 0.518 0.501 0.493 0.503 0.503 0.650 0.650 
+
+AUPRC 0.275 0.276 0.268 0.262 0.268 0.269 0.413 0.408 
+
+Mort. AUROC 0.519 0.501 0.511 0.515 0.497 0.553 0.599 0.658 
+
+AUPRC 0.181 0.174 0.180 0.190 0.173 0.205 0.249 0.316 MIMIC-IV : diagnosis and mortality prediction with ABP only Sepsis AUROC 0.531 0.520 0.527 0.498 0.504 0.495 0.692 0.657 
+
+AUPRC 0.175 0.177 0.168 0.154 0.160 0.162 0.286 0.260 
+
+HF AUROC 0.500 0.510 0.501 0.503 0.503 0.498 0.637 0.596 
+
+AUPRC 0.258 0.267 0.258 0.259 0.259 0.260 0.364 0.330 
+
+Mort. AUROC 0.504 0.560 0.506 0.484 0.519 0.535 0.702 0.656 
+
+AUPRC 0.118 0.138 0.116 0.110 0.117 0.130 0.236 0.209 AI-READI : study_group prediction under 2 input modes Study group 
+
+> (CGM only)
+
+AUROC 0.502 0.519 0.546 0.715 0.656 0.604 0.771 0.763 
+
+AUPRC 0.253 0.262 0.291 0.412 0.356 0.330 0.504 0.477 
+
+Study group 
+
+> (CGM +Lab)
+
+AUROC 0.759 0.757 0.552 0.794 0.790 0.777 0.795 0.796 
+
+AUPRC 0.469 0.466 0.298 0.525 0.514 0.500 0.533 0.525 
+
+Table 1: Downstream evaluation under a train-on-real, test-on-synthetic protocol: a probe trained on real signals scores each method’s generated signal (5-seed mean). MIMIC-III/-IV predict external ICD diagnoses (sepsis, heart failure “HF”) and in-hospital mortality from the generated ABP; AI-READI predicts four-class study_group from the generated CGM alone or with lab test results. Bold marks the best generative method per row. comparable, and each metric is the mean over five classifier seeds (per-seed standard deviations and significance tests are in the supplement). Because two of the downstream labels (in-hospital mortality on MIMIC and study_group on AI-READI) would otherwise be model inputs, we remove the categorical label from the conditioning set of every method and retrain, so no reported number is scored on a label its generator was given. We also score the real validation signals under the same probe ( Real-Valid ∗) and treat this as an approximate anchor rather than an upper bound: it is itself a finite-sample estimate, and a generated signal can score above it. The downstream tasks are four-class study_group classification on AI-READI — from the generated CGM alone and with the real labs fused into the probe input — and, on MIMIC-III/-IV, external ICD diagnoses ( sepsis , heart failure ) plus in-hospital mortality from the generated ABP alone. 
+
+3.2 Main Results 
+
+ReCoGen is the strongest generative model in every row of Table 1, attaining the best AUROC and AUPRC on all sixteen (dataset, task, metric) combinations. The margin is largest on the critical-care benchmarks, where recovering diagnoses and mortality from the ABP waveform alone is hard and the six baselines hover near chance; on AI-READI our generated CGM leads clearly without the real labs and matches the strongest baseline once they are fused in, where every method saturates because the real labs dominate the probe. Against the Real-Valid ∗ reference obtained from the real signal under the same probe, ReCoGen reaches or exceeds it on thirteen of the sixteen rows and falls below it on three, most 6Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 100 150 200 spread 52 Real CGM 0 12 24 spread 47 ReCoGen (ours) 0 12 24 hour of day 100 150 200 spread 37 Bridge (baseline) healthy pre-diabetes T2D, oral med. insulin-dependent 
+
+Figure 3: Generated CGM reproduces the class structure of the real signal on AI-READI. Each curve is the 24-hour trace averaged over the held-out par-ticipants of one study_group class; the vertical axis is mean glucose in mg/dL, shared across panels, and “spread” is the gap between the highest and lowest class mean. Bridge is the strongest baseline on this dataset.                                   
+
+> Dataset Task Full −TS −static Real
+> MIMIC-III Sepsis 0.677 0.579 0.500 0.633
+> HF 0.650 0.618 0.544 0.650
+> Mortality 0.599 0.570 0.521 0.658
+> MIMIC-IV Sepsis 0.692 0.656 0.587 0.657
+> HF 0.637 0.608 0.516 0.596
+> Mortality 0.702 0.561 0.565 0.656
+> AI-READI Study Group 0.771 0.750 0.507 0.763
+
+Table 2: Conditioning ablation: ReCoGen re-trained with all conditions (Full), without the time-series conditions ( −TS), or without the static ones (−static), Each ablated model is retrained and re-scored end to end by the same train-on-real, test-on-synthetic probe (AUROC, 5-seed mean); Full and Real repeat the corresponding values of Ta-ble 1. Underline marks the more damaging re-moval per row. visibly on MIMIC-III mortality (AUROC 0.599 vs. 0.658 , AUPRC 0.249 vs. 0.316 ). 
+
+A qualitative look on AI-READI Figure 3 is an illustration rather than added evidence, and it covers one dataset. study_group is ordinal and the real CGM class means span 52 mg/dL, so the class structure is legible in the waveform itself: ReCoGen reproduces the ordering and most of the span ( 47 mg/dL), while Bridge compresses the classes to 37 mg/dL and shifts the whole cohort upward. We plot class means because the variability between participants of one class is far larger than the separation between classes. The same plot on MIMIC would show little, since the real ABP level separates the ICU labels by only a few mmHg; there the comparison rests on Table 1, and we make no visual claim. 
+
+What the protocol does and does not establish The probe scores a generated signal, and that signal is a function of the conditions, so a high score can arise in two ways: the synthesized target carries the same label-relevant physiology as the real one, or the generator re-expresses information already in the conditions in a form the probe reads easily. Downstream utility therefore measures label-relevant information transfer, and conflates target fidelity with condition re-expression. We add no pointwise fidelity metric because the setting offers no clean target: the signal we synthesize for a held-out subject is precisely the one that was not measured. Two observations bound the ambiguity. Sepsis and heart failure are external ICD diagnoses never available to the generator, so recovering them from the generated waveform cannot be explained by copying a conditioning variable; they can still be correlated with the covariates it does see. Mortality is the sharper case: driven by the hemodynamic state ABP encodes and correlated with those covariates, it is the label most exposed to a conditioning-correlated shortcut. Table 2 bounds that room: static conditions alone already support much of the score (MIMIC-IV sepsis AUROC 
+
+0.656 with no time-series condition). Scores above Real-Valid ∗ are thus evidence that label-relevant structure survives generation, possibly in a cleaner form than the measured waveform, not that the synthetic signal is the more faithful one. 
+
+3.3 Ablation Study Time-series vs. static conditioning To quantify how much each conditioning group contributes, we retrain ReCoGen leave-one-group-out (Table 2): from the “Full” conditioning we drop either all time-7Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness Sepsis HF Mort. Sepsis HF Mort. Study grp 0.4 0.5 0.6 0.7 0.8 Downstream AUROC      
+
+> MIMIC-III MIMIC-IV AI-READI
+> Cross-attn. tokens (Ours) In-context tokens AdaLN vector In-painting
+
+Figure 4: Time-series conditioning mechanism: per-task downstream AUROC (bars: 5-seed mean; error bars: ±1 std) for four injections differing only in how the conditioning series enters — frozen-AE latents via learnable cross-attention tokens (ReCoGen), the same latents as in-context tokens, the pooled latents as one AdaLN vector, and RePaint-style in-painting (no AE). Dashed line: chance.                         
+
+> Dataset Task Token +AdaLN (ReCoGen) Token -only AdaLN -only MIMIC-III Sepsis 0.677 0.547 0.595 HF 0.650 0.536 0.648 Mortality 0.599 0.525 0.561 MIMIC-IV Sepsis 0.692 0.560 0.562 HF 0.637 0.551 0.593 Mortality 0.702 0.501 0.509 AI-READI Study group 0.771 0.624 0.742
+
+Table 3: Static-feature encoding ablation as a token ×AdaLN factorial, per-task downstream AU-ROC: in-context tokens +AdaLN context (ReCo-Gen) vs. tokens-only vs. AdaLN-only. Bold marks the best injection per row. 0 0.1 0.3 0.5 0.7   
+
+> Stage-1 AE mask ratio
+> 0.60 0.65 0.70 0.75
+> Downstream AUROC
+> AI-READI MIMIC-IV MIMIC-III
+
+Figure 5: Stage-I mask-ratio sensitivity. Down-stream AUROC against the stage-I mask ratio; each line is the mean over a dataset’s tasks (AI-READI: study_group; MIMIC-III/-IV: sepsis, HF, mortal-ity), error bars the pooled 5-seed probe std. The sweep is a single end-to-end re-run, so its ρ=0 .3
+
+point need not reproduce the main table exactly. series conditions ( −TS) or all static/tabular ones ( −static), applying the ablation identically at training, validation and generation time. Removing either group lowers AUROC on every task, so both carry information that ReCoGen transfers into its generation; dropping the static conditions hurts more in most cases. 
+
+Time-series conditioning mechanism Holding everything else fixed, we compare four ways for the conditioning series to enter (Figure 4): frozen-AE latents read by learnable per-modality queries via 
+
+cross-attention into in-context tokens (ReCoGen); the same latents as plain in-context tokens; the pooled latents through AdaLN modulation; and the in-painting alternative of Diffusion-TS (Yuan & Qiao, 2024) and ImagenTime (Naiman et al., 2024). Cross-attention wins overall, most clearly on the ABP tasks, where the other injections fall well behind and in-painting is unstable, dropping toward or below chance on the hardest cases ( e.g. MIMIC-IV mortality). On AI-READI all four are comparable. 8Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Static-feature encoding We inject the static features as a token ×AdaLN factorial (Table 3, same protocol): in-context tokens plus a pooled AdaLN modulation (ReCoGen), tokens only, or the AdaLN modulation alone. Both paths together win on every (dataset, task), by a wide margin on MIMIC-IV, so they are complementary rather than redundant; between the single-path variants, removing the AdaLN modulation is consistently more damaging. The static features are therefore carried primarily through AdaLN, the token adding a complementary gain only when that path is present. 
+
+Stage-I mask-ratio sensitivity The stage-I autoencoders hold out and reconstruct an additional fraction of the observed points, the mask ratio , set to 0.3 in ReCoGen. Sweeping it over {0, 0.1, 0.3, 0.5, 0.7} and retraining both stages end to end per value (Figure 5, AUROC averaged over each dataset’s tasks), the generator is fairly robust: AUROC varies within a modest range with no monotone trend, and 0.3 is a consistently strong setting. 
+
+4 Related Works 
+
+Conditional Time-Series Generation We review existing generators through the lens of how they ingest conditioning signals. 1) Label-conditioned models steer generation with a discrete class: TTS-CGAN (Li et al., 2022) and TimeVQVAE (Lee et al., 2023) fall into this category. 2) Attribute-conditioned models condition on structured metadata: TEdit (Jing et al., 2024) and WaveStitch (Shankar et al., 2025) are two representative works. TimeWeaver (Narasimhan et al., 2024) extends this line of work by enabling multimodal conditioning through the tokenization and fusion of heterogeneous covariates spanning categorical, continuous, and time-variant modalities. 3) Text-conditioned models verbalize the condition into natural language and inject it through text embedding models: VerbalTS (Gu et al., 2025), T2S (Ge et al., 2025), Bridge (Li et al., 2025), and DiffuSETS (Lai et al., 2025) are in this group. 
+
+4) Signal-conditioned models take the observed portion of a time series as the condition, prediction and imputation being the representative tasks: CSDI (Tashiro et al., 2021), Diffusion-TS (Yuan & Qiao, 2024), and ImagenTime (Naiman et al., 2024). Across all four groups, a generator is tailored to one 
+
+kind of condition and absorbs it directly into the generative process, either as an in-context sequence to be in-painted alongside the target or as fused metadata; even TimeWeaver (Narasimhan et al., 2024), which admits multiple covariate types, assumes them densely aligned and does not model the heavy, modality-dependent missingness of co-recorded physiological streams. ReCoGen departs from this recipe in two ways: it targets genuinely multimodal conditioning (several irregularly sampled, partially observed time series together with static clinical descriptors) rather than a single condition type, and it decouples 
+
+how a condition is represented from how the target is generated , freezing a missingness-aware encoder per modality so the generator consumes robust condition tokens instead of reconstructing the raw streams itself. 
+
+Medical Downstream Tasks Our probe is trained on real signals, which is meaningful only if the labels are ones those signals genuinely predict; we therefore ground each task in prior work. CGM traces routinely characterize glycemic state and screen for diabetes (Hall et al., 2018), and CGMformer (Lu et al., 2025) fine-tunes exactly the diabetes-status target (study_group) we probe on AI-READI. ABP and its co-recorded vitals are the core input to ICU risk prediction: MIMIC benchmarks predict in-hospital mortality from clinical time series (Harutyunyan et al., 2019), Nemati et al. (2018) predict sepsis onset from routine vitals, and others predict circulatory failure and hypotension from the same signals (Hyland et al., 2020; Hatib et al., 2018). Our three ABP labels are complementary: mortality is the canonical ICU outcome, directly driven by the hemodynamic state ABP encodes (Vincent & De Backer, 2013; Maheshwari et al., 2018; Alghatani et al., 2021), while sepsis and heart failure are external diagnoses never given to the generator, so they test whether it preserves label-relevant physiology rather than low-order statistics. 
+
+5 Conclusion 
+
+ReCoGen addresses conditional generation of physiological time series from several irregularly sampled, partially observed signals together with static clinical variables. Feeding them straight into the generator makes one objective both represent the conditions and generate the target, serving neither well; ReCoGen 9Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+separates the two, distilling each irregular stream into missingness-tolerant tokens with a per-modality masked autoencoder and generating the target with a frozen-encoder flow-matching model. It attains the best downstream utility on all sixteen (dataset, task, metric) settings across AI-READI, MIMIC-III and MIMIC-IV, by the widest margin on the critical-care ABP benchmarks where the six baselines hover near chance. Two limitations frame that result: downstream utility conflates target fidelity with a re-expression of the conditions, so the real-signal reference is an anchor rather than a ceiling; and encoding each modality independently leaves cross-modal dependencies to the generator. Modeling the conditions jointly, and separating fidelity from re-expression in a paired setting, are natural next steps. 
+
+Acknowledgment 
+
+This research was partially funded by the National Institutes of Health (NIH) under award 1R01EB037101-01. The views and conclusions contained in this document are those of the authors and should not be interpreted as representing the official policies, either expressed or implied, of the NIH. 
+
+References 
+
+Acosta, J. N., Falcone, G. J., Rajpurkar, P., and Topol, E. J. Multimodal biomedical ai. Nature Medicine , 28 (9):1773–1784, 2022. 2 AI-READI Consortium. Ai-readi: rethinking ai data collection, preparation and sharing in diabetes research and beyond. Nature Metabolism , 6(12):2210–2212, 2024. 5 Alghatani, K., Ammar, N., Rezgui, A., and Shaban-Nejad, A. Predicting intensive care unit length of stay and mortality using patient vital signs: machine learning model development and validation. JMIR Medical Informatics , 9(5):e21347, 2021. 1, 9 Baltrušaitis, T., Ahuja, C., and Morency, L.-P. Multimodal machine learning: A survey and taxonomy. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 41(2):423–443, 2018. 2 Che, Z., Purushotham, S., Cho, K., Sontag, D., and Liu, Y. Recurrent neural networks for multivariate time series with missing values. Scientific Reports , 8(1):6085, 2018. 2 Dunn, J., Runge, R., and Snyder, M. Wearables and the medical revolution. Personalized Medicine , 15(5): 429–448, 2018. 1 Ge, Y., Li, J., Zhao, Y., Wen, H., Li, Z., Qiu, M., Li, H., Jin, M., and Pan, S. T2s: High-resolution time series generation with text-to-series diffusion models. arXiv Preprint arXiv:2505.02417 , 2025. 9 Gu, S., Li, C., Jing, B., and Ren, K. Verbalts: Generating time series from texts. In Forty-second International Conference on Machine Learning , 2025. 2, 5, 9 Hall, H., Perelman, D., Breschi, A., Limcaoco, P., Kellogg, R., McLaughlin, T., and Snyder, M. Glucotypes reveal new patterns of glucose dysregulation. PLoS Biology , 16(7):e2005143, 2018. 1, 9 Harutyunyan, H., Khachatrian, H., Kale, D. C., Ver Steeg, G., and Galstyan, A. Multitask learning and benchmarking with clinical time series data. Scientific Data , 6(1):96, 2019. 1, 9 Hatib, F., Jian, Z., Buddi, S., Lee, C., Settels, J., Sibert, K., Rinehart, J., and Cannesson, M. Machine-learning algorithm to predict hypotension based on high-fidelity arterial pressure waveform analysis. 
+
+Anesthesiology , 129(4):663–674, 2018. 9 He, K., Chen, X., Xie, S., Li, Y., Dollár, P., and Girshick, R. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16000–16009, 2022. 2, 4 Hyland, S. L., Faltys, M., Hüser, M., Lyu, X., Gumbsch, T., Esteban, C., Bock, C., Horn, M., Moor, M., Rieck, B., et al. Early prediction of circulatory failure in the intensive care unit using machine learning. 
+
+Nature Medicine , 26(3):364–373, 2020. 1, 9 Jing, B., Gu, S., Chen, T., Yang, Z., Li, D., He, J., and Ren, K. Towards editing time series. Advances in Neural Information Processing Systems , 37:37561–37593, 2024. 2, 9 Johnson, A. E., Pollard, T. J., Shen, L., Lehman, L.-w. H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Anthony Celi, L., and Mark, R. G. Mimic-iii, a freely accessible critical care database. Scientific Data ,3(1):1–9, 2016. 5 10 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Johnson, A. E., Bulgarelli, L., Shen, L., Gayles, A., Shammout, A., Horng, S., Pollard, T. J., Hao, S., Moody, B., Gow, B., et al. Mimic-iv, a freely accessible electronic health record dataset. Scientific Data , 10(1):1, 2023. 5 Lai, Y., Chen, J., Zhao, Q., Zhang, D., Wang, Y., Geng, S., Li, H., and Hong, S. Diffusets: 12-lead ecg generation conditioned on clinical text reports and patient-specific information. Patterns , 6(10), 2025. 2, 9 Lan, S., Gu, S., Xiong, Z., and Ren, K. Contsg-bench: A unified benchmark for conditional time series generation. arXiv Preprint arXiv:2603.04767 , 2026. 5 Lee, D., Malacarne, S., and Aune, E. Vector quantized time series generation with a bidirectional prior model. arXiv Preprint arXiv:2303.04743 , 2023. 2, 9 Li, H., Huang, Y.-H., Xu, C., Schlegel, V., Jiang, R., Batista-Navarro, R., Nenadic, G., and Bian, J. Bridge: Bootstrapping text to control time-series generation via multi-agent iterative optimization and diffusion modeling. arXiv Preprint arXiv:2503.02445 , 2025. 2, 5, 9 Li, T. and He, K. Back to basics: Let denoising generative models denoise. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 36115–36125, 2026. 5 Li, X., Ngu, A. H. H., and Metsis, V. Tts-cgan: A transformer time-series conditional gan for biosignal data augmentation. arXiv Preprint arXiv:2206.13676 , 2022. 2, 9 Lipman, Y., Chen, R. T., Ben-Hamu, H., Nickel, M., and Le, M. Flow matching for generative modeling. In The eleventh international conference on learning representations , 2023. 2 Liu, X., Gong, C., and Liu, Q. Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv Preprint arXiv:2209.03003 , 2022. 2 Lu, Y., Liu, D., Liang, Z., Liu, R., Chen, P., Liu, Y., Li, J., Feng, Z., Li, L. M., Sheng, B., et al. A pretrained transformer model for decoding individual glucose dynamics from continuous glucose monitoring data. 
+
+National Science Review , 12(5):nwaf039, 2025. 1, 9 Maheshwari, K., Nathanson, B. H., Munson, S. H., Khangulov, V., Stevens, M., Badani, H., Khanna, A. K., and Sessler, D. I. The relationship between icu hypotension and in-hospital mortality and morbidity in septic patients. Intensive Care Medicine , 44(6):857–867, 2018. 9 Naiman, I., Berman, N., Pemper, I., Arbiv, I., Fadlon, G., and Azencot, O. Utilizing image transforms and diffusion models for generative modeling of short and long time series. Advances in Neural Information Processing Systems , 37:121699–121730, 2024. 2, 3, 4, 5, 8, 9 Narasimhan, S. S., Agarwal, S., Akcin, O., Sanghavi, S., and Chinchali, S. Time weaver: A conditional time series generation model. arXiv Preprint arXiv:2403.02682 , 2024. 2, 5, 9 Nemati, S., Holder, A., Razmi, F., Stanley, M. D., Clifford, G. D., and Buchman, T. G. An interpretable machine learning model for accurate prediction of sepsis in the icu. Critical Care Medicine , 46(4): 547–553, 2018. 1, 9 Nuttall, G., Burckhardt, J., Hadley, A., Kane, S., Kor, D., Marienau, M. S., Schroeder, D. R., Handlogten, K., Wilson, G., and Oliver, W. C. Surgical and patient risk factors for severe arterial line complications in adults. Anesthesiology , 124(3):590–597, 2016. 1 Peebles, W. and Xie, S. Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 4195–4205, 2023. 5 Sarkar, P. and Etemad, A. Cardiogan: Attentive generative adversarial network with dual discriminators for synthesis of ecg from ppg. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, pp. 488–496, 2021. 2 Shankar, A., Chen, L., van Deursen, A., and Hai, R. Wavestitch: Flexible and fast conditional time series generation with diffusion models. Proceedings of the ACM on Management of Data , 3(6):1–25, 2025. 2, 5, 9 Tashiro, Y., Song, J., Song, Y., and Ermon, S. Csdi: Conditional score-based diffusion models for probabilistic time series imputation. Advances in Neural Information Processing Systems , 34:24804– 24816, 2021. 2, 9 Topol, E. J. High-performance medicine: the convergence of human and artificial intelligence. Nature Medicine , 25(1):44–56, 2019. 1 11 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Vincent, J.-L. and De Backer, D. Circulatory shock. New England Journal of Medicine , 369(18):1726–1734, 2013. 9 Yuan, X. and Qiao, Y. Diffusion-ts: Interpretable diffusion for general time series generation. arXiv Preprint arXiv:2403.01742 , 2024. 2, 5, 8, 9 12 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+# Appendix 
+
+A Data Windowing and Preprocessing 13 B Stage I: Per-Modality Masked Autoencoders 13 C Stage II: Conditional Flow-Matching Generator 14 D Baselines 15 E Downstream Evaluation Protocol 15 F Statistical Significance of the Main Results 16 
+
+This supplement lists the full parameter settings behind every number reported in the main paper: the win-dowing and preprocessing of the three cohorts, the Stage I masked autoencoders, the Stage II conditional flow-matching generator, the sampling configuration, the six baselines, and the downstream evaluation probe. Values that a launch script leaves unset are the corresponding reference implementation’s defaults. All runs use a single NVIDIA GPU per job. 
+
+A Data Windowing and Preprocessing 
+
+Every method in a given benchmark consumes exactly the same windows: the baselines call the dataset builder, split, windowing and valid-window filter of ReCoGen verbatim, and generation is driven by the same window index (the metadata file written by our own generation pass), so the downstream probe scores all methods on an identical set of subjects and time intervals. Each channel is min-max normalized to [−1, 1] per series, and each per-modality pack carries a binary observed mask ( 1 = observed, 0 =missing or padding). 
+
+AI-READI (CGM generation) Windows are built on the glucose anchor grid: anchor sampling period 
+
+5 minutes with a 2 s matching tolerance, maximum anchor gap 10 minutes, maximum window span 
+
+24 hours, and at least 288 events per day, giving T =288 steps per window. Windows whose target exceeds a 0.5 missing ratio are discarded. The four conditioning modalities (heart rate, calorie expenditure, physical activity, respiratory rate) are aligned to that grid; the static descriptor consists of 6 numeric CGM-enhanced features, 6 self-report binary flags (yes/no/unknown), and 6 “past two weeks” medication labels. The 4-class study_group is the downstream target, not a condition (see “Label conditioning is disabled” below). 
+
+MIMIC-III and MIMIC-IV (ABP generation) Stays are split 80 /20 into train and test by train_frac =0 .8; a window is kept if at least 5% of its target steps are observed (min_target_coverage =0 .05 ) and its missing ratio does not exceed 0.5. The target is the mean ABP channel on a 24 -hour, 5-minute grid ( T =288 ). On MIMIC-III the ABP and the three vitals (heart rate, respiratory rate, SpO 2) come from the Waveform Database Matched Subset numerics resampled onto that grid; on MIMIC-IV they come from bedside charted measurements, with the vitals kept on the coarser hourly grid ( Tcond =24 ). The static descriptor is a 27 -dimensional vector (age, gender, and 25 
+
+chart/lab/drug window means); the binary in-hospital-mortality label is likewise a downstream target, not a condition. 
+
+B Stage I: Per-Modality Masked Autoencoders 
+
+One autoencoder is trained per time-variant conditioning modality (four on AI-READI, three on each MIMIC cohort) with the settings in Table 4. The network projects the (single-channel) input to dmodel ,adds sinusoidal positional encodings, replaces every naturally missing or additionally held-out step with one shared learnable [missing] token, applies a Transformer encoder, and reads out with a linear 13 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Setting AI-READI MIMIC Model dimension dmodel 128 128 Attention heads 4 4Encoder layers 3 3Input series length L 288 288 / 24 Positional-encoding capacity 288 512 Mask ratio ρ 0.3 0.3 Epochs 1000 1000 Batch size 256 256 Optimizer AdamW AdamW Learning rate 3×10 −4 3×10 −4
+
+Weight decay 10 −4 10 −4
+
+Max. missing ratio (filter) 0.5 0.1 Seed 0 0
+
+Table 4: Stage I masked-autoencoder settings. One model is trained per conditioning modality; the mask-ratio sweep of the main paper retrains all of them at ρ ∈ { 0, 0.1, 0.3, 0.5, 0.7}. The condi-tioning series are L=288 steps long on MIMIC-III (5-minute grid) and L=24 on MIMIC-IV (hourly grid); the positional-encoding table is simply sized to cover them. 
+
+Setting AI-READI MIMIC 
+
+Backbone ( JiT )
+
+Image size (delay embedding) 18 18 Patch size 2 2Hidden size 128 128 Depth 4 4Attention heads 4 4Attn./proj. dropout 0.1 / 0.1 0.1 / 0.1 Bottleneck dimension 64 64 Label classes 4 2In-context tokens 18 13 
+
+Condition encoder 
+
+Tokens per modality 4 4Encoder width / heads 128 / 4 128 / 4 Frozen AE (dim/heads/layers) 128/4/3 128/4/3 
+
+Flow matching and optimization 
+
+Pmean / Pstd 0.5 / 1.2 0 / 1.2 
+
+t clamp ϵt 10 −5 10 −5
+
+Noise scale 1.0 1.0 Label drop prob. 0.0 0.0 EMA decays 0.999 and 0.9999 Epochs 1000 1000 Batch size 256 256 Optimizer AdamW AdamW Learning rate 10 −4 10 −4
+
+Weight decay 10 −5 10 −5
+
+Gradient clipping 1.0 1.0 Seed 42 42 
+
+Sampling 
+
+ODE solver Heun Heun Sampling steps 50 50 Guidance scale 1.0 1.0 
+
+t interval [0 , 1] [0 , 1] 
+
+Weights / epoch EMA( 0.999 ), epoch 1000 
+
+Table 5: Stage II generator settings. Pmean is the only value that differs between cohorts; it was selected on validation utility in a per-cohort sweep, with everything else held fixed. head. The loss is the mean squared error on the additionally held-out steps only; the mask ratio ρ is the fraction of observed steps that are held out. The checkpoint with the lowest validation loss is kept and frozen for Stage II. 
+
+C Stage II: Conditional Flow-Matching Generator 
+
+Stage II freezes the Stage I encoders and trains the JiT denoiser with the settings in Table 5. A
+
+T =288 series is delay-embedded into an 18 × 18 single-channel image (non-overlapping windows, i.e. delay = embedding =image size) and the flow-matching loss is computed only inside the valid-region mask. Each conditioning modality contributes 4 in-context tokens produced by learnable per-modality queries cross-attending over its frozen latents; the static descriptor contributes 2 further tokens on AI-READI (one numeric MLP token and one categorical-transformer token) and 1 on the MIMIC cohorts, and is additionally pooled into the AdaLN modulation. The in-context stream therefore has length 14 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+4×4+2=18 on AI-READI and 3×4+1=13 on MIMIC, and is inserted before the first transformer block (in_context_start =0 ). Two exponential moving averages of the weights are tracked; all reported numbers use the faster one (decay 0.999 ) at epoch 1000 .
+
+Label conditioning is disabled Both downstream label sets (in-hospital mortality on the MIMIC cohorts, the 4-class study_group on AI-READI) would leak if they also conditioned the generator, so the categorical label is removed from every method and all label-conditioned models are retrained from scratch. For ReCoGen this means the label embedding is pinned to its null slot identically at training, validation and generation time, so the true label never reaches the network; the “Label classes” row of Table 5 therefore sizes an embedding that is never driven by a real label. Among the baselines, TimeWeaver’s categorical metadata attribute is held constant, the verbalization fed to VerbalTS and Bridge omits the outcome clause, and Diffusion-TS, ImagenTime and WaveStitch never had a label path to begin with. Every number reported in the main paper comes from this de-leaked setting. 
+
+Ablation variants All ablations reuse Table 5 and change exactly one component. The conditioning ablations ( −TS, −static) replace a group with the model’s built-in missing representation (zeroed values and masks, or the null label slot), so tensor shapes and the in-context length stay fixed, and the ablation is applied identically at training, validation and generation time. The injection variants (in-context tokens without cross-attention, AdaLN-only pooling, RePaint-style in-painting) and the static-encoding factorial (Token +AdaLN, Token-only, AdaLN-only) likewise keep every other setting. Each variant is retrained from scratch; the mask-ratio sweep retrains both stages end to end per value. 
+
+D Baselines                                                
+
+> Method Settings Diffusion-TS dmodel =128 ;3encoder / 4decoder layers;
+> 1000 diffusion steps, 200 sampling steps ImagenTime delay =embedding =32 (32 ×32 image); UNet width 64 ;100 diffusion steps TimeWeaver channels 64 ,4layers, 8heads; cosine schedule;
+> 1000 diffusion steps; metadata: cond =128 ,token =64 ,2fusion layers, 4fusion heads WaveStitch SSSD-S4: residual/skip channels 64 ,4residual layers, state size 64 , cond. channels 16 ;
+> 200 diffusion steps VerbalTS channels 64 ,4layers, AdaLN text conditioning; cosine schedule, 1000 diffusion steps Bridge UNet width 64 ,2residual blocks per stage; cosine schedule, 1000 diffusion steps; prototype series drawn from the training split
+
+Table 6: Baseline settings shared by the three bench-marks. Unlisted values are the reference implemen-tation’s defaults. All six baselines are trained for 1000 epochs at learning rate 10 −4 on the same windows, with the seed fixed to 42 and the target reduced to the single generated channel. Batch size is 512 for Diffusion-TS, ImagenTime and TimeWeaver and 
+
+256 for WaveStitch, VerbalTS and Bridge. Five of the six use Adam ( β=(0 .9, 0.96) ); ImagenTime keeps AdamW, as in its reference implementation. Method-specific settings are listed in Table 6; for the text-conditioned pair, the verbalized condi-tion is embedded by a frozen LongCLIP text tower (768 -d, 248 -token window) in which each condi-tioning series is rendered as summary statistics plus a 20 -point downsampled numeric transcript in physical units. 
+
+E Downstream Evaluation Protocol 
+
+The probe is a 1D CNN: three convolutional blocks with kernel sizes 7, 5 and 3 and 64 , 128 and 
+
+256 channels, each with batch normalization and ReLU and the first two followed by max pooling, then global average pooling, dropout 0.2 and a linear classifier. It is trained on real signals for 
+
+50 epochs with Adam, learning rate 10 −3, weight decay 10 −4 and batch size 256 , and then applied to each method’s generated signals. Every reported metric is the mean (and standard deviation) over the five probe seeds {0, 1, 2, 3, 4}; the same trained probe configuration scores every method, and the real validation signals scored under it give the Real-Valid ∗
+
+reference. In the fused AI-READI mode the generated CGM passes through the same convolutional trunk while the biochemical lab values and their missingness mask pass through a two-layer MLP (width 64 ,dropout 0.2); the two embeddings are concatenated before the linear classifier head. The MIMIC cohorts 15 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+are reported in the ABP-only mode. 
+
+F Statistical Significance of the Main Results 
+
+The main paper reports 5-seed means. Table 7 adds the per-seed dispersion behind every AUROC entry of that table and tests ReCoGen’s margin over each baseline; Table 8 isolates the comparison against the 
+
+strongest rival in each setting, and Table 9 aggregates across settings. 
+
+Test protocol The unit of replication is the downstream probe seed: all methods are scored by the same probe configuration re-trained under the five seeds {0, 1, 2, 3, 4}, giving n=5 AUROC values per (dataset, task, method). For each of the eight (dataset, task) settings we compare ReCoGen against each of the six baselines with a two-sided Welch t-test (unequal variances, Satterthwaite degrees of freedom) and control the family-wise error rate across the six comparisons within that setting by the Holm–Bonferroni procedure; ∗, ∗∗ and ∗∗∗ in Table 7 denote Holm-adjusted p < 0.05 , p < 0.01 and p < 0.001 . To summarize across settings without assuming normality, we also run an exact Wilcoxon signed-rank test on the eight paired per-setting AUROC differences (Table 9); with n=8 its smallest attainable two-sided p-value is 
+
+2/28 = 0 .0078 , which every baseline attains. 
+
+Result ReCoGen’s margin is significant after Holm correction in 46 of the 48 per-setting comparisons. The two exceptions are both on AI-READI in the CGM +Lab mode, against Bridge ( +0 .001 , p=0 .69 ) and TimeWeaver ( +0 .005 , p=0 .38 ): once the real laboratory values are fused into the probe input every method saturates near the real-signal reference, so that mode does not separate generators. In the CGM-only mode on the same cohort the margin over the strongest baseline is +0 .056 and significant. The single narrowest significant margin is MIMIC-III mortality against WaveStitch ( +0 .046 , p=0 .009 ), which is also the setting where ReCoGen falls furthest below the real-signal reference. Across settings, ReCoGen beats every baseline in 8/8 settings with median margins of +0 .137 to +0 .165 AUROC. 
+
+What these tests do and do not cover Five limitations should be read alongside the numbers. (i) Only AUROC is tested; the per-seed dispersion of AUPRC was not retained by the evaluation pipeline, so the AUPRC rows of the main table carry no test. (ii) The five probe seeds are shared across methods, so the observations are in fact paired; we nevertheless use the unpaired Welch test, which discards that pairing and is therefore the conservative choice — a paired test would yield smaller p-values. (iii) The tests are computed from means and standard deviations stored to three decimal places, so for the lowest-variance entries (subscript .001 ) the t statistics should be read as orders of magnitude rather than exact values; none of the Holm-adjusted conclusions turns on those rows. (iv) On AI-READI, ReCoGen was scored by its own five-seed probe instance rather than the one used for the baselines; the two agree on the real validation signal to within 0.005 AUROC ( 0.766 vs. 0.763 in CGM-only, 0.798 vs. 0.796 in CGM +Lab), and the main paper quotes the baseline probe’s value as the reference, but the AI-READI comparisons are across probe draws rather than within one. (v) The Real-Valid ∗ reference is not tested: its per-seed dispersion was not retained either, and, as the main paper argues, it is an approximate anchor rather than a null hypothesis worth rejecting. 16 Represent, Then Generate: Multimodal-Conditioned Time-Series Generation under Irregular Missingness 
+
+Generative baselines Ref. Dataset Task Diffusion -TS Imagen Time Verbal TS Bridge Time Weaver Wave Stitch ReCoGen Real-Valid ∗
+
+MIMIC-III Sepsis .566 ∗∗∗  
+
+> .010
+
+.513 ∗∗∗  
+
+> .008
+
+.515 ∗∗∗  
+
+> .004
+
+.505 ∗∗∗  
+
+> .003
+
+.510 ∗∗∗  
+
+> .003
+
+.525 ∗∗∗  
+
+> .005
+
+.677 .019 .633 
+
+HF .523 ∗∗∗  
+
+> .002
+
+.518 ∗∗∗  
+
+> .004
+
+.501 ∗∗∗  
+
+> .003
+
+.493 ∗∗∗  
+
+> .002
+
+.503 ∗∗∗  
+
+> .003
+
+.503 ∗∗∗  
+
+> .002
+
+.650 .015 .650 
+
+Mortality .519 ∗∗  
+
+> .008
+
+.501 ∗∗  
+
+> .006
+
+.511 ∗∗  
+
+> .006
+
+.515 ∗∗  
+
+> .003
+
+.497 ∗∗  
+
+> .004
+
+.553 ∗∗  
+
+> .012
+
+.599 .024 .658 
+
+MIMIC-IV Sepsis .531 ∗∗∗  
+
+> .006
+
+.520 ∗∗∗  
+
+> .004
+
+.527 ∗∗∗  
+
+> .013
+
+.498 ∗∗∗  
+
+> .002
+
+.504 ∗∗∗  
+
+> .007
+
+.495 ∗∗∗  
+
+> .013
+
+.692 .007 .657 
+
+HF .500 ∗∗∗  
+
+> .002
+
+.510 ∗∗∗  
+
+> .001
+
+.501 ∗∗∗  
+
+> .001
+
+.503 ∗∗∗  
+
+> .001
+
+.503 ∗∗∗  
+
+> .002
+
+.498 ∗∗∗  
+
+> .007
+
+.637 .005 .596 
+
+Mortality .504 ∗∗∗  
+
+> .016
+
+.560 ∗∗∗  
+
+> .007
+
+.506 ∗∗∗  
+
+> .002
+
+.484 ∗∗∗  
+
+> .003
+
+.519 ∗∗∗  
+
+> .012
+
+.535 ∗∗∗  
+
+> .017
+
+.702 .005 .656 
+
+AI-READI SG (CGM) .502 ∗∗∗  
+
+> .002
+
+.519 ∗∗∗  
+
+> .003
+
+.546 ∗∗∗  
+
+> .008
+
+.715 ∗∗∗  
+
+> .003
+
+.656 ∗∗∗  
+
+> .008
+
+.604 ∗∗∗  
+
+> .015
+
+.771 .013 .763 
+
+SG (CGM +Lab) .759 ∗∗∗  
+
+> .006
+
+.757 ∗∗∗  
+
+> .005
+
+.552 ∗∗∗  
+
+> .012
+
+.794 .005 .790 .007 .777 ∗ 
+
+> .010
+
+.795 .002 .796 
+
+Table 7: Downstream AUROC over the five probe seeds, written mean std with leading zeros omitted; the means are exactly the AUROC rows of the main downstream table. Superscripts on a baseline mark the Holm-adjusted significance of ReCoGen’s margin over that baseline within its row (two-sided Welch 
+
+t-test, n=5 per method, six comparisons per row): ∗p < 0.05 , ∗∗ p < 0.01 , ∗∗∗ p < 0.001 ; no superscript means not significant at 0.05 . The Real-Valid ∗ reference is a single value per row — its per-seed dispersion was not retained — and is not tested. 
+
+Setting Rival ∆ pHolm 
+
+MIMIC-III Sepsis Diffusion-TS +0 .111 < 10 −4
+
+MIMIC-III HF Diffusion-TS +0 .127 < 10 −5
+
+MIMIC-III Mort. WaveStitch +0 .046 0.009 
+
+MIMIC-IV Sepsis VerbalTS +0 .165 < 10 −7
+
+MIMIC-IV HF ImagenTime +0 .127 < 10 −7
+
+MIMIC-IV Mort. WaveStitch +0 .167 < 10 −6
+
+AI-READI SG Bridge +0 .056 < 10 −4
+
+AI-READI SG +Lab Bridge +0 .001 0.694 
+
+Table 8: ReCoGen against the hardest baseline in each setting; ∆ is the AUROC margin. “Rival” is the baseline with the largest Holm-adjusted p-value in that row of Table 7, i.e. the one whose margin is hardest to establish. Only the saturated AI-READI CGM +Lab mode fails to separate. 
+
+Baseline Wins Median ∆ W p
+
+Diffusion-TS 8/8 +0 .137 0 0.0078 
+
+ImagenTime 8/8 +0 .142 0 0.0078 
+
+VerbalTS 8/8 +0 .165 0 0.0078 
+
+Bridge 8/8 +0 .157 0 0.0078 
+
+TimeWeaver 8/8 +0 .147 0 0.0078 
+
+WaveStitch 8/8 +0 .152 0 0.0078 
+
+Table 9: Exact two-sided Wilcoxon signed-rank test over the eight (dataset, task) settings, pair-ing ReCoGen’s AUROC with each baseline’s. “Wins” counts settings with a positive difference. 
+
+p=0 .0078 is the smallest value attainable at n=8 ,so it is reached whenever a method wins every setting; the test establishes consistency across set-tings, not the size of any single margin. 17

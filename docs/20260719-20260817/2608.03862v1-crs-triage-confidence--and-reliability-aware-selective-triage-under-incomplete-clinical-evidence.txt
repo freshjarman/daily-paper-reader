@@ -1,0 +1,460 @@
+Title: CRS-Triage: Confidence- and Reliability-Aware Selective Triage under Incomplete Clinical Evidence
+
+URL Source: https://arxiv.org/pdf/2608.03862v1
+
+Published Time: Wed, 05 Aug 2026 01:17:39 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# CRS-Triage: Confidence- and Reliability-Aware Selective Triage under Incomplete Clinical Evidence 
+
+## Guan Qiang, 1 Yushen Chen, 1 Tianlong Liu, 1* David Rotenberg, 2 Ethan H. Kim, 2 Fang Fang 1* 
+
+> 1
+
+Western University, London, Ontario, Canada 
+
+> 2
+
+Centre for Addiction and Mental Health, Toronto, Ontario, Canada gqiang@uwo.ca, yche2692@uwo.ca, tianlong.liu@uwo.ca, David.Rotenberg@camh.ca, Ethan.Kim@camh.ca, fang.fang@uwo.ca 
+
+Abstract 
+
+Emergency triage requires reliable decisions within a short time period. However, the available electronic health record (EHR) data, including structured data and clinical text, are of-ten incomplete, unreliable, and inconsistent. This makes ma-chine learning (ML)-based triage prediction more challeng-ing, as existing ML models typically rely on complete and reliable EHR data to accurately predict acuity levels of pa-tients. To address this, we propose confidence- and reliability-aware selective triage (CRS-Triage) to predict patients’ acuity levels with a confidence score. By comparing the confidence score with a pre-defined threshold, the proposed CRS-Triage can selectively determine whether the model should make the decision or defer the case. Specifically, CRS-Triage sep-arately evaluates the reliability of structured data and clinical text and then jointly considers the consistency between the two modalities to estimate the confidence of each prediction. Moreover, to reduce the risk of missing high-acuity patients, i.e., under-triage, the proposed CRS-Triage prefers to assign patients slightly higher acuity levels, i.e., over-triage, by pe-nalizing under-triage errors. Experiments on the MIMIC-IV-ED dataset show that CRS-Triage achieves strong prediction performance. It also provides a better risk–coverage trade-off and remains reliable when the available EHR data are incom-plete, degraded, or inconsistent across modalities. 
+
+## Introduction 
+
+Emergency triage requires determining the acuity level of each patient encounter quickly and accurately. To achieve this, reliable clinical information is needed. However, in practice, the available electronic health record (EHR) data is often incomplete, unreliable, or even inconsistent across dif-ferent data sources (Xie et al. 2022; Soenksen et al. 2022). Specifically, in the emergency department, the EHR data for each encounter typically consists of structured data and short text data. However, structured data, such as vital signs and intake information, may be missing and unreliable at the time of triage. Short text fields, such as chief complaints and triage notes, may also vary in length and quality (Mitra et al. 2023). For instance, some notes contain clear clinical infor-mation, while others are brief, unclear, or even inconsistent with the structured data. Although ML-based triage prediction methods are widely used, they may still produce unreliable predictions because 
+
+> *
+
+Corresponding author 
+
+they do not explicitly estimate the reliability of each modal-ity or jointly model predictive uncertainty. Existing ML-based methods handle the two modalities of EHR data sep-arately. In structured data, missing values are often handled through imputation or masking before prediction (Lee et al. 2023). For clinical text, it is typically cleaned and tokenized and then represented with methods such as TF-IDF or pre-trained language models (Liu et al. 2022a). Subsequently, the processed structured and text data are commonly com-bined through concatenation, late fusion, or attention-based fusion (Thao et al. 2024; Yao et al. 2024). However, these fusion methods do not explicitly consider the reliability of each modality. As a result, unreliable information may still have a substantial influence on the fused representa-tion that leads to inaccurate or overconfident predictions. Moreover, in existing ML-based triage prediction methods, uncertainty is typically estimated only after the prediction model has been trained, rather than being jointly learned with it (Tomani, Cremers, and Buettner 2022). Thus, the es-timated uncertainty may not reliably indicate how likely a prediction is to be incorrect or whether accepting it could lead to a clinically unsafe decision. Another important issue is that under-triage can delay ur-gently needed care and therefore poses a greater risk to pa-tient safety. In triage, there are typically two types of errors, including under-triage and over-triage. Under-triage occurs when a high-acuity patient is assigned a lower acuity level, which may delay treatment. In contrast, over-triage happens when a low-acuity patient is assigned a higher acuity level, which may consume additional clinical resources but is gen-erally less harmful (Huabbangyang et al. 2023). Therefore, while a triage model should aim to classify patients’ acu-ity levels as accurately as possible, it should treat these two types of errors differently. When classification errors can-not be completely avoided, the model should favor over-triage over under-triage to reduce the risk of delaying neces-sary care for high-acuity patients. Existing methods balance these two errors through class weighting, cost-sensitive loss functions, or decision-threshold adjustment to place greater emphasis on identifying high-acuity patients and reducing under-triage (Wyatt et al. 2024; Lin et al. 2024). However, the associated weights, loss parameters, or decision thresh-olds are typically fixed at the population level and cannot adapt to the quality of EHR data or predictive uncertainty on arXiv:2608.03862v1 [cs.LG] 4 Aug 2026 a case-by-case basis. To address these challenges, we propose CRS-Triage, a confidence- and reliability-aware selective model for emer-gency triage. CRS-Triage calculates the reliability of the structured data and clinical text for every patient encounter. It then evaluates the consistency between the two modalities by comparing their prediction distributions for each modal-ity. The estimated modality reliability and cross-modal con-sistency are then used to determine the weights of each modality during fusion, and the fused prediction distribu-tion is used to predict the patient’s acuity level. To reflect the embedded uncertainty for each prediction, we propose a confidence score that is calculated using modality relia-bility and cross-modal consistency. Finally, the confidence score is compared with a threshold to determine whether the model should issue a prediction or defer the case for further assessment. Overall, our proposed CRS-Triage remains reli-able under incomplete and unreliable EHR data by making accurate predictions based on an assessment of the reliabil-ity of the available EHR data. The main contributions are summarized as follows: • A reliability-aware multimodal fusion mechanism is de-veloped to estimate the reliability of structured data and clinical text for each patient encounter. The estimated re-liability of each modality is jointly considered with cross-modal consistency during fusion, therefore reducing the influence of unreliable information on the final predic-tion. • A confidence score calculation mechanism is introduced to determine whether to accept a model-based prediction or defer the case for further assessment. Therefore, the risk of overconfident predictions can be reduced. • Larger penalties for under-triage errors are introduced to encourage the model to avoid assigning lower acuity lev-els to high-acuity patients. Thus, the risk of delaying ur-gent care for high-acuity patients is reduced. 
+
+## Related Work 
+
+Emergency Triage with Incomplete Structured Data 
+
+ML-based models have been widely used in emergency triage to predict patient acuity from EHR data (Levin et al. 2018; Goto et al. 2019; Xie et al. 2022; Lin et al. 2024). These models commonly use structured clinical data, such as demographics and vital signs, because these data provide useful information about patient acuity. Most existing stud-ies focus on improving overall predictive performance. More recent studies have also examined which patient groups are more likely to be incorrectly triaged (Sax et al. 2023; Wy-att et al. 2024). However, these methods generally do not explicitly estimate the reliability of the available structured data for each encounter. Estimating this reliability is im-portant because missing values are common in structured EHR data and may also reflect the clinical measurement pro-cess (Che et al. 2018; Groenwold 2020). To handle these missing values, existing methods commonly use imputation, missingness masks, or models designed for incomplete clin-ical time series. More recent work has also modeled the relationship between missing clinical data and patient out-comes (Liang, Pan, and Xiong 2025). These methods im-prove the use of incomplete structured data but mainly fo-cus on representing, recovering, or accounting for missing information. They do not explicitly estimate how reliable the remaining structured data are for a particular prediction. As a result, predictions based on incomplete records may be treated as equally reliable as those based on more complete records. 
+
+Clinical Text and Multimodal EHR Learning 
+
+In addition to structured data, clinical text can provide in-formation that is not fully captured by structured clinical variables. Existing studies have therefore combined struc-tured EHR data and clinical text using feature concate-nation, attention mechanisms, or transformer-based fusion (Yang and Wu 2021; Lyu et al. 2023; Soenksen et al. 2022; Thao et al. 2024). However, multimodal EHR data may also be incomplete. To address this problem, recent meth-ods have learned modality-aware representations from in-complete EHR data (Lee et al. 2023) and supported pre-diction when some modalities are unavailable. For example, M3Care estimates missing information from the available modalities (Zhang et al. 2022), while MUSE and FlexCare support prediction under different combinations of modal-ities and labels (Wu et al. 2024; Xu et al. 2024b). Dr-Fuse further addresses missing modalities by learning shared and modality-specific representations (Yao et al. 2024). Al-though these methods improve prediction with incomplete multimodal data, they mainly focus on missing entire modal-ities or learning joint representations. In emergency triage, structured data and clinical text may both be available but have different levels of reliability. For example, some struc-tured features may be missing, while the clinical text may be short or unclear. The two modalities may also provide incon-sistent predictions. Evidential multi-view methods address a related problem by estimating predictive evidence and un-certainty from each data source and handling disagreement between their predictions (Han et al. 2021; Xu et al. 2024a). However, these methods do not explicitly estimate the relia-bility of each modality. 
+
+Uncertainty and Selective Prediction 
+
+Another important issue is the reliability of the confidence estimate after multimodal fusion. A model with high pre-diction accuracy may still make overconfident predictions when the available information is incomplete or differs from the training data (Guo et al. 2017). To estimate predictive uncertainty, evidential learning represents class probabilities using a Dirichlet distribution and estimates uncertainty from the amount of predictive evidence (Sensoy, Kaplan, and Kandemir 2018). However, evidential uncertainty alone may not always reliably indicate whether a prediction is incorrect (Shen et al. 2024). To reduce the risk of accepting uncertain predictions, selective prediction uses predictive confidence to determine whether a model-based prediction should be accepted or the case should be deferred for further assess-ment (Geifman and El-Yaniv 2019). Related methods also learn whether a case should be predicted by the model or passed to a human expert (Mozannar and Sontag 2020; Dvi-jotham et al. 2023). Since deferred cases require human as-sessment, human decisions may also be affected by how the deferral is communicated (Bondi et al. 2022). Another im-portant issue is that under-triage and over-triage have dif-ferent clinical consequences. Under-triage assigns a lower acuity level to a high-acuity patient and may delay urgently needed care, whereas over-triage mainly increases the use of clinical resources (Huabbangyang et al. 2023; Sax et al. 2023). Recent work has addressed this difference using cost-aware selective prediction with calibrated probabilities and conformal prediction (Kwon and Kim 2026). However, this approach uses a single prediction source. Moreover, uncer-tainty is estimated and the deferral decision is made only af-ter the prediction model has been trained, rather than being jointly learned with it. 
+
+## Method 
+
+Problem Setup 
+
+We consider a dataset D = {(xsi , mi, x ti, y i)}Ni=1 with N
+
+emergency triage encounters. Let r ∈ {s, t } denote the structured or text modality. For each encounter i, xsi ∈ Rd
+
+denotes the structured clinical data with a number of d fea-tures, which may contain missing values. Let mi ∈ { 0, 1}d
+
+represent the corresponding missingness mask with each en-try mi,j to be 1 if the j-th structured feature is observed and 0 otherwise. The clinical text is denoted by xti, and 
+
+yi ∈ { 1, . . . , C } denotes the true triage class. The triage classes are ordered in descending order of clinical acuity, such that lower class indices indicate higher acuity levels. For each encounter, a CRS-Triage model Fw(·), parame-terized by w, produces a class probability vector pi and a confidence score si ∈ [0 , 1] . Specifically, pi,c is the pre-dicted probability that encounter i belongs to triage class 
+
+c and ˆyi denotes the predicted acuity level. Given a confi-dence threshold τ ∈ [0 , 1] , the final model output can be represented as: 
+
+˜yi =
+
+ˆyi, si ≥ τ, 
+
+defer , si < τ. (1) In addition to prediction accuracy, the patient safety risk posed by under-triage should also be considered. Given the adopted label ordering, prediction errors can be divided into under-triage and over-triage. Specifically, ˆyi > y i indicates under-triage, whereas ˆyi < y i indicates over-triage. Since under-triage may delay urgently needed care, it is assigned a larger penalty than over-triage. Accordingly, a penalty func-tion for triage errors is defined as: 
+
+A(yi, c ) = 
+
+
+
+λunder |c − yi|, c > y i,λover |c − yi|, c < y i,
+
+0, c = yi,
+
+(2) where yi is the true class, c is a possible predicted class, and 
+
+λunder > λ over > 0. Thus, the expected penalty for triage errors under the predictive distribution is expressed as: 
+
+Ci =
+
+> C
+
+X
+
+> c=1
+
+A(yi, c )pic . (3) 
+
+Modality-Specific Encoding and Prediction 
+
+After imputation, the structured feature vector is denoted by 
+
+˜xsi ∈ Rd. Let ϕv (·) and ϕm(·) denote the learnable projec-tion functions for the imputed values ˜xsi and the missingness mask mi, respectively. The two inputs are jointly encoded as: 
+
+zsi = WsEs ([ ϕv (˜ xsi ); ϕm(mi)]) + bs. (4) where Es(·) is the structured-data encoder, Ws and bs are the learnable parameters, and [·, ·] denotes the concatenation operation. For the text modality, the clinical text xti is tok-enized by Tok( ·) and encoded by the pretrained text encoder 
+
+Et(·). The resulting token representations are aggregated using mean-pooling function MeanPool( ·) with the token-level attention mask μti (Reimers and Gurevych 2019). Sim-ilarly, the learnable projection matrix Wt and bias vector bt
+
+are then used to obtain the fixed-length text representation 
+
+zti:
+
+zti = Wt MeanPool  Et(Tok( xti)); μti
+
+ + bt. (5) After the two modalities have been encoded, each modal-ity produces its own predictive evidence. The structured-data prediction head Gs(·) and text prediction head Gt(·)
+
+map the representations zsi and zti to the evidence vectors esi
+
+and eti, respectively. A softplus activation is applied to each output to ensure that both evidence vectors are nonnegative (Xu et al. 2024a). These evidence vectors are then used to construct the modality-specific predictive distributions. Fol-lowing Dirichlet-based evidential learning (Sensoy, Kaplan, and Kandemir 2018; Chen et al. 2024), the evidence eri from each modality r ∈ { s, t } is converted into the Dirichlet pa-rameters αri = eri + 1, where 1 ∈ RC is a vector of ones. The total Dirichlet strength is calculated as Sri = PCc=1 αric .The modality-specific class probability and evidential uncer-tainty are then given by pric = αric /S ri and uri = C/S ri ,respectively. Finally, the corresponding probability vector is denoted by: 
+
+pri = ( pri1, . . . , p riC ). (6) 
+
+Reliability-Aware Evidential Fusion 
+
+After the modality-specific predictions and uncertainty esti-mates are obtained, CRS-Triage estimates the reliability of each modality before fusion. For the structured data, reli-ability is calculated from feature availability. Since struc-tured features may contribute differently to triage prediction, an unconstrained learnable parameter ηj is introduced for each feature j ∈ { 1, . . . , d }. This parameter is converted into the nonnegative feature weight aj = softplus( ηj ).The same feature weights are used for all encounters. Then, the structured-data reliability score ρsi that represents the weighted proportion of available features, can be calculated as: 
+
+ρsi =
+
+Pdj=1 aj mi,j 
+
+Pdj=1 aj
+
+, (7) For the clinical text, reliability is calculated using text length, prediction certainty, and evidential certainty. The normalized text length Li ∈ [0 , 1] is calculated from the number of non-padding tokens. The entropy of Input  Model  Output   
+
+> Missingness
+> Mask
+> Structured
+> Clinical Data
+> Final Decision
+> Predict or Defer
+> Class
+> Probabilities
+> Clinical Text
+> Structured
+> Encoder Structured
+> Evidence
+> Text
+> Encoder
+> Evidence Fusion
+> Prediction and
+> Uncertainty
+> Selection
+> Module
+> Text
+> Evidence
+> Confidence Score
+
+Figure 1: High-level overview of CRS-Triage. Structured clinical data are jointly encoded with their missingness masks, while clinical text is encoded separately. Modality reliability, predictive uncertainty, and cross-modal consistency determine the weight assigned to each modality during fusion. The model outputs a class-probability vector, a confidence score, and a fi-nal predict-or-defer decision. the text-based prediction can be calculated by Hti =
+
+− PCc=1 ptic log ptic . Based on this entropy, the prediction certainty is represented by 1 − H ti / log C. Then, the eviden-tial certainty can be represented by 1−uti. The text reliability score ρti can be calculated by combining these three quanti-ties using the trainable weight vector wtρ and bias btρ:
+
+ρti = σ
+
+
+
+(wtρ)⊤
+
+
+
+Li, 1 − Hti
+
+log C , 1 − uti
+
+
+
++ btρ
+
+
+
+, (8) where σ(·) is the sigmoid function and both ρsi and ρti belong to [0 , 1] .However, even when the two modalities are reliable in-dividually, they may still provide conflicting predictions. CRS-Triage therefore evaluates their cross-modal consis-tency by comparing the structured-data probability vector 
+
+psi and text-based probability vector pti (Xu et al. 2024a). Specifically, the cross-modal disagreement score δi is calcu-lated using the normalized Jensen–Shannon divergence: 
+
+δi = JS ( psi ∥pti)log 2 . (9) Based on modality reliability, evidential certainty, and cross-modal consistency, the structured-data weight qsi and text weight qti are calculated by combining these quantities us-ing the trainable weight vectors wsq and wtq and biases bsq
+
+and btq , respectively: 
+
+qsi = σ  (wsq )⊤ [ρsi , 1 − usi , 1 − δi] + bsq
+
+ ,qti = σ  (wtq )⊤ ρti, 1 − uti, 1 − δi
+
+ + btq
+
+ . (10) Unlike normalized attention weights, qsi and qti are estimated independently and are not required to sum to one. Therefore, both modalities can contribute little evidence when their in-formation is unreliable, uncertain, or conflicting (Liu et al. 2022b). The estimated modality weights are then applied to the structured-data evidence esi and text evidence eti. The resulting fused evidence vector ei can be calculated as: 
+
+ei = qsi esi + qti eti. (11) Following the same Dirichlet transformation used for the modality-specific evidence, the fused evidence ei is con-verted into the final Dirichlet parameters αi = ei + 1. The corresponding total Dirichlet strength is Si = PCc=1 αic .The final class probability and fused uncertainty are then calculated as pic = αic /S i and ui = C/S i, respectively. 
+
+Confidence-Based Selective Prediction 
+
+After the final class probability vector pi and fused uncer-tainty ui are obtained, CRS-Triage calculates a confidence score for each prediction. To measure how clearly the two most likely classes are separated, let p(1)  
+
+> i
+
+and p(2)  
+
+> i
+
+denote the largest and second-largest entries of pi, respectively. The prediction margin is then calculated as ∆i = p(1)  
+
+> i
+
+− p(2)  
+
+> i
+
+.The confidence score si can be calculated with the trainable weight vector wconf and bias bconf :
+
+si = σ
+
+
+
+w⊤
+
+> conf
+
+ρsi , ρ ti, 1 − usi , 1 − uti,
+
+1 − ui, 1 − δi, ∆i
+
+ + bconf 
+
+
+
+.
+
+(12) During inference, the confidence score si is compared with a confidence threshold τ ∈ (0 , 1) . The model issues a predic-tion when si ≥ τ and defers the case for further assessment when si < τ .To make the confidence score reflect the patient safety risk posed by under-triage, the expected triage penalty Ci defined above is included during training. For our dataset with N
+
+encounters, a target coverage κ ∈ (0 , 1] is used to prevent the model from deferring too many cases. The penalty co-efficient β > 0 controls the coverage constraint, while the small constant ϵ > 0 provides numerical stability. Thus, the selective training loss Lsel is defined as: 
+
+Lsel =
+
+PNi=1 siCi
+
+PNi=1 si + ϵ + β
+
+"
+
+max 0, κ − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+si
+
+!# 2
+
+.
+
+(13) Here, to prevent the model from assigning low confidence to all cases, we introduce a coverage constraint that applies a penalty when the average confidence falls below the target coverage κ.
+
+Training Objective 
+
+All components of CRS-Triage are trained jointly using the evidential learning, triage penalty, confidence-based se-lective, and cross-modal disagreement objectives defined above. Following evidential learning (Sensoy, Kaplan, and Kandemir 2018; Chen et al. 2024), a KL-regularized evi-dential loss is used for classification. For a Dirichlet pa-rameter vector α and its one-hot class label y, the total Dirichlet strength can be calculated as S = PCc=1 αc. Then, the modified Dirichlet parameter vector can be defined as 
+
+˜α = y + ( 1 − y) ⊙ α, where 1 is a vector of ones and 
+
+⊙ denotes element-wise multiplication. The digamma func-tion is denoted by ψ(·), while Dir( ·) and KL( ·∥· ) denote the Dirichlet distribution and KL divergence, respectively. The nonnegative coefficient λKL controls the KL regularization. Thus, the per-sample evidential loss ℓEDL (α, y) is defined as: 
+
+ℓEDL (α, y) = 
+
+> C
+
+X
+
+> c=1
+
+yc [ψ(S) − ψ(αc)] + λKL KL [Dir( ˜ α)∥ Dir( 1)] .
+
+(14) For our training set containing N encounters, the eviden-tial loss is calculated using the fused Dirichlet parameters 
+
+αi and the modality-specific Dirichlet parameters αsi and 
+
+αti. The nonnegative coefficient λaux controls the contribu-tion of the modality-specific supervision. The total eviden-tial loss Levi is calculated as: 
+
+Levi = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+"
+
+ℓEDL (αi, yi)+ λaux 
+
+2
+
+
+
+ℓEDL (αsi , yi) + ℓEDL (αti, yi)
+
+#
+
+.
+
+(15) The expected triage penalty Ci defined above is also min-imized over all training encounters. The corresponding av-erage triage penalty is Lpen = N −1 PNi=1 Ci. This term re-duces the expected triage penalty over all encounters. The fused uncertainty should also reflect disagreement between the structured data and clinical text. Therefore, the disagree-ment loss Ldis is introduced to increase the fused uncertainty 
+
+ui when the cross-modal disagreement δi is large. The posi-tive coefficient γ controls the required relationship between disagreement and uncertainty: 
+
+Ldis = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+[max (0 , γδ i − ui)] 2 . (16) This loss encourages the fused uncertainty ui to increase as the disagreement between the two modalities becomes stronger. Finally, the overall training objective L is defined as: 
+
+L = Levi + λpen Lpen + λsel Lsel + λdis Ldis . (17) 
+
+## Experiment and Results 
+
+Experimental Setup 
+
+Our proposed CRS-Triage was evaluated on MIMIC-IV-ED v2.2 dataset (Johnson et al. 2023). 418 ,100 adult encounters from emergency department were included from 201 ,252 
+
+patients with five-level acuity labels. Features such as de-mographics, arrival mode, triage vital signs, and pain scores were used as structured data inputs, while chief complaints were used as text inputs. To prevent information leakage, variables recorded after triage were excluded. Patients were randomly divided into training, validation, and test sets with a 70%/10%/20% patient-level split rule. All encounters from the same patient were assigned to the same subset. For encoders of each modality of data, a two-layer neu-ral network was implemented to encode the structured data, and BioClinicalBERT (Alsentzer et al. 2019) was used as the text encoder. The proposed CRS-Triage was compared with several baselines, such as structured-only and text-only models, conventional early, late, and gated fusion methods, and representative multimodal and selective prediction base-lines. Specifically, DrFuse (Yao et al. 2024) was included as a clinical multimodal fusion baseline for incomplete and inconsistent modalities, while trusted multi-view classifica-tion (TMC) (Han et al. 2023) was incorporated as an evi-dential fusion baseline. Furthermore, SelectiveNet (Geifman and El-Yaniv 2019) was included as an end-to-end selec-tive prediction baseline model. All methods used the same modality encoders and patient-level data splits to ensure a fair comparison. Performance was evaluated with metrics such as Macro-F1, balanced accuracy, quadratic weighted kappa, under- and over-triage rates, expected calibration er-ror, and risk–coverage metrics. Results are reported as mean 
+
+± standard deviation over five random seeds. 
+
+Overall Performance 
+
+Table 1 reports the overall results at full coverage, where predictions are made for all encounters without deferral. Our proposed CRS-Triage achieved the highest Macro-F1 of 0.742 and QWK of 0.846 , while obtaining a competitive balanced accuracy of 0.734 . The highest Macro-F1 and com-petitive balanced accuracy show that CRS-Triage performed consistently across different acuity levels, including the less common ones. The higher QWK indicates that fewer pa-tients were assigned an acuity level far from their true level. CRS-Triage also improved the Macro-F1 to 0.742 from base evidential fusion and gated fusion. These results suggest that neither uncertainty estimation nor learned fusion weights alone are sufficient to handle unreliable or conflicting mul-timodal information. By jointly considering modality relia-bility and cross-modal consistency, CRS-Triage reduces the contribution of unreliable or conflicting information during fusion. CRS-Triage also reduced the under-triage rate and achieved better calibration, with its predicted probabilities more closely aligned with the observed accuracy. Compared with base evidential fusion, it reduced the under-triage rate from 13 .1% to 9.6% , while the over-triage rate increased only slightly from 14 .5% to 15 .1% . This trade-off is con-Table 1: Overall performance at full coverage. Results are reported as mean ± standard deviation over five random seeds. 
+
+Classification Performance Clinical Risk and Calibration Method Macro-F1 ↑ BAcc ↑ QWK ↑ UT (%) ↓ OT (%) ↓ Triage Penalty ↓ ECE ↓
+
+Structured only 0.604 ±0.006 0.621 ±0.008 0.735 ±0.004 19 .2±0.4 18 .5±0.5 0.698 ±0.008 0.067 ±0.002 
+
+Text only 0.618 ±0.011 0.629 ±0.010 0.746 ±0.006 18 .5±0.6 19 .6±0.8 0.693 ±0.007 0.061 ±0.003 
+
+Early fusion 0.664 ±0.007 0.678 ±0.008 0.781 ±0.004 15 .8±0.4 16 .9±0.6 0.594 ±0.006 0.049 ±0.002 
+
+Late fusion 0.675 ±0.007 0.689 ±0.007 0.792 ±0.005 15 .2±0.3 16 .4±0.5 0.573 ±0.006 0.046 ±0.003 
+
+Gated fusion 0.688 ±0.006 0.701 ±0.007 0.801 ±0.004 14 .5±0.3 15 .6±0.5 0.546 ±0.005 0.041 ±0.002 
+
+DrFuse 0.697 ±0.005 0.711 ±0.007 0.812 ±0.004 13 .9±0.3 14 .9±0.4 0.523 ±0.005 0.038 ±0.002 
+
+TMC 0.704 ±0.006 0.738 ±0.009 0.819 ±0.006 13 .4±0.4 14 .7±0.5 0.509 ±0.005 0.034 ±0.001 
+
+Base evidential fusion 0.707 ±0.005 0.721 ±0.006 0.822 ±0.005 13 .1±0.3 14 .5±0.5 0.499 ±0.007 0.031 ±0.002 
+
+CRS-Triage 0.742 ±0.006 0.734 ±0.009 0.846 ±0.003 9.6±0.1 15 .1±0.2 0.406 ±0.004 0.021 ±0.001 
+
+BAcc: balanced accuracy; QWK: quadratic weighted kappa; UT: under-triage rate; OT: over-triage rate; ECE: expected calibration error. 
+
+Table 2: Selective prediction at fixed coverage. Metrics are computed over accepted predictions and reported as mean ±
+
+standard deviation over five random seeds.                                              
+
+> Coverage Selection method Error (%) ↓UT (%) ↓Triage Penalty ↓
+> 80% Maximum probability 18 .3±0.77.0±0.60.315 ±0.010
+> Predictive entropy 17 .8±0.46.8±0.40.304 ±0.009
+> Predictive margin 17 .4±0.56.5±0.40.292 ±0.007
+> Evidential certainty 16 .5±0.35.9±0.40.267 ±0.006
+> SelectiveNet 16 .1±0.35.7±0.30.257 ±0.006
+> CRS score 14 .7±0.34.7±0.20.208 ±0.005
+> 90% Maximum probability 22 .0±0.88.4±0.70.360 ±0.016
+> Predictive entropy 21 .6±0.78.2±0.70.352 ±0.014
+> Predictive margin 21 .3±0.68.0±0.70.344 ±0.009
+> Evidential certainty 20 .7±0.67.7±0.50.331 ±0.007
+> SelectiveNet 20 .3±0.47.4±0.40.319 ±0.005
+> CRS score 19 .1±0.46.7±0.30.291 ±0.004
+
+Error denotes the classification error rate, and UT denotes the under-triage rate among accepted predictions. 
+
+sistent with the training objective. As a result, the expected triage penalty decreased to 0.406 . CRS-Triage also reduced the ECE from 0.031 to 0.021 , which suggests that using modality reliability and cross-modal consistency during fu-sion reduces overconfident predictions. 
+
+Selective Prediction and Clinical Risk 
+
+Table 2 compares different selection methods at fixed cov-erage levels. Except for SelectiveNet, all selection methods used the same predictions produced by CRS-Triage. There-fore, the differences in performance reflect how well each method identifies reliable cases, rather than any differences in the underlying classifier. At both 80% and 90% cover-age, selecting cases based on the CRS confidence score re-sulted in the lowest classification error, under-triage rate, and expected triage penalty. Specifically, at 80% coverage, the CRS confidence score helped to reduce the expected triage penalty from 0.267 with evidential certainty to 0.208 .It also reduced the under-triage rate from 5.9% to 4.7% 
+
+and achieved a lower accepted-case error rate than Selec-tiveNet. The same pattern was also observed at 90% cover-age, where the CRS confidence score achieved an expected triage penalty of 0.291 and an under-triage rate of 6.7% .The advantage of the CRS confidence score was more evi-dent at lower coverage, where more cases could be deferred. In this setting, the confidence score was more effective at re-taining cases with higher modality reliability, lower uncer-tainty, and stronger cross-modal consistency. The deferred encounters had substantially higher error rates and expected triage penalties than the accepted encounters, showing that the confidence score successfully identified cases that were less suitable for model-based triage. 
+
+Ablation and Sensitivity Analysis 
+
+Table 3 shows how each component contributes to CRS-Triage. When modality reliability was removed, Macro-F1 decreased from 0.742 to 0.724 , while the expected triage penalty increased from 0.406 to 0.451 and the ECE in-creased from 0.021 to 0.029 . This confirms that modality re-liability improves both evidence fusion and confidence esti-mation. Removing cross-modal disagreement also increased the expected triage penalty to 0.433 at full coverage and to 
+
+0.231 at 80% coverage, showing that disagreement provides useful information for identifying unreliable predictions. The effects of the training objectives were more apparent in patient safety and predict-or-defer performance. Replac-ing the expected triage penalty with the standard classifi-cation loss had little effect at full coverage, but increased the expected triage penalty at 80% coverage from 0.208 
+
+to 0.258 . This suggests that the proposed objective helps the model decide which cases should be accepted or de-ferred. Assigning equal penalties to under-triage and over-triage slightly increased Macro-F1 from 0.742 to 0.744 , but increased the under-triage rate from 9.6% to 13 .0% and the expected triage penalty from 0.406 to 0.481 . Therefore, the small improvement in Macro-F1 was accompanied by a substantially higher under-triage rate and expected triage penalty. The sensitivity analysis showed the same trade-off that increasing the under-triage penalty reduced under-triage but increased over-triage. A penalty ratio of 3 provided a rea-sonable balance and was used in the main experiments. 
+
+Robustness to Incomplete and Conflicting Evidence 
+
+Three test-time perturbations were used to evaluate model robustness without retraining. To simulate structured-data Table 3: Ablation study of CRS-Triage. Results are reported as mean ± standard deviation over five random seeds. 
+
+Full Coverage 80% Coverage Variant Macro-F1 ↑ UT (%) ↓ Triage Penalty ↓ ECE ↓ Triage Penalty ↓ UT (%) ↓
+
+CRS-Triage 0.742 ±0.006 9.6±0.1 0.406 ±0.004 0.021 ±0.001 0.208 ±0.005 4.7±0.2
+
+w/o reliability 0.724 ±0.007 11 .1±0.4 0.451 ±0.007 0.029 ±0.002 0.249 ±0.007 5.8±0.4
+
+w/o disagreement 0.732 ±0.013 9.9±0.6 0.433 ±0.009 0.026 ±0.002 0.231 ±0.007 5.3±0.5
+
+Standard selective loss 0.739 ±0.012 10 .4±0.5 0.414 ±0.007 0.023 ±0.003 0.258 ±0.005 5.9±0.5
+
+Equal UT/OT Penalties 0.744 ±0.007 13 .0±0.3 0.481 ±0.005 0.022 ±0.002 0.252 ±0.005 7.0±0.2
+
+Base evidential fusion 0.707 ±0.005 13 .1±0.3 0.499 ±0.007 0.031 ±0.002 0.295 ±0.006 6.6±0.2
+
+For the standard selective loss, the expected triage penalty in the training objective is replaced with the classification loss. For the variant without the larger under-triage penalty, under-triage and over-triage errors are assigned equal penalties. 
+
+Table 4: Effect of the under-/over-triage penalty ratio. 
+
+Penalty ratio Macro-F1 ↑ UT (%) ↓ OT (%) ↓
+
+1 0.744 13 .0 12 .62 0.743 10 .8 14 .13 0.742 9.6 15 .15 0.734 8.0 18 .5
+
+Table 5: Robustness under test-time perturbations. Each en-try reports Macro-F1 / triage penalty. Results are averaged over five random seeds.                       
+
+> Macro-F1 ↑/ Triage Penalty ↓
+> Perturbation Rate Gated Base Evi. CRS
+> None 0% 0.688 /0.546 0 .707 /0.499 0.742 /0.406
+> Structured missingness 10% 0 .674 /0.574 0 .695 /0.524 0.735 /0.420
+> 30% 0 .639 /0.648 0 .662 /0.590 0.716 /0.456
+> 50% 0 .586 /0.761 0 .612 /0.690 0.681 /0.520
+> Text degradation 10% 0 .676 /0.570 0 .697 /0.520 0.736 /0.417
+> 30% 0 .642 /0.640 0 .666 /0.578 0.720 /0.447
+> 50% 0 .594 /0.744 0 .620 /0.673 0.688 /0.505
+> Cross-modal conflict 10% 0 .668 /0.590 0 .690 /0.538 0.732 /0.429
+> 30% 0 .612 /0.702 0 .644 /0.642 0.704 /0.478
+> 50% 0 .538 /0.846 0 .579 /0.766 0.658 /0.566
+
+missingness, 10% , 30% , or 50% of the originally observed structured entries were randomly masked. To simulate text degradation, the same proportions of non-special tokens were randomly removed while retaining at least one token. Cross-modal conflict was introduced by replacing the chief complaint of an encounter with one from another encounter having a different acuity label. The replacement text was selected from a similar length range to prevent text length from becoming an artificial indicator of conflict. All model parameters remained fixed during these evaluations. Table 5 reports the robustness results as the perturbation severity increased. Although all methods performed worse when more information was removed, CRS-Triage consis-tently achieved the highest Macro-F1 and the lowest ex-pected triage penalty. Under 50% additional structured miss-ingness, CRS-Triage retained a Macro-F1 of 0.681 , com-pared with 0.612 for base evidential fusion and 0.586 for gated fusion. It also reduced the expected triage penalty from 
+
+0.690 for base evidential fusion to 0.520 . A similar pattern was observed under text degradation. When 50% of the text tokens were removed, CRS-Triage achieved a Macro-F1 of 
+
+0.688 and an expected triage penalty of 0.505 , whereas base evidential fusion achieved 0.620 and 0.673 , respectively. These results show that estimating modality reliability helps reduce the contribution of degraded information while re-taining useful information from the other modality. Cross-modal conflict caused the largest performance de-crease for all methods. At a conflict rate of 50% , CRS-Triage achieved a Macro-F1 of 0.658 , outperforming base eviden-tial and gated fusion. It also reduced the expected triage penalty to 0.566 , compared with 0.766 for base evidential fusion and 0.846 for gated fusion. The larger improvements under cross-modal conflict show that explicitly calculating inconsistency between the two modalities helps CRS-Triage remain reliable when they provide inconsistent predictions. 
+
+## Conclusion 
+
+In this work, we proposed CRS-Triage, a confidence- and reliability-aware selective model for emergency triage un-der incomplete and unreliable EHR data. CRS-Triage jointly considers modality reliability, cross-modal consistency, and prediction uncertainty to support reliable multimodal pre-diction and determine when a case should be deferred. It also assigns larger penalties to under-triage errors to re-duce the risk of missing high-acuity patients. Experiments on MIMIC-IV-ED showed that CRS-Triage achieved bet-ter prediction performance and selective prediction results. It also remained robust when the available EHR data were incomplete, degraded, or conflicting. Future work will in-vestigate how modality reliability can be estimated more ac-curately when the quality and distribution of clinical data change. 
+
+## Acknowledgement 
+
+Guan Qiang received trainee support through a Mitacs Ac-celerate Project involving Kelello Health, the Centre for Ad-diction and Mental Health (CAMH), and Western University (Project ID GMS-100025). References 
+
+Alsentzer, E.; Murphy, J.; Boag, W.; Weng, W.-H.; Jindi, D.; Naumann, T.; and McDermott, M. 2019. Publicly available clinical BERT embeddings. In Proceedings of the 2nd clini-cal natural language processing workshop , 72–78. Bondi, E.; Koster, R.; Sheahan, H.; Chadwick, M.; Bachrach, Y.; Cemgil, T.; Paquet, U.; and Dvijotham, K. 2022. Role of human-AI interaction in selective prediction. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 36, 5286–5294. Che, Z.; Purushotham, S.; Cho, K.; Sontag, D.; and Liu, Y. 2018. Recurrent neural networks for multivariate time series with missing values. Scientific reports , 8(1): 6085. Chen, J.; Ma, B.; Cui, H.; and Xia, Y. 2024. Think twice be-fore selection: Federated evidential active learning for med-ical image analysis with domain shifts. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 11439–11449. Dvijotham, K.; Winkens, J.; Barsbey, M.; Ghaisas, S.; Stan-forth, R.; Pawlowski, N.; Strachan, P.; Ahmed, Z.; Azizi, S.; Bachrach, Y.; et al. 2023. Enhancing the reliability and ac-curacy of AI-enabled diagnosis via complementarity-driven deferral to clinicians. Nature Medicine , 29(7): 1814–1820. Geifman, Y.; and El-Yaniv, R. 2019. Selectivenet: A deep neural network with an integrated reject option. In Interna-tional conference on machine learning , 2151–2159. PMLR. Goto, T.; Camargo Jr, C. A.; Faridi, M. K.; Freishtat, R. J.; and Hasegawa, K. 2019. Machine learning–based prediction of clinical outcomes for children during emergency depart-ment triage. JAMA network open , 2(1): e186937. Groenwold, R. H. 2020. Informative missingness in elec-tronic health record systems: the curse of knowing. Diag-nostic and prognostic research , 4(1): 8. Guo, C.; Pleiss, G.; Sun, Y.; and Weinberger, K. Q. 2017. On calibration of modern neural networks. In International conference on machine learning , 1321–1330. PMLR. Han, Z.; Zhang, C.; Fu, H.; and Zhou, J. T. 2021. Trusted Multi-View Classification. In International Conference on Learning Representations .Han, Z.; Zhang, C.; Fu, H.; and Zhou, J. T. 2023. Trusted Multi-View Classification With Dynamic Evidential Fusion. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelli-gence , 45(2): 2551–2566. Huabbangyang, T.; Rojsaengroeng, R.; Tiyawat, G.; Silakoon, A.; Vanichkulbodee, A.; Sri-On, J.; and Buathong, S. 2023. Associated factors of under and over-triage based on the emergency severity index; a retrospective cross-sectional study. Archives of academic emergency medicine ,11(1): e57. Johnson, A. E.; Bulgarelli, L.; Shen, L.; Gayles, A.; Sham-mout, A.; Horng, S.; Pollard, T. J.; Hao, S.; Moody, B.; Gow, B.; et al. 2023. MIMIC-IV, a freely accessible electronic health record dataset. Scientific data , 10(1): 1. Kwon, H.; and Kim, D.-J. 2026. Conformal selective pre-diction with cost aware deferral for safe clinical triage under distribution shift. Scientific Reports , 16(1): 10016. Lee, K.; Lee, S.; Hahn, S.; Hyun, H.; Choi, E.; Ahn, B.; and Lee, J. 2023. Learning missing modal electronic health records with unified multi-modal data embedding and modality-aware attention. In Machine Learning for Health-care Conference , 423–442. PMLR. Levin, S.; Toerper, M.; Hamrock, E.; Hinson, J. S.; Barnes, S.; Gardner, H.; Dugas, A.; Linton, B.; Kirsch, T.; and Ke-len, G. 2018. Machine-learning-based electronic triage more accurately differentiates patients with respect to clinical out-comes compared with the emergency severity index. Annals of emergency medicine , 71(5): 565–574. Liang, Z.; Pan, Z.; and Xiong, R. 2025. Causal Repre-sentation Learning from Multimodal Clinical Records un-der Non-Random Modality Missingness. In Proceedings of the 2025 Conference on Empirical Methods in Natural Lan-guage Processing , 28779–28796. Lin, Y.-T.; Deng, Y.-X.; Tsai, C.-L.; Huang, C.-H.; and Fu, L.-C. 2024. Interpretable deep learning system for identi-fying critical patients through the prediction of triage level, hospitalization, and length of stay: Prospective study. JMIR Medical Informatics , 12: e48862. Liu, S.; Wang, X.; Hou, Y.; Li, G.; Wang, H.; Xu, H.; Xi-ang, Y.; and Tang, B. 2022a. Multimodal data matters: Lan-guage model pre-training over structured and unstructured electronic health records. IEEE Journal of Biomedical and Health Informatics , 27: 504–514. Liu, W.; Yue, X.; Chen, Y.; and Denoeux, T. 2022b. Trusted multi-view deep learning with opinion aggregation. In Pro-ceedings of the AAAI Conference on Artificial Intelligence ,volume 36, 7585–7593. Lyu, W.; Dong, X.; Wong, R.; Zheng, S.; Abell-Hart, K.; Wang, F.; and Chen, C. 2023. A multimodal transformer: Fusing clinical notes with structured ehr data for inter-pretable in-hospital mortality prediction. In AMIA Annual Symposium Proceedings , volume 2022, 719. Mitra, R.; McGough, S. F.; Chakraborti, T.; Holmes, C.; Copping, R.; Hagenbuch, N.; Biedermann, S.; Noonan, J.; Lehmann, B.; Shenvi, A.; et al. 2023. Learning from data with structured missingness. Nature Machine Intelligence ,5(1): 13–23. Mozannar, H.; and Sontag, D. 2020. Consistent estimators for learning to defer to an expert. In International confer-ence on machine learning , 7076–7087. PMLR. Reimers, N.; and Gurevych, I. 2019. Sentence-BERT: Sen-tence Embeddings using Siamese BERT-Networks. In Pro-ceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing , 3982– 3992. Association for Computational Linguistics. Sax, D. R.; Warton, E. M.; Mark, D. G.; Vinson, D. R.; Kene, M. V.; Ballard, D. W.; Vitale, T. J.; McGaughey, K. R.; Beardsley, A.; Pines, J. M.; et al. 2023. Evaluation of Ver-sion 4 of the emergency severity index in us emergency de-partments for the rate of mistriage. JAMA Network Open ,6(3): e233404. Sensoy, M.; Kaplan, L.; and Kandemir, M. 2018. Eviden-tial deep learning to quantify classification uncertainty. Ad-vances in neural information processing systems , 31. Shen, M.; Ryu, J. J.; Ghosh, S.; Bu, Y.; Sattigeri, P.; Das, S.; and Wornell, G. W. 2024. Are uncertainty quantification ca-pabilities of evidential deep learning a mirage? Advances in Neural Information Processing Systems , 37: 107830– 107864. Soenksen, L. R.; Ma, Y.; Zeng, C.; Boussioux, L.; Villalo-bos Carballo, K.; Na, L.; Wiberg, H. M.; Li, M. L.; Fuentes, I.; and Bertsimas, D. 2022. Integrated multimodal artificial intelligence framework for healthcare applications. NPJ dig-ital medicine , 5(1): 149. Thao, P. N. M.; Dao, C.-T.; Wu, C.; Wang, J.-Z.; Liu, S.; Ding, J.-E.; Restrepo, D.; Liu, F.; Hung, F.-M.; and Peng, W.-C. 2024. Medfuse: Multimodal ehr data fusion with masked lab-test modeling and large language models. In 
+
+Proceedings of the 33rd ACM International Conference on Information and Knowledge Management , 3974–3978. Tomani, C.; Cremers, D.; and Buettner, F. 2022. Parameter-ized temperature scaling for boosting the expressive power in post-hoc uncertainty calibration. In European conference on computer vision , 555–569. Springer. Wu, Z.; Dadu, A.; Tustison, N.; Avants, B.; Nalls, M.; Sun, J.; and Faghri, F. 2024. Multimodal patient representation learning with missing modalities and labels. In International Conference on Learning Representations .Wyatt, S.; Lunde Markussen, D.; Haizoune, M.; Vestbø, A. S.; Sima, Y. T.; Sandboe, M. I.; Landschulze, M.; Bartsch, H.; and Sauer, C. M. 2024. Leveraging machine learn-ing to identify subgroups of misclassified patients in the emergency department: Multicenter proof-of-concept study. 
+
+Journal of medical Internet research , 26: e56382. Xie, F.; Zhou, J.; Lee, J. W.; Tan, M.; Li, S.; Rajnthern, L.; Chee, M. L.; Chakraborty, B.; Wong, A.-K. I.; Dagan, A.; et al. 2022. Benchmarking Emergency Department Triage Prediction Models with Machine Learning and Large Pub-lic Electronic Health Records. In AMIA Annual Symposium Proceedings .Xu, C.; Si, J.; Guan, Z.; Zhao, W.; Wu, Y.; and Gao, X. 2024a. Reliable conflictive multi-view learning. In Pro-ceedings of the AAAI conference on artificial intelligence ,volume 38, 16129–16137. Xu, M.; Zhu, Z.; Li, Y.; Zheng, S.; Zhao, Y.; He, K.; and Zhao, Y. 2024b. Flexcare: Leveraging cross-task synergy for flexible multimodal healthcare prediction. In Proceed-ings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 3610–3620. Yang, B.; and Wu, L. 2021. How to leverage the multimodal EHR data for better medical prediction? In Proceedings of the 2021 conference on empirical methods in natural lan-guage processing , 4029–4038. Yao, W.; Yin, K.; Cheung, W. K.; Liu, J.; and Qin, J. 2024. Drfuse: Learning disentangled representation for clinical multi-modal fusion with missing modality and modal incon-sistency. In Proceedings of the AAAI conference on artificial intelligence , volume 38, 16416–16424. Zhang, C.; Chu, X.; Ma, L.; Zhu, Y.; Wang, Y.; Wang, J.; and Zhao, J. 2022. M3care: Learning with missing modalities in multimodal healthcare data. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining , 2418–2428.

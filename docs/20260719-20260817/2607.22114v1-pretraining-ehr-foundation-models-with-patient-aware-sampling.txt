@@ -1,0 +1,191 @@
+Title: Pretraining EHR Foundation Models with Patient-Aware Sampling
+
+URL Source: https://arxiv.org/pdf/2607.22114v1
+
+Published Time: Mon, 27 Jul 2026 00:34:19 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# Pretraining EHR Foundation Models with Patient-Aware Sampling 
+
+Joshua Placidi 1 2 3 Yuxuan “Edison” Liu 1 2 3 Jinpei Han 1 2 Marek Rei 1 A. Aldo Faisal 1 2 3 4 
+
+## Abstract 
+
+Autoregressive foundation models for electronic health records (EHRs) typically inherit pretrain-ing methods from language modeling, where pa-tient trajectories are concatenated into a single token stream and windows are sampled from that stream. In EHR data, this choice is consequential: windows may mix multiple patients, and patients with longer records contribute more optimization updates, potentially introducing bias. We pro-pose Patient Sampling, a pretraining sequence-construction method that allows us to control how training signal is distributed across patients. We compare this method to the standard approach, which we refer to as Global Stream. We show that stochastic Patient Sampling with controllable weighting improves performance on real-world EHR data. Across downstream clinical tasks on MIMIC-IV v2.2 and v3.1, Patient Sampling improves Macro AUROC and AUPRC over the Global Stream baseline. These results identify training and validation sequence construction as important and underexplored design choices for autoregressive EHR foundation models. 
+
+## 1. Introduction 
+
+Autoregressive foundation models for electronic health records (EHRs) represent each patient history as a variable-length sequence of discrete tokens and train with a next-token prediction objective. Recent work has shown that these models can support zero-shot clinical prediction by simulating future trajectories from observed patient histories (Renc et al., 2024; Kraljevic et al., 2024). 
+
+> 1
+
+Dept. of Computing, Imperial College London, London, United Kingdom 2Dept. of Bioengineering, Imperial College London, London, United Kingdom 3UKRI Centres in AI for Health, United Kingdom 4Chair in Digital Health, Universit¨ at Bayreuth, Bayreuth, Germany. Correspondence to: Joshua Placidi <joshua.placidi25@imperial.ac.uk >, A. Aldo Faisal 
+
+<aldo.faisal@imperial.ac.uk >.
+
+Proceedings of the Workshop on Structured Data for Health at the 43 rd International Conference on Machine Learning , Seoul, South Korea. Copyright 2026 by the author(s). Patient Trajectories 
+
+Figure 1. Toy example of an EHR dataset represented as variable-length token sequences Di. Colored boxes denote EHR tokens, and black-bordered boxes indicate end-of-sequence tokens. 
+
+Current EHR pretraining methods largely inherit sequence construction strategies from language modeling. In the stan-dard setup, patient trajectories are concatenated into a global token stream and fixed-length training windows are sampled from that stream. In EHR data, this is more than an effi-ciency choice: a window may contain events from multiple patients, and patients with longer records contribute more optimization updates during training. This is especially rel-evant in our setting, where patient trajectory lengths are highly unequal, forming a log-normal distribution as shown in Figure 3. In this work, we study alternative methods for pretraining se-quence construction. We identify three different approaches, which we refer to as Global Stream, Patient Chunks and Patient Sampling. Keeping tokenization and model architecture fixed, we com-pare the standard Global Stream method with patient-aware alternatives that preserve patient boundaries and alter how training signal is distributed across patients. Across MIMIC-IV v2.2 and v3.1 (Johnson et al., 2023b; 2024; 2023a), we find that Patient Sampling achieves stronger overall down-stream performance than the Global Stream baseline, im-proving both Macro AUROC and Macro AUPRC. Our find-ings highlight the impact of pretraining sequence construc-tion methods, and to our knowledge this is the first work to explore this design choice in the context of autoregressive health foundation models. 1arXiv:2607.22114v1 [cs.LG] 24 Jul 2026 Pretraining EHR Foundation Models with Patient-Aware Sampling Global Stream         
+
+> Stride=3
+> Patient Chunks Patient Sampling
+> Figure 2. Comparison of the dataset constructions considered in this work. On the left Global Stream forms training windows from a global concatenated token stream. Patient Chunks constructs deterministic within-patient windows. Patient Sampling first samples a patient and then samples a window from that patient alone. Colors denote different patients, and gray boxes indicate padding.
+
+## 2. Background 
+
+Autoregressive modeling has recently emerged as a promis-ing paradigm for EHR data, where patient history is repre-sented as a sequence of tokenized events. Figure 1 illustrates this setup with a toy tokenized EHR dataset. 
+
+EHR Foundation Models Recent work has applied au-toregressive or generative pretraining to longitudinal EHR data. ETHOS (Renc et al., 2024) and its follow-up ETHOS-ARES (Renc et al., 2025) convert EHR data into tokenized patient timelines, train GPT-2 (Radford et al., 2019) style models with next-token prediction, and evaluate them by rolling out future events from a clinical prediction point to obtain zero-shot predictions for downstream tasks. Fore-sight (Kraljevic et al., 2024) models patient timelines with a generative pretrained transformer that combines structured EHR data and free text to predict future clinical concepts and outcomes. CoMET (Waxler et al., 2025) demonstrates that autoregressive medical event pretraining with a next-token prediction objective scales to larger models and datasets with predictable scaling laws. Together, these works estab-lish autoregressive pretraining over patient timelines as a viable approach to EHR foundation modeling, but do not ex-plicitly study pretraining sequence construction as a primary design variable. 
+
+Sequence Composition The impact of sequence com-position has previously been explored in language model pretraining. Zhao et al. (2024) show that concatenating unre-lated documents into a fixed-length sequence can introduce distracting cross-document context, harming language mod-eling and downstream performance. They demonstrate that both intra-document masking and retrieval-based packing of related documents improve performance. Similarly, In-Context Pretraining (Shi et al., 2024) shows that re-ordering documents so that each context window contains seman-tically related material improves tasks requiring stronger 10 1 10 2 10 3 10 4 10 5
+
+> Sequence Length 010000 Frequency
+
+Training Sequence Lengths  
+
+> Figure 3. Distribution of patient token sequence lengths in the MIMIC-IV v2.2 training set, shown on a log-scaled x-axis.
+
+contextual reasoning across document boundaries. These findings motivate studying sequence composition in EHR modelling, where patient trajectories are highly unequal in length and standard sequence construction may further amplify this imbalance. 
+
+## 3. Method 
+
+We consider a dataset of N patients D = {x(i)}Ni=1 , where patient i is represented by a sequence of EHR tokens 
+
+x(i) =
+
+
+
+x(i)1 , . . . , x (i)
+
+> Li
+
+
+
+,
+
+and Li is the sequence length of patient i. Following prior work on autoregressive EHR modeling, we train a decoder-only transformer with a next-token prediction objective on fixed-length token windows of length S.We compare several strategies for constructing windows 
+
+w = ( w1, . . . , w S ) for training and validation. A window is a sequence of tokens that forms a single datapoint. 
+
+Global Stream. Our baseline follows the standard global stream construction used in autoregressive pretraining. We 2Pretraining EHR Foundation Models with Patient-Aware Sampling                                                                                                                    
+
+> Dataset Method MIMIC-IV v2.2 + ED v2.2 MIMIC-IV v3.1 + ED v2.2 Train Validation αICU Mortality ICU Readmission ICU Mortality ICU Readmission Macro AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC Global Stream Global Stream –0.878 0.434 0.725 0.383 0.843 0.428 0.703 0.380 0.787 0.406 Global Stream Patient Chunks –0.866 0.428 0.717 0.389 0.852 0.439 0.712 0.382 0.786 0.410 Patient Chunks Patient Chunks –0.865 0.357 0.664 0.313 0.832 0.327 0.662 0.334 0.756 0.332 Patient Sampling Patient Chunks 00.885 0.432 0.726 0.392 0.851 0.437 0.701 0.372 0.791 0.408 0.2 0.848 0.350 0.721 0.382 0.839 0.402 0.690 0.365 0.774 0.375 0.4 0.882 0.443 0.728 0.399 0.834 0.405 0.696 0.372 0.785 0.405 0.6 0.884 0.456 0.730 0.405 0.850 0.446 0.706 0.381 0.792 0.422
+> 0.8 0.845 0.378 0.725 0.397 0.821 0.379 0.707 0.376 0.775 0.383 10.863 0.416 0.733 0.407 0.848 0.435 0.719 0.399 0.791 0.414
+
+Table 1. Comparison of pretraining data constructions on ICU Mortality and ICU Readmission across MIMIC-IV v2.2 + ED v2.2 and MIMIC-IV v3.1 + ED v2.2. Results are reported as AUROC and AUPRC. The final macro column denotes the mean across all four reported task settings, and the best value in each metric column is shown in bold. 
+
+concatenate all patient sequences into a single stream 
+
+z = x(1) ∥ x(2) ∥ · · · ∥ x(N )
+
+with total length T = PNi=1 Li. Given stride r, we define the set of valid start indices 
+
+TGS = {1, 1+ r, 1+2 r, . . . , t max }, tmax ≤ T −S+1 .
+
+Each window is then w(t) = ( zt, . . . , z t+S−1), t ∈TGS . This construction is simple and efficient, but a single window may contain tokens from multiple patients. 
+
+Patient Chunks. To preserve patient boundaries, we pro-pose constructing windows independently within each pa-tient sequence. For patient i, we define a deterministic set of chunk start indices 
+
+Bi = {1, 1 + S, 1 + 2 S, . . . } ∩ { 1, . . . , L i},
+
+We then add a final chunk that is right-aligned to the end of the sequence, 
+
+bi, end = max(1 , L i − S + 1) ,
+
+and add this to the start index set Bi ← B i ∪ { bi, end }. Each window is then 
+
+w(i,b ) =
+
+
+
+x(i) 
+
+> b
+
+, . . . , x (i)min( Li, b +S−1) 
+
+
+
+, b ∈ B i.
+
+Windows shorter than S are right-padded to length S, and padded target positions are excluded from the loss and masked out. Unlike Global Stream, Patient Chunks always produces windows containing tokens from a single patient. 
+
+Patient-Aware Sampling. We next introduce a stochastic construction that decouples patient and window selection, to control the distribution of loss signal during training. This construction is only used for training due to its non-deterministic nature. For each patient i, let W(i) denote the set of valid start indices for constructing a window. We first sample a patient according to 
+
+pα(i) = |W (i)|α
+
+PNj=1 |W (j)|α ,
+
+where α ∈ [0 , 1] controls the weighting of patients during training. When α = 0 , patients are sampled uniformly; when α = 1 , patients are sampled proportionally to the number of valid windows they contain, i.e. a patient with twice as many possible token windows as another patient will be sampled twice as often. Given a sampled patient i, we then sample a start index uniformly from 
+
+W(i) = {1 − S, 2 − S, . . . , L i − 2}.
+
+We clip the proposed start index to the first valid token 
+
+˜s = max(1 , s ). This choice of start indices allows tokens within a patient trajectory to appear with a broader range of left-context lengths, rather than systematically under-sampling early positions 1 . Conditioned on (i, ˜s), the re-sulting window is x(i)˜s:˜ s+S−1, right-padded to length S if necessary. Global Stream may cross patient boundaries and introduce long-trajectory bias, Patient Chunks preserves patient bound-aries but retains this imbalance, and Patient Sampling pre-serves boundaries while allowing the training distribution over patients to vary smoothly between patient-uniform and length-weighted sampling. Each method is visualized in Figure 2. 3Pretraining EHR Foundation Models with Patient-Aware Sampling 
+
+Method ICU Mortality ICU Readmission ICU Admission Hospital Mortality Macro AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC MIMIC-IV v2.2 + ED v2.2 Global Stream 0.878 0.434 0.725 0.383 0.909 0.760 0.826 0.289 0.834 0.467 Patient Sampling 0.884 0.456 0.730 0.405 0.909 0.756 0.846 0.297 0.842 0.478 
+
+MIMIC-IV v3.1 + ED v2.2 Global Stream 0.843 0.428 0.703 0.380 0.905 0.748 0.813 0.308 0.816 0.466 Patient Sampling 0.850 0.446 0.706 0.381 0.910 0.757 0.834 0.322 0.825 0.477 
+
+Table 2. Comparison of Global Stream and Patient Sampling ( α = 0 .6) across ICU Mortality, ICU Readmission, ICU Admission, and Hospital Mortality for MIMIC-IV v2.2 + ED v2.2 and MIMIC-IV v3.1 + ED v2.2. Results are reported as AUROC and AUPRC, and the Macro columns report the mean across the four tasks within each dataset version. Best value in each column is shown in bold. 
+
+## 4. Experiments and Results 
+
+Experimental setup. We evaluate the methods introduced in Section 3 using two tokenized EHR datasets derived from MIMIC-IV: version 2.2 (Johnson et al., 2023b) and version 3.1 (Johnson et al., 2024), both accessed via PhysioNet (Goldberger et al., 2000). In both settings, we also include the Emergency Department module, MIMIC-IV-ED version 2.2 (Johnson et al., 2023a). Each dataset is split by patient into 80% train, 10% validation, and 10% test sets. We train a 6-layer GPT-2 model (Radford et al., 2019) on a single NVIDIA GH200 with sequence length S = 2048 .Validation loss is evaluated every 10K training steps, and the checkpoint with the lowest validation loss is used for down-stream evaluation. Because Patient Chunks is deterministic and both patient-aware methods operate on single-patient windows, we use Patient Chunks as the validation dataset for Patient Chunks and Patient Sampling training datasets. For Global Stream, we report results with both Global Stream and Patient Chunks as validation datasets. We evaluate downstream performance using the rollout framework of Renc et al. (2025) on the following clinical tasks: ICU Mortality, ICU Readmission, ICU Admission, and Hospital Mortality. See Appendix A for full training and evaluation details. 
+
+Main results. We first evaluate each method on the ICU Mortality and ICU Readmission tasks, sweeping Patient Sampling over α values in increments of 0.2. Results are shown in Table 1. We find that Patient Chunks does not improve over the Global Stream baseline, suggesting that simply preserving patient boundaries is not sufficient. Pa-tient Sampling with α = 0 .6 yields the strongest macro performance across both tasks in both datasets, and we therefore select this model for broader evaluation. Table 2 shows results from further evaluation on the Hospital 
+
+> 1
+
+Due to the need for an input and a target, the first and last tokens are still slightly under-sampled compared to interior tokens, though we believe this effect is minimal. 10 2 10 3          
+
+> Ground-truth token length
+> 0.04
+> 0.00 0.04 0.08 0.12
+> positive score
+> Baseline
+> ICU Mortality
+> 0.0 0.2 0.4 0.6 0.8 1.0 0.0 0.2 0.4 0.6 0.8 1.0
+
+Figure 4. ∆ positive score on ICU Mortality (MIMIC-IV v2.2) for Patient Sampling models with different α values, relative to a Global Stream baseline. Positive score is the fraction of simula-tions that terminate with the correct end token, delta positive score is measured relative to the Global Stream baseline. Datapoints are grouped by the number of tokens of the ground truth sequence. 
+
+Mortality and ICU Admission tasks. We find performance improvements on the Hospital Mortality task across both datasets. Improvements on ICU Admission are marginal, with no gain on MIMIC-IV v2.2 and small gains on MIMIC-IV v3.1. Across all four benchmarks and both datasets, Patient Sampling outperforms Global Stream on all four macro metrics. 
+
+Effect of α. Figure 4 shows how the behavior of Patient Sampling varies with ground-truth token length on the ICU Mortality benchmark for MIMIC-IV v2.2. Smaller values of 
+
+α produce the strongest positive shifts relative to the Global Stream baseline, with α = 0 showing the largest effect overall. As hypothesized, α = 0 improves performance on shorter sequences, but this effect is actually amplified as ground-truth sequence length increases. Intermediate settings such as α = 0 .4 and α = 0 .6 also remain positive across much of the range, whereas larger values of α stay 4Pretraining EHR Foundation Models with Patient-Aware Sampling 
+
+closer to parity or become negative as trajectory length increases. Notably, α = 0 .2 underperforms relative to neighbouring values of α, highlighting the need for further investigation into the effect of α on downstream tasks. 
+
+## 5. Conclusion 
+
+We studied how pretraining sequence construction affects autoregressive EHR foundation models, proposing a new Patient Sampling method. We show that Patient Sampling improves over the Global Stream baseline across a broad set of downstream benchmarks. These results suggest that pa-tient boundaries alone are insufficient, but that patient-aware sampling and control over how training signal is distributed can improve autoregressive EHR pretraining. More broadly, our findings identify sequence construction as an important design choice for autoregressive EHR foundation models. 
+
+## Acknowledgements 
+
+JP is supported by UK Research and Innovation (UKRI) AI Centre for Doctoral Training in Digital Healthcare grant number EP/Y030974/1, and by a philanthropic BUPA PhD Scholarship. YL is supported by UK Research and Innova-tion (UKRI) Centre for Doctoral Training in AI for Health-care (EP/S023283/1). AAF is supported by the UK Re-search and Innovation (UKRI) Turing AI Fellowship grant (EP/V025449/1). MR & AAF acknowledge support of the UKRI AI programme, and the Engineering and Physical Sciences Research Council (EPSRC), for the AI Hub in Gen-erative Models (EP/Y028805/1). AAF & MR acknowledge the use of resources provided by the Isambard-AI National AI Research Resource (AIRR). Isambard-AI is operated by the University of Bristol and is funded by the UK Govern-ment’s Department for Science, Innovation and Technology (DSIT) via UK Research and Innovation; and the Science and Technology Facilities Council (ST/AIRR/I-A-I/1023). 5Pretraining EHR Foundation Models with Patient-Aware Sampling 
+
+## References 
+
+Goldberger, A. L., Amaral, L. A. N., Glass, L., Hausdorff, J. M., Ivanov, P. C., Mark, R. G., Mietus, J. E., Moody, G. B., Peng, C.-K., and Stanley, H. E. Physiobank, phys-iotoolkit, and physionet: Components of a new research resource for complex physiologic signals. Circulation ,101(23):e215–e220, 2000. RRID:SCR 007345. Johnson, A., Bulgarelli, L., Pollard, T., Celi, L. A., Mark, R., and Horng, S. Mimic-iv-ed (version 2.2), 2023a. URL https://doi.org/10.13026/ 5ntk-km72 . RRID:SCR 007345. Johnson, A., Bulgarelli, L., Pollard, T., Horng, S., Celi, L. A., and Mark, R. MIMIC-IV. PhysioNet , January 2023b. doi: 10.13026/6mm1-ek67. URL https:// doi.org/10.13026/6mm1-ek67 . Version 2.2. Johnson, A., Bulgarelli, L., Pollard, T., Gow, B., Moody, B., Horng, S., Celi, L. A., and Mark, R. Mimic-iv (version 3.1), 2024. URL https://doi.org/10.13026/ kpb9-mt58 . RRID:SCR 007345. Kraljevic, Z., Bean, D., Shek, A., Bendayan, R., Hem-ingway, H., Yeung, J. A., Deng, A., Balston, A., Ross, J., Idowu, E., Teo, J. T., and Dobson, R. J. B. Fore-sight&#x2014;a generative pretrained transformer for modelling of patient timelines using electronic health records: a retrospective modelling study. The Lancet Digital Health , 6(4):e281–e290, 2024. doi: 10.1016/ S2589-7500(24)00025-6. URL https://doi.org/ 10.1016/S2589-7500(24)00025-6 .Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., and Sutskever, I. Language models are un-supervised multitask learners. OpenAI Technical Report , 2019. URL https://cdn.openai. com/better-language-models/language_ models_are_unsupervised_multitask_ learners.pdf .Renc, P., Jia, Y., Samir, A. E., Was, J., Li, Q., Bates, D. W., and Sitek, A. Zero-shot health trajectory prediction using transformers. npj Digital Medicine , 7(1):256, 2024. doi: 10.1038/s41746-024-01235-0. URL https://doi. org/10.1038/s41746-024-01235-0 .Renc, P., Grzeszczyk, M. K., Oufattole, N., Goode, D., Jia, Y., Bieganski, S., McDermott, M. B. A., Was, J., Samir, A. E., Cunningham, J. W., Bates, D. W., and Sitek, A. Foundation model of electronic medi-cal records for adaptive risk estimation. GigaScience ,14:giaf107, 09 2025. ISSN 2047-217X. doi: 10.1093/ gigascience/giaf107. URL https://doi.org/10. 1093/gigascience/giaf107 .Shi, W., Min, S., Lomeli, M., Zhou, C., Li, M., Lin, X. V., Smith, N. A., Zettlemoyer, L., tau Yih, W., and Lewis, M. In-context pretraining: Language modeling beyond doc-ument boundaries. In The Twelfth International Confer-ence on Learning Representations , 2024. URL https: //openreview.net/forum?id=LXVswInHOo .Waxler, S., Blazek, P., White, D., Sneider, D., Chung, K., Nagarathnam, M., Williams, P., Voeller, H., Wong, K., Swanhorst, M., Zhang, S., Usuyama, N., Wong, C., Nau-mann, T., Poon, H., Loza, A., Meeker, D., Hain, S., and Shah, R. Generative medical event models improve with scale, 2025. URL https://arxiv.org/abs/ 2508.12104 .Zhao, Y., Qu, Y., Staniszewski, K., Tworkowski, S., Liu, W., Miło´ s, P., Wu, Y., and Minervini, P. Analysing the impact of sequence composition on language model pre-training. In Ku, L.-W., Martins, A., and Srikumar, V. (eds.), Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 7897–7912, Bangkok, Thailand, August 2024. Association for Computational Linguis-tics. doi: 10.18653/v1/2024.acl-long.427. URL https: //aclanthology.org/2024.acl-long.427/ .6Pretraining EHR Foundation Models with Patient-Aware Sampling Component Setting                                  
+
+> Embedding dimension 768 Transformer layers 6Attention heads 12 Context length 2048 Dropout 0.1 RoPE base 10000 Batch size 64 Optimizer AdamW Learning rate 1.5×10 −4
+> Weight decay 0.1 Warmup steps 4000 Hold steps 136000 Decay steps 260000 Final LR ratio 0.05 Validation interval every 10K steps
+> Table 3. Core model and training hyperparameters used in our experiments.
+> Benchmark Prediction point Terminating tokens
+> ICU Mortality ICU ADMISSION MEDS DEATH ,ICU DISCHARGE
+> ICU Readmission ICU DISCHARGE ICU ADMISSION ,HOSPITAL DISCHARGE
+> ICU Admission HOSPITAL ADMISSION ICU ADMISSION ,HOSPITAL DISCHARGE
+> Hospital Mortality HOSPITAL ADMISSION MEDS DEATH ,HOSPITAL DISCHARGE
+> Table 4. Benchmark definitions used in the rollout-based evaluation framework.
+
+## A. Model, Training, and Evaluation Framework 
+
+Model. We use a decoder-only transformer based on a GPT-2 style architecture. The model consists of a learned token embedding layer, a stack of transformer blocks with causal self-attention and MLP sublayers, a final layer normalization, and a linear language-modeling head. Rotary positional embeddings (RoPE) are used in place of learned absolute position embeddings. Models were trained on a single NVIDIA GH200 with a standard next-token prediction objective over tokenized EHR trajectories. Table 3 summarizes the core model and optimization hyperparameters used in our experiments. 
+
+Evaluation framework. Downstream evaluation is performed using a rollout-based benchmark framework. For each benchmark, evaluation prompts are constructed by identifying a benchmark-specific prediction point together with two terminating outcome tokens in each patient trajectory. The model receives the patient history up to the prediction point and is then rolled out autoregressively until a terminating token is generated or a maximum generation length of 4096 tokens is reached. For each prompt, we run 20 stochastic rollouts. A scalar score is computed as the fraction of rollouts that terminate with the different end tokens, and this score is used as the model output for binary classification. Simulations that exceed the 4096-token limit are terminated and excluded from benchmark calculations. AUROC and AUPRC are then computed from the resulting per-prompt scores. Table 4 presents the definitions for each benchmark we report. We note that the rollout-based evaluation is stochastic and can be noisy, and due to computational constraints we were unable to repeat all experiments across multiple random seeds. 7
