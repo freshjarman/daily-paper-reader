@@ -1,0 +1,1142 @@
+Title: ChronoSSM: Training for Temporally Aware Representations in Autoregressive State Space Models
+
+URL Source: https://arxiv.org/pdf/2608.10120v1
+
+Published Time: Wed, 12 Aug 2026 00:09:13 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# ChronoSSM: Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+# Adrien Schoen ∗
+
+adrien.schoen@cnrs.fr ENS de Lyon, CNRS, UCBL1, LIP Lyon, France 
+
+# Nachiketa Ratnakar Patil ∗
+
+npatil@iitb.ac.in Centre for Machine Intelligence and Data Science Indian Institute of Technology Bombay Mumbai, India 
+
+# Arjun Bhagoji 
+
+arjunp@iitb.ac.in Centre for Machine Intelligence and Data Science Indian Institute of Technology Bombay Mumbai, India 
+
+# Francesco Bronzino 
+
+francesco.bronzino@ens-lyon.fr ENS de Lyon, CNRS, UCBL1, LIP Lyon, France Institut universitaire de France France 
+
+## Abstract 
+
+Modern sequence models, from Transformers to State Space Models, have enabled powerful generative modeling across diverse domains, yet they are typically trained to predict what happens while treating 
+
+when it happens as a secondary concern. In data-mining settings where events are associated with explicit timing information, this separation can limit temporal reasoning, anomaly detection, and faithful reconstruction of event chronology. A common strategy is to treat timing as an auxiliary signal, training a separate timing model using representations learned solely for event prediction. However, this two-stage approach implicitly assumes that repre-sentations optimized for event prediction already contain sufficient temporal structure. We introduce ChronoSSM, an autoregressive State Space Model (SSM) that jointly models events and timestamps with a shared backbone trained using combined token and temporal generation objectives. We compare the Joint regime, where temporal supervi-sion updates the backbone, with the Two-Stage regime, where tim-ing is learned only using the frozen event representations. Across four domains spanning dense and partial timestamp supervision, Joint training consistently makes inter-arrival information more recoverable from frozen representations without any systematic degradation in content-generation quality overall. Our results show that temporal supervision can produce more temporally informa-tive representations without materially degrading autoregressive event modeling. 
+
+## 1 Introduction 
+
+Modern autoregressive sequence models are now used well be-yond natural language, including in domains such as business-process traces, clinical event sequences derived from electronic health records, network traffic, and temporal knowledge graphs [2, 16, 17, 26]. In these settings, events are associated with explicit temporal metadata, and downstream tasks depend not only on what happened but also on when it happened [4, 16, 20, 24]. This raises a basic question: can autoregressive sequence models learn 
+
+> ∗Both authors contributed equally to this research.
+
+both event identity and event timing within a shared representation ?We formalize this problem in §2. A common way to incorporate timing has been to treat it as an auxiliary task [3, 15]: first train a sequence model for next-event prediction, then freeze its representations and fit a separate timing module on top. This two-stage strategy is simple and modular, but it assumes that representations optimized only for token prediction already retain enough temporal information. That assumption is questionable: the token generation objective only rewards features that improve next-event likelihood, not inter-arrival modeling. A downstream timing module must therefore recover temporal struc-ture from representations that were never explicitly trained to encode it. In this paper, we introduce ChronoSSM (§3), an autoregressive State Space Model that predicts both the next event and its times-tamp from a shared backbone. A lightweight temporal head is trained jointly with the token prediction head, so temporal gradi-ents can directly update the backbone. The resulting model learns event semantics and temporal dynamics within a unified representa-tion. Our code and configurations shall be released upon acceptance. To test whether this joint formulation offers a real advantage over the two-stage alternative, we conduct a controlled comparison between two training regimes that share the same architecture, data, and temporal objective (§4): a Two-Stage regime, in which timing is learned after event prediction on frozen representations, and a Joint regime, in which both objectives are optimized together. We evaluate this comparison on four key domains spanning dense and partial timestamp supervision: business-process traces [22, 26], clinical event sequences [17], network traffic [2, 3], and temporal knowledge graphs [16]. In addition to these four main domains, we also experiment with symbolic-music [12, 13, 18] generation reported in §B. Our two main research questions are: 
+
+RQ1 (Temporal Recoverability). Does Joint training yield repre-sentations from which inter-arrival information is more recoverable than under Two-Stage training? We evaluate this using a suite of recoverability diagnostics (formalized in §5) that probe whether temporal structure is encoded in frozen learned representations and can be extracted by lightweight analyses. We find that Joint training consistently produces representations from which timing 
+
+> 1arXiv:2608.10120v1 [cs.LG] 10 Aug 2026 Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino
+
+is more recoverable across all four domains, with the magnitude of the effect varying by domain. 
+
+RQ2 (Quality Degradation). Does injecting temporal supervi-sion into the shared backbone systematically degrade downstream modeling quality? Stronger temporal recoverability is only useful if it does not compromise the model’s primary event-generation function. We therefore compare Joint and Two-Stage training on domain-specific generation metrics and find no evidence of a systematic degradation under Joint training (§6), with Joint generating higher quality data in 2 out of 4 domains. Overall, these results indicate that explicit temporal supervision can improve temporal recoverability without systematically degrad-ing the model’s primary generative function. This paves the way for temporally-aware generative models to be trained and deployed in relevant domains. 
+
+## 2 Background 
+
+This section introduces the modeling framework used throughout the paper. We first describe the underlying sequence model and the representations it produces, and then formalize the problem setting for predicting the next event and its associated timing information. 
+
+## 2.1 The State-Space Architecture 
+
+State Space Models (SSMs) are sequence models with recurrent latent-state dynamics that support linear-time processing in se-quence length [8, 11]. This is useful in long-sequence settings, where computational efficiency becomes important as context length grows. The core mechanism of an SSM is a linear dynamical system that maps an input sequence to an output sequence through a hidden state [11]. At step 𝑘 , the model updates a latent state 𝑠 𝑘 from the previous state and the current input 𝑥 𝑘 , and then produces an output representation ℎ𝑘 :
+
+𝑠 𝑘 = 𝐴 𝑘 𝑠 𝑘 −1 + 𝐵 𝑘 𝑥 𝑘 , (1) 
+
+ℎ𝑘 = 𝐶 𝑘 𝑠 𝑘 + 𝐷 𝑘 𝑥 𝑘 . (2) In modern selective SSMs, some of these parameters are conditioned on the current input, allowing the model to selectively propagate or discard information according to the sequence context. This input-dependent selection mechanism enables the model to adapt its effective memory to the content of the sequence. Stacking several SSM layers produces a causal sequence model that processes the input in a single forward pass and generates a hidden representation ℎ𝑘 at each position. These token-wise hid-den states can then be used by lightweight prediction heads for tasks such as next-token prediction or temporal prediction. This representation-level property is the one exploited in this paper. 
+
+## 2.2 Problem Setting 
+
+Let D denote a dataset of timestamped sequences. Each sequence of length 𝑇 in D is written as {( 𝑥 𝑘 , 𝑡 𝑘 )} 𝑇 −1 
+
+> 𝑘 =0
+
+, where 𝑥 𝑘 is a discrete to-ken and 𝑡 𝑘 is its associated timestamp. From successive timestamps, we derive the inter-arrival times {Δ𝑡 𝑘 = 𝑡 𝑘 − 𝑡 𝑘 −1 }𝑇 −1 
+
+> 𝑘 =1
+
+.Denoting the token history up to step 𝑘 by X𝑘 = {𝑥 𝑖 }𝑘 𝑖 =0, our objective is to model the joint distribution of the next token 𝑥 𝑘 +1
+
+and its associated inter-arrival time Δ𝑡 𝑘 +1:
+
+𝑝 𝛾 (𝑥 𝑘 +1, Δ𝑡 𝑘 +1 | X 𝑘 ). (3) Using the chain rule, we factor this joint distribution as 
+
+𝑝 𝛾 (𝑥 𝑘 +1, Δ𝑡 𝑘 +1 | X 𝑘 ) = 𝑝 𝜃,𝛼 (𝑥 𝑘 +1 | X 𝑘 ) 𝑝 𝜃,𝜙 (Δ𝑡 𝑘 +1 | 𝑥 𝑘 +1, X𝑘 ), (4) where 𝛾 = {𝜃, 𝛼, 𝜙 } collects the parameters of the shared sequence model, token-prediction head, and temporal-prediction head, re-spectively. Let 𝑉 denote the vocabulary size and 𝐷 the hidden-state dimension. The shared sequence model is a causal autoregressive model parameterized by 𝜃 that produces a token-wise hidden represen-tation ℎ𝑘 from the history X𝑘 . In our main instantiation, we use a State Space Model, although the framework is not tied to this particular architecture. Any causal autoregressive backbone that produces token-wise hidden representations can be used instead; Appendix §C illustrates this with an additional Transformer-based instantiation. Formally, the backbone computes 
+
+ℎ𝑘 = Backbone 𝜃 (X 𝑘 ). (5) The token-prediction head is a linear map 𝑊 tok  
+
+> 𝛼
+
+∈ R𝑉 ×𝐷 param-eterized by 𝛼 , and it models the next-token distribution as 
+
+𝑝 𝜃,𝛼 (𝑥 𝑘 +1 | X 𝑘 ) = softmax 
+
+
+
+𝑊 tok  
+
+> 𝛼
+
+ℎ𝑘 
+
+
+
+. (6) The temporal-prediction head is a function 𝑓 time  
+
+> 𝜙
+
+(· ; 𝑟 𝑘 +1) param-eterized by 𝜙 and conditioned on a transition representation 𝑟 𝑘 +1.After 𝑥 𝑘 +1 is processed, the sequence model produces ℎ𝑘 +1 accord-ing to Eq. (5). Because Δ𝑡 𝑘 +1 describes the transition from position 𝑘 
+
+to position 𝑘 + 1, its prediction is based on a representation 𝑟 𝑘 +1 de-rived from both ℎ𝑘 and ℎ𝑘 +1. The temporal-prediction head models the second factor as 
+
+𝑝 𝜃,𝜙 (Δ𝑡 𝑘 +1 | 𝑥 𝑘 +1, X𝑘 ) = 𝑓 time  
+
+> 𝜙
+
+(Δ𝑡 𝑘 +1; 𝑟 𝑘 +1) . (7) The construction of 𝑟 𝑘 +1 is introduced in §3. 
+
+## 3 ChronoSSM 
+
+Having defined the modeling setting and notation, we now de-scribe the design choices that instantiate ChronoSSM. We first in-troduce the temporal representation 𝑟 𝑘 +1 supplied to the temporal-prediction head in Eq. (7). We then define the training objective and compare two optimization schedules that differ in whether temporal supervision is allowed to update the shared backbone. 
+
+## 3.1 Model Design 
+
+An inter-arrival time measures the elapsed time between two con-secutive tokens, rather than a property of either token considered in isolation. We therefore represent it using the change between their corresponding hidden states: 
+
+𝑟 𝑘 +1 = Δℎ𝑘 +1 = ℎ𝑘 +1 − ℎ𝑘 . (8) The temporal target and the representation used to predict it are thus both defined as differences between consecutive positions: 
+
+Δ𝑡 𝑘 +1 = 𝑡 𝑘 +1 − 𝑡 𝑘 
+
+| {z }
+
+> temporal difference
+
+←→ Δℎ𝑘 +1 = ℎ𝑘 +1 − ℎ𝑘 
+
+| {z }
+
+> hidden-state difference
+
+. (9) 
+
+Preprint 2ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+This choice for 𝑟 𝑘 +1 is a modeling decision rather than a structural requirement of the framework. An alternative temporal representa-tion 𝑟 ′ 
+
+> 𝑘 +1
+
+= [ℎ𝑘 ; ℎ𝑘 +1] is considered in Appendix §F. 
+
+## 3.2 Training Objective 
+
+Under the factorization in Eq. (4), maximum-likelihood training decomposes the negative log-likelihood of each transition into a token-prediction term and a temporal-prediction term: 
+
+ℓ𝑘 = − log 𝑝 𝛾 (𝑥 𝑘 +1, Δ𝑡 𝑘 +1 | X 𝑘 )
+
+= − log 𝑝 𝜃,𝛼 (𝑥 𝑘 +1 | X 𝑘 )
+
+| {z }
+
+> ℓtok
+> 𝑘
+
++ − log 𝑝 𝜃,𝜙 (Δ𝑡 𝑘 +1 | 𝑥 𝑘 +1, X𝑘 )
+
+| {z }
+
+> ℓtime
+> 𝑘
+
+. (10) We now instantiate these two terms using the token-prediction and temporal-prediction heads introduced in §2.2. For token prediction, the factor 𝑝 𝜃,𝛼 (𝑥 𝑘 +1 | X 𝑘 ) is categorical, so the sequence-level token loss is 
+
+𝐿 tok = 
+
+> 𝑇 −2
+
+∑︁ 
+
+> 𝑘 =0
+
+ℓtok  
+
+> 𝑘
+
+= 
+
+> 𝑇 −2
+
+∑︁ 
+
+> 𝑘 =0
+
+CE 
+
+
+
+𝑊 tok  
+
+> 𝛼
+
+ℎ𝑘 , 𝑥 𝑘 +1
+
+
+
+, (11) where CE denotes categorical cross-entropy, which is appropriate because {𝑥 𝑘 }𝑇 −1 
+
+> 𝑘 =0
+
+is a sequence of discrete tokens [9] (see §2.2). For temporal prediction, the factor 𝑝 𝜃,𝜙 (Δ𝑡 𝑘 +1 | 𝑥 𝑘 +1, X𝑘 ) is de-fined by a conditional density over the continuous-valued target 
+
+Δ𝑡 𝑘 +1. This definition is well posed provided that the chosen con-ditional density has support on the observed inter-arrival targets, including zero when zero inter-arrival times are present. We there-fore define the sequence-level temporal loss as the negative log-likelihood of the observed inter-arrival times under that density: 
+
+𝐿 time = 
+
+> 𝑇 −2
+
+∑︁ 
+
+> 𝑘 =0
+
+ℓtime  
+
+> 𝑘
+
+= 
+
+> 𝑇 −2
+
+∑︁ 
+
+> 𝑘 =0
+
+− log 𝑓 time  
+
+> 𝜙
+
+(Δ𝑡 𝑘 +1; Δℎ𝑘 +1) , (12) where Δℎ𝑘 +1 is the hidden-state transition defined in Eq. (8). The concrete form of 𝑓 time  
+
+> 𝜙
+
+is specified for each experimental regime in §4. Summing Eq. (10) over the sequence gives the joint negative log-likelihood 
+
+LNLL = 𝐿 tok + 𝐿 time . (13) Minimizing this objective corresponds to maximum-likelihood train-ing of the factorized distribution over tokens and inter-arrival times. In practice, the token and temporal losses may have different numerical scales. We therefore optimize the weighted objective 
+
+L = 𝐿 tok + 𝜆 𝜏 𝐿 time , (14) where 𝜆 𝜏 ≥ 0 controls the relative contribution of temporal predic-tion. 
+
+## 3.3 Training Schedules 
+
+We consider two approaches for optimizing the parameter set 
+
+𝛾 = {𝜃, 𝛼, 𝜙 }. Both regimes use the same shared sequence back-bone model, token-prediction head, temporal-prediction head, and loss components. They differ only in whether the temporal loss is allowed to update the shared backbone. The two regimes are illustrated in Figure 1: Figure 1a shows the Joint setup, whereas Figure 1b shows the Two-Stage schedule. The corresponding opti-mization procedures are summarized in Algorithms 1 and 2. 
+
+Joint Training. Under Joint training, the backbone and both prediction heads are optimized simultaneously using the objective in Eq. (14). Gradients from both 𝐿 tok and 𝐿 time update the backbone parameters 𝜃 , while the token-prediction and temporal-prediction heads are updated by 𝐿 tok and 𝐿 time , respectively. In particular, the temporal loss backpropagates through Δℎ𝑘 +1 =
+
+ℎ𝑘 +1 − ℎ𝑘 , encouraging changes between consecutive hidden states to become informative about the corresponding inter-arrival times. Because the token-prediction head uses hidden states produced by the same backbone, temporal supervision can also affect the representations used for next-token prediction. 
+
+Two-Stage Training. Under Two-Stage training, token and tem-poral learning are separated into two phases. In the first phase, the backbone and token-prediction head are optimized using 𝐿 tok alone. In the second phase, the temporal-prediction head is trained using 
+
+𝐿 time on the hidden-state transitions produced by the token-trained sequence model. Because the backbone is not updated during the second phase, temporal gradients cannot modify its representations. The temporal-prediction head can therefore exploit only the temporal information already present in the token-trained hidden-state transitions. This regime provides a controlled baseline for isolating the effect of allowing temporal supervision to shape the backbone. 
+
+## 3.4 Inference 
+
+Generation proceeds autoregressively. Given the token history X𝑘 ,the token head first predicts the next token 𝑥 𝑘 +1. After this token is processed by the backbone, the model obtains ℎ𝑘 +1 and computes 
+
+Δℎ𝑘 +1. The temporal head then predicts the associated inter-arrival time cΔ𝑡 𝑘 +1 from Δℎ𝑘 +1, and the timestamp is updated as 𝑡 𝑘 +1 =
+
+𝑡 𝑘 + cΔ𝑡 𝑘 +1.The token-decoding strategy and the point estimate used for temporal prediction are specified in §4. 
+
+## 4 Experimental Setup 
+
+Our experimental setup is designed to isolate the effect of allow-ing temporal supervision to update the shared backbone. Our pri-mary evaluation therefore compares Joint and Two-Stage training, which use the same model components, data, temporal objective, and generation procedure within each domain, but differ in whether the temporal loss updates the shared backbone. This controlled com-parison lets us determine whether this choice makes inter-arrival information more recoverable from the learned representations (RQ1 in §5) and whether any such improvement preserves token-generation quality ( RQ2 in §6). We conduct this controlled comparison on four domains exhibit-ing distinct sequence structures, vocabularies, timestamp densities, and temporal regimes: business-process traces, clinical event se-quences, network traffic, and temporal knowledge graphs. Together, these four domains provide complementary tests of RQ1 and RQ2 
+
+across dense and partial timestamp coverage, short and long se-quences, and substantially different temporal distributions. Appen-dix §A provides a detailed comparison of the structural and tem-poral properties of the four main evaluation domains, and Appen-dix §B reports additional experiments on musical event sequences. 
+
+Preprint 3Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino SSM  
+
+> Backbone Token Head
+> Time Head
+> Backpropagation
+> Backpropagation
+
+(a) Joint training updates the shared SSM backbone and both predic-tion heads using the token and temporal losses. SSM   
+
+> Backbone Token Head
+> Time Head
+> Backpropagation
+> SSM
+> Backbone Token Head
+> Time Head
+> Backpropagation
+> Stage 1
+> Stage 2
+
+(b) Two-Stage training first optimizes the shared SSM backbone and token-prediction head, then trains the temporal-prediction head in a separate second stage. 
+
+Figure 1: Overview of the Joint and Two-Stage training regimes. Algorithm 1 Joint training 
+
+Require: Epochs 𝐸 ; backbone Backbone 𝜃 ; token head 𝑊 tok  
+
+> 𝛼
+
+; tempo-ral head 𝑓 time  
+
+> 𝜙
+
+; dataset D of timestamped sequences; sequence length 𝑇 ; temporal weight 𝜆 𝜏  
+
+> 1:
+
+for epoch = 1, . . . , 𝐸 do  
+
+> 2:
+
+for each {( 𝑥 𝑘 , 𝑡 𝑘 )} 𝑇 −1 
+
+> 𝑘 =0
+
+∈ D do  
+
+> 3:
+
+(ℎ0, . . . , ℎ 𝑇 −1) ← Backbone 𝜃 (𝑥 0, . . . , 𝑥 𝑇 −1) 
+
+> 4:
+
+Compute 𝐿 tok using Eq. (11)  
+
+> 5:
+
+Compute 𝐿 time using Eq. (12)  
+
+> 6:
+
+L ← 𝐿 tok + 𝜆 𝜏 𝐿 time  
+
+> 7:
+
+Update 𝛼 using ∇𝐿 tok  
+
+> 8:
+
+Update 𝜙 using ∇𝐿 time  
+
+> 9:
+
+Update 𝜃 using ∇L  
+
+> 10:
+
+end for  
+
+> 11:
+
+end for Algorithm 2 Two-Stage training 
+
+Require: Token-training epochs 𝐸 tok ; temporal-training epochs 
+
+𝐸 time ; backbone Backbone 𝜃 ; token head 𝑊 tok  
+
+> 𝛼
+
+; temporal head 
+
+𝑓 time  
+
+> 𝜙
+
+; dataset D of timestamped sequences; sequence length 𝑇  
+
+> 1:
+
+for epoch = 1, . . . , 𝐸 tok do  
+
+> 2:
+
+for each {( 𝑥 𝑘 , 𝑡 𝑘 )} 𝑇 −1 
+
+> 𝑘 =0
+
+∈ D do  
+
+> 3:
+
+(ℎ0, . . . , ℎ 𝑇 −1) ← Backbone 𝜃 (𝑥 0, . . . , 𝑥 𝑇 −1) 
+
+> 4:
+
+Compute 𝐿 tok using Eq. (11)  
+
+> 5:
+
+Update 𝜃 and 𝛼 using ∇𝐿 tok  
+
+> 6:
+
+end for  
+
+> 7:
+
+end for  
+
+> 8:
+
+Freeze 𝜃 and 𝛼  
+
+> 9:
+
+for epoch = 1, . . . , 𝐸 time do  
+
+> 10:
+
+for each {( 𝑥 𝑘 , 𝑡 𝑘 )} 𝑇 −1 
+
+> 𝑘 =0
+
+∈ D do  
+
+> 11:
+
+(ℎ0, . . . , ℎ 𝑇 −1) ← Backbone 𝜃 (𝑥 0, . . . , 𝑥 𝑇 −1) 
+
+> 12:
+
+Compute 𝐿 time using Eq. (12)  
+
+> 13:
+
+Update 𝜙 using ∇𝐿 time  
+
+> 14:
+
+end for  
+
+> 15:
+
+end for 
+
+## 4.1 Experimental Instantiation 
+
+Unless stated otherwise, all experiments in the main paper instan-tiate ChronoSSM with a Mamba2 backbone [6]. To assess the ro-bustness of the controlled comparison to the choice of causal au-toregressive backbone, and to illustrate that the framework can be instantiated beyond SSMs, Appendix §C repeats the comparison with a GPT-2 backbone. The temporal-head architecture is selected separately for each domain to account for differences in sequence structure and temporal distribution. Complete domain-specific preprocessing settings, model archi-tectures, temporal-head configurations, loss weights, and training hyperparameters are reported in Appendix §H. Appendix §G re-ports the corresponding training-time and peak-memory overhead. Appendix §E reports an auxiliary-loss-weight sensitivity study for network traffic and temporal knowledge graph. 
+
+## 4.2 Densely Timestamped Datasets 
+
+In this subsection, each sequence in D follows the canonical for-mulation introduced in §2.2: every token 𝑥 𝑘 is associated with an observed timestamp 𝑡 𝑘 , so inter-arrival times are defined for every consecutive pair of events. 
+
+Business-process traces. BPI Challenge 2018 [22, 26] (BPI2018) is a business-process event log in which each case is represented as a sequence of timestamped activities. Each complete case forms one process trace. For every event, the activity label defines the token 
+
+𝑥 𝑘 , while its occurrence time defines the associated timestamp 𝑡 𝑘 .Events are ordered chronologically within each trace. When mul-tiple activities share the same timestamp, they are retained as sepa-rate tokens and therefore produce valid zero-valued inter-arrival targets. The original event log also contains resource identifiers, lifecycle transitions, application metadata, permit information, and 
+
+Preprint 4ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+other event- and case-level attributes, but we discard these auxil-iary attributes and retain only the ordered activity labels and their timestamps to keep the modeling simple. 
+
+Clinical event sequences. MIMIC-IV [17] is a large-scale elec-tronic health record dataset containing clinical observations col-lected during hospital and intensive-care stays. We use the chartevents 
+
+table, which records timestamped bedside observations such as vital signs, ventilator settings, nursing assessments, and other charted clinical measurements. The event defines the token 𝑥 𝑘 , and the recording time defines the timestamp 𝑡 𝑘 .Events are ordered chronologically within each stay. When mul-tiple observations share the same timestamp, they are retained as separate tokens, yielding valid zero-valued inter-arrival times, as in BPI2018. We discard the remaining clinical and administrative attributes and retain only the ordered event identities and their timestamps. 
+
+Log-transformed temporal targets. Although the temporal regimes differ across the two dense domains, both datasets ex-hibit highly heterogeneous inter-arrival times: BPI2018 contains very long delays, whereas MIMIC-IV is bursty and strongly zero-inflated, as summarized in Appendix §A. We therefore predict a log-transformed auxiliary target in both settings, preserving the monotone ordering of inter-arrival times while compressing large gaps so that they do not dominate the temporal loss and short gaps remain well resolved. Because both datasets contain simultaneous events, the temporal prediction mechanism must accommodate observed inter-arrival times that are exactly zero. In particular, a plain log (Δ𝑡 𝑘 ) would be undefined when Δ𝑡 𝑘 = 0. We therefore define 
+
+𝑧 𝑘 = log 
+
+
+
+1 + Δ𝑡 𝑘 
+
+𝑠 
+
+
+
+, (15) where 𝑠 is a dataset-specific time scale. This transformed quantity 
+
+𝑧 𝑘 defines the auxiliary temporal target used for supervision. The temporal head produces a raw scalar output, which is mapped through a softplus nonlinearity to obtain a non-negative inter-arrival prediction cΔ𝑡 𝑘 . This prediction is then transformed in the same way: 
+
+b𝑧 𝑘 = log 1 + cΔ𝑡 𝑘 
+
+𝑠 
+
+!
+
+. (16) We instantiate the temporal factor as the fixed-variance log-normal density 
+
+𝑓 time  
+
+> 𝜙
+
+(Δ𝑡 𝑘 ; Δℎ𝑘 ) = 1
+
+(𝑠 + Δ𝑡 𝑘 )√2𝜋𝜎 2 exp 
+
+
+
+− (𝑧 𝑘 − b𝑧 𝑘 )2
+
+2𝜎 2
+
+
+
+, (17) where 𝜎 2 is fixed. Its negative log-likelihood is equivalent, up to terms independent of the model parameters, to squared error be-tween b𝑧 𝑘 and 𝑧 𝑘 . This is a modeling choice rather than a requirement of the framework. Appendix §B reports an auxiliary GiantMIDI experiment that instead applies squared-error regression to scaled raw inter-arrival times, testing whether the results depend on the logarithmic target transformation. 
+
+## 4.3 Partially Timestamped Datasets 
+
+Many temporally structured sequences do not provide a timestamp for every token but only for selected structural boundaries. These settings are therefore important for evaluating whether tempo-ral supervision can still shape useful representations when it is available only sparsely within the sequence. In this subsection, we consider domains in which timestamps are attached only to selected boundary tokens rather than to every token in the sequence. Let Itime denote the set of positions carrying valid temporal targets. For each 𝑘 ∈ I time , let 𝑘 − denote the pre-ceding position in Itime . The temporal target and its corresponding hidden-state representation are then defined as 
+
+Δ𝑡 𝑘 = 𝑡 𝑘 − 𝑡 𝑘 − , Δℎ𝑘 = ℎ𝑘 − ℎ𝑘 − . (18) The temporal loss is evaluated only for 𝑘 ∈ I time . Tokens outside 
+
+Itime continue to contribute to the token-generation objective but do not contribute directly to the temporal objective. This defines a different setting from the canonical formulation introduced in §2.2. 
+
+Network traffic. Network traffic consists of timestamped packets exchanged between hosts and recorded in packet-capture files. We use captures of video-streaming traffic [2], following the prepro-cessing procedure of Chu et al. [3]. Packet contents are serialized as sequences of byte tokens, with a dedicated <|pkt|> token de-limiting successive packets. Timestamps are attached only to these 
+
+<|pkt|> boundary tokens, so Itime contains the packet-boundary positions. 
+
+Temporal knowledge graphs. Temporal knowledge graphs repre-sent evolving relational information as timestamped facts (ℎ, 𝑟, 𝑜, 𝜏 ),where ℎ and 𝑜 denote entities, 𝑟 denotes a relation, and 𝜏 denotes the fact timestamp. We use the GDELT temporal knowledge graph [16], which contains world events extracted from news media and orga-nized chronologically. Facts are mapped to a fixed vocabulary of entity and relation identifiers and represented as structured token blocks of the form 
+
+<|STM|>, h, r, o . Consecutive facts are grouped into fixed-length training sequences. The timestamp of each fact is attached only to its <|STM|> marker, so Itime contains the <|STM|> positions. 
+
+Log-transformed temporal targets. To keep the temporal ob-jective comparable across all domains, we apply the same target scaling, logarithmic transformation, softplus-constrained predic-tion, and squared-error loss introduced in §4.2. For network traffic only, packet inter-arrival times are clipped at the 99th percentile before scaling. This reduces the influence of rare extreme delays on the dataset-specific scaling and training stability, beyond the compression already provided by the logarithmic transformation. 
+
+## 4.4 Generation Settings 
+
+Token decoding is domain-specific: BPI2018, MIMIC-IV, and dy-namic knowledge graphs use greedy decoding, whereas network traffic uses stochastic sampling, following Chu et al. [3]. Complete decoding parameters are reported in Appendix §H. For temporal prediction, the raw output of the temporal head is passed through a softplus nonlinearity to obtain the non-negative point estimate 
+
+cΔ𝑡 𝑘 , which is added to the preceding generated timestamp. 
+
+## 4.5 External Reference Baselines 
+
+For additional descriptive context, Appendix §I reports one re-trained domain-adapted baseline per dataset, including its architec-ture, probing adaptation, results, and interpretation. These external 
+
+Preprint 5Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino 
+
+models are not used to answer RQ1 or RQ2 , because they differ from ChronoSSM in architecture, objective, temporal representa-tion, and generation procedure. 
+
+## 5 Temporal Recoverability 
+
+This section addresses RQ1 (Temporal Recoverability) : whether Joint training makes inter-arrival information more recoverable from the sequence-backbone representations than Two-Stage train-ing. To answer this question, we evaluate after training the same representation that is supplied to the temporal head. The backbone is frozen, and temporal information is extracted either with a lin-ear probe or through a non-parametric analysis of representation geometry. No probe gradients are propagated into the backbone, so the resulting measurements reflect information already present in the learned representations. 
+
+## 5.1 Recoverability Metrics 
+
+In order to respond to RQ1 , we define temporal recoverability as the extent to which the temporal target associated with an event transition can be extracted from frozen backbone representations using a simple readout or reflected in their geometry. For each valid temporal transition, we evaluate the representation supplied to the temporal head and the transformed inter-arrival target used during training. 
+
+Linear timing probe. The first recoverability metric consists of training a ridge-regression probe to predict the temporal target 𝑧 𝑘 
+
+(see Eq. (15)) from the corresponding frozen temporal representa-tion 𝑟 𝑘 (see Eq. (8)): 
+
+𝑟 𝑘 −→ 𝑧 𝑘 . (19) Although this may resemble the second stage of Two-Stage train-ing, the two procedures serve different purposes. The Two-Stage temporal head is part of the model itself and is optimized for down-stream temporal prediction, whereas the probe is a post hoc di-agnostic trained only after model training has finished. It uses a simple ridge-regression readout, does not reuse the trained tempo-ral head, and is introduced solely to measure how easily temporal information can be extracted from the frozen representation. We report mean absolute error (MAE) and the coefficient of deter-mination ( 𝑅 2). A lower MAE indicates that the temporal target can be reconstructed more accurately from the representation, while a higher 𝑅 2 indicates that the probe explains a larger fraction of its variability. Lower MAE and higher 𝑅 2 therefore indicate stronger temporal recoverability. 
+
+Temporal Cohesion Score. The second recoverability metric eval-uates whether transitions associated with similar temporal targets occupy nearby regions of representation space. For each temporal representation 𝑟 𝑘 , we identify its 𝐾 nearest neighbors under cosine similarity and compute the mean absolute difference between their associated temporal targets: 
+
+𝑑 nn = 1
+
+𝑁 𝐾 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑘 =1
+
+∑︁ 𝑗 ∈ N 𝐾 (𝑘 )
+
+|𝑧 𝑘 − 𝑧 𝑗 |, (20) where N𝐾 (𝑘 ) denotes the 𝐾 nearest neighbors of 𝑟 𝑘 .We compare this quantity with the mean target difference ob-tained by assigning 𝐾 randomly selected transitions to each 𝑟 𝑘 ,denoted 𝑑 rand , and report TCS = 𝑑 rand − 𝑑 nn 
+
+𝑑 rand + 𝜀 , (21) where 𝜀 prevents division by zero. In all experiments, we set 𝐾 = 5and use cosine similarity. Sensitivity to the neighborhood size and similarity measure is reported in Appendix §J. A high TCS indicates that transitions with similar inter-arrival times are substantially closer in representation space than expected under random pairing. Temporal information is therefore more strongly reflected in the geometry of the learned representations. Appendix §K provides a separate descriptive layer-wise alignment analysis of the same representation geometry across domains. 
+
+## 5.2 Response to RQ1 
+
+Table 1 reports transition-level temporal recoverability across the four evaluation domains. In every domain, Joint achieves higher TCS and probe 𝑅 2, together with lower probe MAE, than Two-Stage. Thus, joint training improves both local temporal coherence and the linear accessibility of inter-arrival information, under both dense and partial timestamp supervision. The diagnostic profile nevertheless differs by domain. On BPI2018, TCS increases only slightly, from 0 .794 to 0 .803, while the probe improvements are clearer: 𝑅 2 increases from 0 .461 to 0 .631 and MAE decreases from 3 .342 to 2 .775. This pattern may suggest that joint training makes temporal information more linearly accessi-ble without substantially changing local temporal neighborhoods. MIMIC-IV shows a similar pattern. Network traffic, by contrast, shows large improvements in all three diagnostics, including TCS from 0 .147 to 0 .622, probe 𝑅 2 from 0 .190 to 0 .394, and MAE from 0.382 to 0 .308. The concurrent gains may suggest changes in both local temporal coherence and linear accessibility. For the temporal knowledge graph, the changes are smaller across all three diag-nostics than on the other domains: unlike BPI2018 and MIMIC-IV, where the probe metrics improve more clearly than TCS, and net-work traffic, where all three diagnostics improve substantially, its gains remain modest but consistently favor Joint. 
+
+Takeaways. The controlled results provide an affirmative an-swer to RQ1 : compared with Two-Stage, Joint makes inter-arrival information more recoverable from the representations supplied to the temporal head. 
+
+## 6 Effect on Generation Quality 
+
+The previous section provided an affirmative answer to RQ1 , show-ing that Joint training makes temporal information more recover-able from the representations supplied to the temporal head. How-ever, this improvement would be of limited value if it were obtained at the expense of the model’s primary generative capability. We therefore turn to RQ2 and test whether the additional temporal supervision introduced by Joint training systematically degrades generation quality relative to Two-Stage training across the four evaluation domains. 
+
+Preprint 6ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models                                     
+
+> Dataset Method TCS ↑Probe 𝑅 2↑Probe MAE ↓
+> BPI2018 Joint 0.8030 0.631 2.775
+> Two-Stage 0.7940 0.461 3.342 MIMIC-IV Joint 0.8620 0.6580 0.5970
+> Two-Stage 0.8480 0.5880 0.6450 Network traffic Joint 0.6216 0.3943 0.3080
+> Two-Stage 0.1468 0.1902 0.3824 Temporal KG Joint 0.2027 0.4449 904.14
+> Two-Stage 0.1722 0.4296 955.69
+
+Table 1: Transition-level temporal recoverability across do-mains. Boldface identifies the better result within the con-trolled Joint–Two-Stage comparison. 
+
+## 6.1 Preservation Metrics 
+
+We evaluate generated samples against held-out data using domain-specific protocols taken from the literature. 
+
+Business-process traces. For BPI2018, we evaluate generated activity sequences using Damerau–Levenshtein similarity (DLS), following the suffix-prediction protocol commonly used in predic-tive process monitoring [25]. For each evaluated prefix, similarity between the generated and reference suffixes is computed as 1 − 𝑑 DL ( ˆx, x)
+
+max (| ˆx|, |x|) ,
+
+where ( 𝑑 DL ) denotes Damerau–Levenshtein distance. We report the mean and median over all evaluated suffix comparisons. Higher values indicate that the generated continuation more closely repro-duces the activity ordering of the corresponding reference trace. 
+
+Clinical event sequences. For MIMIC-IV, we compare the mar-ginal distribution and coverage of generated clinical event types against held-out sequences. We report Jensen–Shannon divergence and total variation distance between the generated and reference event-token distributions, with lower values indicating closer agree-ment. We also report recall over the 50 most frequent reference event types, defined as the fraction of these event types that appear at least once in the generated data. Higher recall indicates better coverage of frequent clinical events. 
+
+Network traffic. We compare marginal distributions of key packet-header fields between generated and real traffic, following prior work [3, 15]. We report Jensen–Shannon divergence for source and destination IP addresses and TCP ports. Lower divergence indicates that generated packets more faithfully reproduce the distributional characteristics of real network traffic. 
+
+Temporal knowledge graphs. We use filtered link prediction following [16]. Given a query prefix, the model ranks candidate objects while masking facts that appear elsewhere in the dataset. We report mean reciprocal rank, mean rank, and Hits@(1,3,10). Higher mean reciprocal rank and Hits scores, and lower mean rank, indicate that the model better captures the relational structure required to complete a fact. 
+
+## 6.2 Response to RQ2 
+
+Table 2 reports content-generation quality across the four domains. The controlled comparison provides a negative answer to RQ2 :Joint training does not systematically degrade generative perfor-mance relative to Two-Stage training. Its effect is nevertheless domain-dependent, but provides no evidence of a systematic degra-dation in generative performance. On BPI2018, Joint and Two-Stage obtain identical mean and median DLS. The additional temporal supervision therefore changes neither the generated activity suffixes nor their similarity to the reference traces in this setting. On MIMIC-IV, Two-Stage achieves slightly lower token JSD and total variation distance, while both regimes obtain the same recall over the 50 most frequent clinical event types. Thus, Joint introduces a small degradation in matching the marginal event-token distribution, but does not reduce coverage of frequent clinical events. Appendix §D reports the complementary held-out validation-loss diagnostics: MIMIC-IV is also the only main domain in which Joint has a slightly higher token loss than Two-Stage (1.296 versus 1.293, a difference of about 0.2%). This small teacher-forced loss difference is consistent with the limited distributional change, but does not indicate a broad degradation in generation quality: frequent-event coverage is unchanged. In contrast, Joint improves content-generation quality in both partially timestamped domains. On network traffic, Joint consis-tently lowers the JSD of all four evaluated packet-header fields, with particularly large improvements for source and destination TCP ports. On temporal knowledge graphs, Joint also improves every filtered link-prediction metric, yielding substantially higher MRR and Hits@ {1, 3, 10 }, together with a markedly lower mean rank. In these domains, temporal supervision not only preserves content generation but appears to improve the structural regularities cap-tured by the token generator. The lower held-out 𝐿 tok under Joint in both domains is consistent with these output-level improvements (see §D). 
+
+Takeaways. The results provide a negative answer to RQ2 .Although Joint does not dominate Two-Stage on every indi-vidual metric, there is no evidence that the improved temporal recoverability established in RQ1 is obtained at the cost of a systematic degradation in the model’s primary generative capability. 
+
+## 7 Related Work 
+
+The prediction problem formalized in Eq. (4) has long been stud-ied in the point-process literature [5]. Recent neural approaches have used recurrent architectures [1, 7] and transformers [23] to model continuous-time event sequences. Our focus is on the stricter generative setting, where both event identity and timing must be produced autoregressively. Prior work in this domain typically ei-ther decouples timing from content generation or does not model timing at all. For example, some methods assign inter-arrival times with separate components after content generation [3, 15], whereas others focus on event generation without modeling inter-arrival times within the same autoregressive generator [16, 27]. By con-trast, ChronoSSM focuses on how the event and temporal factors 
+
+Preprint 7Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino                                                       
+
+> Dataset Method Content-generation quality BPI2018 DLS mean ↑DLS median ↑
+> Joint 0.487 0.500
+> Two-Stage 0.487 0.500
+> MIMIC-IV Token JSD ↓Token TV ↓Recall@50 ↑
+> Joint 0.314 0.477 0.780
+> Two-Stage 0.302 0.451 0.780
+> Network traffic JSD ip.src ↓JSD ip.dst ↓JSD tcp.src ↓JSD tcp.dst ↓
+> Joint 0.0412 0.0311 0.0764 0.1120
+> Two-Stage 0.0669 0.0516 0.1248 0.2183 Temporal KG MRR ↑MR ↓Hits@1 ↑Hits@3 ↑Hits@10 ↑
+> Joint 0.1461 269.06 0.0899 0.1490 0.2527
+> Two-Stage 0.0576 2155.60 0.0325 0.0557 0.1017
+
+Table 2: Content-generation quality across domains. Boldface identifies the better result within the controlled Joint–Two-Stage comparison. 
+
+in Eq. (4) interact when they are learned within the same autore-gressive sequence model. A key distinction is that, even when prior work models event identity and timing jointly within a common model [1, 7, 23], it does not study how the temporal term 𝑝 𝜃,𝜙 (Δ𝑡 𝑘 +1 | 𝑥 𝑘 +1, X𝑘 ) should interact with the event term 𝑝 𝜃,𝛼 (𝑥 𝑘 +1 | X 𝑘 ) from a representation-learning perspective when both are learned within the same model. This is the specific question studied in this paper. 
+
+## 8 Discussion and Future Work 
+
+We introduced ChronoSSM, an autoregressive model that jointly predicts tokens and inter-event times from a shared backbone. Across four temporally structured domains, Joint training yields representations from which temporal information is more easily recoverable ( RQ1 ). At the same time, it does not systematically degrade downstream generation quality relative to Two-Stage training ( RQ2 ): generation quality is unchanged on BPI2018, mod-estly reduced on selected MIMIC-IV distributional metrics, and im-proved on network traffic and temporal knowledge graphs. These results indicate that allowing timing gradients to shape the shared backbone can improve temporal recoverability without imposing a systematic cost on generative performance. 
+
+## 8.1 Linking Temporal Recoverability and Generation Quality 
+
+The relationship between temporal recoverability and content-generation quality is domain-dependent. On BPI2018, improved temporal recoverability is accompanied by unchanged activity-sequence quality. On MIMIC-IV, it coexists with a modest degrada-tion in marginal event-token distribution metrics, but no reduction in frequent-event coverage. On network traffic and temporal knowl-edge graphs, Joint training is associated with better evaluated content-generation metrics alongside improved temporal recover-ability. These results indicate that stronger temporal organization does not necessarily impose a uniform temporal–semantic trade-off. Instead, its effect depends on the domain structure, the density of temporal supervision, and the content properties captured by the evaluation protocol. 
+
+Validation loss analysis: In addition to the analysis described above, we also carry out a direct check of the effectiveness of the temporal head in predicting inter-arrival times, given the true dif-ference in token representations (see Eq. (12)). We compute the tem-poral loss on the held-out validation data for each dataset (which has the true inter-arrival times), and report it in Appendix §D. We observe that the timing loss for most cases, is lower using the Joint method. However, this is a only a coarse measurement how well the time head has learned the underlying distribution of temporal data. A more careful check would require multiple, long generation sequences, appropriately calibrated against the training data, after which the temporal distributions would be compared for real and generated data. As we note in §8.3, a rigorous evaluation pipeline for this would be an interesting direction for future work. 
+
+## 8.2 Towards a Mechanistic Understanding 
+
+Appendix §K compares the layer-wise representations learned by the token-generation model with and without explicit temporal su-pervision. We use Centered Kernel Alignment (CKA), Centered Ker-nel Nearest Neighbor Alignment (CKNNA), and Mutual 𝑘 -Nearest Neighbor (M-KNN). Across domains, temporal supervision changes the learned representations, but the form of this change varies: in some cases it affects both global and local geometry, whereas in others it is primarily local. Changes are also generally less pro-nounced in earlier layers, which may reflect their stronger focus on the input structure. The patterns nevertheless differ across the four domains, so they do not yet provide a single mechanistic account of how temporal supervision reshapes representation learning in SSMs. 
+
+## 8.3 Future Work 
+
+Several questions remain about the conditions under which tempo-ral supervision is beneficial. Building on the sensitivity analyses in Appendix §E, future work should test more systematically how the 
+
+Preprint 8ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+gains from Joint training depend on temporal-supervision strength across all domains, temporal-head capacity, and the structure of the target domain. This would clarify the conditions under which temporal gradients beneficially reshape the backbone. The practical value of improved temporal recoverability also war-rants direct evaluation. Future work should test whether it trans-lates into better performance on downstream tasks that explicitly depend on temporal structure, such as anomaly detection, forecast-ing, or temporal retrieval. This would help establish whether the representation-level gains observed here are not only diagnostic but also practically useful across temporally structured domains. Finally, future work should assess the distributional fidelity of timestamps produced during free autoregressive generation, testing whether the representation-level gains translate into faithful tempo-ral synthesis beyond the content-generation metrics considered in this study. For RQ2 , we prioritized domain-specific generation pro-tocols established in the respective application literatures, allowing a controlled comparison of the two training regimes using metrics with existing task-specific meaning. These protocols primarily as-sess event content, however. Developing standardized evaluation procedures for jointly generated event content and timestamps is therefore an important next step, particularly because existing generative approaches often decouple temporal prediction from content generation (§7). 
+
+## References 
+
+[1] Alex Boyd, Robert Bamler, Stephan Mandt, and Padhraic Smyth. 2020. User-dependent neural sequence models for continuous-time event data. Advances in Neural Information Processing Systems 33 (2020), 21488–21499. [2] Francesco Bronzino, Paul Schmitt, Sara Ayoubi, Guilherme Martins, Renata Teixeira, and Nick Feamster. 2019. Inferring Streaming Video Quality from Encrypted Traffic: Practical Models and Deployment Experience. Proc. ACM Meas. Anal. Comput. Syst. 3, 3, Article 56 (Dec. 2019), 25 pages. doi:10.1145/3366704 [3] Andrew Chu, Xi Jiang, Shinan Liu, Arjun Bhagoji, Francesco Bronzino, Paul Schmitt, and Nick Feamster. 2026. NetSSM: Multi-Flow and State-Aware Network Trace Generation using State-Space Models. Proc. ACM Netw. 4, CoNEXT1, Article 6 (March 2026), 24 pages. doi:10.1145/3786289 [4] Joscha Cüppers, Adrien Schoen, Gregory Blanc, and Pierre-Francois Gimenez. 2024. FlowChronicle: Synthetic Network Flow Generation through Pattern Set Mining. Proc. ACM Netw. 2, CoNEXT4, Article 26 (Nov. 2024), 20 pages. doi:10.1145/3696407 [5] Daryl J Daley and David Vere-Jones. 2008. An introduction to the theory of point processes: volume II: general theory and structure . Springer. [6] Tri Dao and Albert Gu. 2024. Transformers are SSMs: generalized models and efficient algorithms through structured state space duality. In Proceedings of the 41st International Conference on Machine Learning (Vienna, Austria) (ICML’24) .JMLR.org, Article 399, 31 pages. [7] Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. 2016. Recurrent marked temporal point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining . 1555–1564. [8] Alexander Fichtl, Jeremias Bohn, Josefin Kelber, Edoardo Mosca, and Georg Groh. 2025. The End of Transformers? On Challenging Attention and the Rise of Sub-Quadratic Architectures. ArXiv abs/2510.05364 (2025). https: //api.semanticscholar.org/CorpusID:281886741 [9] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. 2016. Deep Learning . MIT Press. [10] Arthur Gretton, Kenji Fukumizu, Choon Teo, Le Song, Bernhard Schölkopf, and Alex Smola. 2007. A Kernel Statistical Test of Independence. In Advances in Neural Information Processing Systems , J. Platt, D. Koller, Y. Singer, and S. Roweis (Eds.), Vol. 20. Curran Associates, Inc. https://proceedings.neurips.cc/paper_ files/paper/2007/file/d5cfead94f5350c12c322b5b664544c1-Paper.pdf [11] Albert Gu, Karan Goel, and Christopher Ré. 2022. Efficiently Modeling Long Sequences with Structured State Spaces. arXiv:2111.00396 [cs.LG] https://arxiv. org/abs/2111.00396 [12] Curtis Hawthorne, Andriy Stasyuk, Adam Roberts, Ian Simon, Cheng-Zhi Anna Huang, Sander Dieleman, Erich Elsen, Jesse Engel, and Douglas Eck. 2019. Enabling Factorized Piano Music Modeling and Generation with the MAE-STRO Dataset. In International Conference on Learning Representations . https: //openreview.net/forum?id=r1lYRjC9F7 [13] Cheng-Zhi Anna Huang, Ashish Vaswani, Jakob Uszkoreit, Noam Shazeer, Ian Simon, Curtis Hawthorne, Andrew M. Dai, Matthew D. Hoffman, Monica Din-culescu, and Douglas Eck. 2019. Music Transformer: Generating Music with Long-Term Structure. In International Conference on Learning Representations .https://openreview.net/forum?id=rJe4ShAcF7 [14] Minyoung Huh, Brian Cheung, Tongzhou Wang, and Phillip Isola. 2024. Po-sition: The Platonic Representation Hypothesis. In Proceedings of the 41st In-ternational Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 235) , Ruslan Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp (Eds.). PMLR, 20617–20642. https://proceedings.mlr.press/v235/huh24a.html [15] Xi Jiang, Shinan Liu, Aaron Gember-Jacobson, Arjun Nitin Bhagoji, Paul Schmitt, Francesco Bronzino, and Nick Feamster. 2024. Netdiffusion: Network data aug-mentation through protocol-constrained traffic generation. Proceedings of the ACM on Measurement and Analysis of Computing Systems 8, 1 (2024), 1–32. [16] Woojeong Jin, Meng Qu, Xisen Jin, and Xiang Ren. 2020. Recurrent Event Network: Autoregressive Structure Inferenceover Temporal Knowledge Graphs. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , Bonnie Webber, Trevor Cohn, Yulan He, and Yang Liu (Eds.). Association for Computational Linguistics, Online, 6669–6683. doi:10.18653/v1/ 2020.emnlp-main.541 [17] Alistair E. W. Johnson, Lucas Bulgarelli, Tom J. Pollard, Steven Horng, Leo An-thony Celi, and Roger G. Mark. 2023. MIMIC-IV, a Freely Accessible Electronic Health Record Dataset. Scientific Data 10, 1 (2023), 1. doi:10.1038/s41597-022-01899-x [18] Qiuqiang Kong, Bochen Li, Xuchen Song, Qishuo Meng, Mark Barlow, and Simon Dixon. 2022. GiantMIDI-Piano: A Large-Scale MIDI Dataset for Classical Piano Music. Transactions of the International Society for Music Information Retrieval 5, 1 (2022), 87–102. doi:10.5334/tismir.80 [19] Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey Hinton. 2019. Similarity of Neural Network Representations Revisited. In Proceedings of the 36th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 97) , Kamalika Chaudhuri and Ruslan Salakhutdinov (Eds.). PMLR, 3519–3529. https://proceedings.mlr.press/v97/kornblith19a.html [20] Maxime Lanvin, Pierre-François Gimenez, Yufei Han, Frédéric Majorczyk, Lu-dovic Mé, and Eric Totel. 2023. Towards Understanding Alerts raised by Un-supervised Network Intrusion Detection Systems. In Proceedings of the 26th International Symposium on Research in Attacks, Intrusions and Defenses (Hong Kong, China) (RAID ’23) . Association for Computing Machinery, New York, NY, USA, 135–150. doi:10.1145/3607199.3607247 [21] Ilya Loshchilov and Frank Hutter. 2019. Decoupled Weight Decay Regularization. arXiv:1711.05101 [cs.LG] https://arxiv.org/abs/1711.05101 [22] Felix Mannhardt, Massimiliano de Leoni, Hajo A. Reijers, and Wil M. P. van der Aalst. 2018. The BPI Challenge 2018. In Proceedings of the Business Process Intelligence Challenge 2018 .[23] Aristeidis Panos. 2024. Decomposable transformer point processes. Advances in Neural Information Processing Systems 37 (2024), 88932–88955. [24] John Paparrizos, Paul Boniol, Qinghua Liu, and Themis Palpanas. 2025. Advances in Time-Series Anomaly Detection: Algorithms, Benchmarks, and Evaluation Measures. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (Toronto ON, Canada) (KDD ’25) . Association for Computing Machinery, New York, NY, USA, 6151–6161. doi:10.1145/3711896. 3736565 [25] Niek Tax, Ilya Verenich, Marcello La Rosa, and Marlon Dumas. 2017. Predictive Business Process Monitoring with LSTM Neural Networks. In Advanced Informa-tion Systems Engineering (Lecture Notes in Computer Science, Vol. 10253) . Springer, 477–492. doi:10.1007/978-3-319-59536-8_30 [26] Boudewijn van Dongen and F. (Florian) Borchert. 2018. BPI Challenge 2018. doi:10.4121/UUID:3301445F-95E8-4FF0-98A4-901F1F204972 [27] Yucheng Yin, Zinan Lin, Minhao Jin, Giulia Fanti, and Vyas Sekar. 2022. Practical gan-based synthetic ip header trace generation using netshare. In Proceedings of the ACM SIGCOMM 2022 Conference . 458–472. [28] Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, and Hongyuan Zha. 2020. Transformer Hawkes Process. In Proceedings of the 37th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 119) . PMLR, 11692–11702. https://proceedings.mlr.press/v119/zuo20a.html 
+
+Preprint 9Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino 
+
+## Appendix Overview 
+
+In this appendix, we provide additional experimental details, robust-ness analyses, and supporting results that complement the main paper. In particular, we (i) compare the experimental domains and document the model configurations, (ii) evaluate the robustness of the results across datasets, backbones, temporal-loss weights, and temporal representations, (iii) report held-out validation-loss diagnostics, (iv) provide comparisons with domain-specific base-lines, and (v) further analyze the recoverability metrics and the layer-wise geometry of the learned representations. The appendix is organized as follows: (1) Comparison of the experimental domains (§A). (2) Additional experiments on symbolic music (§B). (3) Application to an alternative autoregressive backbone (§C). (4) Held-out validation-loss diagnostics for the main experi-ments (§D). (5) Sensitivity to the auxiliary temporal-loss weight (§E). (6) Comparison of alternative temporal representations (§F). (7) Computational overhead (§G). (8) Domain-specific model configurations (§H). (9) Domain-specific baseline setup and results (§I). (10) Sensitivity of TCS to its metric parameters (§J). (11) Layer-wise representation analysis (§K). 
+
+## A Comparison of Experimental Domains 
+
+This appendix expands on the four-domain evaluation introduced in §4.2 and §4.3, summarizing why the evaluation spans genuinely dif-ferent settings. The main paper compares two densely timestamped domains (BPI2018 and MIMIC-IV) and two partially timestamped domains (network traffic and temporal knowledge graphs), while the auxiliary GiantMIDI experiment adds a dense musical setting. These datasets differ not only in application domain, but also in the granularity of the atomic event, the meaning and size of the token vocabulary, the scale of the input sequences, the positions at which timestamps are available, and the characteristic shape of the temporal distribution. In Table 3, we see that the datasets differ strongly even within each timestamping regime. Among the dense domains, BPI2018 is comparatively short, template-like, and dominated by long waiting periods between process stages, whereas MIMIC-IV is much longer, more heterogeneous, and strongly zero-inflated because many clin-ical events share the same chart time. GiantMIDI is also dense, but it operates at a much finer temporal scale, with sub-second note timing and many simultaneous events due to chords. Among the partial domains, temporal knowledge graphs use a large symbolic vocabulary and relatively coarse fact-level timing, whereas network traffic uses a much smaller byte-level vocabulary and extremely dense packet timing. These differences matter directly for the interpretation of the main results. Because the same qualitative effect of joint token– time training appears across these settings, it is less likely to be an artifact of a single temporal scale, single supervision pattern, or single type of Two-Stage structure. 
+
+## B Music Event Experiments 
+
+Dataset and event representation. We use GiantMIDI [18], a large-scale corpus of classical piano MIDI performances. Each piece is converted into an ordered sequence of note events as in MAESTRO-style symbolic music modeling [12]: the token 𝑥 𝑘 is note pitch and the timestamp 𝑡 𝑘 is note onset. We retain only pitch events and onset times and discard note duration, velocity, composer and performer identifiers, YouTube metadata, and transcription meta-data. As noted in §4.2, this auxiliary experiment also differs from the main dense-domain setup in its temporal supervision: instead of the log-gap target, it regresses directly on scaled raw inter-arrival times. More specifically, we define the scaled target 
+
+𝑢 𝑘 = Δ𝑡 𝑘 
+
+𝑠 music 
+
+, b𝑢 𝑘 = softplus  𝑔 𝜙 (Δℎ𝑘 ) , (22) and instantiate the temporal factor as 
+
+𝑓 time  
+
+> 𝜙
+
+(Δ𝑡 𝑘 ; Δℎ𝑘 ) = 1
+
+𝑠 music 
+
+√2𝜋𝜎 2 exp 
+
+
+
+− (𝑢 𝑘 − b𝑢 𝑘 )2
+
+2𝜎 2
+
+
+
+, (23) with fixed variance 𝜎 2. Thus, its negative log-likelihood is equiva-lent, up to parameter-independent terms, to squared error on scaled raw inter-arrival times. 
+
+Generation-quality evaluation. We evaluate generated music against held-out MIDI sequences with a window-based overlapping-area (OA) protocol inspired by the evaluation used by [13]. Each sequence is segmented into fixed 2-second windows, and for ev-ery window we compute four simple symbolic music statistics: note density, pitch range, mean pitch, and pitch variance. For each feature, we compare the empirical distribution over generated win-dows with the corresponding held-out distribution through their overlapping area, where higher values indicate closer agreement. We report both the feature-wise OA scores and their mean. 
+
+Response. Table 4 provides the same controlled comparison for the auxiliary musical setting. From the perspective of RQ1 , temporal recoverability remains weak for both ChronoSSM variants: TCS is identical ( −0.044 for both), but the probe scores still slightly favor Joint ( 𝑅 2 = 0.160 vs. 0 .142, MAE 248 .006 vs. 261 .097). Thus, even in this dense symbolic-music setting, joint training yields a modest recoverability advantage under the probe-based diagnostics. From the perspective of RQ2 , the controlled comparison shows no degradation of free-generation quality under Joint in this auxil-iary setting. At the aggregate level, mean OA increases from 0 .016 under Two-Stage training to 0 .172 under Joint training. The same pattern holds for all four reported symbolic-music features. In par-ticular, Joint improves mean-pitch OA from 0 .000 to 0 .345, note-density OA from 0 .063 to 0 .230, pitch-range OA from 0 .000 to 0 .050, and pitch-variance OA from 0 .000 to 0 .063. This mirrors the pattern observed for network traffic and temporal knowledge graphs in §6, where Joint training is also associated with better evaluated content-generation metrics relative to Two-Stage. 
+
+## C Alternative Autoregressive Backbone 
+
+As described in §2.2, ChronoSSM is not tied to a State Space Model: its shared backbone can be any causal autoregressive architecture that produces token-wise hidden states. This appendix therefore 
+
+Preprint 10 ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models                                                              
+
+> Partial Timestamping Dense Timestamping Property Temporal KG Network Traffic BPI2018 MIMIC-IV GiantMIDI (Aux.) Atomic event Knowledge-graph fact Packet Business activity Charted clinical event Piano note Token semantics Entity / relation Byte value Activity label itemid Note pitch Vocabulary 15,626 symbolic tokens 261 byte-level tokens 41 activities 500 retained itemid s84 note tokens Typical sequence length Hundreds to thousands Tens of thousands Tens Thousands Thousands Timestamp availability Fact boundaries only Packet boundaries only Every event Every event Every note Temporal supervision Sparse Sparse Dense Dense Dense Typical inter-arrival scale Seconds Microseconds Minutes to days minutes, with many zeros Milliseconds–seconds Temporal distribution Moderate variability Heavy-tailed Strongly heavy-tailed Zero-inflated and bursty Dense with many zero Simultaneity No No common extremely common very common Outlier handling No clipping 99th-percentile clipping No clipping No clipping No clipping Main temporal challenge Sparse supervision Extreme density Very long delays Bursty zero-inflated tim-ing Simultaneous events
+
+Table 3: High-level comparison of the main evaluation domains and the auxiliary GiantMIDI benchmark.    
+
+> Dataset Method OA mean
+
+↑ Mean pitch OA ↑ Note density OA ↑ Pitch range OA ↑ Pitch var. OA ↑ TCS ↑ Probe 𝑅 2 ↑ Probe MAE ↓                 
+
+> GiantMIDI Joint 0.172 0.345 0.230 0.050 0.063 -0.044 0.160 248.006
+> Two-Stage 0.016 0.000 0.063 0.000 0.000 -0.044 0.142 261.097
+
+Table 4: Auxiliary GiantMIDI results. OA denotes the mean and feature-wise overlapping-area scores computed from 2-second window statistics. Boldface identifies the better result within the controlled Joint–Two-Stage comparison.     
+
+> Dataset Metric Joint Two-Stage Generation BPI2018 Mean DLS
+
+↑ 0.486951 0.487380  
+
+> Med. DLS
+
+↑ 0.500 0.500   
+
+> MIMIC-IV JSD
+
+↓ 0.296 0.286  
+
+> R@50
+
+↑ 0.820 0.780 Network JSD(srcIP) ↓ 0.5882 0.3902  
+
+> JSD(dstIP)
+
+↓ 0.6931 0.2342  
+
+> JSD(sPort)
+
+↓ 0.6931 0.2408  
+
+> JSD(dPort)
+
+↓ 0.6931 0.4259  
+
+> TKG MRR
+
+↑ 0.1310 0.1329  
+
+> MR
+
+↓ 510.87 534.30 Hits@1 ↑ 0.0711 0.0723  
+
+> Hits@3
+
+↑ 0.1385 0.1394  
+
+> Hits@10
+
+↑ 0.2439 0.2492  
+
+> Recoverability BPI2018 TCS
+
+↑ -0.163 0.282  
+
+> Probe
+
+𝑅 2 ↑ 0.661 0.603 Probe MAE ↓ 2.630 2.806 MIMIC-IV TCS ↑ 0.876 0.857 Probe 𝑅 2 ↑ 0.663 0.607 Probe MAE ↓ 0.595 0.627 Network TCS ↑ 0.6465 0.6951  
+
+> Probe
+
+𝑅 2 ↑ 0.4297 0.3665 Probe MAE ↓ 0.0967 0.1188 TKG TCS ↑ 0.5242 0.5156 Probe 𝑅 2 ↑ 0.6057 0.6129  
+
+> Probe MAE
+
+↓ 839.75 833.01 
+
+Table 5: GPT-2 backbone instantiation under the controlled Joint–Two-Stage comparison. Boldface identifies the better result for each metric. 
+
+illustrates the framework with a GPT-2 backbone. We repeat the con-trolled Joint–Two-Stage comparison while keeping the datasets and evaluation protocols unchanged. Table 5 summarizes the re-sults, so we keep the discussion brief here. 
+
+Response. The GPT-2 results are more heterogeneous than the Mamba2 results. On MIMIC-IV and network traffic, the recoverabil-ity picture is more favorable to Joint than the generation picture. On MIMIC-IV, Joint clearly improves the timing-recovery met-rics, but the generation comparison is mixed: Two-Stage achieves slightly lower JSD, whereas Joint improves recall over the 50 most frequent event types. On network traffic, the tension is sharper: Joint improves the linear-probe recoverability metrics, but Two-Stage is clearly better on all packet-header distribution-matching metrics, and even TCS favors Two-Stage. On BPI2018 and the temporal knowledge graph, GPT-2 does not reproduce the Mamba2 recoverability pattern. On BPI2018, generation quality is effectively unchanged under DLS. TCS favors Two-Stage, whereas both probe diagnostics favor Joint. On the temporal knowledge graph, the two regimes are effectively tied overall, with Joint improving TCS and mean rank but Two-Stage remaining slightly better on the probe metrics and the other link-prediction scores. Overall, the GPT-2 appendix does not support a uniform story. In some domains, Joint yields more recoverable temporal information only with mixed or weaker generation results; in others, it does not even provide a clear recoverability advantage. The favorable qualitative picture in the main paper is therefore not reproduced consistently with a GPT-2 backbone. One plausible explanation is architectural: Mamba2’s selective recurrent state dynamics may provide a more suitable inductive bias for representing temporal transitions in long event sequences, whereas GPT-2 distributes sequence history through attention-based representations. This interpretation remains tentative. The present comparison does not isolate architectural effects from differences in model capacity, op-timization, or backbone-specific hyperparameter choices, so it does not establish that one architecture is intrinsically simpler or better suited to temporal supervision than the other. 
+
+Preprint 11 Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino                          
+
+> Dataset Method 𝐿 tok ↓𝐿 time ↓
+> BPI2018 Joint 1.066 7.813
+> Two-Stage 1.107 19.585 MIMIC-IV Joint 1.296 0.348
+> Two-Stage 1.293 0.446 Network traffic Joint 1.087 0.001370
+> Two-Stage 1.145 0.001692 Temporal KG Joint 4.718 0.239 Two-Stage 5.868 0.078
+
+Table 6: Held-out validation losses for the four main ex-periments. Boldface identifies the lower result within each dataset and loss. 
+
+## D Held-Out Validation-Loss Diagnostics 
+
+Table 6 reports validation losses on the predefined validation par-titions used in the four main experiments. We use the dataset-provided training and validation splits; validation samples are ex-cluded from gradient-based training. Both losses are evaluated under observed validation histories and therefore characterize con-ditional prediction rather than free-running generation. Conse-quently, the reported losses neither compare generated sequences or timestamps with their real-data distributions nor capture errors that accumulate when the model conditions on its own generated history. They provide complementary optimization diagnostics, but do not by themselves establish high-quality free-running content generation or distributionally faithful timestamp generation. For token prediction, Joint obtains lower validation 𝐿 tok on BPI2018, network traffic, and temporal knowledge graphs, whereas Two-Stage is marginally lower on MIMIC-IV. This pattern provides complementary context for the content-generation results in §6, but does not replace the free-generation evaluation. For temporal point prediction, Joint obtains lower 𝐿 time on BPI2018, MIMIC-IV, and network traffic. On the temporal knowl-edge graph, however, Two-Stage achieves lower direct temporal-head loss. This result should be interpreted narrowly: 𝐿 time mea-sures the conditional point-prediction error of the particular trained temporal head, rather than a general measure of temporal genera-tion quality. 
+
+## E Effect of Auxiliary-Loss Weight 
+
+This section studies the effect of the auxiliary temporal-loss weight 
+
+𝜆 𝜏 on the two partially timestamped domains: network traffic and temporal knowledge graphs. The goal is to assess how increasing the strength of temporal supervision changes temporal recoverabil-ity and downstream generation quality. The two domains exhibit different sensitivity profiles. On the tem-poral knowledge graph, increasing 𝜆 𝜏 produces a fairly consistent improvement in both recoverability and downstream link predic-tion. Table 7 shows both trends. The strongest setting, 𝜆 𝜏 = 1.00, yields the best TCS, 𝑅 2, MAE, mean rank, and Hits@10, while 
+
+𝜆 𝜏 = 0.75 slightly improves MRR and H@1. On network traffic, the dependence is less monotone, and no sin-gle value of 𝜆 𝜏 optimizes all recoverability diagnostics. The highest TCS is obtained at 𝜆 𝜏 = 500, whereas the highest probe ( 𝑅 2) occurs at 𝜆 𝜏 = 10 and the lowest probe MAE at 𝜆 𝜏 = 100. Table 8 further                                                          
+
+> 𝜆 𝜏 TCS ↑𝑅 2↑MAE ↓MRR ↑MR ↓H@1 ↑H@10 ↑
+> 0.05 0.188 0.265 965.9 0.095 684.6 0.059 0.160 0.10 0.186 0.299 942.0 0.095 498.5 0.054 0.169 0.20 0.195 0.298 922.8 0.119 360.1 0.068 0.212 0.35 0.190 0.297 934.8 0.126 316.9 0.071 0.230 0.50 0.214 0.309 921.8 0.135 274.2 0.079 0.240 0.75 0.203 0.303 928.1 0.149 273.5 0.093 0.254 1.00 0.224 0.312 913.1 0.148 265.6 0.090 0.256
+
+Table 7: Effect of the auxiliary temporal-loss weight 𝜆 𝜏 on temporal recoverability and link prediction for the temporal knowledge graph. Hits@3 is omited for space reasons.                                            
+
+> 𝜆 𝜏 TCS ↑𝑅 2↑MAE ↓JSD(src) ↓JSD(dst) ↓JSD(sport) ↓JSD(dport) ↓
+> 10 0.323 0.385 0.331 0.300 0.182 0.231 0.419 50 0.289 0.294 0.346 0.278 0.168 0.218 0.374 100 0.606 0.377 0.316 0.187 0.112 0.203 0.351 200 0.377 0.288 0.363 0.213 0.127 0.202 0.363 500 0.614 0.330 0.344 0.341 0.216 0.240 0.400
+
+Table 8: Effect of the auxiliary temporal-loss weight 𝜆 𝜏 on recoverability and packet-header distribution matching for network traffic. JSD(src), JSD(dst), JSD(sport), and JSD(dport) denote the source/destination IP and source/destination TCP-port marginals, respectively. 
+
+shows that 𝜆 𝜏 = 100 yields the best packet-header distribution-matching metrics. These results therefore do not reveal a simple trade-off between temporal recoverability and generation quality; rather, the different recoverability diagnostics respond differently to the strength of temporal supervision, while an intermediate weight provides the best agreement with the evaluated packet-header marginals. 
+
+Rule of Thumb for Selecting the Auxiliary-Loss Weight. These results indicate that there is no universally optimal value of 𝜆 𝜏 . For the main experiments, we chose the auxiliary-loss weight so that the weighted temporal term, 𝜆 𝜏 𝐿 time , was approximately of the same order of magnitude as the token-prediction loss 𝐿 tok during training. This scale-matching criterion prevents either term from numerically dominating the joint objective in Eq. (14). 
+
+## F Alternative Temporal Representations 
+
+The default temporal representation 𝑟 𝑘 introduced in §3.1 (Eq. (8)) is defined as the difference between the hidden states associated with the two endpoints of a temporally supervised transition. We compare it with the alternative representation 𝑟 ′ 
+
+> 𝑘
+
+, formed by con-catenating the same endpoint states: 
+
+𝑟 𝑘 = Δℎ𝑘 = ℎ𝑘 − ℎ𝑘 −1, 𝑟 ′ 
+
+> 𝑘
+
+= [ℎ𝑘 −1; ℎ𝑘 ]. (24) The representation 𝑟 𝑘 has dimension 𝑑 , whereas 𝑟 ′ 
+
+> 𝑘
+
+has dimension 2𝑑 and therefore changes the input projection of the temporal head. We evaluate both choices on one densely timestamped domain (BPI2018) and one partially timestamped domain (network traffic), retaining the same backbone, data splits, temporal-head family, and optimization schedule within each representation. On network traffic, using 𝑟 ′ 
+
+> 𝑘
+
+empirically changes the magnitude and optimization behavior of the temporal objective. Stable training therefore requires 𝜆 𝜏 = 50, rather than the value 𝜆 𝜏 = 300 used with 
+
+Preprint 12 ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+𝑟 𝑘 . Consequently, the network experiment should be interpreted as a comparison between two practical temporal-input configurations rather than as a strictly representation-only ablation. The results obtained with 𝑟 ′ 
+
+> 𝑘
+
+use transition-level recoverability diagnostics. Table 9 shows that the configuration based on 𝑟 ′ 
+
+> 𝑘
+
+does not repro-duce the empirical pattern obtained with the default representation 
+
+𝑟 𝑘 .From the perspective of RQ1 (§5), BPI2018 remains effectively a tie. With 𝑟 ′ 
+
+> 𝑘
+
+, Two-Stage is numerically better on all three recover-ability diagnostics, but the differences are small. Using 𝑟 ′ 
+
+> 𝑘
+
+therefore removes, rather than meaningfully reverses, the clearer Joint ad-vantage obtained with 𝑟 𝑘 . Generation quality is unchanged, with identical mean and median DLS under both regimes. The network-traffic results show a clearer departure from the default configuration. With 𝑟 ′ 
+
+> 𝑘
+
+, Joint still outperforms Two-Stage on the recoverability diagnostics, but the separation is substantially smaller, especially for TCS and probe 𝑅 2. The representation 𝑟 ′
+
+> 𝑘
+
+therefore fails to reproduce the strong recoverability advantage observed with 𝑟 𝑘 .From the perspective of RQ2 (§6), both variants using 𝑟 ′ 
+
+> 𝑘
+
+also match the packet-header distributions poorly. Source- and destination-IP JSD reach 0 .6931 under both regimes, while the TCP-port diver-gences are substantially higher than with 𝑟 𝑘 . Because this degra-dation occurs for both Joint and Two-Stage, it does not indicate a Joint-specific trade-off, but rather that the tested configuration based on 𝑟 ′ 
+
+> 𝑘
+
+is poorly suited to network traffic. Overall, the main empirical pattern is sensitive to the representa-tion supplied to the temporal head. On BPI2018, the representation 
+
+𝑟 ′ 
+
+> 𝑘
+
+does not reproduce the clearer recoverability advantage obtained with 𝑟 𝑘 , while generation quality remains near-equivalent. It also does not reproduce the stronger recoverability or generation quality obtained with 𝑟 𝑘 on network traffic. Because the network run with 
+
+𝑟 ′ 
+
+> 𝑘
+
+uses a different temporal-loss weight, the experiment supports the practical choice of 𝑟 𝑘 without isolating the representation as the sole causal factor. 
+
+## G Computational Overhead 
+
+We report the computational cost of the Joint and Two-Stage training procedures defined in §3.3 (Algorithms 1 and 2). All ex-periments were performed on NVIDIA RTX PRO 6000 Blackwell Max-Q GPUs (96 GB VRAM). The network traffic experiments used two GPUs with a batch size of 32 per GPU (64 total), while the remaining datasets were trained on a single GPU. Our experiments consider two training strategies. In the pro-posed Joint training approach, for a single training run of 40 epochs. In Two-Stage training first trains the language model for 40 epochs and then performs an additional 40 epochs of training using only the auxiliary objective, resulting in a total of 80 training epochs. Table 10 summarizes the training time. For two-stage training, the reported time is separated into the language-model (LM) stage and the auxiliary (Aux) stage. The proposed method introduces only a lightweight auxiliary prediction head on top of the language-model backbone. Conse-quently, the backbone architecture, hidden-state dimension, and sequence length remain unchanged, and the additional computa-tion arises only from evaluating the auxiliary loss during training. Although each epoch of joint training is slightly more expensive than language-model training alone, it eliminates the need for a separate auxiliary optimization stage. As shown in Table 10, this results in comparable or lower end-to-end training time across the evaluated datasets while maintaining a modest memory footprint. 
+
+## H Model Configurations 
+
+Table 11 records the concrete Mamba2 configurations used in our experiments. Following the training schedules defined in §3.3 (Al-gorithms 1 and 2), for optimization, all Joint models are trained for 40 epochs. All Two-Stage models use 40 epochs of token-only training followed by 40 epochs of temporal-head training with the backbone frozen. For the partially timestamped domains §4.3, the temporal head additionally uses four temporal lags. 
+
+Training Hyperparameters and Setup. All models are optimized using AdamW [21] with weight decay 0 .1. We use a base peak learning rate of 𝜂 = 2 × 10 −4 (scaled to 4 × 10 −4 for multi-GPU DDP runs on Network traffic), scheduled with a 1-epoch linear warmup followed by cosine annealing decay down to a floor ratio of 0 .1. Next-token modeling uses Cross-Entropy loss with label smoothing (𝜖 smooth = 0.1), while temporal regression uses Mean Squared Error over log-transformed targets log (1 + Δ𝑡 /𝑠 ). Models are trained with a batch size of 64 for BPI2018, MIMIC-IV, Network traffic (32 per GPU), and GiantMIDI (sequence lengths of 4096 tokens with 50% window stride, and 256/128 for BPI2018), and a batch size of 32 for GDELT (sequence length 5000, stride 1024). 
+
+## I Domain-Specific Baselines 
+
+This appendix provides the full baseline setup, results, and inter-pretation summarized in §4.5, kept separate from the controlled Joint –Two-Stage comparison in the main text. Here, a baseline 
+
+denotes a previously proposed domain-specific model that serves as an external reference point for the task. Studying such baselines is useful because it helps contextualize the absolute scale of the reported metrics, shows how our models compare with domain-adapted alternatives from prior work, and clarifies which observa-tions appear specific to ChronoSSM versus common across different modeling choices. In all cases, the baselines are retrained on the same train/validation/test splits as ChronoSSM and evaluated with the same domain-specific metrics. However, they remain descrip-tive reference points only. Because they differ from ChronoSSM in architecture, objective, temporal representation, and generation procedure, they do not isolate the effect of the training regime and therefore cannot be used to answer RQ1 (§5) or RQ2 (§6). The evidence for those two questions comes only from the controlled Joint–Two-Stage comparison. 
+
+## I.1 Baseline Presentation 
+
+Table 12 summarizes the baseline family used for each domain, including the event-generation procedure and the temporal mecha-nism. 
+
+BPI2018. For business-process traces, we use an LSTM baseline in-spired by the predictive-process-monitoring model of Tax et al. [25], which jointly predicts the next activity and its time gap from a recur-rent state. In our experiments, we use a modernized implementation 
+
+Preprint 13 Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino                                                                             
+
+> Dataset Method Temporal recoverability BPI2018 generation Network-traffic generation TCS ↑Probe 𝑅 2↑Probe MAE ↓DLS mean ↑DLS median ↑JSD ip.src ↓JSD ip.dst ↓JSD tcp.src ↓JSD tcp.dst ↓
+> BPI2018 Joint 0.7924 ( 0.8030 )0.8753 ( 0.631 )4,919,732 ( 2.775 )0.487 (0.487 )0.500 (0.500 )––––Two-Stage 0.8029 (0.7940 )0.8789 (0.461 )4,861,086 (3.342 )0.487 (0.487 )0.500 (0.500 )––––Network traffic Joint 0.2987 (0.6216 )0.0313 (0.3943 )0.00610 (0.3080 )––0.6931 (0.0412 )0.6931 (0.0311 )0.3477 ( 0.0764 )0.4344 ( 0.1120 )Two-Stage 0.2538 ( 0.1468 )0.0116 ( 0.1902 )0.00654 ( 0.3824 )––0.6931 (0.0669 )0.6931 (0.0516 )0.3431 (0.1248 )0.3926 (0.2183 )
+
+Table 9: Results with concatenation 𝑟 ′ 
+
+> 𝑘
+
+= [ℎ𝑘 −1; ℎ𝑘 ] as the temporal representation. Parenthesized italic values report the results from the main paper for reference. Boldface identifies the better concatenation result within each Joint–Two-Stage comparison; “–” marks metrics not applicable to that dataset.                
+
+> Dataset Joint (40 ep.) Two-Stage (80 ep.) Peak VRAM Network traffic 58.0 h 68.7 h 51 GB BPI2018 17 min 15 min 3 GB MIMIC-IV 8.3 h 9.3 h 29 GB GDELT 53.3 min 66.7 min 60 GB
+
+Table 10: Total training time and peak GPU memory usage. Joint training optimizes both objectives simultaneously for 40 epochs, whereas Two-Stage training consists of 40 epochs of language-model training followed by 40 epochs of auxil-iary training.                                     
+
+> Dataset 𝑑 model Layers Aux head Hidden dim 𝑠 𝜆 𝜏
+> BPI2018 128 4MLP 256 1.0 0.1 MIMIC-IV 256 8MLP 768 1.0 0.1 Network traffic 768 24 GRU 768 0.001 300 GDELT 256 8MLP 768 0.001 1.0 GiantMIDI 192 6MLP 384 1.0 0.1
+
+Table 11: Domain-specific Mamba2 configurations. The col-umn 𝑠 denotes the time scale used in the transformed tempo-ral target, and 𝜆 𝜏 denotes the temporal-loss weight in Eq. (14). 
+
+rather than the original legacy training script. The model is trained for 50 epochs with batch size 256. 
+
+MIMIC-IV. For MIMIC-IV, we use the Transformer Hawkes Process (THP) [28], a sequence model designed for event streams with explicit temporal dynamics. We train for 20 epochs with batch size 64, model dimension 256, 4 attention heads, and 4 transformer layers. Relative times are scaled in hours during training. 
+
+Network traffic. For network traffic, we use NetSSM [3] as the content generator and then assign timing with a separately fit-ted Gaussian mixture model, reflecting a decoupled content/time pipeline. NetSSM is trained on the tokenized packet-sequence rep-resentation of the dataset for 10 epochs with batch size 8. Packet timestamps are then assigned using a 3-component GMM fit on training-split inter-arrival times. 
+
+GDELT. For temporal knowledge graphs, we use RE-Net [16], again combined with a separate Gaussian mixture model for fact-level timing, similar to what we did with NetSSM. We follow the standard RE-Net training schedule, with a pretraining phase followed by full training; both phases use hidden size 200, dropout 0.5, learning rate 10 −3, batch size 1024, and 20 epochs. 
+
+GiantMIDI. For the auxiliary GiantMIDI experiment, we use Music Transformer [13], a strong symbolic-music baseline in which timing is represented directly through discrete time_shift tokens. It is trained on PerformanceRNN-style event tokens obtained from the MAESTRO-style export of GiantMIDI [12, 18]. We use discrete note and time_shift events, fix note duration to 0.10 seconds and velocity to 64 during export for 100 epochs with batch size 2. 
+
+## I.2 Baseline Recoverability Protocol 
+
+The recoverability analysis requires a small adaptation for the ex-ternal baselines, because they do not all expose the same temporal representation as ChronoSSM. The controlled Joint–Two-Stage comparison always probes the representation supplied to the tem-poral head. For the baselines, we therefore probe the frozen repre-sentation most directly tied to temporal prediction in each model, so that the diagnostic remains as comparable as possible across methods. This is the recurrent state for the LSTM, the event-history representation for THP, the packet-boundary representation for NetSSM, and the fact-history representation for RE-Net. Within each dataset, the baseline probe uses the same target 𝑧 𝑘 and the same evaluation protocol as the controlled Joint–Two-Stage com-parison. The resulting numbers remain descriptive only, since the compared models still differ in architecture and temporal parame-terization. Table 14 reports the resulting descriptive recoverability scores. 
+
+## I.3 Baseline Results 
+
+The baseline comparisons are most informative when they reveal a separation between generation quality and temporal recoverabil-ity. On several datasets, the domain-specific baselines are clearly stronger than ChronoSSM on the generation task, which is ex-pected because they were designed specifically for that domain. Table 13 shows that, on BPI2018, the LSTM yields higher suffix similarity than both controlled variants. On MIMIC-IV, THP also dominates the generation metrics. The largest gap appears on the temporal knowledge graph, where RE-Net substantially outper-forms ChronoSSM on filtered link prediction. The auxiliary Giant-MIDI baseline shows the same pattern, with Music Transformer far ahead on OA generation quality. These gaps are not a problem for the main claims of the paper; they are expected, because these baselines are purpose-built generators for their respective domains. By contrast, the recoverability picture is consistently weak or at least much less convincing for the baselines. The LSTM baseline on BPI2018 has almost no recoverability under the probe diagnostics. NetSSM is similarly weak on network traffic, including a negative probe 𝑅 2. RE-Net is another important case: despite much better generation quality, its probe recoverability remains poor relative to 
+
+Preprint 14 ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models                
+
+> Dataset Baseline Event-generation procedure Temporal mechanism BPI2018 LSTM [25] Autoregressive activity generation until end-of-sequence Next-gap prediction from the shared recurrent state MIMIC-IV THP [28] Autoregressive next-event generation from the event-history context Joint next-gap prediction from the same contex-tual representation Network traffic NetSSM + GMM [3] Autoregressive byte-sequence generation with packet delimiters Packet inter-arrival times sampled afterward from a 3-component GMM Temporal KG RE-Net + GMM [16] Autoregressive future-fact generation from temporal quadruples Fact-level temporal gaps sampled afterward from a 3-component GMM GiantMIDI Music Transformer [13] Autoregressive note-event generation Timing represented through discrete time_shift
+> tokens
+
+Table 12: Reference baselines used for descriptive comparison across the four main domains and the auxiliary GiantMIDI experiment.      
+
+> Timestamping Dataset Baseline Content-generation quality Dense BPI2018 DLS mean
+
+↑ DLS median ↑      
+
+> LSTM 0.535 (0.487) 0.533 (0.500) MIMIC-IV Token JSD
+
+↓ Recall@50 ↑      
+
+> THP 0.111 (0.302) 1.000 (0.780) GiantMIDI OA mean
+
+↑ Mean pitch OA ↑ Note density OA ↑ Pitch range OA ↑ Pitch var. OA ↑            
+
+> Music Transformer 0.577 (0.172) 0.458 (0.345) 0.270 (0.230) 0.852 (0.050) 0.730 (0.063) Partial Network traffic JSD ip.src
+
+↓ JSD ip.dst ↓ JSD tcp.src ↓ JSD tcp.dst ↓      
+
+> NetSSM 0.3076 ( 0.0412 )0.2426 ( 0.0311 )0.2923 ( 0.0764 )0.2923 ( 0.1120 )Temporal KG MRR
+
+↑ MR ↓ Hits@1 ↑ Hits@3 ↑ Hits@10 ↑          
+
+> RE-Net 0.4136 (0.1461) 144.16 (269.06) 0.3446 (0.0899) 0.4398 (0.1490) 0.5405 (0.2527)
+
+Table 13: Content-generation results for the reference baselines on the four main evaluation domains and the auxiliary GiantMIDI experiment. Parenthesized values report the best ChronoSSM result across Joint and Two-Stage; boldface marks the better of the baseline and ChronoSSM value.     
+
+> Timestamping Dataset Baseline TCS
+
+↑ Probe 𝑅 2 ↑ Probe MAE ↓                       
+
+> Dense BPI2018 LSTM 0.0375 ( 0.8030 )0.0001 ( 0.631 )4.120 ( 2.775 )MIMIC-IV THP 0.8584 ( 0.8620 )0.2265 ( 0.6580 )1.96 ( 0.5970 )GiantMIDI Music Transformer -1.000 ( -0.044 )undef. ( 0.160 )10.568 (248.006) Partial Network traffic NetSSM + GMM 0.3689 ( 0.6216 )-0.5744 ( 0.3943 )0.860 ( 0.3080 )Temporal KG RE-Net + GMM 0.3762 (0.2027) 0.0161 ( 0.4449 )1,412.25 ( 904.14 )
+
+Table 14: Temporal-recoverability results for the reference baselines on the four main evaluation domains and the auxiliary GiantMIDI experiment. Parenthesized values report the best ChronoSSM result across Joint and Two-Stage; boldface marks the better of the baseline and best ChronoSSM value. 
+
+both ChronoSSM variants. Music Transformer also fits this pattern, with very poor recoverability despite being the strongest generator in that setting. The most revealing case is THP on MIMIC-IV. Its TCS is close to that of Joint, yet its probe 𝑅 2 is much lower. This suggests that a seemingly favorable TCS value does not by itself imply that tempo-ral information is cleanly or linearly accessible from the represen-tation. More broadly, these baselines do not learn timing through the same kind of shared representation studied in ChronoSSM: some use different temporal parameterizations, and others decou-ple timing from content generation entirely. Their recoverability is therefore generally weak, and when a baseline comes close to Joint on a single metric, we interpret that locally as a reminder that no single recoverability metric should be read in isolation. 
+
+## J Sensitivity to Distance Metric and Neighborhood Size 
+
+The Temporal Cohesion Score (TCS) depends on two design choices: (i) the distance metric used to compare hidden states, and (ii) the neighborhood size 𝐾 used to define local neighborhoods. In the main experiments (§5), we fix 𝐾 = 5 and use cosine similarity. In this section, we analyze the robustness of TCS to these choices and clarify how the resulting sensitivity differs between the network-traffic and temporal-knowledge-graph domains. 
+
+Preprint 15 Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino 
+
+## J.1 Sensitivity to Distance Metric 
+
+We first examine the effect of the distance metric while keeping the neighborhood size fixed at 𝐾 = 5. Specifically, we recompute TCS using Euclidean ( 𝐿 2) and Manhattan ( 𝐿 1) distances in place of cosine similarity. Table 15 reports the resulting scores for both domains. On net-work traffic, the Joint model consistently achieves a TCS of approx-imately 0 .62, while the Two-Stage baseline remains around 0 .15. The relative improvement induced by joint training is therefore large and stable across all three metrics. This robustness indicates that the strong temporal signal observed in network traffic is not an artifact of a particular geometric choice. On the temporal knowledge graph, the same qualitative pat-tern holds, but the gains are much smaller: the Two-Stage baseline ranges from 0 .104 to 0 .112, whereas the Joint model ranges from 0.126 to 0 .144. Temporal cohesion is therefore somewhat sensitive to the distance metric in this domain, but the advantage of Joint training remains positive under all three choices.                        
+
+> TCS Metric Formulation ↑
+> Dataset Model Cosine Euclidean ( 𝐿 2)Manhattan ( 𝐿 1)Network Traffic Two-Stage 0.1469 0.1542 0.1526
+> Joint 0.6214 0.6225 0.6255
+> Improv. +323% +303% +310%
+> Temporal KG Two-Stage 0.110 0.112 0.104
+> Joint 0.144 0.126 0.127
+> Improv. +31% +12% +22%
+
+Table 15: TCS across distance metrics for network traffic and temporal knowledge graphs. 
+
+## J.2 Sensitivity to Neighborhood Size 𝐾 
+
+We next vary neighborhood size 𝐾 on the two partially timestamped domains, again using cosine, Euclidean, and Manhattan distances. Table 16 shows a clear contrast between them. For network traffic, the Joint model remains far above the Two-Stage baseline for all tested values of 𝐾 and all three distance metrics, even though TCS gradually decreases as neighborhoods grow. This indicates that the temporal organization induced by Joint training is not limited to a narrow nearest-neighbor effect. For temporal knowledge graphs, the picture is different. The advantage of Joint training is visible at small neighborhoods, but it rapidly shrinks toward zero as 𝐾 increases, regardless of the distance metric. Here, temporal information is therefore much more localized: once the neighborhood expands, static relational structure dominates similarity and temporal ordering becomes difficult to recover. Together with the distance-metric analysis above, this comparison shows that the main conclusion is robust to the exact geometric choice, while the spatial extent of temporal organization depends strongly on the domain.                                                          
+
+> Cosine Distance Euclidean ( 𝐿 2)Manhattan ( 𝐿 1)
+> Dataset 𝐾 Two-Stage Joint Two-Stage Joint Two-Stage Joint Network Traffic
+> 50.147 0.621 0.154 0.622 0.153 0.626
+> 15 0.032 0.527 0.046 0.531 0.049 0.533
+> 25 0.049 0.479 0.066 0.486 0.067 0.488
+> 35 0.061 0.446 0.077 0.454 0.080 0.456
+> Temporal KG
+> 50.172 0.203 0.112 0.126 0.104 0.127
+> 15 0.048 0.051 0.038 0.049 0.041 0.049
+> 25 0.020 0.029 0.029 0.029 0.026 0.029
+> 35 -0.001 0.000 0.001 0.002 -0.001 0.002
+
+Table 16: Sensitivity of TCS to neighborhood size 𝐾 for net-work traffic and temporal knowledge graphs. 
+
+## K Layer-Wise Representation Analysis 
+
+This appendix examines how temporal supervision changes the internal representations learned by ChronoSSM. It is intended to complement the recoverability results of §5 and the generation-quality results of §6, rather than to provide a complete mechanistic account of all four evaluation domains. 
+
+## K.1 Representation-Similarity Metrics 
+
+This subsection provides the formal definitions of the representation-similarity metrics used in the layer-wise analysis below. These met-rics quantify alignment between hidden representations learned under Joint and Two-Stage training at different geometric scales. To quantify structural differences between the two training regimes, we compare hidden states produced by corresponding backbone layers on identical input sequences. Let X ∈ R𝑛 ×𝑑 and 
+
+Y ∈ R𝑛 ×𝑑 denote the activations from the Joint and Two-Stage models, respectively, for 𝑛 samples and representation dimension 𝑑 .We measure alignment at three complementary geometric scales. 
+
+Global structural alignment (CKA). We use linear Centered Kernel Alignment (CKA) [19] to measure similarity between the global “clouds” formed by the representations. Given Gram matrices 
+
+𝐾 = XX ⊤ and 𝐿 = YY ⊤, and the centering matrix 𝐻 = 𝐼 − 1 
+
+> 𝑛
+
+11 ⊤,linear CKA is defined as CKA (𝐾, 𝐿 ) = HSIC (𝐾, 𝐿 )√︁ 
+
+HSIC (𝐾, 𝐾 ) HSIC (𝐿, 𝐿 ) , (25) where HSIC (𝐾, 𝐿 ) = 1
+
+(𝑛 − 1)2 tr (𝐾𝐻𝐿𝐻 ) (26) is the Hilbert–Schmidt Independence Criterion [10]. High CKA values indicate strong global alignment between representation spaces. 
+
+Local neighborhood alignment (CKNNA). To assess alignment at a local geometric scale, we use Centered Kernel Nearest Neighbor Alignment (CKNNA) [14]. Let A be a binary adjacency matrix such that A𝑖 𝑗 = 1 if sample 𝑗 is a mutual 𝑘 -nearest neighbor of sample 𝑖 
+
+in both representation spaces. CKNNA is defined as CKNNA (𝐾, 𝐿 ) = tr (( A ◦ 𝐾 )( A ◦ 𝐿 )⊤)∥A ◦ 𝐾 ∥𝐹 · ∥ A ◦ 𝐿 ∥𝐹 
+
+, (27) where ◦ denotes the Hadamard product and ∥ · ∥ 𝐹 is the Frobenius norm. Lower values indicate greater divergence in local neighbor-hood structure between the two representations. 
+
+Topological overlap (M-KNN). Finally, we compute the Mutual 
+
+𝑘 -Nearest Neighbor (M-KNN) overlap to measure agreement in 
+
+Preprint 16 ChronoSSM : Training for Temporally Aware Representations in Autoregressive State Space Models 
+
+neighborhood membership. Let N X 
+
+> 𝑘
+
+(𝑖 ) denote the set of 𝑘 near-est neighbors of sample 𝑖 in representation space X. The M-KNN overlap is defined as M-KNN (X, Y) = 1
+
+𝑛𝑘 
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+N X 
+
+> 𝑘
+
+(𝑖 ) ∩ N Y 
+
+> 𝑘
+
+(𝑖 ) . (28) Lower overlap indicates that the two models induce different local topological structures over the data. 
+
+## K.2 Per-Domain Patterns 
+
+Figure 2 collects the layer-wise alignment plots for all four domains. 
+
+BPI2018. Figure 2a shows the mildest change of the four domains. CKA remains high throughout the backbone and ends at 0 .917, while M-KNN and CKNNA decline but stay well above the network-traffic values. The substantial probe-based recoverability gain de-spite this relatively mild geometric change is consistent with the possibility that Joint makes temporal information more linearly accessible without a major reshaping of the representation space. The alignment measures alone do not establish that mechanism. 
+
+MIMIC-IV. Figure 2b shows a different pattern: CKA stays close to 1 across all layers and ends at 0 .969, whereas M-KNN and CKNNA drop to roughly 0 .34 to 0 .36 at the final layer. The natural reading is that Joint changes local neighborhood structure much more than global geometry. This local change is compatible with the favorable probe diagnostics on MIMIC-IV, but the plot does not establish how it produces them or explain why generation quality is slightly mixed in this domain. 
+
+Network traffic. Figure 2c shows the strongest reorganization. CKA is high at the input, drops sharply through much of the back-bone, and recovers only near the end, while M-KNN and CKNNA remain low across most layers. This pattern is consistent with the concurrent gains in TCS and probe diagnostics: compared with Two-Stage, Joint appears to reshape fine-grained local geome-try much more substantially in this domain than in the others. It may therefore be compatible with changes in both local temporal coherence and linear accessibility, without establishing a causal explanation for either the recoverability or generation results. 
+
+Temporal knowledge graphs. Figure 2d lies between the previous two cases. The two models stay well aligned early, diverge most clearly in the middle layers, and recover substantial similarity near the output. This fits the smaller recoverability differences relative to the other domains, but does not provide a clear account of why those differences are small: Joint changes the intermediate computation, while the two regimes converge again toward more similar late-layer geometries. 
+
+## K.3 Cross-Domain Interpretation 
+
+The main cross-domain observation is negative but informative: the four domains do not support a single geometric story for why Joint improves temporal recoverability. BPI2018 shows only mod-est change, MIMIC-IV preserves almost the same global geometry while altering local neighborhoods, temporal knowledge graphs diverge mainly in the middle layers before recovering, and net-work traffic undergoes the broadest local and intermediate-layer reorganization. This variation weakens two simple explanations at once. First, it weakens a single-mechanism interpretation in which improved recoverability would always arise from the same kind of represen-tational change. Second, it weakens a simple dense-versus-partial timestamping explanation: BPI2018 and MIMIC-IV are both densely timestamped but behave quite differently, and the two partially timestamped domains are likewise not interchangeable. Timestamp density alone is therefore too coarse to explain the observed pat-terns. There is no simple relationship between alignment and recov-erability gains. BPI2018 exhibits a substantial probe-based gain despite relatively high final-layer alignment, whereas network traf-fic combines broad local divergence with large gains in both TCS and the probe diagnostics. These observations are consistent with the domain-specific interpretations in the recoverability analysis, but the plots do not verify them or identify a common mechanism. The safest conclusion is therefore narrow. Joint can improve temporal recoverability under several different patterns of repre-sentational change, and those patterns do not map cleanly onto downstream generation quality. The layer-wise analysis is useful mainly because it rules out overly simple explanations; it does not provide a complete account of why the domain-level results differ. This interpretation is robust to the neighborhood size used for M-KNN and CKNNA: although the absolute values change, the same qualitative patterns remain. 
+
+Preprint 17 Adrien Schoen, Nachiketa Ratnakar Patil, Arjun Bhagoji, and Francesco Bronzino L0 L1 L2 L3 Final 
+
+Layers 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Similarity Score
+> 0.917 0.306 0.324
+
+CKA MKNN CKNNA 
+
+(a) BPI2018. L0 L1 L2 L3 L4 L5 L6 L7 Final 
+
+Layers 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Similarity Score
+> 0.969 0.341 0.361
+
+CKA MKNN CKNNA (b) MIMIC-IV. L0 L2 L4 L6 L8 L10 L12 L14 L16 L18 L20 L22 Final 
+
+Layers 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Similarity Score
+> 0.860 0.268 0.298
+
+CKA MKNN CKNNA 
+
+(c) Network traffic. L0 L1 L2 L3 L4 L5 L6 L7 Final 
+
+Layers 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Similarity Score
+> 0.963 0.663 0.625
+
+CKA MKNN CKNNA (d) Temporal knowledge graph. 
+
+Figure 2: Layer-wise alignment between ChronoSSM models trained under Joint and Two-Stage regimes, measured using CKA, M-KNN, and CKNNA. CKA captures global geometric alignment, whereas M-KNN and CKNNA emphasize local neighborhood structure. 
+
+Preprint 18

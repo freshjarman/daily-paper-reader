@@ -1,0 +1,686 @@
+Title: EvtGraph: Event-Adaptive Compression for Sparse Temporal Graph Learning in Multimodal Time Series
+
+URL Source: https://arxiv.org/pdf/2608.04368v1
+
+Published Time: Thu, 06 Aug 2026 00:23:04 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# EvtGraph: Event-Adaptive Compression for Sparse Temporal Graph Learning in Multimodal Time Series 
+
+Ziqian Wang 
+
+Tingxiong Xiao Yuxiao Cheng Jinli Suo Department of Automation Tsinghua University Beijing, China 
+
+{wangziqi24, xtx22, cyx22, jlsuo}@mail.tsinghua.edu.cn 
+
+## Abstract 
+
+Multimodal temporal data are inherently irregular and uneven in information density, yet most models rely on uniform discretization, leading to inefficient representations. We propose EvtGraph , a unified framework that aligns computation with temporal salience under explicit budget constraints. EvtGraph reparameterizes sequences into event-level tokens via event-adaptive compression (EAMC), selects a compact subset with a node budget (NBC), and performs temporally constrained sparse graph reasoning (T2SG). This transforms dense sequences into structured computa-tion over salient events, reducing complexity while preserving critical transitions. We show that this design provides a practical mechanism for allocating representa-tional capacity under a fixed budget, yielding a consistent performance–efficiency trade-off, where a small budget is often sufficient in practice. Experiments on mul-timodal clinical (MIMIC-IV + CXR) and cross-domain benchmarks demonstrate that EvtGraph outperforms both Transformer-based and recurrent baselines while significantly improving efficiency. These results suggest that budget-constrained event-centric representation provides a general paradigm for learning from high-redundancy temporal data. 
+
+## 1 Introduction 
+
+Multimodal temporal data are ubiquitous across real-world applications, ranging from clinical monitoring with physiological signals and medical records to video understanding that integrates visual, auditory, and textual streams. A fundamental challenge in modeling such data lies not only in heterogeneous sampling rates or long-range dependencies, but in a deeper structural mismatch: while modern architectures allocate computation uniformly over time, real-world temporal signals are inherently non-uniform in information density. Informative patterns are sparse, irregular, and concentrated in short intervals, whereas large portions of the sequence are redundant. This mismatch induces systematic inefficiencies. Uniform discretization schemes, such as fixed windows or patch-based representations, over-allocate representational capacity to low-information regions while fragmenting semantically coherent temporal structures. When lifted into graph rep-resentations for multimodal reasoning, this inefficiency further manifests as the node explosion 
+
+problem, where the number of nodes grows linearly with sequence length across modalities and dense connectivity leads to quadratic complexity, making standard graph neural networks impractical for long sequences. 
+
+> Preprint. arXiv:2608.04368v1 [cs.LG] 5 Aug 2026
+
+Existing approaches partially alleviate this issue but remain limited by their underlying assumptions. Multi-scale or pyramid-based models [Liu et al., 2022, Wu et al., 2023] retain predefined temporal grids and thus fail to align resolution with information density. Sparse attention and correlation-based graph methods [Zaheer et al., 2020, Zhang et al., 2020] reduce computational cost but operate on fixed tokenizations, leaving the representation itself unchanged. Token pruning and pooling strategies [Bolya et al., 2023] adapt computation post hoc, often sacrificing temporal consistency or interpretability. As a result, sparsity is typically treated as an efficiency heuristic rather than an intrinsic property of representation learning. In this work, we revisit multimodal temporal modeling from an event-centric perspective. We define an event not as a predefined segment, but as a capacity-constrained representation unit 
+
+that concentrates task-relevant information within a localized temporal region. Under this view, temporal modeling can be formulated as learning a compact set of such units that optimally allocate representational capacity according to information density. This perspective naturally leads to a unified framework, EvtGraph , which integrates three components under a shared principle of budget-constrained information allocation . First, an event-adaptive compression module reparameterizes dense temporal features into a set of information-concentrated event tokens, allowing salient regions to receive higher effective resolution. Second, a Node Budget Controller enforces a global capacity constraint by selecting a fixed number of tokens, thereby explicitly linking computational cost with representational capacity. Finally, a temporally-constrained sparse graph is constructed over these tokens, imposing a structured prior that restricts dependencies to temporally admissible and local interactions. Under this formulation, compactness, adaptivity, and sparsity emerge as consequences of a single design principle, rather than independent heuristics. In particular, sparsity arises jointly from (i) information-driven representation compression and (ii) explicit budget constraints, eliminating the need for post hoc pruning. Our contributions are summarized as follows: • We identify a fundamental mismatch between information density and computational allocation in multimodal temporal modeling, and formulate event-centric representation learning as a capacity-constrained problem. • We propose E VT GRAPH , a unified framework that combines event-adaptive compression, budget-constrained representation learning, and structured temporal graph reasoning. • We show that enforcing an explicit node budget yields a favorable efficiency–accuracy trade-off, achieving strong performance on multimodal clinical prediction (MIMIC-IV) and cross-domain benchmarks (TimeMMD). • We provide detailed analyses demonstrating that the learned representations concentrate on high-information temporal regions and exhibit meaningful structural properties under budget constraints. Taken together, our framework establishes a principled connection between adaptive representation learning and scalable structured reasoning. By treating computation as a constrained resource and aligning it with information density, E VT GRAPH provides a general approach for modeling high-redundancy multimodal temporal data. 
+
+## 2 Related Work 
+
+Event-centric and irregular multimodal temporal modeling. Real-world temporal data are often asynchronous and uneven in information density. Continuous-time models such as Neural ODEs, Latent ODEs, and Neural CDEs model irregular dynamics in continuous time [Chen et al., 2018, Rubanova et al., 2019, Kidger et al., 2020], while set-based approaches (SeFT, mTAND) handle unaligned observations via permutation-invariant or softly aligned representations [Horn et al., 2020, Shukla and Marlin, 2021]. Multimodal architectures such as Perceiver IO and large vision–language models enable flexible cross-modal fusion [Jaegle et al., 2021, Alayrac et al., 2022]. However, most approaches still operate on predefined temporal units, which becomes inefficient under highly asynchronous sampling. In contrast, our method reparameterizes the temporal axis into event-level tokens, enabling multimodal reasoning over salient events rather than uniformly sampled timesteps. 
+
+Efficient sequence modeling and adaptive computation. A large body of work improves scalability via sparse attention, low-rank approximation, or hardware-aware implementations [Kitaev et al., 2𝑡 1 𝑡 2 𝑡 3 𝑡 4 𝑡 5 𝑡 6 𝑡 7 𝑡 8 𝑡 9                                  
+
+> High -freq.
+> (ECG -like)
+> Low -freq.
+> (Vital Sign)
+> Clinical
+> Text/CXR
+> High
+> Low
+> saliency
+> 𝑡 1𝑡 2𝑡 3𝑡 4𝑡 5𝑡 6𝑡 7𝑡 8𝑡 9
+> Event Reparameterization
+> Original Multimodal Streams
+> selected
+> merged
+> Budgeted Sparse Graph
+> ϵ
+> event
+> tokens
+> Z1Z2Z3Z4Z5Z6Z7Z8Z9Z10 Z11 Z12 Z13 Z14
+> Z′ 1Z′ 2Z′ 3Z′ 4Z′ 5
+> .
+> TOP -B importance score
+> T2SG (Graph Construction)
+> ϵ-lag window
+> 𝑗 < 𝑖
+> Vision
+> Temporal
+> Text
+> Cross -modal Edge
+> Temporal Edge
+> …𝐻 t𝐻 t+1 𝐻 t−1 𝐻 t+2
+> ϵ-lag window
+> Only edges satisfying
+> …
+> EAMC (Event Compression)
+> Multimodal Input
+> (X, Text, Vitals)
+> Node Budget
+> Controller
+> Text
+> encoder
+> CXR
+> encoder
+> Task -
+> specific
+> heads
+> …
+> AKI
+> Death
+> Circ. Fail
+> (a) Event -Adaptive Reparameterization under Budget Constraint (b) Budget -Aware Temporal Graph Construction Pipeline
+
+Figure 1: Overview of EvtGraph. (a) Event-adaptive temporal reparameterization maps multimodal streams into event tokens via soft weights, concentrating representation on salient regions while merging redundant ones. (b) The selected tokens are organized into a budget-aware temporally constrained graph, where edges respect causal ordering and locality, enabling efficient downstream prediction. 2020, Zaheer et al., 2020, Dao et al., 2022]. Structured state space models (e.g., S4, Mamba) further achieve linear-time sequence modeling through recurrent formulations [Gu et al., 2022, Gu and Dao, 2023]. While effective for long sequences, these methods still operate over continuous or uniformly discretized time. Dynamic token reduction methods (TokenLearner, DynamicViT, ToMe) adapt computation to input content [Ryoo et al., 2021, Rao et al., 2021, Bolya et al., 2023], but rely on fixed initial tokenization. Our approach differs by jointly learning event-adaptive tokenization and budget-constrained selection, transforming dense sequences into compact event-level representations. 
+
+Information bottleneck and budgeted representations. The Information Bottleneck principle characterizes representation learning as a trade-off between compression and task-relevant information [Tishby et al., 2000]. Our Node Budget Controller can be viewed as an explicit bottleneck that enforces a fixed capacity on event tokens, linking predictive utility to computational cost. Unlike post-hoc pruning or regularization-based approaches, the budget is imposed directly at the representation level, enabling efficient learning under strict constraints. 
+
+Graph compression and temporally constrained reasoning. Graph-based methods provide struc-tured modeling for temporal dependencies, including graph pooling techniques (DiffPool, SAGPool) and temporal graph networks (TGAT, TGN) [Ying et al., 2018, Xu et al., 2020]. Sparse Transformers similarly reduce attention complexity through heuristic sparsity patterns [Beltagy et al., 2020]. How-ever, most approaches either compress an existing dense graph or apply generic sparsification. In contrast, T2SG constructs a sparse graph directly over compressed event tokens, where edges are constrained by temporal ordering and bounded lag. Unlike post-hoc pruning methods that require full graph construction, our approach treats node budgeting as a foundational constraint, generating efficiency from the outset. 
+
+Temporal consistency and leakage-free modeling. Temporal order is critical for forecasting and clinical prediction, as future leakage can lead to overly optimistic results [Granger, 1969, Runge, 2020]. Rather than performing causal discovery, we enforce temporally admissible message passing, ensuring that dependencies respect ordering constraints. This positions our method as a budget-aware and event-centric framework for temporally consistent multimodal reasoning. 
+
+## 3 Method 
+
+3.1 Framework Overview 
+
+We propose EvtGraph , a framework for multimodal temporal learning under explicit computational budgets. The key idea is to treat representation learning as a capacity allocation problem , where limited representational resources are distributed over time according to information density. Unlike approaches that adapt computation on top of fixed representations, EvtGraph formulates representation learning itself under a global capacity constraint. Given multimodal inputs X = {x(m)
+
+t }t=1: T, m =1: M , we first encode them into a shared latent space, yielding temporal features H = {ht}Tt=1 .3EvtGraph then performs a progressive transformation: 
+
+H → Z → Z′ → G ,
+
+where dense temporal features are first reparameterized into event tokens, then compressed under a global budget constraint , and finally organized into a temporally constrained sparse graph for structured reasoning. In this process, tokenization, selection, and connectivity are jointly determined, rather than specified independently. The entire pipeline is trained end-to-end, such that event selection, budget allocation, and graph structure are jointly optimized for the downstream task. To handle heterogeneous modalities, all inputs are aligned onto a shared temporal axis: dense signals are resampled, while sparse modalities are projected to their nearest timestamps. Missing values are handled via masking rather than imputation to preserve temporal consistency. This pipeline implements the progressive transformation illustrated in Figure 1(b). 
+
+3.2 Problem Formulation 
+
+We consider multimodal temporal data X = {x(m) 
+
+> t
+
+}t=1: T, m =1: M , and encoded features H =
+
+{ht}Tt=1 .A fundamental challenge in temporal modeling is the mismatch between the non-uniform distribution of information and the uniform allocation of computation. In real-world signals, informative events are sparse and irregular, while large portions of the sequence are redundant. To address this, we seek a compact representation Z = {zs}Ss=1 with S ≪ T , where each token aggregates information across time: 
+
+zs =
+
+> T
+
+X
+
+> t=1
+
+ws,t ht, ws,t ≥ 0, X
+
+> t
+
+ws,t = 1 . (1) Rather than viewing Eq. (1) as a simple weighted aggregation, we interpret each zs as a capacity-constrained representation unit that concentrates task-relevant information within a localized temporal region. This induces a budgeted representation space, where each token serves as a limited-capacity carrier of temporal information. From this perspective, the model implicitly enforces a trade-off between information preservation and representation compactness, analogous to rate–distortion or information bottleneck principles, without explicitly optimizing mutual information. Each token is assigned an importance score αs = gψ (zs), and at most B tokens are retained, so that the budget B
+
+directly controls the effective representation capacity and the compression–performance trade-off. Over these selected tokens, we define a temporally constrained graph: 
+
+E = {(i, j ) | 0 < t i − tj ≤ ϵ}. (2) This formulation jointly constrains both the number of representation units and the admissible dependencies, linking computational complexity directly to the structure of the learned representation. 
+
+3.3 Event-Adaptive Representation (EAMC) 
+
+We first transform dense temporal features into a compact set of event tokens. Rather than learning explicit segment boundaries, which is often unstable under weak supervision, we adopt a fixed coarse partition of the sequence into S contiguous blocks, each of length L = ⌈T /S ⌉.Within each block, we compute saliency scores 
+
+ℓs,r = fθ (hs,r ), r = 1 , . . . , L, 
+
+and obtain normalized weights via a temperature-controlled softmax: 
+
+ws,r = exp( ℓs,r /τ e)
+
+P 
+
+> r′
+
+exp( ℓs,r ′ /τ e) .
+
+4The resulting event token is given by 
+
+zs =
+
+> L
+
+X
+
+> r=1
+
+ws,r hs,r . (3) Unlike standard attention or pooling mechanisms that operate as feature aggregation operators, this formulation serves as a representation reparameterization of the temporal axis. Each token zs is not merely an attended summary, but a capacity-constrained unit that redistributes representational mass within a local temporal region. In particular, the normalization constraint P 
+
+> r
+
+ws,r = 1 induces a competitive allocation of information within each block, encouraging the model to concentrate on a small subset of salient timesteps while suppressing redundant ones. From this perspective, EAMC does not aim to increase expressiveness through richer attention, but to reshape the temporal representation space such that downstream computation operates on information-dense units. Event structure is therefore not explicitly imposed, but emerges implicitly from the learned distribution of information density. To stabilize training, we gradually anneal τe and introduce a residual term: 
+
+zs = (1 − γ) X
+
+> r
+
+ws,r hs,r + γ · Pool( {hs,r }), (4) which prevents degeneration under overly sharp distributions. 
+
+3.4 Node Budget Allocation 
+
+Given event tokens Z, we retain at most B tokens under a global budget constraint. Each token is assigned an importance score αs = gψ (zs), and the top-B tokens are selected. From a representation perspective, the node budget B imposes an explicit capacity constraint on the latent space, forcing the model to allocate a limited number of representation slots to the most informative temporal regions. Unlike conventional token pruning, where selection is applied as a post-hoc efficiency heuristic, the budget here acts as a first-class modeling constraint , directly shaping the learned representation and its effective capacity. To enable gradient-based optimization, we introduce a differentiable relaxation. For each selected token ˆzi, we define a soft aggregation: 
+
+˜zi = X
+
+> s
+
+qi,s zs, (5) where 
+
+qi,s ∝ exp(( αs − λ|ts − ti|)/τ B ) .
+
+Rather than merely approximating top-B selection, this relaxation performs localized information redistribution : tokens compete globally via αs, while the temporal bias |ts − ti| encourages nearby information to be reassigned instead of discarded. A straight-through estimator is used so that forward computation follows hard selection, while gradients are propagated through the soft aggregation. To mitigate information loss from hard selection, discarded tokens are further aggregated to their nearest selected token in time, yielding 
+
+z′ 
+
+> i
+
+= LayerNorm ˆzi + 1
+
+|R i| + δ
+
+X
+
+> s∈R i
+
+zs
+
+!
+
+. (6) This results in a compact set of nodes Z′ that preserves local context while respecting the global budget constraint. 
+
+3.5 Temporally-Constrained Sparse Graph (T2SG) 
+
+We construct a sparse temporal graph over the selected tokens Z′. Edges are restricted by temporal admissibility: 
+
+(i, j ) ∈ E ⇐⇒ j < i ∧ ti − tj ≤ ϵ, 
+
+5ensuring causal and leakage-free message passing. Rather than introducing sparsity through generic pruning or attention masking, this construction derives the graph structure directly from the compressed event representation . As a result, the sparsity pattern is not imposed independently, but is coupled with both the node budget and the temporal distribution of information. This constraint can be interpreted as a structured prior over temporal dependencies, encoding the inductive bias that relevant interactions are both temporally ordered and locally bounded. To further control complexity, each node only retains its top-κ neighbors, leading to the update 
+
+z(l+1)  
+
+> i
+
+= σ
+
+ X
+
+> j∈N κ(i)
+
+α(l) 
+
+> ij
+
+W(l)z(l)
+
+> j
+
+ . (7) The resulting graph contains at most B nodes and O(κB ) edges, yielding near-linear complexity. Im-portantly, sparsity emerges jointly from (i) event-level compression and (ii) explicit budget constraints, rather than from post-hoc edge pruning. 
+
+3.6 Implementation Details 
+
+Graph sparsity is controlled by the temporal window ϵ and neighbor budget κ, which enforce locality while reducing redundant connections. Given the small node budget B, we use shallow graph layers (L = 2 –3) to avoid over-smoothing. Node features are normalized with LayerNorm to stabilize cross-modal similarity, while temporal consistency is ensured via strict admissibility constraints. Ablations confirm that removing event adaptivity, budget control, or temporal constraints degrades performance or increases complexity, highlighting the importance of their joint design. 
+
+## 4 Experiments 
+
+We evaluate the proposed framework from three complementary perspectives: (1) predictive perfor-mance across multimodal tasks, (2) efficiency–information trade-offs under explicit budget constraints, and (3) structural validity of the learned event representations and temporal dependencies. Concretely, we examine whether the model (i) improves accuracy under constrained computation, (ii) preserves information through event-adaptive compression and budgeted selection, and (iii) learns meaningful temporal structures aligned with data semantics. Experiments are conducted on clinical prediction, cross-domain forecasting, and sensor-based activity recognition benchmarks. 
+
+4.1 Experimental Setup Datasets. We evaluate on three complementary benchmarks covering clinical prediction and cross-domain generalization: (1) MIMIC-IV + CXR , a multimodal clinical dataset with irregular sampling and missing observations; (2) TimeMMD , a cross-domain multimodal benchmark with paired temporal and textual data. (3) UCI HAR , a lightweight multivariate sensor dataset for human activity recognition, used to evaluate generalization to short event-like temporal sequences. 
+
+Tasks and Metrics. We consider regression, classification, and efficiency evaluation. Regression tasks include physiological prediction on MIMIC and forecasting on TimeMMD (MSE, MAE, RMSE). Classification tasks involve clinical risk prediction, evaluated using AUROC and AUPRC. Efficiency is measured in terms of latency, memory, and computational cost under varying sequence lengths and node budgets. 
+
+Baselines. We compare against representative methods across four paradigms: (1) Discrete-time models (GRU-D, LSTM, TimesNet, iTransformer, PatchTST), (2) Continuous-time models (Neural CDE, Latent ODE, mTAN, SeFT), (3) Adaptive computation methods (ToMe, DynamicViT), and (4) Graph-based models (Perceiver-IO, TGN, DiffPool, MinCutPool). This set covers key design axes including temporal dynamics, adaptive computation, and structured reasoning. For 6Table 1: Main results on MIMIC-IV + CXR. Results are AUROC over 3 seeds. Best results are in 
+
+bold , and second best are underlined. 
+
+Category Model Params Macro AKI Circ. Fail Death Sepsis Continuous-Time 
+
+Neural CDE 1.6M 0.5578 ±0.011 0.5182 ±0.012 0.5235 ±0.008 0.4992 ±0.005 0.6904 ±0.037 Latent ODE 121K 0.7971 ±0.005 0.7374 ±0.015 0.8621 ±0.006 0.7248 ±0.014 0.8641 ±0.023 mTAN 60K 0.7328 ±0.005 0.6933 ±0.009 0.7084 ±0.009 0.7344 ±0.013 0.7950 ±0.011 
+
+Adaptive Computation ToMe 180K 0.7974 ±0.015 0.7274 ±0.014 0.8026 ±0.019 0.7949 ±0.016 0.8648 ±0.017 DynamicViT 183K 0.7916 ±0.006 0.7209 ±0.006 0.7936 ±0.013 0.7798 ±0.006 0.8722 ±0.012 
+
+Graph Pooling DiffPool 25K 0.4919 ±0.017 0.5116 ±0.020 0.5177 ±0.017 0.4780 ±0.021 0.4604 ±0.076 MinCutPool 25K 0.5807 ±0.019 0.5778 ±0.014 0.5833 ±0.010 0.5436 ±0.063 0.6181 ±0.073 
+
+Discrete-Time TS 
+
+LSTM 102K 0.8405 ±0.006 0.7981 ±0.006 0.8704 ±0.001 0.8089 ±0.011 0.8848 ±0.019 GRU 77K 0.8392 ±0.001 0.7887 ±0.002 0.8566 ±0.008 0.8224 ±0.015 0.8889 ±0.024 TCN 77K 0.8127 ±0.017 0.7504 ±0.009 0.8419 ±0.007 0.7971 ±0.020 0.8615 ±0.041 Transformer 130K 0.8006 ±0.015 0.7327 ±0.005 0.8101 ±0.010 0.7951 ±0.014 0.8643 ±0.034 TimesNet 18.9M 0.8002 ±0.003 0.7349 ±0.006 0.7934 ±0.008 0.8148 ±0.004 0.8578 ±0.027 
+
+TS-SOTA iTransformer 137K 0.7795 ±0.006 0.6992 ±0.006 0.7642 ±0.009 0.8141 ±0.009 0.8407 ±0.015 PatchTST 342K 0.7744 ±0.011 0.7026 ±0.005 0.7509 ±0.010 0.8209 ±0.012 0.8232 ±0.024 
+
+Ours EvtGraph 286K 0.9060 ±0.007 0.9043 ±0.005 0.9037 ±0.006 0.9147 ±0.024 0.8961 ±0.003 (a)  Efficiency –Accuracy Pareto Frontier (b) Budget vs Performance and Computational Cost  (c) Compression Ratio vs Information Retention 
+
+Figure 2: Efficiency–information trade-off under budget-aware modeling. (a) Efficiency–accuracy Pareto frontier on MIMIC-IV + CXR, showing strong performance under reduced latency. (b) Performance and computational cost versus node budget B, with AUROC peaking at a small budget (B∗ = 8 ). (c) Compression ratio versus information retention, where IRR remains high under aggressive compression. forecasting-oriented baselines, we tune sequence aggregation strategies(mean pooling, last-token pooling, attention pooling) on the validation set and report the best configuration. 
+
+Implementation Details. All models are trained under a unified setting for fair comparison. Additional details on preprocessing, optimization, and hyperparameters are provided in Appendix.D. 
+
+4.2 Multimodal Clinical and Cross-Domain Performance 
+
+EvtGraph achieves consistent improvements on multimodal clinical prediction tasks (Table 1), indicating robust gains across all outcomes. We attribute this to its ability to filter redundant temporal regions and concentrate computation on salient events, which is particularly beneficial under irregular and noisy clinical signals where global attention may be less effective. As shown in Figure 2(a), EvtGraph further exhibits a favorable efficiency–accuracy trade-off, achiev-ing the best Macro AUROC under comparable or lower computational cost. On the TimeMMD benchmark (Table 2), EvtGraph attains the lowest cross-domain error, while maintaining competitive in-domain performance, suggesting improved robustness under distribution shift. Consistent gains are also observed on UCI HAR, indicating that the benefits extend to shorter and more structured temporal sequences (Appendix D.5). 7Table 2: Results on TimeMMD and UCI HAR. For TimeMMD, we report MSE and MAE (mean 
+
+± std), where lower is better. For UCI HAR, we report accuracy, where higher is better. Best results are in bold , and second best are underlined.                                                                                    
+
+> Category Model Params In-domain Cross-domain UCI HAR MSE MAE MSE MAE Acc. RNN LSTM 337K 0.226 ±0.005 0.385 ±0.006 1.973 ±0.160 1.125 ±0.046 0.9230 GRU 287K 0.217 ±0.007 0.368 ±0.006 2.056 ±0.264 1.159 ±0.076 0.9240
+> Conv TCN 287K 0.621 ±0.202 0.580 ±0.097 2.459 ±1.041 1.178 ±0.264 0.9430
+> Attention Transformer 565K 0.251 ±0.032 0.372 ±0.026 1.430 ±0.034 0.957 ±0.006 0.8870
+> Continuous-Time Latent ODE 262K 0.237 ±0.035 0.353 ±0.032 1.595 ±0.141 1.010 ±0.046 0.8867 mTAN 241K 0.279 ±0.009 0.395 ±0.007 2.115 ±0.399 1.182 ±0.109 0.8894
+> Adaptive Computation DynamicViT 776K 0.246 ±0.043 0.375 ±0.042 1.285 ±0.140 0.902 ±0.062 0.8928 ToMe 763K 0.227 ±0.007 0.361 ±0.001 1.385 ±0.198 0.940 ±0.060 0.8992
+> Graph Pooling MinCutPool 170K 0.438 ±0.117 0.489 ±0.067 1.738 ±0.262 1.028 ±0.084 0.9074 DiffPool 170K 0.451 ±0.115 0.499 ±0.066 1.756 ±0.274 1.033 ±0.086 0.8476
+> Ours EvtGraph 149K 0.203 ±0.025 0.337 ±0.015 1.054 ±0.161 0.812 ±0.056 0.9494 (a) Budget vs Performance and Cost (b) Event -Adaptive Representation Analysis
+
+Figure 3: Event-adaptive representation analysis. (a) Raw signal and activity patterns highlighting salient temporal regions. (b) Learned event-adaptive representations. The assignment heatmap ws,t 
+
+shows highly concentrated temporal allocation, while segment importance scores αs indicate that only a few event tokens dominate the representation. 
+
+4.3 Efficiency–Information Trade-off and Event-Adaptive Representation 
+
+We evaluate the trade-off between predictive performance, computational cost, and information retention under varying node budgets B.As shown in Figure 2, EvtGraph achieves a favorable efficiency–accuracy Pareto frontier, and performance peaks at a small budget ( B∗ = 8 ) before saturating as computational cost increases. This suggests that only a limited number of event tokens is sufficient to capture the dominant temporal structure. To examine whether this efficiency arises from meaningful representations rather than uniform compression, we analyze the learned event-adaptive structure in Figure 3. As shown in Figure 3(b), the assignment weights ws,t concentrate on a small subset of salient temporal locations, while the segment importance scores αs indicate selective allocation of representational capacity. Over 94% of the total weight is concentrated within the top-3 timesteps per segment, demonstrating highly selective computation. Together, these results suggest that EvtGraph achieves efficiency not through uniform compression, but by allocating computation to high-information temporal regions. 
+
+4.4 Budget and Graph Diagnostics 
+
+Figure 4(a) visualizes the temporally admissible mask induced by the lag constraint ϵ. Figure 4(b) shows that the number of edges scales near-linearly with the number of retained nodes, consistent with 
+
+O(κB ). Figure 4(c) further illustrates modality-wise allocation, showing that the model adaptively distributes capacity across time-series, image, and text modalities. 8(c) Multimodal Allocation Patterns (b) Edge Scaling (a) Temporal Admissibility Mask Figure 4: Structural diagnostics of the budget-aware temporal graph. (a) Temporal admissibility mask under lag constraint ϵ, showing that edges are restricted to past nodes within a bounded window. (b) Edge count as a function of node count, demonstrating near-linear scaling ( O(κB )) compared to quadratic growth in fully connected graphs. (c) Modality-wise allocation weights, indicating adaptive capacity distribution across time-series, image, and text modalities. 
+
+4.5 Ablation Study 
+
+Table 3: Ablation on MIMIC-IV + CXR.                                              
+
+> Variant Macro AKI Circ. Fail Death Sepsis Full 0.906 0.904 0.9037 0.915 0.896
+> w/o NBC 0.898 0.891 0.880 0.919 0.880 w/o Temp 0.895 0.890 0.8446 0.908 0.882 w/o Event 0.879 0.867 0.898 0.895 0.855 w/o RevIN 0.835 0.775 0.884 0.903 0.796 w/o Mask 0.867 0.838 0.899 0.914 0.835 Uniform Compression 0.894 0.892 0.904 0.907 0.887 Random Selection 0.892 0.890 0.900 0.899 0.882
+
+We conduct ablations on MIMIC-IV + CXR (Table 3). Removing event adap-tivity leads to the largest drop, highlight-ing its central role in allocating capacity to informative temporal regions. Perfor-mance also degrades without the budget controller, suggesting its regularization effect, while w/o Temp underperforms, confirming the necessity of temporally admissible graph construction. Remov-ing RevIN and masking further reduces performance, indicating the importance of distribution alignment and leakage-free modeling. To isolate the effect of adaptivity, we compare against two controlled baselines under the same node budget: Uniform Compression and Random Selection . Both underperform the full model, indicating that improvements arise not merely from compression, but from adaptive concentration of computation on salient regions. Overall, gains stem from the joint effect of event-adaptive representation, budget control, and temporally constrained reasoning. 
+
+## 5 Conclusion 
+
+We present EvtGraph , a framework for multimodal temporal modeling under explicit computational constraints. By casting representation learning as a capacity allocation problem , EvtGraph adaptively distributes a fixed budget over time according to information density, producing a compact set of event-level tokens for structured reasoning via a temporally constrained graph. Under this formulation, compression, selection, and sparsity are not introduced as independent heuristics, but emerge jointly from a unified budget-aware design. Empirically, EvtGraph achieves strong performance across multimodal clinical and cross-domain benchmarks, while consistently improving efficiency–accuracy trade-offs under limited computation. 
+
+Limitations. EvtGraph relies on coarse temporal partition, which may limit ability to capture events with highly variable or long-range structure. Its advantages may diminish for near-stationary signals, and performance depends on the choice of node budget B, which requires task-specific tuning. 
+
+Broader Impact. EvtGraph provides a practical approach for modeling high-redundancy temporal data in resource-constrained settings. More broadly, it suggests a perspective in which representation 9learning is governed by explicit capacity constraints, offering a principled pathway toward scalable and efficient modeling in structured domains. 
+
+## References 
+
+Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katie Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob Menick, Sebastian Borgeaud, Andrew Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikolaj Bi´ nkowski, Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, and Karen Simonyan. Flamingo: A visual language model for few-shot learning. In Advances in Neural Information Processing Systems , volume 35 of NeurIPS . Curran Associates, Inc., 2022. Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer: The long-document transformer. 
+
+CoRR , abs/2004.05150, 2020. Daniel Bolya, Cheng-Yang Fu, Xiaoliang Dai, Peizhao Zhang, Christoph Feichtenhofer, and Judy Hoffman. Token merging: Your vit but faster. In International Conference on Learning Represen-tations , 2023. Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David K. Duvenaud. Neural ordinary differential equations. In Advances in Neural Information Processing Systems , 2018. Tri Dao, Daniel Y. Fu, Stefano Ermon, Atri Rudra, and Christopher Ré. Flashattention: Fast and memory-efficient exact attention with io-awareness. In Advances in Neural Information Processing Systems , volume 35 of NeurIPS . Curran Associates, Inc., 2022. Clive W. J. Granger. Investigating causal relations by econometric models and cross-spectral methods. 
+
+Econometrica , 37(3):424–438, 1969. Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. arXiv preprint arXiv:2312.00752 , 2023. Albert Gu, Karan Goel, and Christopher Ré. Efficiently modeling long sequences with structured state spaces. In International Conference on Learning Representations , 2022. Max Horn, Michael Moor, Christian Bock, Bastian Rieck, and Karsten Borgwardt. Set functions for time series. In International Conference on Machine Learning , 2020. Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch, Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier Henaff, Matthew Botvinick, Andrew Zisserman, Oriol Vinyals, and Joao Carreira. Perceiver io: A general ar-chitecture for structured inputs and outputs. In International Conference on Machine Learning ,2021. Alistair E. W. Johnson, Tom J. Pollard, Seth J. Berkowitz, Nathaniel R. Greenbaum, Matthew P. Lungren, Chih-Ying Deng, Roger G. Mark, and Steven Horng. Mimic-cxr, a de-identified publicly available database of chest radiographs with free-text reports. Scientific Data , 6(1):317, 2019. doi: 10.1038/s41597-019-0322-0. Alistair E. W. Johnson, Lucas Bulgarelli, Lu Shen, Aaron Gayles, Ayad Shammout, Steven Horng, Tom J. Pollard, Sicheng Hao, Benjamin Moody, Brian Gow, Li-wei H. Lehman, Leo A. Celi, and Roger G. Mark. Mimic-iv, a freely accessible electronic health record dataset. Scientific Data , 10 (1):1, 2023. doi: 10.1038/s41597-022-01899-x. Patrick Kidger, James Morrill, James Foster, and Terry Lyons. Neural controlled differential equations for irregular time series. In Advances in Neural Information Processing Systems , 2020. Nikita Kitaev, Lukasz Kaiser, and Anselm Levskaya. Reformer: The efficient transformer. In 
+
+International Conference on Learning Representations , 2020. Shizhan Liu, Hang Yu, Cong Liao, Jianguo Li, Weiyao Lin, Alex X. Liu, and Schahram Dust-dar. Pyraformer: Low-complexity pyramidal attention for long-range time series modeling and forecasting. In 10th International Conference on Learning Representations (ICLR) , 2022. 10 Yongming Rao, Wenliang Zhao, Benlin Liu, Jiwen Lu, and Jie Zhou. Dynamicvit: Efficient vision transformers with dynamic token sparsification. In Advances in Neural Information Processing Systems (NeurIPS) , volume 34, pages 13937–13949, 2021. Yulia Rubanova, Ricky T. Q. Chen, and David K. Duvenaud. Latent ordinary differential equations for irregularly-sampled time series. In Advances in Neural Information Processing Systems , 2019. Jakob Runge. Discovering contemporaneous and lagged causal relations in autocorrelated nonlinear time series datasets. In Conference on Uncertainty in Artificial Intelligence , 2020. Michael S. Ryoo, AJ Piergiovanni, Anurag Arnab, Mostafa Dehghani, and Anelia Angelova. Token-learner: What can 8 learned tokens do for images and videos? In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 8000–8010, 2021. Satya Narayan Shukla and Benjamin M. Marlin. Multi-time attention networks for irregularly sampled time series. International Conference on Learning Representations , 2021. Naftali Tishby, Fernando C. Pereira, and William Bialek. The information bottleneck method. arXiv preprint physics/0004057 , 2000. Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. Timesnet: Temporal 2d-variation modeling for general time series analysis. In AAAI Conference on Artificial Intelligence (AAAI) ,2023. Da Xu, Chuanwei Ruan, Evren Korpeoglu, Sushant Kumar, and Kannan Achan. Inductive repre-sentation learning on temporal graphs. In International Conference on Learning Representations (ICLR) , 2020. Zhitao Ying, Jiaxuan You, Christopher Morris, Xiang Ren, William Hamilton, and Jure Leskovec. Hierarchical graph representation learning with differentiable pooling. In Advances in Neural Information Processing Systems (NeurIPS) , 2018. Manzil Zaheer, Guru Guruganesh, Avinava Dubey, Joshua Ainslie, Chris Alberti, Santiago Ontañón, Philip Pham, Anirudh Ravula, Qifan Wang, Li Yang, and Amr Ahmed. Big bird: Transformers for longer sequences. In Advances in Neural Information Processing Systems (NeurIPS) , volume 33, pages 17283–17297, 2020. Qi Zhang, Yeyun Gong, Jiawei Wu, and Xuanjing Huang. Mm-gnn: Multi-modal graph neural network for predicting the popularity of news articles. IEEE Transactions on Multimedia , 22(11): 3022–3032, 2020. 
+
+## A Broader Impact 
+
+This work aims to improve the efficiency and interpretability of multimodal machine learning, with a primary focus on healthcare applications. The proposed framework enables modeling long-term patient records under strict computational budgets, potentially improving accessibility of clinical decision support systems in resource-constrained settings. However, models trained on historical clinical data (e.g., MIMIC-IV) may inherit biases related to demographics, data collection processes, or clinical practices. While our method does not explicitly address bias, its emphasis on event-adaptive representations and structured temporal modeling may facilitate auditing of which temporal segments and modalities contribute to predictions, supporting more transparent analysis. Although no immediate harmful applications are identified, risks such as bias amplification or misuse in automated decision-making remain possible. Therefore, we emphasize that the proposed method should be deployed with appropriate human oversight and in conjunction with domain expertise. 
+
+## B Code Availability 
+
+An anonymized implementation is provided at: anonymous.4open.science (EvtGraph-F279). 11 C Notation 
+
+Table 4: Notation used in the proposed framework. 
+
+Symbol Description Shape / Domain 
+
+X = {xt}Tt=1 Multimodal time-series inputs T × d0
+
+H = {ht}Tt=1 Encoded temporal features T × dZ = {zs}Ss=1 Event-level tokens S × dws,t Assignment weights (time → event tokens) [0 , 1] , P 
+
+> t
+
+ws,t = 1 
+
+αs Event importance score R
+
+SB Index set of Top-B selected tokens |S B | ≤ B
+
+˜zi Soft aggregated token (training) Rd
+
+z′ 
+
+> i
+
+Final retained token after aggregation Rd
+
+G = ( V, E) Temporal graph over selected tokens –
+
+V Node set ( = {z′
+
+> i
+
+}) ˆS nodes 
+
+E Edge set under temporal constraints –
+
+M [i, j ] Temporal admissibility mask {0, 1}
+
+ϵ Temporal lag window N
+
+κ Max neighbors per node N
+
+h(ℓ) Node representations at layer ℓ ˆS × dB Node budget N
+
+ˆS Number of retained nodes ≤ BτB Temperature for Top-B relaxation R>0
+
+## D Experimental Setup 
+
+D.1 MIMIC-IV + CXR Preprocessing and Protocol 
+
+We construct a multimodal cohort by aligning EHR data from MIMIC-IV Johnson et al. [2023] and chest X-ray data from MIMIC-CXR Johnson et al. [2019]. For each patient encounter, we define a fixed observation window of 7 days after admission, corresponding to 168 hours. All dynamic variables are discretized at a 2-hour resolution, yielding T = 84 time steps. The time-series branch uses F = 20 dynamic clinical variables, while static covariates such as demographic or admission-level attributes are processed separately when used by multimodal baselines. Time-series inputs are represented as tensors X ∈ RB×T ×F together with explicit missing-value masks. We do not impute missing values; instead, missingness is provided as part of the input representation. Continuous variables are normalized using statistics computed only from the training split. CXR images are resized to 224 × 224 and normalized using standard ImageNet statistics. Radiology reports are encoded using a pretrained text encoder and aligned to the timestamp of the corresponding CXR examination. Sparse modalities are assigned to their nearest valid timestamp within the observation window. We consider four binary clinical prediction tasks: acute kidney injury (AKI), circulatory failure, sepsis, and death. For each task, the input consists only of measurements, images, and reports observed within the 7-day window. Labels are defined from clinical events occurring after the observation window, so that the model predicts future outcomes rather than reconstructing already observed events. Unless otherwise specified, outcomes that occur within the observation window are excluded from the positive target definition to avoid label leakage. Thus, each task is formulated as 
+
+ˆy = f (X[0 ,T obs ]), y = I{target event occurs after Tobs },
+
+where Tobs denotes the end of the observation window. To avoid temporal leakage from multimodal inputs, we enforce strict timestamp filtering. CXR images and radiology reports are included only if their acquisition or report timestamps fall within the observation window. Reports generated after the observation window are removed, even if they 12 correspond to earlier studies. When multiple CXR studies are available, each image–report pair is aligned using its own timestamp, and future studies are never exposed to the model. This prevents textual descriptions or diagnostic impressions from revealing outcomes that occur after the prediction time. We remove variables with extremely high missing rates or low support and apply per-feature normal-ization using training-set statistics. The final cohort contains 5,506 patient encounters, split at the patient level into training, validation, and test sets with ratio 0.7/0.15 /0.15 . All visits from the same patient are assigned to the same split to prevent patient-level information leakage. All baselines are evaluated under the same preprocessing pipeline, patient-level splits, observation windows, and target definitions. For multimodal baselines, the same time-series variables, missing-value masks, static covariates, CXR images, and radiology reports are provided whenever the architecture supports the corresponding modality. When a baseline is originally designed for unimodal time-series modeling, we use the same encoded modality features and fuse them with the temporal representation through a shared late-fusion MLP, so that performance differences are not caused by access to different input information. For forecasting-oriented architectures, we replace the forecasting head with the same binary classification head and tune temporal aggregation strategies on the validation set. 
+
+D.2 Time-MMD Dataset and Preprocessing. 
+
+We also conduct experiments on the Time-MMD dataset, which integrates nine domains (Energy, Climate, Health_US, Economy, Traffic, Agriculture, Environment, SocialGood, Security) with three modalities: time-series signals, free-text records, and structured static features. Each domain contains 309 –500 samples for 24-hour forecasting tasks. Time-series are transformed via first-order differencing ∆yt = yt − yt−1 followed by normalization (z-score or robust scaling). Static features are standardized independently, while text records are aligned by nearest timestamp. Domain-level statistics (prediction performance, feature richness, stability) are visualized in Figure 5, and cross-domain drift is illustrated in Figure 6. The analysis reveals that Energy and Climate domains are the most suitable: Energy provides highly stable numerical signals with lowest error (MSE = 0.039, MAE = 0.162), while Climate offers the richest textual information (average length 119 .3 characters) with strong seasonality patterns. Thus, these two domains are selected as primary benchmarks for multimodal forecasting. 
+
+D.3 UCI HAR Dataset and Preprocessing. 
+
+We further evaluate the proposed framework on the UCI Human Activity Recognition (HAR) dataset, a lightweight multivariate sensor benchmark for temporal classification. The dataset consists of smartphone inertial measurements (accelerometer and gyroscope) collected from 30 subjects per-forming six daily activities. Each sample is represented as a fixed-length multivariate time series with 
+
+T = 128 timesteps and 9 sensor channels. Compared to multimodal clinical data, HAR represents a simpler setting with shorter and more structured sequences. However, informative patterns are still concentrated around activity transitions, making it a suitable testbed for evaluating event-adaptive temporal representations. We follow the standard preprocessing protocol. Raw sensor signals are normalized channel-wise using z-score normalization. No additional resampling is required due to the fixed sampling rate. All models are trained under the same input resolution and classification setting, predicting activity labels from the full sequence. This dataset is used solely to assess generalization to event-like temporal sequences, and does not introduce additional multimodal complexity. 
+
+D.4 Tasks and Evaluation Protocol 
+
+We consider multiple clinical prediction tasks including AKI, death, sepsis, and circulatory failure. All tasks are formulated as binary classification problems. For each patient, the model observes a fixed 7-day window and predicts outcomes defined at or after the end of the observation window. Evaluation is performed at the patient level. 13 Figure 5: Domain-level suitability analysis of Time-MMD. Multi-dimensional evaluation includes prediction performance, feature richness, stability, and overall ranking across nine domains. Energy and Climate emerge as top candidates. 
+
+Figure 6: Cross-domain drift analysis of Time-MMD. Left: label distribution drift measured by KS statistic. Right: static feature drift averaged across features. Larger values indicate greater divergence between domains, highlighting challenges of generalization. We report AUROC and AUPRC as primary metrics. All results are averaged over 3 runs with different random seeds. 
+
+Baselines and Implementation Details. We compare with representative baselines across recurrent, convolutional, transformer, and graph-based models, including GRU-D, LSTM, TCN, TimesNet, iTransformer, PatchTST, Perceiver-IO, and TGN. For baselines originally designed for forecasting (e.g., TimesNet, iTransformer, PatchTST), we replace their task-specific output layers with a shared MLP classification head to match the clinical prediction setting. Temporal representations are aggregated into a fixed-size vector (e.g., mean pooling over the sequence dimension), and the same classification head is applied across all methods. All baselines are provided with identical multimodal inputs and evaluated under the same preprocessing pipeline, data splits, and loss functions to ensure a fair comparison. 14 All models are trained using the same optimization setup unless otherwise specified. Recurrent and convolutional baselines (GRU-D, LSTM, TCN) use hidden size 128, while transformer- and graph-based baselines use higher-dimensional embeddings (e.g., 512). Our model adopts a compact shared embedding space of d = 64 , to which all modalities are projected before fusion. Despite architectural differences, all methods produce comparable representations for the downstream classification task. Table 5 summarizes detailed hyperparameter configurations. Unless otherwise specified, all models are trained for 30 epochs using the Muon optimizer with weight decay 10 −5, learning rate 1 × 10 −3,and batch size 64. 
+
+Compute Resources. All experiments are conducted on a single NVIDIA A100 GPU (40GB). Training each model takes approximately XX hours, depending on dataset size. Table 5: Training configurations for all models. All models are trained for 30 epochs using the Muon optimizer with weight decay 10 −5, learning rate 1 × 10 −3, and batch size 64. 
+
+Method Param. Value 
+
+GRU-D Hidden size 128 Layers / Dropout / Input size 2 / 0.1 / 20 LSTM Hidden size 128 Layers / Dropout / Input size 2 / 0.1 / 20 (batch_first=True) TCN Hidden size 128 Layers / Dropout / Dilations 2 / 0.1 / 2i
+
+CSFformer Embedding dim 512 Layers / Heads / df f 2 / 8 / 2048 Seq. len / Pred. len / MSPI layers 167 / 1 / 3 CXR-CLIP Projection dim / Temperature 512 / 0.07 Backbone ResNet + BERT, LSTM(hidden=512, layers=2) CrossViT Backbone CrossViT-small-224 (pretrained) Input dims ts_dim=2, static_dim=10, text_dim=768 TGN Embedding dim 100 (temporal GNN encoder) Perceiver-IO Latent dim / Latent slots 512 / 256 Cross-attn heads / Self-attn heads 8 / 8 TimesNet Seq len / Pred len 96 / 96 d_model / d_ff 512 / 2048 e_layers / dropout 2 / 0.1 top_k 2num_kernels 6embed / freq timeF / h iTransformer Seq len / Pred len 96 / 96 d_model / d_ff 512 / 2048 n_heads / e_layers 8 / 2 dropout 0.1 factor / activation 1 / gelu embed / freq timeF / h PatchTST Seq len / Pred len 96 / 96 d_model / d_ff 64 / 256 n_heads / e_layers 4 / 3 dropout 0.2 patch_len / stride 16 / 8 individual True embed / freq timeF / h Ours (EvtGraph) Shared dim 64 Layers / Heads / Modal dims 2 / 4 / text=64, image=64, ts=64, static=5 Boundary smoothing window 5Node budget B 8Lag window ϵ 4Edge budget κ 215 D.5 UCI HAR Benchmark 
+
+To further evaluate the generalization ability of EvtGraph beyond clinical data, we conduct experi-ments on the UCI Human Activity Recognition (HAR) dataset. This dataset consists of multivariate time series collected from smartphone inertial sensors, with activity labels corresponding to different human actions. Compared to clinical prediction tasks, HAR represents a lightweight setting with shorter sequences and relatively structured temporal patterns. However, informative signals are still concentrated around activity transitions, making it a suitable benchmark for evaluating event-adaptive temporal modeling. We compare EvtGraph against a diverse set of baselines, including recurrent models (GRU, LSTM), convolutional models (TCN), Transformer-based methods (Transformer, PatchTST, iTransformer, TimesNet), adaptive token methods (ToMe, DynamicViT), continuous-time models (mTAN, Latent ODE), and graph-based approaches (DiffPool, MinCutPool). All models are evaluated under a unified setting.                                                
+
+> Model Accuracy ↑F1 (macro) ↑Params
+> EvtGraph (Ours) 0.9494 0.9496 149K TCN 0.9430 0.9433 161K GRU 0.9240 0.9238 42K LSTM 0.9230 0.9238 212K MinCutPool 0.9074 0.9080 13K TimesNet 0.9016 0.9010 18.8M PatchTST 0.8992 0.8994 235K ToMe 0.8992 0.8984 165K iTransformer 0.8975 0.8964 120K DynamicViT 0.8928 0.8904 168K mTAN 0.8894 0.8880 48K Transformer 0.8870 0.8848 115K Latent ODE 0.8867 0.8865 50K DiffPool 0.8476 0.8469 13K
+
+Table 6: Performance comparison on the UCI HAR dataset. EvtGraph achieves the best performance across both accuracy and macro-F1, while maintaining a compact model size. EvtGraph achieves the best performance across all evaluated methods, surpassing strong baselines such as TCN and GRU. Despite its moderate parameter count, the model consistently outperforms both lightweight models and large Transformer-based approaches. This result highlights two important properties. First, event-adaptive compression remains effective even in relatively short and structured sequences, suggesting that the method does not rely on extremely long temporal contexts. Second, the explicit budget constraint enables efficient allocation of representational capacity, allowing the model to focus on informative temporal regions rather than uniformly processing all timesteps. Overall, these findings support the claim that EvtGraph provides a general mechanism for event-centric temporal modeling, beyond the specific setting of multimodal clinical data. 
+
+## E Diagnostics and Additional Details 
+
+This section provides additional definitions and diagnostics used to analyze the proposed framework. 
+
+E.1 Information Retention Rate (IRR) 
+
+To quantify how much temporal information is preserved after compression, we measure reconstruc-tion fidelity in the encoded feature space. Let H = {ht}Tt=1 denote the original temporal features and ˜H their reconstruction from the compressed representation. 16 We define the reconstruction error as 
+
+Lrec = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+∥ht − ˜ht∥22,
+
+and normalize it by the variance 
+
+σ2 = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+∥ht − ¯h∥22.
+
+The Information Retention Rate is defined as 
+
+IRR = 1 − Lrec 
+
+σ2 .
+
+A higher IRR indicates that the compressed representation preserves more information from the original temporal signal. 
+
+E.2 Graph Sparsity and Complexity 
+
+Under the proposed T2SG construction, the number of nodes is bounded by ˆS ≤ B, where B is the node budget. Each node only attends to a limited temporal neighborhood and is further restricted by top-κ sparsification. As a result, the in-degree satisfies 
+
+deg −(i) ≤ min( ϵ, κ ),
+
+and the total number of edges is bounded by 
+
+|E| ≤ ˆS · min( ϵ, κ ),
+
+which yields near-linear complexity O(κB ).
+
+E.3 Temporal Masking and Leakage Control 
+
+To avoid information leakage, we restrict message passing to past temporal dependencies. Specifically, node i only aggregates information from nodes j satisfying j < i and i − j ≤ ϵ.In contrast, allowing symmetric neighborhoods (i.e., |i − j| ≤ ϵ) would introduce future information into the representation, leading to optimistic but invalid performance estimates. By enforcing strictly past-directed connectivity, the proposed model ensures temporally consistent reasoning and prevents leakage from future observations. In practice, ϵ is treated as a tunable hyperparameter. We find that moderate values (e.g., ϵ = 4 under 
+
+B = 8 ) provide a good balance between capturing temporal dependencies and maintaining stable training. 
+
+## F Additional Theoretical Discussion 
+
+Budget-constrained representation selection. We provide a simple justification for the Node Budget Controller (NBC) from a capacity allocation perspective. Let {zs}Ss=1 denote candidate event tokens, and let us = U (zs) be a scalar utility function that measures the task-relevant information contained in token zs. Given a fixed budget B, the goal is to select a subset of tokens that maximizes the total utility: 
+
+S∗ 
+
+> B
+
+= arg max  
+
+> S⊆{ 1,...,S },|S|≤ B
+
+X
+
+> s∈S
+
+us. (8) 
+
+Proposition 1 (Optimality of top-B selection). The optimal solution to the above problem is obtained by selecting the top-B tokens ranked by utility us.17 Proof. Since the objective is a modular function over individual elements, the problem reduces to selecting the B largest values of us, which is solved by sorting. □
+
+Connection to the proposed method. In practice, the utility function us is unknown and must be approximated. The proposed importance score αs = gψ (zs) serves as a learned surrogate for us. If 
+
+αs is monotonically aligned with us, i.e., higher αs implies higher task-relevant utility, then selecting the top-B tokens according to αs recovers the optimal solution. This provides a justification for the Node Budget Controller: budgeted selection corresponds to optimal capacity allocation under a cardinality constraint. 
+
+Relation to information bottleneck. Under the additional assumption that different tokens capture complementary task-relevant information, maximizing P 
+
+> s∈S
+
+us can be interpreted as maximizing a lower bound of I(Z; Y ) subject to a constraint |Z| ≤ B. This yields an information-bottleneck-inspired interpretation of the proposed framework, although we do not explicitly optimize mutual information. 
+
+## G Additional Method Details 
+
+For completeness, we provide additional formulations of the main modules described in Sec. 3, focusing on implementation details while maintaining consistency with the main text. 
+
+G.1 Event-Adaptive Representation (EAMC) 
+
+EAMC transforms temporal features H = {ht}Tt=1 into a compact set of event-level tokens. 
+
+Coarse partition. We adopt a fixed coarse partition of the temporal axis into S contiguous blocks, each of length L = ⌈T /S ⌉. Unlike boundary-based segmentation, this design avoids instability under weak supervision and ensures consistent token cardinality. 
+
+Intra-block adaptive aggregation. Within each block s, we compute saliency scores: 
+
+ℓs,r = fθ (hs,r ), r = 1 , . . . , L, 
+
+and obtain assignment weights via temperature-controlled softmax: 
+
+ws,r = exp( ℓs,r /τ e)
+
+P 
+
+> r′
+
+exp( ℓs,r ′ /τ e) .
+
+The event token is then defined as: 
+
+zs =
+
+> L
+
+X
+
+> r=1
+
+ws,r hs,r , X
+
+> r
+
+ws,r = 1 .
+
+This formulation performs a continuous reweighting within each block, allowing the model to focus on salient temporal patterns while suppressing redundant regions. 
+
+Remark. Learning explicit segment boundaries (e.g., via peak detection or boundary predictors) is a possible extension, but is not required in the proposed framework. 
+
+G.2 Node Budget Controller (NBC) 
+
+Each event token is assigned an importance score: 
+
+αs = gψ (zs).
+
+We select a subset SB = TopB( {αs}) and denote selected tokens as ˆZ = {ˆzi}Bi=1 , with ˆzi = zsi .18 Soft relaxation. To enable gradient propagation, we construct a soft aggregation: 
+
+˜zi = X
+
+> s
+
+qi,s zs, qi,s = exp(( αs − λ|ts − ti|)/τ B )
+
+P 
+
+> r
+
+exp(( αr − λ|tr − ti|)/τ B ) ,
+
+where ti := tsi is the timestamp of the selected token. A straight-through estimator is applied: 
+
+ztrain  
+
+> i
+
+= ˜ zi + sg(ˆ zi − ˜zi),
+
+so that forward computation uses hard selection, while gradients flow through ˜zi.
+
+Local aggregation. Discarded tokens are assigned to the nearest selected token: 
+
+Ri = {s / ∈ S B | i = arg min  
+
+> j
+
+|ts − tj |} .
+
+We incorporate residual information via normalized aggregation: 
+
+z′ 
+
+> i
+
+= LayerNorm ˆzi + 1
+
+|R i| + δ
+
+X
+
+> s∈R i
+
+zs
+
+!
+
+.
+
+This preserves local context while maintaining stable feature scale. 
+
+G.3 Temporally-Constrained Sparse Graph (T2SG) 
+
+We construct a sparse temporal graph over retained nodes {z′
+
+> i
+
+}.
+
+Temporal admissibility. Edges are restricted by a causal mask: 
+
+M [i, j ] = 1(j < i ∧ ti − tj ≤ ϵ).
+
+Sparse connectivity. Edge weights are computed via similarity, and each node keeps only its top-κ
+
+neighbors: 
+
+A[i, :] = Top -κj
+
+ sim( z′
+
+> i
+
+, z′ 
+
+> j
+
+) · M [i, j ].
+
+Complexity. The number of edges satisfies 
+
+|E| ≤ ˆS · min( ϵ, κ ),
+
+yielding near-linear complexity. Message passing scales as O(κBd ).19 NeurIPS Paper Checklist 
+
+1. Claims 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope? Answer: [Yes] Justification: The claims in the abstract and introduction are consistent with the experimental results presented. Guidelines: • The answer [N/A] means that the abstract and introduction do not include the claims made in the paper. • The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A [No] or [N/A] answer to this question will not be perceived well by the reviewers. • The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings. • It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper. 2. Limitations 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? Answer: [Yes] Justification: We discuss limitations including sensitivity to hyperparameters, dataset scope, and computational constraints in conclusion. Guidelines: • The answer [N/A] means that the paper has no limitation while the answer [No] means that the paper has limitations, but those are not discussed in the paper. • The authors are encouraged to create a separate “Limitations” section in their paper. • The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be. • The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated. • The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon. • The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset size. • If applicable, the authors should discuss possible limitations of their approach to address problems of privacy and fairness. • While the authors might fear that complete honesty about limitations might be used by reviewers as grounds for rejection, a worse outcome might be that reviewers discover limitations that aren’t acknowledged in the paper. The authors should use their best judgment and recognize that individual actions in favor of transparency play an impor-tant role in developing norms that preserve the integrity of the community. Reviewers will be specifically instructed to not penalize honesty concerning limitations. 3. Theory assumptions and proofs 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof? 20 Answer: [N/A] Justification: The paper does not include formal theoretical results; the contributions are empirical and methodological. Guidelines: • The answer [N/A] means that the paper does not include theoretical results. • All the theorems, formulas, and proofs in the paper should be numbered and cross-referenced. • All assumptions should be clearly stated or referenced in the statement of any theorems. • The proofs can either appear in the main paper or the supplemental material, but if they appear in the supplemental material, the authors are encouraged to provide a short proof sketch to provide intuition. • Inversely, any informal proof provided in the core of the paper should be complemented by formal proofs provided in appendix or supplemental material. • Theorems and Lemmas that the proof relies upon should be properly referenced. 4. Experimental result reproducibility 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-perimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)? Answer: [Yes] Justification: All experimental details including datasets, model configurations, and training procedures are described in Section 4 and Appendix. Guidelines: • The answer [N/A] means that the paper does not include experiments. • If the paper includes experiments, a [No] answer to this question will not be perceived well by the reviewers: Making the paper reproducible is important, regardless of whether the code and data are provided or not. • If the contribution is a dataset and/or model, the authors should describe the steps taken to make their results reproducible or verifiable. • Depending on the contribution, reproducibility can be accomplished in various ways. For example, if the contribution is a novel architecture, describing the architecture fully might suffice, or if the contribution is a specific model and empirical evaluation, it may be necessary to either make it possible for others to replicate the model with the same dataset, or provide access to the model. In general. releasing code and data is often one good way to accomplish this, but reproducibility can also be provided via detailed instructions for how to replicate the results, access to a hosted model (e.g., in the case of a large language model), releasing of a model checkpoint, or other means that are appropriate to the research performed. • While NeurIPS does not require releasing code, the conference does require all submis-sions to provide some reasonable avenue for reproducibility, which may depend on the nature of the contribution. For example (a) If the contribution is primarily a new algorithm, the paper should make it clear how to reproduce that algorithm. (b) If the contribution is primarily a new model architecture, the paper should describe the architecture clearly and fully. (c) If the contribution is a new model (e.g., a large language model), then there should either be a way to access this model for reproducing the results or a way to reproduce the model (e.g., with an open-source dataset or instructions for how to construct the dataset). (d) We recognize that reproducibility may be tricky in some cases, in which case authors are welcome to describe the particular way they provide for reproducibility. In the case of closed-source models, it may be that access to the model is limited in some way (e.g., to registered users), but it should be possible for other researchers to have some path to reproducing or verifying the results. 5. Open access to data and code 
+
+21 Question: Does the paper provide open access to the data and code, with sufficient instruc-tions to faithfully reproduce the main experimental results, as described in supplemental material? Answer: [Yes] Justification: Code is released at submission time. Guidelines: • The answer [N/A] means that paper does not include experiments requiring code. • Please see the NeurIPS code and data submission guidelines ( https://neurips.cc/ public/guides/CodeSubmissionPolicy ) for more details. • While we encourage the release of code and data, we understand that this might not be possible, so [No] is an acceptable answer. Papers cannot be rejected simply for not including code, unless this is central to the contribution (e.g., for a new open-source benchmark). • The instructions should contain the exact command and environment needed to run to reproduce the results. See the NeurIPS code and data submission guidelines ( https: //neurips.cc/public/guides/CodeSubmissionPolicy ) for more details. • The authors should provide instructions on data access and preparation, including how to access the raw data, preprocessed data, intermediate data, and generated data, etc. • The authors should provide scripts to reproduce all experimental results for the new proposed method and baselines. If only a subset of experiments are reproducible, they should state which ones are omitted from the script and why. • At submission time, to preserve anonymity, the authors should release anonymized versions (if applicable). • Providing as much information as possible in supplemental material (appended to the paper) is recommended, but including URLs to data and code is permitted. 6. Experimental setting/details 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperpa-rameters, how they were chosen, type of optimizer) necessary to understand the results? Answer: [Yes] Justification: We specify training details including data splits, hyperparameters, and opti-mization settings in Section 4 and Appendix. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The experimental setting should be presented in the core of the paper to a level of detail that is necessary to appreciate the results and make sense of them. • The full details can be provided either with the code, in appendix, or as supplemental material. 7. Experiment statistical significance 
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments? Answer: [Yes] Justification: Results are reported as mean ± standard deviation over 3 seeds. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The authors should answer [Yes] if the results are accompanied by error bars, confidence intervals, or statistical significance tests, at least for the experiments that support the main claims of the paper. • The factors of variability that the error bars are capturing should be clearly stated (for example, train/test split, initialization, random drawing of some parameter, or overall run with given experimental conditions). • The method for calculating the error bars should be explained (closed form formula, call to a library function, bootstrap, etc.) 22 • The assumptions made should be given (e.g., Normally distributed errors). • It should be clear whether the error bar is the standard deviation or the standard error of the mean. • It is OK to report 1-sigma error bars, but one should state it. The authors should preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis of Normality of errors is not verified. • For asymmetric distributions, the authors should be careful not to show in tables or figures symmetric error bars that would yield results that are out of range (e.g., negative error rates). • If error bars are reported in tables or plots, the authors should explain in the text how they were calculated and reference the corresponding figures or tables in the text. 8. Experiments compute resources 
+
+Question: For each experiment, does the paper provide sufficient information on the com-puter resources (type of compute workers, memory, time of execution) needed to reproduce the experiments? Answer: [Yes] Justification: We report the type of hardware, training time, and computational cost in Appendix. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The paper should indicate the type of compute workers CPU or GPU, internal cluster, or cloud provider, including relevant memory and storage. • The paper should provide the amount of compute required for each of the individual experimental runs as well as estimate the total compute. • The paper should disclose whether the full research project required more compute than the experiments reported in the paper (e.g., preliminary or failed experiments that didn’t make it into the paper). 9. Code of ethics 
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics https://neurips.cc/public/EthicsGuidelines ?Answer: [Yes] Justification: The research adheres to the NeurIPS Code of Ethics and does not involve harmful or unethical applications. Guidelines: • The answer [N/A] means that the authors have not reviewed the NeurIPS Code of Ethics. • If the authors answer [No], they should explain the special circumstances that require a deviation from the Code of Ethics. • The authors should make sure to preserve anonymity (e.g., if there is a special consid-eration due to laws or regulations in their jurisdiction). 10. Broader impacts 
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed? Answer: [Yes] Justification: We discuss potential positive impacts such as improved clinical decision support, as well as risks including model misinterpretation and deployment biases, in the Conclusion section. Guidelines: • The answer [N/A] means that there is no societal impact of the work performed. • If the authors answer [N/A] or [No], they should explain why their work has no societal impact or why the paper does not address societal impact. 23 • Examples of negative societal impacts include potential malicious or unintended uses (e.g., disinformation, generating fake profiles, surveillance), fairness considerations (e.g., deployment of technologies that could make decisions that unfairly impact specific groups), privacy considerations, and security considerations. • The conference expects that many papers will be foundational research and not tied to particular applications, let alone deployments. However, if there is a direct path to any negative applications, the authors should point it out. For example, it is legitimate to point out that an improvement in the quality of generative models could be used to generate Deepfakes for disinformation. On the other hand, it is not needed to point out that a generic algorithm for optimizing neural networks could enable people to train models that generate Deepfakes faster. • The authors should consider possible harms that could arise when the technology is being used as intended and functioning correctly, harms that could arise when the technology is being used as intended but gives incorrect results, and harms following from (intentional or unintentional) misuse of the technology. • If there are negative societal impacts, the authors could also discuss possible mitigation strategies (e.g., gated release of models, providing defenses in addition to attacks, mechanisms for monitoring misuse, mechanisms to monitor how a system learns from feedback over time, improving the efficiency and accessibility of ML). 11. Safeguards 
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)? Answer: [N/A] Justification: The proposed method does not involve high-risk assets such as generative models or sensitive data release. Guidelines: • The answer [N/A] means that the paper poses no such risks. • Released models that have a high risk for misuse or dual-use should be released with necessary safeguards to allow for controlled use of the model, for example by requiring that users adhere to usage guidelines or restrictions to access the model or implementing safety filters. • Datasets that have been scraped from the Internet could pose safety risks. The authors should describe how they avoided releasing unsafe images. • We recognize that providing effective safeguards is challenging, and many papers do not require this, but we encourage authors to take this into account and make a best faith effort. 12. Licenses for existing assets 
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected? Answer: [Yes] Justification: We use publicly available datasets such as MIMIC-IV and cite their original sources, complying with their usage licenses. Guidelines: • The answer [N/A] means that the paper does not use existing assets. • The authors should cite the original paper that produced the code package or dataset. • The authors should state which version of the asset is used and, if possible, include a URL. • The name of the license (e.g., CC-BY 4.0) should be included for each asset. • For scraped data from a particular source (e.g., website), the copyright and terms of service of that source should be provided. 24 • If assets are released, the license, copyright information, and terms of use in the package should be provided. For popular datasets, paperswithcode.com/datasets 
+
+has curated licenses for some datasets. Their licensing guide can help determine the license of a dataset. • For existing datasets that are re-packaged, both the original license and the license of the derived asset (if it has changed) should be provided. • If this information is not available online, the authors are encouraged to reach out to the asset’s creators. 13. New assets 
+
+Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets? Answer: [N/A] Justification: The paper does not introduce new datasets or publicly released models. Guidelines: • The answer [N/A] means that the paper does not release new assets. • Researchers should communicate the details of the dataset/code/model as part of their submissions via structured templates. This includes details about training, license, limitations, etc. • The paper should discuss whether and how consent was obtained from people whose asset is used. • At submission time, remember to anonymize your assets (if applicable). You can either create an anonymized URL or include an anonymized zip file. 14. Crowdsourcing and research with human subjects 
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)? Answer: [N/A] Justification: The paper does not involve crowdsourcing or human subject experiments. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Including this information in the supplemental material is fine, but if the main contribu-tion of the paper involves human subjects, then as much detail as possible should be included in the main paper. • According to the NeurIPS Code of Ethics, workers involved in data collection, curation, or other labor should be paid at least the minimum wage in the country of the data collector. 15. Institutional review board (IRB) approvals or equivalent for research with human subjects 
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained? Answer: [N/A] Justification: The paper does not involve research with human subjects requiring IRB approval. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Depending on the country in which research is conducted, IRB approval (or equivalent) may be required for any human subjects research. If you obtained IRB approval, you should clearly state this in the paper. 25 • We recognize that the procedures for this may vary significantly between institutions and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the guidelines for their institution. • For initial submissions, do not include any information that would break anonymity (if applicable), such as the institution conducting the review. 16. Declaration of LLM usage 
+
+Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Note that if the LLM is used only for writing, editing, or formatting purposes and does not impact the core methodology, scientific rigor, or originality of the research, declaration is not required. Answer: [N/A] Justification: LLMs are not used as part of the core methodology of this work. Guidelines: • The answer [N/A] means that the core method development in this research does not involve LLMs as any important, original, or non-standard components. • Please refer to our LLM policy in the NeurIPS handbook for what should or should not be described. 26
