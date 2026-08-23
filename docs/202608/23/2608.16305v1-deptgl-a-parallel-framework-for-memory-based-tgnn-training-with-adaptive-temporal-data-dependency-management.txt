@@ -1,0 +1,1133 @@
+Title: DepTGL: A Parallel Framework for Memory-based TGNN Training with Adaptive Temporal Data Dependency Management
+
+URL Source: https://arxiv.org/pdf/2608.16305v1
+
+Published Time: Tue, 18 Aug 2026 01:49:44 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# DepTGL: A Parallel Framework for Memory-based TGNN Training with Adaptive Temporal Data Dependency Management 
+
+Linfang Chen §, Zhen Song §, Lei Liu §, Yu Gu ‡, Yushuai Li †,Yanfeng Zhang ‡, Lizhen Cui §, Ge Yu ‡, Tianyi Li †
+
+> §
+
+Shandong University, China ‡Northeastern University, China †Aalborg University, Denmark 
+
+chenlinfang@mail.sdu.edu.cn, {songzhen,l.liu,clz }@sdu.edu.cn, 
+
+{guyu,Zhangyf,yuge }@mail.neu.edu.cn, {tianyi,yusli }@cs.aau.dk 
+
+Abstract —Memory-based Temporal Graph Neural Networks (M-TGNNs) maintain recursively updated node states to capture fine-grained temporal interactions. However, existing distributed frameworks lack effective mechanisms for managing the temporal data dependencies inherent in these models. As a result, they must enforce strict chronological updates, incur substantial remote synchronization overhead, and experience severe load imbalance when temporal event streams are skewed. We pro-pose DepTGL , a scalable distributed training framework that restructures temporal-dependency management for M-TGNNs from a data-centric perspective. First, DepTGL introduces ahybrid temporal-dependency management scheme that explicitly balances communication and caching overhead via temporal-event caching, supplemented by selective dependency-driven communication. Next, DepTGL incorporates a gradient-aware cache-synchronization policy that adaptively suppresses bound-ary updates as model optimization stabilizes, thereby reducing redundant synchronization. Finally, DepTGL integrates a load-aware temporal-pruning strategy that eliminates auxiliary replay events under skew-induced load spikes, reducing redundant data processing and mitigating straggler effects. Experiments on six real-world temporal graphs show that DepTGL achieves an average speedup of 4.99 × over state-of-the-art baselines, while maintaining comparable accuracy. 
+
+Index Terms —temporal graph neural networks, distributed training, temporal data dependency management, data caching 
+
+I. I NTRODUCTION 
+
+Memory-based Temporal Graph Neural Networks (M-TGNNs) have achieved strong performance on dynamic graph learning tasks by directly modeling timestamped interaction events [1]–[5]. Such timestamped continuous data streams are ubiquitous in various real-world applications, ranging from social network interactions to spatio-temporal mobility analysis, such as moving object clustering [6], trajectory similarity computation [7], and transportation mode classifica-tion [8]. Representative M-TGNN models, such as JODIE [2], DyRep [3], and TGN [5], maintain node-wise temporal states and update them along chronological interactions. Subsequent M-TGNN models enhance temporal representation learning by introducing mechanisms such as inductive temporal atten-tion, asynchronous message propagation, and causal temporal walks, as exemplified by TGAT [4], APAN [9], and CAW [10]. While these models increase the expressive power of temporal graph representations, they also impose strict chronological dependencies across events and node states. Such dependen-cies hinder parallelization and complicate state management, making distributed training significantly more challenging than in static GNN training [11]–[17] or snapshot-based dynamic GNN training [18]–[20]. Distributed GNN systems, such as DistDGL [11], PipeGCN [12], NeutronStar [13], PaGraph [14], Dorylus [15], BNS-GCN [16], and SANCUS [17], have been extensively developed for large-scale static graphs. These systems fo-cus on spatial dependencies and thus do not account for event ordering or evolving node states, making them un-suitable for memory-based TGNNs whose computation is tightly coupled to chronological interaction events. Recent distributed temporal-graph systems, including DynaHB [18], SWASH [19], PGT-I [20], and NeutronStream [21], support dynamic workloads but operate on discrete-time snapshots or windowed updates rather than continuous event streams. As a result, they also fail to address the event-level temporal dependencies that fundamentally constrain the parallelization of memory-based TGNNs. For event-driven M-TGNNs, distributed systems such as Sven [22], DistTGL [23], DisTGL [24], Cascade [25], MemShare [26], SWIFT [27], and TASER [28] advance distributed temporal graph training through temporal parti-tioning, time-indexed storage, dependency-aware execution, shared state management, pipeline parallelism, and adaptive sampling. However, frequent data-state synchronization, rigid communication patterns, and hotspot-induced stragglers con-tinue to form fundamental bottlenecks, limiting the scalability of distributed training for M-TGNNs on continuous-time dy-namic graphs. We summarize the main design challenges in achieving parallel M-TGNN systems as follows. 
+
+Challenge I: Cross-worker temporal data dependencies are difficult to serve efficiently. In M-TGNNs, each node data state is recursively updated along its timestamped inter-action history. Processing a target event on one worker may therefore depend on earlier events and remote node states maintained by other workers. Such dependencies break the sample independence assumed by standard batch-parallel ex-ecution and make simple spatial caching insufficient, because cached remote states cannot capture the missing chronological arXiv:2608.16305v1 [cs.DC] 17 Aug 2026 evolution between synchronization boundaries. Handling these dependencies through online traversal or per-access remote fetching would place both dependency materialization and communication on the critical training path. 
+
+Challenge II: Strict data consistency and cache synchro-nization incur massive communication overhead. Existing distributed TGNN frameworks typically enforce periodic or frequent cache-synchronization boundaries to maintain tempo-ral data consistency across GPUs. This rigid cache synchro-nization mechanism not only slows down training significantly, but also ignores the convergence characteristics of the model in later stages, causing substantial avoidable data-state syn-chronization overhead and limiting the safe reuse of locally cached states. 
+
+Challenge III: Data skewness in temporal streams leads to severe computational bottlenecks. Real-world temporal data streams typically exhibit highly skewed interaction patterns. In distributed processing, both the input data volume and the dependency-induced data replay workload can fluctuate sharply across temporal batches. Due to the reliance on global cache-synchronization barriers, fast workers must idle and wait for the heaviest-loaded worker, causing severe performance degradation and reduced cluster utilization. Motivated by the above challenges, we propose DepTGL ,a parallel framework for distributed M-TGNN training that combines lightweight remote caching, in-window local replay, and adaptive boundary refreshes to reduce remote data-state requests while preserving chronological update semantics. To address Challenge I , DepTGL introduces batch-wise hy-brid temporal data dependency serving. It expands temporal data dependencies offline, constructs worker-specific mixed batches, and performs timestamp-ordered local replay, thereby moving dependency materialization out of the runtime critical path. To address Challenge II , DepTGL proposes gradient-aware dynamic cache synchronization. It uses the EMA of gradient norms as a lightweight signal to skip stable boundary refreshes and reduce redundant cross-worker synchronization. To address Challenge III , DepTGL designs load-aware tem-poral data pruning. It uses the EMA of batch execution times to detect heavy-load phases and prune auxiliary replay events before forward propagation while preserving all target events. Our main contributions are summarized as follows:  
+
+> •
+
+We propose DepTGL , a parallel framework for distributed memory-based TGNN training. By combining offline tem-poral data dependency expansion, worker-specific mixed-batch construction, and timestamp-ordered local temporal data replay, DepTGL serves cross-worker temporal data dependencies outside the runtime critical path and reduces fine-grained remote data-state requests.  
+
+> •
+
+We propose a gradient-aware dynamic cache synchroniza-tion mechanism that uses the moving average of gradi-ent norms to adaptively control boundary synchronization, reducing unnecessary cache-synchronization operations as training stabilizes.  
+
+> •
+
+We propose a load-aware temporal data pruning strategy that selectively prunes pure auxiliary replay events before forward propagation under heavy-load conditions, reducing prunable auxiliary computation and mitigating straggler effects at synchronization barriers.  
+
+> •
+
+We implement DepTGL and evaluate it on real-world temporal graphs. Experimental results show that DepTGL 
+
+achieves an average epoch-time speedup of 4.99 × over state-of-the-art baselines, while maintaining comparable ac-curacy across datasets and models. II. R ELATED WORK 
+
+A. Temporal Graph Neural Networks 
+
+Temporal graph neural networks can be broadly categorized into Snapshot-based models discretize continuous graph evolu-tion into a sequence of static snapshots or temporal windows, typically capturing spatio-temporal patterns by coupling graph convolutions with sequence models [29]–[35]. Capturing such spatio-temporal evolving patterns is also a fundamental challenge in related dynamic data mining fields, including evolutionary clustering of moving objects [6] and complex trajectory analyses [7], [8]. From a computational perspective, the temporal dependencies in these methods are coarse-grained and mainly bounded at the snapshot or window level. In contrast, continuous-time methods process fine-grained timestamped interaction events directly to capture structural and temporal dynamics [1], [4], [9], [10]. Among them, M-TGNNs, such as JODIE [2], DyRep [3], and TGN [5], maintain node-wise temporal data states and update them recursively along timestamped interactions. Therefore, the data state required by a target event depends on the chronological sequence of earlier events involving the same nodes, which breaks the independence assumption of conventional batch-wise parallel training. This distinction is important for distributed system design. Snapshot-based systems optimize batching, partitioning, and caching around coarse-grained temporal units, whereas M-TGNN training requires event-level chronological data-state evolution. Therefore, efficient distributed M-TGNN training must explicitly manage event ordering, remote temporal data-state access, and cache consistency across workers during continuous event-stream processing. 
+
+B. Distributed Frameworks for Graph Learning 
+
+Efforts to speed up graph training involve optimizations for single servers and distributed clusters across different graph representations. Table I summarizes representative graph training systems closely related to distributed and temporal graph learning. 
+
+Static GNN training and system optimizations. Large-scale static GNN training has been extensively optimized through neighbor sampling [36], importance sampling [37], variance reduction [38], graph clustering [39], subgraph sam-pling [40], and historical embeddings [41]. These techniques build on canonical message-passing GNN architectures such as GCN [42] and GAT [43], and reduce the computation, sampling, or memory overhead of static graph learning. System-level frameworks further improve scalability through (a) Full Communication (b) Full Cache (c) DepTGL (Ours)         
+
+> Worker 1 (compute worker)
+> Batch r
+> ...
+> Per-batch refresh
+> One-time initialization
+> Worker 2 (remote worker)
+> Remote temporal states
+> ...
+> Lightweight remote cache ...
+> ...
+> Batch r+2
+> ...
+> Batch r+1
+> Worker 1 (compute worker)
+> Batch r
+> ...
+> Synchronization window
+> Local replay
+> ...
+> Batch r+2
+> ...
+> Batch r+1
+> Worker 2 (remote worker)
+> Remote temporal states
+> ...
+> Selective refresh
+> Worker 1 (compute worker)
+> Batch r
+> ...
+> Full remote cache
+> ...
+> ...
+> Batch r+2
+> ...
+> Batch r+1
+> Worker 2 (remote worker)
+> Remote temporal states
+> ...
+> Framework Full Communication Full Cache DepTGL (Ours)
+> Comparison High communication, No cache Low communication, Heavy cache Low communication, Light cache Fig. 1. Motivating case study of communication-cache trade-offs.
+
+distributed graph storage [11], [44], [45], feature caching [14], pipelined feature communication [12], partition-parallel train-ing [16], boundary node sampling [16], serverless execu-tion [15], and staleness-aware communication avoidance [17]. However, these systems mainly target static spatial dependen-cies, where node representations do not maintain chronolog-ical memory states. Therefore, their optimizations cannot be directly applied to memory-based TGNNs without addressing event-order dependencies and temporal data-state consistency. 
+
+Distributed training systems for discrete-time and spa-tiotemporal DGNNs. For discrete-time dynamic graphs, existing distributed DGNN systems mainly optimize com-munication, batching, and partitioning around snapshot or sliding-window execution. Early systems such as ESDG [46], DGC [47], BLAD [48], and DynaGraph [49] reduce com-munication or improve parallelism through snapshot parti-tioning, chunk-based partitioning, load-balanced scheduling, or sliding-window execution. Recent systems further opti-mize this line of work: DynaHB [18] uses hybrid batching for snapshot-based DGNNs, SWASH [19] reduces sliding-window communication through cache sharing, and PGT-I [20] improves memory efficiency for spatiotemporal GNN training. These systems target snapshot-based or time-indexed graph execution, and therefore differ from memory-based continuous-time TGNNs, where node data states evolve along timestamped interaction events and must respect strict chrono-logical update semantics. 
+
+Event-stream and continuous-time TGNN training sys-tems. NeutronStream [21] supports event-stream dynamic GNN training through sliding-window execution. DisTGL [24] supports distributed temporal graph learning through streaming temporal-aware edge partitioning, hybrid caching, and parallel fetching. DistTGL [23] identifies the high overhead of dis-tributed data-state synchronization for memory-based TGNN training. GNNFlow [50] improves continuous temporal GNN learning through time-indexed graph storage, hybrid GPU-CPU placement, temporal sampling, and dynamic caching. Cascade [25] introduces temporal-data-dependency-aware exe-cution, while MemShare [26] mitigates communication bottle-necks through hotspot data-state sharing. Orthogonally, Sven and SWIFT accelerate TGNN execution through pipeline parallelism on multi-GPU and single-machine architectures, respectively [22], [27]. Additionally, TASER [28] improves temporal adaptive sampling for dynamic graph representation learning. Despite these advancements, existing systems usually optimize only one or two aspects, such as dependency schedul-ing, data-state sharing, sampling, caching, or pipelining. They still lack a unified runtime mechanism that jointly adapts cache synchronization frequency and mitigates batch-level workload skew for distributed memory-based TGNN training. More importantly, existing event-stream TGNN systems usually optimize temporal dependency handling, cache management, and runtime scheduling separately. In memory-based TGNNs, these factors are tightly coupled because remote-state fresh-ness, auxiliary replay, and worker-level load imbalance jointly affect the execution cost of each batch. From the perspective of remote temporal data-state serving, two intuitive architectures are Full Communication and Full Cache. Full Communication keeps no persistent remote-state cache and relies on frequent cross-worker communication to fetch or refresh remote temporal states, while Full Cache reduces online communication by materializing remote tem-poral histories locally. DepTGL takes a middle-ground design that combines lightweight remote caching, selective boundary refreshes, and local mixed-batch replay. Example 1 illustrates the communication-cache trade-off among the three designs. 
+
+Example 1 (Communication–cache trade-off in remote tem-poral data-state serving): Figure 1 compares three strategies for serving remote temporal data states in distributed M-TGNN training. In Figure 1(a), Full Communication keeps no persistent remote-state cache and refreshes remote temporal states for each batch, making cross-worker communication a dominant runtime cost. In Figure 1(b), Full Cache materializes remote temporal histories in advance, but the state required by a later batch, e.g., BT , may recursively depend on earlier events involving the same remote nodes and trace back to B1,causing large cache growth. In Figure 1(c), DepTGL avoids both extremes by dividing the event stream into synchroniza-tion windows of K batches, refreshing base remote states only at selected boundaries, and reconstructing remote-state evolution through in-window local mixed-batch replay. TABLE I COMPARISON OF REPRESENTATIVE TEMPORAL GRAPH TRAINING SYSTEMS .
+
+System Target Arch. Core Optimization Comm. Cache Adapt. Load Bal. 
+
+DynaHB [18] S-TGNN Dist. Hybrid batching, vertex caching, async sync Low High RL-based Yes SWASH [19] S-TGNN Dist. Flexible comm., sliding-window cache sharing Low Med. Adaptive sched. Limited PGT-I [20] S-TGNN Dist. Index-batching DDP High Low No Marginal SWIFT [27] M-TGNN Single Data-state-aware pipeline N/A Med. No No TASER [28] M-TGNN Single Temporal adaptive sampling N/A Low No No NeutronStream [21] M-TGNN Dist. Sliding-window event processing Med. Med. No Limited DisTGL [24] M-TGNN Dist. STEP, hybrid cache, parallel fetch Med. Med. Cache-aware Limited DistTGL [23] M-TGNN Dist. Data-state synchronization High Low No Limited GNNFlow [50] M-TGNN Dist. Time-indexed storage, GPU-CPU cache Med. Med. Cache-aware Static Cascade [25] M-TGNN Dist. Data-dependency-aware execution Med. Med. Dep.-aware Marginal MemShare [26] M-TGNN Dist. Hotspot data-state sharing Med. Low Static Partial Sven [22] M-TGNN Dist. Load-balanced hierarchical pipeline Med. Low No Yes 
+
+DepTGL (Ours) M-TGNN Dist. Hybrid dep. serving, cache sync, pruning Low Low Yes Yes  
+
+> Note: S-TGNN denotes snapshot-based or spatiotemporal TGNNs, and M-TGNN denotes memory-based or event-driven TGNNs. Comm. and Cache qualitatively indicate residual communication pressure and cache/storage footprint, respectively. Adapt. denotes runtime adaptivity. Limited/Partial denotes static or heuristic implementations, and N/A denotes not applicable.
+
+C. Communication and Load Optimization 
+
+Beyond temporal graph training frameworks, general dis-tributed optimization and graph learning systems provide useful techniques for communication reduction and straggler mitigation in large-scale training. 
+
+Communication Reduction. Communication reduction has been widely studied in distributed machine learning through asynchronous updates [51], parameter-server training [52], [53], local model averaging [54], [55], and gradient com-pression [56]. In broader temporal and streaming data do-mains, data volume and system loads are frequently reduced through efficient time-series and trajectory compression tech-niques [57]–[59]. In distributed graph training, communi-cation is reduced through graph partitioning [11], feature caching [14], pipelined feature communication [12], boundary-node sampling [16], and stale-cache reuse [17]. For temporal graph training, recent systems further reduce communication through sliding-window cache sharing [19], temporal-aware partitioning and hybrid caching [24], remote data-state caching and time-indexed storage [23], [50], hotspot data-state shar-ing [26], dependency-aware execution [25], or pipeline-based execution [22], [27]. However, in memory-based TGNNs, communication reduction must also handle chronological node data states and temporal messages whose validity depends on timestamp-ordered updates. Existing systems reduce part of this cost through caching, sharing, fetching, or pipelining, but mostly rely on fixed or mechanism-specific policies and do not adapt temporal data-state synchronization to runtime training dynamics across batches. 
+
+Load Balancing and Straggler Mitigation. Load imbal-ance is another long-standing bottleneck in distributed graph training. In static graph learning, workload skew is com-monly mitigated through graph clustering, subgraph sampling, boundary-node sampling, or serverless execution [15], [16], [39], [40]. For dynamic and temporal graph training, DynaHB uses load-aware vertex partitioning and load-balanced training for snapshot-based DGNNs [18]; Sven accelerates distributed TGNN training through load-balanced hierarchical pipeline parallelism [22]; and MemShare alleviates hotspot-related remote data-state communication through hotspot data-state sharing [26]. From a broader distributed optimization perspec-tive, straggler-tolerant training also reduces the computation assigned to slower workers to improve cluster throughput [60]. However, distributed memory-based TGNNs have a more dynamic source of imbalance: each worker’s load depends not only on assigned target events, but also on auxiliary depen-dencies for remote-state reconstruction. Such replay-induced workload can fluctuate sharply across temporal batches, so runtime load control must distinguish supervised target events from auxiliary replay events. III. P RELIMINARIES 
+
+A. Temporal Data Stream and Node Data State 
+
+We represent a temporal graph as a chronologically ordered temporal data stream G = ( V, E). Each event is denoted by 
+
+ek = ( uk, v k, t k, x k), where uk and vk are the two endpoints, 
+
+tk is the timestamp, and xk is the event feature. Events are sorted by time, i.e., t1 ≤ t2 ≤ · · · ≤ t|E| .Memory-based TGNNs, such as JODIE and TGN, maintain a memory vector mu(t) for each node u, which serves as the node’s temporal data state and summarizes its temporal history. Given event ek, the model generates event-level messages and updates the memories of the involved nodes recursively: 
+
+s(k) 
+
+> uk
+
+, s (k) 
+
+> vk
+
+= Message( muk (t− 
+
+> k
+
+), m vk (t− 
+
+> k
+
+), x k, t k), (1) 
+
+muk (tk) = Update( muk (t− 
+
+> k
+
+), s (k) 
+
+> uk
+
+),mvk (tk) = Update( mvk (t− 
+
+> k
+
+), s (k) 
+
+> vk
+
+). (2) Here, t− 
+
+> k
+
+denotes the time immediately before event ek,and s(k) 
+
+> uk
+
+and s(k) 
+
+> vk
+
+are the event messages used to update the endpoint memories. The key implication is that a node representation depends on the ordered sequence of its prior events, so different temporal batches may still be coupled through temporal data states. This coupling creates cross-batch state dependencies that must be preserved during distributed training to ensure correct temporal execution. 
+
+B. Distributed Training Setting 
+
+We consider a distributed training environment with P
+
+workers. The temporal graph nodes are disjointly partitioned across workers, and each worker p ∈ { 1, . . . , P } owns a subset of nodes and maintains their authoritative data states. During training, the temporal data stream is divided into batches and processed across the cluster. When an event involves a remote node, i.e., a node owned by another worker, the processing worker must obtain the corresponding historical data state of that node at the event timestamp. To avoid requesting remote-node temporal data states from owner workers whenever a remote node is accessed, distributed implementations often maintain local cached copies of these states. However, these cached states may become stale as the authoritative states continue to evolve on their owner workers. Therefore, the processing worker must decide when and how to refresh its remote cache so that the cached states remain temporally valid for subsequent events. A straightforward solution is to refresh remote data states frequently through cross-worker cache synchronization. While this strategy can reduce cache staleness and preserve temporal data consistency, it introduces substantial communication traffic and synchro-nization overhead. 
+
+C. Problem Setup and Objective 
+
+To illustrate how remote temporal data-state dependencies couple current events with historical batches across workers, we provide Example 2. Temporal data stream                                   
+
+> t1t2t3t4t5t6t7t8
+> Current batch B r
+> Worker 1
+> (owns sources {1, 2})
+> Worker 2
+> (owns sources {3, 4})
+> Legend source destination
+> event
+> in batch earlier
+> Temporal data-state dependency of node 3
+> < t 1
+> e1
+> 13
+> 13
+> e1
+> 41
+> e2
+> 41
+> e2
+> 23
+> e3
+> 41
+> e4
+> 42
+> e5
+> 13
+> e6
+> 31
+> e7
+> 43
+> e8
+> 13
+> e1
+> 23
+> 41
+> e3
+> e4
+> 42
+> e5
+> 13
+> 3143
+> e7
+> e6
+> e8
+> 3143
+> e7e8
+> 13
+> e6
+> 23
+> e3
+> Fig. 2. Example of cross-worker temporal data-state dependency.
+
+Example 2 (Cross-worker temporal data-state dependency): 
+
+Figure 2 illustrates why remote temporal data-state caching is non-trivial in distributed M-TGNN training. To process event 
+
+e8 = (4 , 3, t 8, x 8) in the current batch Br , the model needs the state of node 3 immediately before t8. This state depends on earlier updates to node 3, including e7 and e6 in Br and 
+
+e3 and e1 from previous batches. Since these events may be assigned to different workers, the required state forms a cross-worker and cross-batch dependency chain, making naive batch parallelism and simple remote-state caching insufficient. The dependency pattern illustrated above leads to three major system-level bottlenecks. First, chronological node-data-state evolution induces temporal data dependencies across current and historical batches, since the data state required by an event may depend on a chain of earlier events involving the same nodes. This limits parallelism and makes naive spatial data caching insufficient. Second, preserving consistent remote data states often requires frequent cross-worker cache synchro-nization, which can dominate the total runtime. Third, skewed temporal data streams and bursty node interactions create imbalanced workloads across workers, causing stragglers at cache-synchronization barriers. Our objective is to minimize the epoch training time of distributed memory-based TGNNs while preserving the chronological node-data-state update semantics required for model accuracy. Formally, the total execution time of an epoch can be decomposed as 
+
+Tepoch = X
+
+> b
+
+max 
+
+> p
+
+
+
+T p,b  
+
+> comp
+
++ T p,b  
+
+> comm
+
++ T p,b 
+
+> wait
+
+
+
+, (3) where T p,b 
+
+> comp
+
+, T p,b 
+
+> comm
+
+, and T p,b  
+
+> wait
+
+denote the local computation time, the cross-worker communication time, and the idle waiting time of worker p on batch b, respectively. DepTGL 
+
+is designed to reduce these three components jointly through temporal-data-dependency-aware execution and adaptive run-time control. IV. S YSTEM ARCHITECTURE AND HYBRID DATA 
+
+DEPENDENCY SERVING 
+
+A. System Overview 
+
+Figure 3 illustrates the overall workflow of DepTGL ac-cording to the execution order of its main modules. Given a temporal graph G = ( V, E), DepTGL first organizes the input as a timestamp-ordered temporal data stream (Step 1⃝)and partitions nodes across workers based on node own-ership (Step 2⃝). Each worker maintains the authoritative temporal data states of its local nodes, while remote-node states are served through local temporal data caches. Within each synchronization window, the offline dependency scanner (Step 3⃝) traces temporal dependencies backward from later target events and identifies historical remote events required for local remote-state reconstruction. DepTGL then constructs worker-specific mixed batches (Step 4 ⃝), which contain target events for supervised training and auxiliary replay events for advancing cached remote states, and generates candidate refresh sets (Step 5⃝) that specify the remote nodes whose base states may be refreshed at synchronization boundaries. During runtime, DepTGL uses a gradient-aware controller (Step 6⃝) to decide whether to refresh remote-node states or reuse locally cached states. The temporal data cache (Step 7 ⃝)provides local and cached remote states for timestamp-ordered execution. Before forward propagation, load-aware replay pruning (Step 8 ⃝) removes eligible pure auxiliary replay events under heavy-load conditions while preserving all target events. Finally, each worker performs per-worker local execution (Step 9⃝), computes the loss only over target events, and updates model parameters together with runtime statistics used by subsequent adaptive synchronization and pruning decisions. ①Temporal Data Stream                      
+
+> timestamp-ordered event
+> e1... en
+> ②Node-Ownership Partitioning
+> ③Offline Dependency Scanner
+> ... scan
+> ④Mixed-Batch Construction
+> Worker 1
+> ...
+> 5⑤Candidate Refresh Set
+> 8
+> ⑧Load-Aware Replay Pruning
+> Worker p
+> e1
+> ⑨Per-Worker Local Execution
+> Worker 12... PLocal nodes P1P2
+> ... PP
+> Batch r+k
+> Batch r
+> Worker 2 e3... e4
+> Worker 1
+> e5... e4
+> ... ...
+> Batch r+1
+> e2
+> synchronization window
+> Worker 2
+> Worker P
+> target events
+> prune auxiliary replay events
+> Worker 2 Worker PWorker 1
+
+...         
+
+> EMA c
+> batch time EMA g
+> grad norm
+> auxiliary replay events
+> e4...
+> e1... e5e2
+> e6
+> e1e3
+> e6... e4e5
+> e2... e5e1
+> ⑦Temporal Data Cache
+> Sync /Refresh
+> Local States Remote Cache
+> Skip /Reuse
+> ⑥Gradient-Aware Controller
+
+Fig. 3. Overview of the DepTGL architecture. 
+
+B. Offline Mixed-Batch Construction 
+
+Offline mixed-batch construction converts the in-window portion of remote temporal data dependencies into worker-local auxiliary replay. For each synchronization window, 
+
+DepTGL identifies historical remote events, marks them as auxiliary replay events, and combines them with target events to form worker-specific mixed batches. Target events con-tribute to the supervised loss, whereas auxiliary replay events only advance cached remote temporal data states. 
+
+Definition 1 (Synchronization Window): Given a synchro-nization interval K, a synchronization window Wq is a con-secutive group of temporal batches: 
+
+Wq = {BqK , B qK +1 , . . . , B qK +K−1}. (4) The beginning of each window acts as a candidate cache-refresh boundary. At this boundary, a worker may refresh the base states of required remote nodes from their owner workers. Within the window, DepTGL advances temporal data states through timestamp-ordered local mixed-batch execution. 
+
+Definition 2 (Mixed Batch): For worker p and batch index 
+
+r, DepTGL constructs a mixed batch as a timestamp-ordered execution sequence: 
+
+eBrp = sort t
+
+ Brp, tar ∪ Brp, aux 
+
+ , (5) where Brp, tar denotes the target events assigned to worker p,
+
+Brp, aux denotes the auxiliary replay events identified by the offline dependency scan, and sort t(·) orders all events by timestamp before execution. Each event in eBrp is associated with an event-type mask that distinguishes target events from auxiliary replay events. 
+
+Example 3 (Backward dependency scan): Figure 4 shows a synchronization window with three batches. For worker p,
+
+DepTGL keeps its source-assigned target events and scans the window backward to insert only the historical remote events needed for local remote-state reconstruction. The resulting mixed batches preserve all target events and add selected aux-iliary replay events, enabling timestamp-ordered local replay within the window. Algorithm 1 describes the offline construction of worker-specific mixed batches. For each worker p, the algorithm identifies the source-assigned target events that contribute to the supervised objective and the auxiliary replay events needed to locally reconstruct remote temporal data-state evolution within a synchronization window. 
+
+Algorithm 1 Source-based Backward Dependency Scan and Mixed-Batch Construction 
+
+Require: Synchronization window Wq ; worker p; global batches {Bs}Bs∈W q ; node ownership mapping π(·)
+
+Ensure: Mixed batches { eBsp}Bs∈W q ; candidate boundary re-fresh set N qp, sync 
+
+1: Bsp, tar ← ∅ , Bsp, aux ← ∅ for each Bs ∈ W q
+
+2: F ← ∅ ; Iaux ← ∅ 
+
+3: for each batch Bs ∈ W q in reverse chronological order 
+
+do 
+
+4: Bsp, tar ← { e = ( u, v, t, x ) ∈ Bs | π(u) = p}
+
+5: F ← F ∪ { v | e = ( u, v, t, x ) ∈ Bsp, tar , π (v)̸ = p}
+
+6: for each event e′ = ( u′, v ′, t ′, x ′) ∈ Bs do 
+
+7: if (u′ ∈ F or v′ ∈ F ) and π(u′)̸ = p then 
+
+8: if id( e′) /∈ I aux then 
+
+9: Insert e′ into Bsp, aux 
+
+10: Iaux ← I aux ∪ { id( e′)}
+
+11: end if 
+
+12: F ← F ∪ { i ∈ { u′, v ′} | π(i)̸ = p}
+
+13: end if 
+
+14: end for 
+
+15: end for 
+
+16: N qp, sync ← F 
+
+17: for each batch Bs ∈ W q do 
+
+18: eBsp ← sort t(Bsp, tar ∪ Bsp, aux )
+
+19: end for 
+
+20: return { eBsp}Bs∈W q , N qp, sync 
+
+The algorithm scans the batches in reverse chronological order. It first collects the target events of worker p and adds their remote destination nodes to the dependency frontier F
+
+(Lines 4–5). Then, for each event that touches the current frontier but is not a target event of worker p, the algorithm inserts it as an auxiliary replay event and further expands the frontier with its remote endpoints (Lines 6–12). This backward expansion captures historical events that may update the remote states required by later target events. Inserted auxiliary replay events are marked by the event-type mask and scan 
+
+e1
+
+v0 → v 3
+
+e6
+
+v6 → v 5
+
+> Batch
+> r + 1
+
+e8
+
+v3 → v 6
+
+e10 
+
+v0 → v 7
+
+> Batch
+> r + 2
+
+e16 
+
+v3 → v 5
+
+e18 
+
+v6 → v 0
+
+> Other Workers own nodes( v1,v2,v4, v5,v7,v8)
+
+e2
+
+v 
+
+> 4
+
+→ v
+
+> 2
+
+e3
+
+v 
+
+> 5
+
+→ v
+
+> 8
+
+v 
+
+> 5
+
+→ v 
+
+> 7
+
+v 
+
+> 8
+
+→ v
+
+> 3
+
+e9
+
+v8 → v 3
+
+e11 
+
+v4 → v2   
+
+> Batch r + 1
+> e8
+> Batch r(sync batch)
+
+v 
+
+> 7
+
+→ v 
+
+> 3
+
+v 
+
+> 4
+
+→ v
+
+> 1
+
+v 
+
+> 2
+
+→ v   
+
+> 6v
+> 1→v
+> 4
+
+v 
+
+> 7
+
+→ v
+
+> 1
+
+e17 
+
+v 
+
+> 2
+
+→ v
+
+> 6
+
+e4 e5
+
+e12 
+
+e15 e14 e13       
+
+> e10
+> e16 e18
+> e1e6
+> Batch r + 2
+> Batch r
+> (sync batch)
+> Worker p
+> owns nodes( v0,v3,v6)
+> Mixed-Batch
+> e3e4
+> e7
+
+e7Fig. 4. Example of backward dependency scanning and mixed-batch construction within a synchronization window. Blue boxes denote target events assigned to worker p, while beige boxes denote auxiliary replay events inserted for local remote-state reconstruction. 
+
+deduplicated during preprocessing, so they can be replayed for temporal data-state reconstruction without being included in the supervised loss. After the scan, the remaining frontier forms the candidate boundary refresh set N qp, sync (Line 16). The target and aux-iliary events in each batch are then merged and sorted by timestamp to form the mixed batch eBsp (Lines 17–19). As a result, worker p can execute all supervised target events while replaying only the necessary historical events for local tempo-ral data-state reconstruction. This output further provides the runtime controller with explicit refresh candidates and target– auxiliary event masks. V. A DAPTIVE CACHE SYNCHRONIZATION AND 
+
+LOAD -AWARE DATA PRUNING 
+
+The offline construction phase described in Section IV moves most temporal data dependency expansion out of the runtime critical path by constructing worker-specific mixed batches. However, two runtime inefficiencies may still re-main. First, even after offline dependency expansion, candidate boundary cache refreshes may still introduce non-negligible cross-worker communication and collective waiting. Second, auxiliary replay events introduced by mixed-batch construction may increase computation on hotspot batches, especially under skewed temporal streams. 
+
+DepTGL addresses these two runtime issues through an adaptive runtime controller. At candidate cache-refresh bound-aries, DepTGL uses recent gradient magnitude statistics to de-cide whether the current boundary refresh should be executed or skipped. During local mixed-batch execution, DepTGL uses recent batch-time statistics to detect hotspot-induced heavy load and prunes eligible pure auxiliary replay events before they enter the forward pass. Both decisions are deliberately conservative: target events are never pruned, and skipped cache refreshes only reuse existing local remote-cache states until the next executed refresh or the final epoch-end synchronization. 
+
+A. Gradient-aware Dynamic Cache Synchronization 
+
+Boundary cache refreshes realign locally cached remote temporal data states with their authoritative owner-side states. They are useful for reducing remote-cache staleness, but exe-cuting them at every scheduled boundary can be unnecessarily expensive. In memory-based TGNN training, early iterations usually involve large parameter updates and rapidly chang-ing node memories, whereas later iterations tend to become more stable. When recent gradient statistics indicate a stable update phase, immediately refreshing remote data states at every boundary may bring limited benefit compared with its communication and synchronization cost. DepTGL therefore uses gradient magnitude as a lightweight runtime signal to adaptively reduce boundary refresh frequency during stable update phases. Let gr denote the gradient norm computed after backpropa-gation on batch r. In the distributed setting, this norm is com-puted from the synchronized model gradients, so it provides a consistent training-dynamics signal for the runtime controller. To capture recent training dynamics, DepTGL maintains an exponential moving average (EMA) of gradient norms: 
+
+¯gr =
+
+(
+
+gr , if ¯gr−1 = 0 ,αg r + (1 − α)¯ gr−1, otherwise , (6) where α is a smoothing factor. The EMA provides a stable estimate of recent gradient dynamics and is used to evaluate upcoming candidate cache-refresh boundaries. For a scheduled candidate boundary at batch r, DepTGL 
+
+makes the synchronization decision using the most recently observed gradient norm gr−1 and its EMA ¯gr−1:
+
+Sr =
+
+(
+
+0, r > 0, ¯gr−1 > 0, and gr−1 < τ g ¯gr−1,
+
+1, otherwise , (7) where Sr = 1 indicates that the boundary cache refresh is executed, and worker p fetches the needed remote-node data states in N qp, sync from their authoritative owner workers; 
+
+Sr = 0 indicates that the refresh is skipped, and worker p con-tinues from its existing local remote-cache states, relying on timestamp-ordered mixed-batch execution to advance remote states locally within the synchronization window. The thresh-old τg controls gradient stability: when the recent gradient norm falls within a stable range relative to its EMA, DepTGL 
+
+skips the refresh; otherwise, it conservatively executes the refresh. Since boundary cache refresh is a collective operation, the coordinator broadcasts the synchronization decision as a constant-size Boolean flag to all workers. 
+
+B. Load-aware Temporal Data Pruning 
+
+Offline mixed-batch construction inserts auxiliary replay events to reconstruct remote temporal histories locally, but these events also increase local computation and may am-plify hotspot-induced stragglers. DepTGL mitigates this issue through load-aware temporal data pruning: under heavy-load conditions, it removes eligible pure auxiliary replay events before forward propagation while preserving all target events. Let crp denote the measured execution time of worker p
+
+on batch r. Since straggler behavior is worker-dependent, 
+
+DepTGL maintains a worker-local EMA of batch execution time: 
+
+¯crp =
+
+(
+
+crp, if ¯cr−1 
+
+> p
+
+= 0 ,βc rp + (1 − β)¯ cr−1 
+
+> p
+
+, otherwise , (8) where β is the smoothing factor. The EMA captures the recent execution trend of each worker and provides a smoothed reference for detecting abnormal local load. Before executing batch r, DepTGL activates heavy-load mode when the latest observed batch time exceeds the EMA-scaled baseline: 
+
+Hrp =
+
+(
+
+1, r > 0, ¯cr−1 
+
+> p
+
+> 0, and cr−1 
+
+> p
+
+> τ c ¯cr−1 
+
+> p
+
+,
+
+0, otherwise , (9) where Hrp = 1 indicates that worker p enters heavy-load mode for batch r, and τc is a multiplicative load threshold. Under the source-based assignment used by DepTGL ,worker p treats an event e = ( u, v, t, x ) as a target event when 
+
+π(u) = p. Therefore, the eligible pruning set of a mixed batch 
+
+eBrp is 
+
+Prp = {e = ( u, v, t, x ) ∈ eBrp | π(u)̸ = p}. (10) These events correspond to pure auxiliary replay events for worker p and do not define its supervised target-event ob-jective. When Hrp = 1 , DepTGL removes them before local forward propagation: 
+
+bBrp =
+
+( eBrp \ P rp , Hrp = 1 ,
+
+eBrp , Hrp = 0 . (11) The same source-based predicate is used to mask the training loss: 
+
+Mp(e) = I(π(u) = p), e = ( u, v, t, x ). (12) The local batch loss is computed as 
+
+Lrp =
+
+     
+
+> P
+> ei∈bBrpMp(ei)ℓ(ei)
+> P
+> ei∈bBrpMp(ei)
+
+, if P 
+
+> ei∈bBrp
+
+Mp(ei) > 0,
+
+0, otherwise ,
+
+(13) where ℓ(ei) is the edge prediction loss for event ei.Loss masking and pruning serve different purposes. Mask-ing excludes auxiliary replay events from the supervised ob-jective, whereas pruning physically removes eligible auxiliary replay events before forward propagation. Therefore, pruning reduces auxiliary computation on heavy-load workers while preserving the target-event training objective. 
+
+C. Adaptive Runtime Controller 
+
+Algorithm 2 summarizes the runtime execution of DepTGL 
+
+over the mixed batches generated by Algorithm 1. It adaptively controls two runtime decisions: whether to refresh remote cached states at candidate boundaries, and whether to prune auxiliary replay events under heavy local workload. At each candidate refresh boundary, the coordinator invokes 
+
+SyncDecision using the previous gradient norm and its EMA (Line 4). The decision is then broadcast to all workers (Line 5). If synchronization is triggered, workers refresh the required remote states in N qp, sync from their owner workers (Lines 6–7); otherwise, they continue using existing cached remote states. Since the decision is broadcast as a Boolean flag, all workers follow the same boundary-level synchronization policy. For each batch, worker p loads eBrp and detects heavy load using the previous batch time and its EMA (Lines 10–11). When heavy load is detected, PruneAux removes eligible pure auxiliary replay events before forward propagation (Line 12). Target events are always preserved. The remaining events are executed in timestamp order, and the loss is computed only on source-assigned target events (Lines 13–14). Finally, the al-gorithm performs backpropagation, updates the gradient EMA and model parameters, records the batch time, and updates the batch-time EMA for subsequent adaptive decisions (Lines 15– 19), followed by final temporal data-state synchronization before evaluation (Line 21). 
+
+Algorithm 2 Adaptive Runtime Controller of DepTGL 
+
+Require: Mixed batches { eBrp }; candidate refresh sets 
+
+{N qp, sync }; node ownership map π(·); thresholds τg , τ c;EMA factors α, β 
+
+Ensure: Updated model parameters and temporal data states  
+
+> 1:
+
+Initialize ¯g ← 0, glast ← 0, ¯cp ← 0, cp, prev ← 0 
+
+> 2:
+
+for each batch r in timestamp order do  
+
+> 3:
+
+if r is a candidate cache-refresh boundary then  
+
+> 4:
+
+Sr ← SyncDecision( glast , ¯g; τg ) 
+
+> 5:
+
+Broadcast Sr from the coordinator to all workers  
+
+> 6:
+
+if Sr = 1 then  
+
+> 7:
+
+Refresh remote cache entries in N qp, sync  
+
+> 8:
+
+end if  
+
+> 9:
+
+end if  
+
+> 10:
+
+Load mixed batch eBrp 
+
+> 11:
+
+Hrp ← LoadDetect( cp, prev , ¯cp; τc) 
+
+> 12:
+
+bBrp ← PruneAux( eBrp , H rp , π ) 
+
+> 13:
+
+Execute bBrp in timestamp order  
+
+> 14:
+
+Lrp ← MaskedLoss( bBrp , π ) 
+
+> 15:
+
+Backpropagate Lrp and compute gradient norm gr 
+
+> 16:
+
+¯g ← EMA(¯ g, g r ; α); glast ← gr 
+
+> 17:
+
+Update model parameters  
+
+> 18:
+
+Measure worker-local batch time crp 
+
+> 19:
+
+¯cp ← EMA(¯ cp, c rp; β); cp, prev ← crp 
+
+> 20:
+
+end for  
+
+> 21:
+
+Synchronize final temporal data states before evaluation VI. THEORETICAL ANALYSIS 
+
+A. Cost and Straggler Analysis 
+
+The primary objective of DepTGL is to reduce the runtime of distributed memory-based TGNN training by replacing fine-grained remote temporal data-state requests with local mixed-batch execution, and by adaptively reducing boundary communication and auxiliary replay computation. 
+
+Communication Cost. Let SK denote the set of scheduled cache-refresh boundaries under synchronization interval K.For a boundary r ∈ S K , let q(r) denote the corresponding synchronization window, and let N q(r) 
+
+> p, sync
+
+be the candidate remote-node set to be refreshed by worker p. Let dm be the dimension of the temporal data state. Under rigid boundary synchronization, worker p incurs 
+
+Crigid ,p = O dm
+
+X
+
+> r∈S K
+
+N q(r)
+
+> p, sync
+
+!
+
+. (14) 
+
+DepTGL executes a boundary refresh only when the gradient-aware decision Sr = 1 . Its boundary communication cost becomes 
+
+CDepTGL ,p = O dm
+
+X
+
+> r∈S K
+
+Sr · N q(r)
+
+> p, sync
+
+!
+
+. (15) The communication ratio is 
+
+ρcomm =
+
+P 
+
+> r∈S K
+
+Sr · N q(r)
+
+> p, sync
+
+P 
+
+> r∈S K
+
+N q(r)
+
+> p, sync
+
+≤ 1. (16) Thus, for the same candidate refresh sets, DepTGL never in-curs more boundary communication than rigid synchronization and reduces the effective refresh frequency as more boundaries are skipped. 
+
+Computation Cost. DepTGL trades part of the communi-cation cost for local auxiliary replay. Let Brp, tar and Brp, aux 
+
+denote the target events and auxiliary replay events in worker 
+
+p’s mixed batch at batch r, respectively. Without load-aware pruning, the local computation cost can be approximated as 
+
+T r 
+
+> comp ,p
+
+≈ ctar Brp, tar + caux Brp, aux , (17) where ctar and caux are the average processing costs of target and auxiliary replay events, respectively. With load-aware pruning, eligible auxiliary replay events are removed when 
+
+Hrp = 1 , and the computation cost becomes 
+
+T ′r 
+
+> comp ,p
+
+≈ ctar Brp, tar + (1 − Hrp )caux Brp, aux . (18) Therefore, load-aware pruning reduces auxiliary replay com-putation by approximately Hrp caux Brp, aux , while preserving all target events in the supervised objective. 
+
+Straggler Effect. In synchronous distributed training, each batch is limited by the slowest worker. Let the active execution time of worker p on batch r be 
+
+Arp = T r 
+
+> comp ,p
+
++ T r
+
+> comm ,p
+
+, (19) and the corresponding iteration time be 
+
+T r 
+
+> iter
+
+= max  
+
+> p
+
+Arp. (20) The aggregate synchronization waiting cost is 
+
+W r 
+
+> wait
+
+=
+
+> P
+
+X
+
+> p=1
+
+ T r 
+
+> iter
+
+− Arp
+
+ . (21) Temporal data skew may make some workers receive more auxiliary replay events than others. When load-aware pruning is activated on worker p, the reduced auxiliary computation can be approximated as 
+
+∆rp = Hrp caux Brp, aux . (22) The post-pruning active time is therefore 
+
+A′rp ≈ Arp − ∆rp. (23) If the pruned worker is a bottleneck or near-bottleneck worker, reducing Arp lowers max p Arp or narrows the gap between workers, thereby mitigating straggler-induced waiting. 
+
+B. Controlled Approximation Analysis 
+
+DepTGL introduces controlled approximation by skipping selected boundary cache refreshes and pruning eligible pure auxiliary replay events. These decisions may affect the fresh-ness of locally cached remote temporal data states, but they do not remove target events from the supervised training objective. 
+
+Objective Preservation. DepTGL preserves the supervised target-event objective because load-aware pruning removes only pure auxiliary replay events. According to the source-based mask defined in Eq. (12), any pruned event e ∈ P rp
+
+satisfies Mp(e) = 0 and therefore does not contribute to the local supervised loss in Eq. (13). Thus, pruning reduces aux-iliary computation without removing target-event loss terms. 
+
+Cache-State Approximation. Let mu(t) denote the author-itative temporal data state of remote node u at time t, and let 
+
+bmp,u (t) denote worker p’s locally cached copy. The cache-state approximation error is 
+
+εp,u (t) = ∥ bmp,u (t) − mu(t)∥ . (24) When a boundary refresh is executed and u ∈ N q(r)
+
+> p, sync
+
+, worker 
+
+p realigns the cached remote state with the authoritative owner-side state: 
+
+bmp,u (tr ) ← mu(tr ), u ∈ N q(r)
+
+> p, sync
+
+, S r = 1 . (25) Between two executed boundary refreshes, skipped re-freshes and pruned auxiliary replay events may make bmp,u (t)
+
+deviate from the authoritative state mu(t). However, this approximation affects only remote-cache freshness rather than the set of supervised target events. Once a later boundary re-fresh is executed, or when the final epoch-end synchronization is performed before evaluation, the affected cached states are realigned with their authoritative owner-side states. VII. EXPERIMENTS 
+
+A. Experimental Setup 
+
+Datasets. We use six public real-world temporal graph datasets: AskUbuntu, MathOverflow, Reddit, MOOC, lastfm, and Wikipedia. These datasets cover diverse temporal interac-tion scenarios and differ in graph scale, event density, temporal duration, structural properties, and interaction sparsity. Table II summarizes their statistics. All datasets are publicly available from public sources. 1
+
+> TABLE II STATISTICS OF THE EVALUATED TEMPORAL GRAPH DATASETS .
+
+Dataset Nodes Events Bipartite Time Span AskUbuntu 159.3K 964.4K No 2613 days MathOverflow 24.8K 506.6K No 2350 days Reddit 11.0K 672.4K Yes 30 days MOOC 7.0K 411.7K Yes 30 days lastfm 2.0K 1.29M Yes 1587 days Wikipedia 9.2K 157.5K Yes 30 days 
+
+Models. We evaluate DepTGL with two representative memory-based continuous-time TGNN models: TGN [5] and JODIE [2]. TGN combines a node memory module with 
+
+> 1https://snap.stanford.edu
+
+temporal neighborhood aggregation, while JODIE updates user and item embedding trajectories through recurrent interactions. Both models maintain chronologically evolving node states, making them suitable for evaluating distributed training under temporal data-state dependencies. 
+
+Baselines. We compare DepTGL with four representative distributed TGNN training baselines. For a controlled compar-ison, we implement their key training policies within the same distributed runtime and use consistent model settings across all methods. The implementation of DepTGL is available in the public repository. 2 
+
+> •
+
+Vanilla DDP. Standard distributed data-parallel training with generic node partitioning and fixed-interval temporal memory synchronization. This baseline represents a com-mon distributed execution mode used in temporal/dynamic graph training systems [21], [24], [26].  
+
+> •
+
+DisTGL. Uses STEP temporal partitioning and cache-based communication optimization for distributed temporal graph training [24].  
+
+> •
+
+NeutronStream. Uses sliding-window event processing to group temporally consecutive events in graph streams [21].  
+
+> •
+
+MemShare. Uses hotspot data-state sharing to reduce re-mote memory communication [26]. 
+
+DepTGL differs by jointly adapting mixed-batch depen-dency serving, boundary cache synchronization, and auxiliary replay pruning at runtime. For the memory–throughput analy-sis in Section VII-C, we additionally include a Full Cache 
+
+variant as an analysis-only reference that maximizes local materialization of remote temporal histories. 
+
+Environments and Metrics. We conduct experiments in two hardware environments. Env 1 is the main real distributed training environment, drawn from a resource pool of five machines: four machines equipped with NVIDIA RTX 2080 Ti GPUs and one machine equipped with an NVIDIA Tesla P100 GPU. Env 2 is a high-performance multi-GPU environment with 8 NVIDIA RTX 4090 GPUs. We report epoch time, target-event throughput, speedup, test AUC, and test AP. Throughput is computed as the number of original training events divided by the average epoch time and does not count auxiliary replay events as additional training progress. Speedup is computed over Vanilla DDP using epoch time. For mechanism analysis, we further report communication time, synchronization count, communication share, scaling efficiency, and peak GPU memory. 
+
+B. End-to-End Efficiency and Accuracy 
+
+We first evaluate end-to-end efficiency and accuracy on temporal link prediction. Table III reports epoch time and speedup over Vanilla DDP in Env 1 and Env 2, while Table IV reports new-node test AUC/AP under the same settings. For each dataset and model, the comparison uses the four baselines described in Section VII-A. Table III(a) shows that, in the main distributed environment, 
+
+DepTGL achieves the lowest epoch time among all compared 
+
+> 2https://github.com/LFchen111/DepTGL
+
+systems across all datasets and both memory-based TGNN models. Under the default TGN setting, DepTGL obtains 4.39– 7.32 × speedups over Vanilla DDP, with an average speedup of 6.03 ×. DepTGL also outperforms MemShare by up to 4.70 ×
+
+on MOOC and 4.69 × on MathOverflow. These results suggest that hotspot data-state sharing alleviates remote memory com-munication, but does not fully address the combined overhead of frequent cache refreshes, temporal dependency serving, and straggler-induced waiting. In contrast, DepTGL combines dependency-aware mixed-batch replay, gradient-aware bound-ary synchronization, and load-aware auxiliary replay pruning to reduce fine-grained remote data-state requests, boundary communication, and straggler-induced stalls. The JODIE results further show that the benefit is not tied to a single TGNN architecture. Since both JODIE and TGN maintain recursively updated node memories, these results in-dicate that DepTGL ’s adaptive temporal data dependency man-agement is broadly effective for memory-based continuous-time TGNNs. Table III(b) reports the results under Env 2. The absolute speedups are smaller because Env 2 provides higher GPU throughput and lower communication latency. Nevertheless, 
+
+DepTGL still achieves the best epoch time on every dataset, demonstrating that the proposed mechanisms remain effective beyond communication-constrained environments.                                                                     
+
+> TABLE IV NEW -NODE LINK PREDICTION ACCURACY COMPARISON .
+> Dataset V-DDP DisTGL NS MS DepTGL
+> Env 1, JODIE
+> AskUbuntu .7144/.7506 .7182/.7539 .7125/.7493 .7111/.7465 .7153/.7501 MathOverflow .7189/.7390 .7199/.7381 .7224/.7425 .7094/.7297 .7199/.7390 Reddit .8783/.8791 .8775/.8746 .8817/.8853 .8746/.8743 .8815/.8819 MOOC .6591/.6265 .6620/.6330 .6566/.6139 .6523/.6242 .6578/.6231 lastfm .7628/.7477 .7893/.7872 .7932/.7989 .7827/.7847 .7863/.7864 Wikipedia .7543/.7471 .8005/.8019 .8042/.8170 .7813/.7862 .7982/.8049
+> Env 1, TGN
+> AskUbuntu .7390/.7944 .7598/.8078 .7622/.8070 .7691/.8044 .7548/.7997 MathOverflow .7228/.7475 .7482/.7723 .7594/.7861 .7214/.7495 .7402/.7552 Reddit .9384/.9409 .9495/.9532 .9497/.9519 .9317/.9278 .9418/.9461 MOOC .7865/.7700 .8422/.8168 .7491/.7008 .8271/.8086 .8268/.8158 lastfm .7151/.7198 .7810/.7805 .7865/.7990 .7869/.8038 .7908/.8047
+> Wikipedia .9276/.9367 .9329/.9409 .9493/.9559 .9312/.9402 .9410/.9484
+> Env 2, JODIE
+> AskUbuntu .7067/.7423 .7152/.7510 .7090/.7454 .7081/.7402 .7140/.7478 MathOverflow .7171/.7375 .7101/.7265 .7186/.7393 .6812/.7010 .7145/.7321 Reddit .8557/.8423 .8596/.8416 .8712/.8636 .8307/.8066 .8716/.8657
+> MOOC .6432/.6144 .6520/.6188 .6523/.6078 .6359/.6064 .6375/.5984 lastfm .7489/.7331 .7888/.7865 .7921/.7967 .7717/.7746 .7847/.7837 Wikipedia .7353/.7184 .7886/.7948 .7969/.8062 .7674/.7616 .7933/.8031
+> Env 2, TGN
+> AskUbuntu .7480/.7935 .7839/.8269 .7856/.8218 .7587/.8004 .7568/.8076 MathOverflow .7313/.7477 .6741/.7195 .7436/.7641 .7199/.7440 .7612/.7903
+> Reddit .9060/.9097 .9399/.9440 .9189/.9254 .9365/.9406 .9457/.9494
+> MOOC .7023/.6535 .8644/.8446 .8350/.8186 .8446/.8229 .8813/.8679
+> lastfm .7596/.7780 .7630/.7588 .6960/.6997 .7605/.7720 .8096/.8244
+> Wikipedia .9028/.9142 .9418/.9483 .9457/.9529 .9369/.9450 .9392/.9471
+> Note: Each entry reports AUC/AP. V-DDP, NS, and MS denote Vanilla DDP, NeutronStream, and MemShare.
+
+Table IV shows that the efficiency gains of DepTGL do not come at the cost of systematic accuracy degradation. In TABLE III END -TO -END EFFICIENCY COMPARISON .                                                                                                  
+
+> (a) Env 1: main real distributed environment.
+> System Model AskUb. MathOvf. Reddit MOOC lastfm Wiki ET Spd. ET Spd. ET Spd. ET Spd. ET Spd. ET Spd. V-DDP JODIE 668.41 1.00 492.22 1.00 270.90 1.00 805.60 1.00 855.21 1.00 380.08 1.00 DisTGL 655.02 1.02 491.15 1.00 214.28 1.26 651.06 1.24 680.03 1.26 311.92 1.22 NS 364.65 1.83 256.93 1.92 100.32 2.70 417.46 1.93 167.65 5.10 74.08 5.13 MS 612.24 1.09 371.24 1.33 134.69 2.01 597.78 1.35 231.91 3.69 100.46 3.78 DepTGL 47.54 14.06 93.84 5.25 32.82 8.26 38.09 21.15 87.40 9.79 20.43 18.61
+> V-DDP TGN 737.96 1.00 542.55 1.00 339.28 1.00 887.88 1.00 987.28 1.00 408.58 1.00 DisTGL 720.63 1.02 537.99 1.01 271.58 1.25 727.44 1.22 767.36 1.29 343.39 1.19 NS 441.97 1.67 644.17 0.84 237.25 1.43 532.65 1.67 327.70 3.01 110.84 3.69 MS 254.35 2.90 422.65 1.28 185.85 1.83 681.14 1.30 362.04 2.73 133.13 3.07 DepTGL 119.62 6.17 90.20 6.02 77.32 4.39 144.86 6.13 160.18 6.16 55.83 7.32 (b) Env 2: high-performance multi-GPU environment.
+> System Model AskUb. MathOvf. Reddit MOOC lastfm Wiki ET Spd. ET Spd. ET Spd. ET Spd. ET Spd. ET Spd. V-DDP JODIE 68.92 1.00 27.60 1.00 70.88 1.00 41.54 1.00 45.40 1.00 18.50 1.00 DisTGL 68.39 1.01 26.57 1.04 58.30 1.22 33.72 1.23 34.05 1.33 15.86 1.17 NS 60.15 1.15 28.81 0.96 60.58 1.17 33.51 1.24 32.96 1.38 14.94 1.24 MS 60.85 1.13 30.60 0.90 57.82 1.23 33.60 1.24 30.38 1.49 14.72 1.26 DepTGL 52.47 1.31 16.36 1.69 41.46 1.71 23.11 1.80 24.19 1.88 10.49 1.76
+> V-DDP TGN 127.73 1.00 77.61 1.00 91.47 1.00 125.00 1.00 153.10 1.00 52.42 1.00 DisTGL 124.55 1.03 75.96 1.02 83.04 1.10 117.74 1.06 140.08 1.09 49.11 1.07 NS 140.83 0.91 81.24 0.96 115.39 0.79 137.79 0.91 191.40 0.80 48.46 1.08 MS 125.30 1.02 73.04 1.06 86.99 1.05 126.43 0.99 161.65 0.95 45.26 1.16 DepTGL 107.36 1.19 64.41 1.21 60.26 1.52 106.20 1.18 128.41 1.19 43.45 1.21
+
+Note: ET denotes epoch time in seconds, and Spd. denotes speedup over Vanilla DDP under the same dataset, model, and environment. V-DDP, NS, MS, AskUb., MathOvf., and Wiki denote Vanilla DDP, NeutronStream, MemShare, AskUbuntu, MathOverflow, and Wikipedia. 
+
+the default TGN setting under Env 1, DepTGL improves over Vanilla DDP on all six datasets in both AUC and AP. For example, on lastfm, DepTGL increases AUC/AP from 0.7151/0.7198 to 0.7908/0.8047. On MOOC, it improves AUC/AP from 0.7865/0.7700 to 0.8268/0.8158. This behavior is consistent with DepTGL ’s design. DepTGL 
+
+always preserves target events for supervised loss computation, while skipped boundary refreshes only reuse locally recon-structed remote states and load-aware pruning only removes pure auxiliary replay events. Therefore, the proposed runtime optimizations reduce synchronization and replay overhead without changing the target-event learning objective. 
+
+C. Time Breakdown and Memory Use 
+
+We analyze runtime composition under Env 1 with TGN. Table V reports a profiled-time breakdown on AskUbuntu, and Figure 5 gives the cross-dataset view. We profile com-munication, runtime batch preparation, forward propagation, backward propagation, and memory management, together with synchronization count and communication share. 
+
+TABLE V REPRESENTATIVE PROFILED -TIME BREAKDOWN .System #Sync Comm. Prep. Fwd. Bwd. Mem. Total Comm.% Vanilla DDP 3215.0 487.64 0.25 42.21 37.90 20.09 588.09 82.9 DisTGL 3215.0 445.09 0.24 42.24 40.52 24.63 552.73 80.5 NeutronStream 1608.0 247.51 0.31 56.91 38.45 23.36 366.54 67.5 MemShare 322.0 56.57 0.32 57.42 36.25 19.74 170.30 33.2 DepTGL 26.1 7.57 0.56 48.35 37.46 21.50 115.45 6.6 
+
+Note: Times are in seconds. #Sync reports the average synchronization count per epoch. Comm.% is computed as Comm./Total. 
+
+Table V shows that communication dominates Vanilla DDP and DisTGL on AskUbuntu: both perform 3215.0 synchro-nizations per epoch and spend over 80% of the profiled time on communication. NeutronStream and MemShare reduce part of this cost, but their communication shares remain 67.5% and 33.2%. In contrast, DepTGL reduces the synchronization count to 26.1 and communication time to 7.57s, cutting total runtime from 588.09s to 115.45s and reducing the communication share from 82.9% to 6.6%. Figure 5 provides a cross-dataset view. For readability, Comm.+Mem. combines cross-worker memory synchroniza-tion and memory-management time, while runtime batch preparation is omitted because it is negligible. Across all datasets, DepTGL substantially reduces the dominant commu-nication and memory-related state-management cost. 
+
+TABLE VI MEMORY –THROUGHPUT TRADE -OFF .
+
+System ET Thr. Spd. Mem. (s) (events/s) (x) (GB) Vanilla DDP 1107.23 466 1.00 2.44 DisTGL 1070.53 482 1.03 2.56 NeutronStream 363.31 1419 3.05 2.96 MemShare 382.40 1348 2.90 2.58 Full Cache 254.13 2029 4.36 3.10 
+
+DepTGL 176.51 2921 6.27 2.44 
+
+Note: ET denotes epoch time; Thr. denotes target-event throughput; Spd. denotes speedup over Vanilla DDP; Mem. denotes peak GPU memory. 
+
+Table VI quantifies the communication-cache trade-off on AskUbuntu, with Full Cache as an analysis-only reference. 
+
+DepTGL achieves the highest throughput, reaching 2921 events/s, 6.27 × higher than Vanilla DDP and 2.17 × higher than MemShare, while using the same peak GPU memory as Vanilla DDP. Full Cache increases peak memory to 3.10GB but still achieves lower throughput than DepTGL , showing that maximizing local materialization is less effective than balancing local replay, boundary refresh control, and auxiliary replay pruning. 
+
+D. Ablation Study and Hyperparameter Sensitivity 
+
+We conduct ablation experiments to isolate the contribution of each DepTGL component. Figure 6 reports four incremental configurations under the main distributed environment with TGN: “Base” disables all DepTGL mechanisms; “+Replay” enables offline mixed-batch construction and worker-local temporal replay with fixed synchronization; “+Sync” further enables gradient-aware dynamic cache synchronization; and “Full” additionally enables load-aware temporal data pruning to form the complete DepTGL configuration. As shown in Figure 6, the three components provide com-plementary benefits. First, “+Replay” moves temporal depen-dency expansion into offline mixed-batch construction and serves many remote temporal data-state dependencies through local replay. On Wikipedia, it reduces epoch time from 408.58s to 103.02s, achieving a 3.97 × speedup over “Base”. Second, “+Sync” adapts boundary cache-refresh decisions to recent gradient dynamics. On AskUbuntu, it reduces epoch time from 437.85s to 137.81s, showing that fixed synchronization 0       
+
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> V-DDP DisTGL NS MS DepTGL V-DDP DisTGL NS MS DepTGL V-DDP DisTGL NS MS DepTGL V-DDP DisTGL NS MS DepTGL V-DDP DisTGL NS MS DepTGL V-DDP DisTGL NS MS DepTGL
+> AskUbuntu MathOverflow Reddit MOOC lastfm Wikipedia Comm.+Mem. Forward Backward
+> Profiled  time  (s)
+
+Fig. 5. Profiled-time breakdown across datasets. 
+
+remains costly even after local replay is enabled. Third, “Full” prunes eligible pure auxiliary replay events under heavy-load conditions, further reducing Reddit epoch time from 112.62s to 77.32s over “+Sync”. Overall, the three components jointly reduce remote data-state access, boundary communication, and batch-level workload skew. 0
+
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> AskUbuntu MathOverflow Reddit MOOC lastfm Wikipedia
+> Base +Replay +Sync Full
+> Epoch  Time  (s)
+
+Dataset 
+
+Fig. 6. Ablation study. 
+
+We further conduct a compact hyperparameter sensitivity study on MathOverflow and lastfm. Table VII reports the results when varying one hyperparameter at a time around the reference configuration K = 6 , τg = 1 .6, and τc = 0 .5.Here, K is the synchronization window length, τg controls boundary-refresh skipping, and τc controls load-aware pruning under batch-level runtime skew. 
+
+TABLE VII HYPERPARAMETER SENSITIVITY .
+
+Cfg. K τg τc
+
+MathOverflow lastfm Time Slow. Time Slow. #1 3 1.6 0.5 70.806 8.5% 138.754 10.3% #2 20 1.6 0.5 75.332 15.5% 129.424 2.9% #3 6 1.0 0.5 73.958 13.4% 133.952 6.5% #4 6 2.5 0.5 76.410 17.1% 142.404 13.2% #5 6 1.6 0.0 71.912 10.2% 131.608 4.6% #6 6 1.6 1.0 74.620 14.4% 139.752 11.1% Ref. 6 1.6 0.5 65.240 0.0% 125.790 0.0% 
+
+Note: Time is average epoch time; Slow. denotes slowdown relative to the reference configuration. 
+
+The results show that moderate runtime-control parameters provide the best balance. A too-small K introduces more refresh opportunities, while a too-large K may increase aux-iliary replay. Overly conservative or aggressive τg weakens the balance between communication saving and cache-state freshness, and extreme τc either prunes too aggressively or leaves runtime skew insufficiently mitigated. 
+
+E. Evaluation of Scalability 
+
+We evaluate scalability by varying the number of workers under Env 1 with TGN. We report target-event throughput and scaling efficiency, computed as Eff n = Thr n/(n · Thr 1).
+
+TABLE VIII SCALABILITY COMPARISON .
+
+System 1W Thr. 2W Thr. 3W Thr. 2W Eff. 3W Eff. 
+
+AskUbuntu 
+
+Vanilla DDP 2341.24 1113.57 464.34 23.78% 6.61% DisTGL 2269.94 1111.95 480.57 24.49% 7.06% NeutronStream 2311.03 1845.86 1419.54 39.94% 20.47% MemShare 2321.56 1790.70 1288.33 38.57% 18.50% DepTGL 2283.51 2838.78 2882.40 62.16% 42.08% Reddit 
+
+Vanilla DDP 2389.08 1257.90 503.87 26.33% 7.03% DisTGL 2360.56 1397.19 623.23 29.59% 8.80% NeutronStream 2305.24 1949.06 1164.91 42.27% 16.84% MemShare 2409.96 1994.78 1356.34 41.39% 18.76% DepTGL 2382.33 3424.28 2928.71 71.87% 40.98% 
+
+Note: The one-worker setting is used as the reference for computing scaling efficiency within each system. 1W, 2W, and 3W denote one, two, and three workers, respectively. 
+
+Table VIII shows that DepTGL maintains the strongest multi-worker scaling behavior. With two workers, DepTGL 
+
+achieves 2838.78 target events/s on AskUbuntu and 3424.28 target events/s on Reddit, corresponding to 62.16% and 71.87% scaling efficiency, respectively. With three work-ers, DepTGL further reaches 2882.40 target events/s on AskUbuntu and 2928.71 target events/s on Reddit, outper-forming Vanilla DDP by 6.21 × and 5.81 ×, and MemShare by 2.24 × and 2.16 ×, respectively. Notably, only DepTGL 
+
+improves from two to three workers on AskUbuntu, suggesting better preservation of useful parallelism. The baselines exhibit different scalability bottlenecks. Vanilla DDP and DisTGL are dominated by frequent tem-poral data-state synchronization, while NeutronStream and MemShare reduce part of synchronization or hotspot-state communication but still lag behind DepTGL . This suggests that existing baselines alleviate individual overheads, but re-main less effective when remote temporal data-state access, boundary refreshes, and batch-level workload skew jointly determine multi-worker M-TGNN execution cost. VIII. C ONCLUSION 
+
+We presented DepTGL , a parallel framework for distributed memory-based TGNN training with adaptive temporal data dependency management. By combining batch-wise hybrid temporal data dependency serving, gradient-aware dynamic cache synchronization, and load-aware temporal data pruning, 
+
+DepTGL reduces remote temporal data-state access, cache-refresh communication, and skew-induced execution overhead. Experiments on six real-world temporal graphs show that 
+
+DepTGL achieves an average speedup of 4.99 × over state-of-the-art baselines while maintaining comparable accuracy. AI-G ENERATED CONTENT ACKNOWLEDGEMENT 
+
+AI-based tools were used for language polishing and figure draft refinement. All technical content was reviewed and verified by the authors. REFERENCES [1] G. H. Nguyen, J. B. Lee, R. A. Rossi, N. K. Ahmed, E. Koh, and S. Kim, “Continuous-time dynamic network embeddings,” in Compan-ion Proceedings of the Web Conference 2018 , 2018, pp. 969–976. [2] S. Kumar, X. Zhang, and J. Leskovec, “Predicting dynamic embedding trajectory in temporal interaction networks,” in Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , 2019, pp. 1269–1278. [3] R. Trivedi, M. Farajtabar, P. Biswal, and H. Zha, “Dyrep: Learning representations over dynamic graphs,” in International Conference on Learning Representations , 2019. [4] D. Xu, C. Ruan, E. Korpeoglu, S. Kumar, and K. Achan, “Inductive representation learning on temporal graphs,” in International Conference on Learning Representations , 2020. [5] E. Rossi, B. Chamberlain, F. Frasca, D. Eynard, F. Monti, and M. Bron-stein, “Temporal graph networks for deep learning on dynamic graphs,” 
+
+arXiv preprint arXiv:2006.10637 , 2020. [6] T. Li, L. Chen, C. S. Jensen, T. B. Pedersen, Y. Gao, and J. Hu, “Evolu-tionary clustering of moving objects,” in 2022 IEEE 38th International Conference on Data Engineering (ICDE) . IEEE, 2022, pp. 3015–3028. [7] H. Su, S. Liu, B. Zheng, X. Zhou, and K. Zheng, “Spatio-temporal trajectory similarity measures: A comprehensive survey and quantitative study,” ACM Transactions on Spatial Algorithms and Systems (TSAS) ,vol. 6, no. 3, pp. 1–36, 2020. [8] B. Zheng, S. Liu, C. Meng, K. Zheng, and H. Su, “Estimator: An effective and scalable framework for transportation mode classification over trajectories,” Information Sciences , vol. 546, pp. 26–44, 2021. [9] X. Wang, D. Lyu, M. Li, Y. Xia, Q. Yang, X. Wang, X. Wang, P. Cui, Y. Yang, B. Sun, and Z. Guo, “APAN: Asynchronous propagation atten-tion network for real-time temporal graph embedding,” in Proceedings of the 2021 International Conference on Management of Data , 2021, pp. 2628–2638. [10] Y. Wang, Y.-Y. Chang, Y. Liu, J. Leskovec, and P. Li, “Inductive representation learning in temporal networks via causal anonymous walks,” in International Conference on Learning Representations , 2021. [11] D. Zheng, C. Ma, M. Wang, J. Zhou, Q. Su, X. Song, Q. Gan, Z. Zhang, and G. Karypis, “Distdgl: Distributed graph neural network training for billion-scale graphs,” in 2020 IEEE/ACM 10th Workshop on Irregular Applications: Architectures and Algorithms , 2020, pp. 36–44. [12] C. Wan, Y. Li, C. R. Wolfe, A. Kyrillidis, N. S. Kim, and Y. Lin, “Pipegcn: Efficient full-graph training of graph convolutional networks with pipelined feature communication,” in International Conference on Learning Representations , 2022. [13] Q. Wang, Y. Zhang, H. Wang, C. Chen, X. Zhang, and G. Yu, “Neutron-star: Distributed gnn training with hybrid dependency management,” in 
+
+Proceedings of the 2022 International Conference on Management of Data , 2022, pp. 1301–1315. [14] Z. Lin, C. Li, Y. Miao, Y. Liu, and Y. Xu, “PaGraph: Scaling GNN training on large graphs via computation-aware caching,” in Proceedings of the 11th ACM Symposium on Cloud Computing , 2020, pp. 401–415. [15] J. Thorpe, Y. Qiao, J. Eyolfson, S. Teng, G. Hu, Z. Jia, J. Wei, K. Vora, R. Netravali, M. Kim, and G. H. Xu, “Dorylus: Affordable, scalable, and accurate GNN training with distributed CPU servers and serverless threads,” in 15th USENIX Symposium on Operating Systems Design and Implementation , 2021, pp. 495–514. [16] C. Wan, Y. Li, A. Li, N. S. Kim, and Y. Lin, “BNS-GCN: Efficient full-graph training of graph convolutional networks with partition-parallelism and random boundary node sampling,” in Proceedings of Machine Learning and Systems , 2022. [17] J. Peng, Z. Chen, Y. Shao, Y. Shen, L. Chen, and J. Cao, “Sancus: Staleness-aware communication-avoiding full-graph decentralized train-ing in large-scale graph neural networks,” in Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence , 2023, pp. 6480–6485. [18] Z. Song, Y. Gu, Q. Sun, T. Li, Y. Zhang, Y. Li, C. S. Jensen, and G. Yu, “Dynahb: A communication-avoiding asynchronous distributed framework with hybrid batches for dynamic gnn training,” Proceedings of the VLDB Endowment , vol. 17, no. 11, pp. 3388–3401, 2024. [19] Z. Song, Y. Gu, T. Li, Y. Li, Q. Sun, Y. Zhang, C. S. Jensen, and G. Yu, “Swash: A flexible communication framework with sliding window-based cache sharing for scalable dgnn training,” Proceedings of the ACM on Management of Data , vol. 3, no. 3, 2025. [20] S. Ockerman, A. Gueroudji, T. Mallick, Y. He, L. Pouchard, R. Ross, and S. Venkataraman, “Pgt-i: Scaling spatiotemporal gnns with memory-efficient distributed training,” in Proceedings of the International Con-ference for High Performance Computing, Networking, Storage and Analysis . ACM, 2025, pp. 217–236. [21] C. Chen, D. Gao, Y. Zhang, Q. Wang, Z. Fu, X. Zhang, J. Zhu, Y. Gu, and G. Yu, “Neutronstream: A dynamic gnn training framework with sliding window for graph streams,” Proceedings of the VLDB Endowment , vol. 17, no. 3, pp. 455–468, 2023. [22] Y. Xia, Z. Zhang, D. Yang, C. Hu, X. Zhou, H. Chen, Q. Sang, and D. Cheng, “Redundancy-free and load-balanced tgnn training with hierarchical pipeline parallelism,” IEEE Transactions on Parallel and Distributed Systems , vol. 35, no. 11, pp. 1904–1919, 2024. [23] H. Zhou, D. Zheng, X. Song, G. Karypis, and V. Prasanna, “Disttgl: Distributed memory-based temporal graph neural network training,” in Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis , 2023, pp. 1–14. [24] Z. Fang, Q. Sun, Q. Wang, L. Chen, and Y. Gao, “Distributed temporal graph neural network learning over large-scale dynamic graphs,” in 
+
+Database Systems for Advanced Applications: 29th International Con-ference, DASFAA 2024 , ser. Lecture Notes in Computer Science, vol. 14851. Springer, 2025, pp. 51–66. [25] Y. Dai, X. Tang, and Y. Zhang, “Cascade: A dependency-aware efficient training framework for temporal graph neural network,” in ASPLOS 2025 , 2025, pp. 95–110. [26] L. Zhang, R. Wang, T. Zheng, Z. Huang, W. Huang, X. Wang, C. Wang, M. Song, S. Wu, and S. He, “Effective and efficient distributed temporal graph learning through hotspot memory sharing,” Proceedings of the VLDB Endowment , vol. 18, no. 9, pp. 3093–3105, 2025. [27] R. Guo, Z. Ding, X. Xie, and J. Xu, “Swift: Enabling large-scale temporal graph learning on a single machine,” Proceedings of the ACM on Management of Data , vol. 3, no. 4, pp. 1–27, 2025. [28] G. Deng, H. Zhou, H. Zeng, Y. Xia, C. Leung, J. Li, R. Kannan, and V. Prasanna, “Taser: Temporal adaptive sampling for fast and accurate dynamic graph representation learning,” in 2024 IEEE International Parallel and Distributed Processing Symposium , 2024. [29] Y. Li, R. Yu, C. Shahabi, and Y. Liu, “Diffusion convolutional recurrent neural network: Data-driven traffic forecasting,” in International Con-ference on Learning Representations , 2018. [30] B. Yu, H. Yin, and Z. Zhu, “Spatio-temporal graph convolutional net-works: A deep learning framework for traffic forecasting,” in Proceed-ings of the Twenty-Seventh International Joint Conference on Artificial Intelligence , 2018, pp. 3634–3640. [31] L. Zhao, Y. Song, C. Zhang, Y. Liu, P. Wang, T. Lin, M. Deng, and H. Li, “T-GCN: A temporal graph convolutional network for traffic prediction,” IEEE Transactions on Intelligent Transportation Systems , vol. 21, no. 9, pp. 3848–3858, 2020. [32] C. Zheng, X. Fan, C. Wang, and J. Qi, “GMAN: A graph multi-attention network for traffic prediction,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 34, no. 01, 2020, pp. 1234–1241. [33] A. Pareja, G. Domeniconi, J. Chen, T. Ma, T. Suzumura, H. Kanezashi, T. Kaler, T. Schardl, and C. Leiserson, “Evolvegcn: Evolving graph convolutional networks for dynamic graphs,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 34, no. 04, 2020, pp. 5363– 5370. [34] A. Sankar, Y. Wu, L. Gou, W. Zhang, and H. Yang, “DySAT: Deep neural representation learning on dynamic graphs via self-attention networks,” in Proceedings of the 13th International Conference on Web Search and Data Mining , 2020, pp. 519–527. [35] J. You, T. Du, and J. Leskovec, “ROLAND: Graph learning framework for dynamic graphs,” in Proceedings of the 28th ACM SIGKDD Con-ference on Knowledge Discovery and Data Mining , 2022. [36] W. L. Hamilton, R. Ying, and J. Leskovec, “Inductive representation learning on large graphs,” in Advances in Neural Information Processing Systems , 2017, pp. 1024–1034. [37] J. Chen, T. Ma, and C. Xiao, “FastGCN: Fast learning with graph convo-lutional networks via importance sampling,” in International Conference on Learning Representations , 2018. [38] J. Chen, J. Zhu, and L. Song, “Stochastic training of graph convolu-tional networks with variance reduction,” in Proceedings of the 35th International Conference on Machine Learning , 2018, pp. 941–949. [39] W.-L. Chiang, X. Liu, S. Si, Y. Li, S. Bengio, and C.-J. Hsieh, “Cluster-GCN: An efficient algorithm for training deep and large graph convolutional networks,” in Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining ,2019, pp. 257–266. [40] H. Zeng, H. Zhou, A. Srivastava, R. Kannan, and V. K. Prasanna, “GraphSAINT: Graph sampling based inductive learning method,” in 
+
+International Conference on Learning Representations , 2020. [41] M. Fey, J. E. Lenssen, F. Weichert, and J. Leskovec, “GNNAutoScale: Scalable and expressive graph neural networks via historical embed-dings,” in Proceedings of the 38th International Conference on Machine Learning , 2021, pp. 3294–3304. [42] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” in International Conference on Learning Rep-resentations , 2017. [43] P. Velickovic, G. Cucurull, A. Casanova, A. Romero, P. Lio, and Y. Bengio, “Graph attention networks,” in International Conference on Learning Representations , 2018. [44] R. Zhu, K. Zhao, H. Yang, W. Lin, C. Zhou, B. Ai, Y. Li, and J. Zhou, “AliGraph: A comprehensive graph neural network platform,” 
+
+Proceedings of the VLDB Endowment , vol. 12, no. 12, pp. 2094–2105, 2019. [45] L. Wang, Q. Yin, C. Tian, J. Yang, R. Chen, W. Yu, Z. Yao, and J. Zhou, “FlexGraph: A flexible and efficient distributed framework for GNN training,” in Proceedings of the Sixteenth European Conference on Computer Systems , 2021, pp. 67–82. [46] V. T. Chakaravarthy, S. S. Pandian, S. Raje, Y. Sabharwal, T. Suzumura, and S. Ubaru, “Efficient scaling of dynamic graph neural networks,” in Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis , 2021, pp. 1–15. [47] F. Chen, P. Li, and C. Wu, “DGC: Training dynamic graphs with spatio-temporal non-uniformity using graph partitioning by chunks,” 
+
+Proceedings of the ACM on Management of Data , vol. 1, no. 4, pp. 1–25, 2023. [48] K. Fu, Q. Chen, Y. Yang, J. Shi, C. Li, and M. Guo, “BLAD: Adaptive load balanced scheduling and operator overlap pipeline for accelerat-ing the dynamic GNN training,” in Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis , 2023, pp. 1–13. [49] M. Guan, A. P. Iyer, and T. Kim, “DynaGraph: Dynamic graph neural networks at scale,” in Proceedings of the 5th ACM SIGMOD Joint International Workshop on Graph Data Management Experiences and Systems and Network Data Analytics , 2022, pp. 6:1–6:10. [50] Y. Zhong, G. Sheng, T. Qin, M. Wang, Q. Gan, and C. Wu, “Gnnflow: A distributed framework for continuous temporal gnn learning on dynamic graphs,” CoRR , vol. abs/2311.17410, 2023. [51] B. Recht, C. Re, S. Wright, and F. Niu, “Hogwild: A lock-free approach to parallelizing stochastic gradient descent,” in Advances in Neural Information Processing Systems , 2011, pp. 693–701. [52] J. Dean, G. S. Corrado, R. Monga, K. Chen, M. Devin, Q. V. Le, M. Z. Mao, M. Ranzato, A. Senior, P. Tucker, K. Yang, and A. Y. Ng, “Large scale distributed deep networks,” in Advances in Neural Information Processing Systems , 2012, pp. 1223–1231. [53] M. Li, D. G. Andersen, J. W. Park, A. J. Smola, A. Ahmed, V. Josifovski, J. Long, E. J. Shekita, and B.-Y. Su, “Scaling distributed machine learning with the parameter server,” in 11th USENIX Symposium on Operating Systems Design and Implementation , 2014, pp. 583–598. [54] H. B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y. Arcas, “Communication-efficient learning of deep networks from decentralized data,” in Proceedings of the 20th International Conference on Artificial Intelligence and Statistics , 2017, pp. 1273–1282. [55] S. U. Stich, “Local sgd converges fast and communicates little,” in 
+
+International Conference on Learning Representations , 2019. [56] Y. Lin, S. Han, H. Mao, Y. Wang, and W. J. Dally, “Deep gradient compression: Reducing the communication bandwidth for distributed training,” in International Conference on Learning Representations ,2018. [57] Y. Yao, L. Chen, Z. Fang, and T. Li, “Camel: Efficient compression of floating-point time series,” Proceedings of the ACM on Management of Data , vol. 2, no. 6, 2024. [58] T. Li, L. Chen, C. S. Jensen, and T. B. Pedersen, “TRACE: Real-time compression of streaming trajectories in road networks,” Proceedings of the VLDB Endowment , vol. 15, no. 2, pp. 350–363, 2021. [59] T. Li, R. Huang, L. Chen, C. S. Jensen, and T. B. Pedersen, “Com-pression of uncertain trajectories in road networks,” Proceedings of the VLDB Endowment , vol. 14, no. 4, pp. 485–497, 2020. [60] M. Egger, S. Kas Hanna, and R. Bitar, “Fast and straggler-tolerant dis-tributed sgd with reduced computation load,” in 2023 IEEE International Symposium on Information Theory (ISIT) . IEEE, 2023, pp. 1336–1341.

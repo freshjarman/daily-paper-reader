@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-07-20 ~ 2026-08-18</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-23</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 4 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 3 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>2</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-18 01:34:16 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-23 20:28:15 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读聚焦时间序列表示与轨迹预测，两篇8分论文分别提出ChronoSSM的自回归状态空间训练方法和状态条件采样的非参数轨迹预测；速读覆盖LLM时序推理蒸馏与多模态稀疏时序图压缩，均为6分。最值得关注的是精读的ChronoSSM与轨迹预测方法，前者在状态空间模型中强化时间感知，后者以非参数方式提升预测适应性。下一步建议从ChronoSSM出发，结合轨迹预测的采样策略，验证在自身时序任务上的迁移效果。</p>
+<p>今日精读地震序列预测前沿，另涉时序预测与图神经网络训练两篇速读。最值得关注的是《Scaling-law-informed neural point processes》，该研究将规模化定律引入神经网络点过程，为地震序列预测提供新范式。普通读者可优先精读此篇，速读文章则适合对动态图训练或自适应预测区间感兴趣的读者按需参考。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -71,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">2 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="ChronoSSM: Training for Temporally Aware Representations in Autoregressive State Space Models">ChronoSSM: Training for Temporally Aware Representations in Autoregressive State Space Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Non-Parametric Spatiotemporal Trajectory Prediction via State-Conditioned Transition Sampling">Non-Parametric Spatiotemporal Trajectory Prediction via State-Conditioned Transition Sampling</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Scaling-law-informed neural point processes for earthquake sequence forecasting">Scaling-law-informed neural point processes for earthquake sequence forecasting</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -87,7 +87,7 @@
     <strong class="dpr-home-dashboard-count">2 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Distilling Temporal Search and Reasoning: Evolving LLMs for Future Prediction via Harness-Assisted Efficient Data Synthesis">Distilling Temporal Search and Reasoning: Evolving LLMs for Future Prediction via Harness-Assisted Efficient Data Synthesis</span></li><li><span class="dpr-home-dashboard-paper-title" title="EvtGraph: Event-Adaptive Compression for Sparse Temporal Graph Learning in Multimodal Time Series">EvtGraph: Event-Adaptive Compression for Sparse Temporal Graph Learning in Multimodal Time Series</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="DepTGL: A Parallel Framework for Memory-based TGNN Training with Adaptive Temporal Data Dependency Management">DepTGL: A Parallel Framework for Memory-based TGNN Training with Adaptive Temporal Data Dependency Management</span></li><li><span class="dpr-home-dashboard-paper-title" title="SPACE: Sample-cloud Predictive Adaptive Conformal Ellipsoids for Multivariate Time-Series Forecasting">SPACE: Sample-cloud Predictive Adaptive Conformal Ellipsoids for Multivariate Time-Series Forecasting</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
 </section>
