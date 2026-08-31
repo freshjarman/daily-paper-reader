@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-30</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-02 ~ 2026-08-31</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 2 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 7 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>1</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>4</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-30 21:37:59 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-31 02:15:52 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读重症监护中基于不规则电子健康记录的多模态提示学习（8.0分），速读拓扑事件序列的弹性并发因果发现（6.0分），共2篇。</p>
-<p>最值得关注多模态提示学习在不规则医疗数据上的稳健监测应用，兼顾精度与鲁棒性。</p>
-<p>下一步可优先复现该精读模型，并对比传统EHR处理方法的实际收益。</p>
+<p>本期聚焦不规则时间序列预测与合成数据生成，共精选7篇论文，其中2篇精读获9分高分。</p>
+<p>最值得关注：跳出MSE评价指标的基准构建，以及基于Copula的纵向表格数据生成方法。</p>
+<p>建议先精读这两篇高分工作，再结合基准函数视角的预测研究拓展理解。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -80,12 +80,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">1 篇</strong>
+    <strong class="dpr-home-dashboard-count">4 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Multimodal Prompt Learning with Irregular EHRs for Robust Monitoring of Critical Care Patients">Multimodal Prompt Learning with Irregular EHRs for Robust Monitoring of Critical Care Patients</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting">Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Synthetic Longitudinal Tabular Data Generation via Copula">Synthetic Longitudinal Tabular Data Generation via Copula</span></li><li><span class="dpr-home-dashboard-paper-title" title="Cortical encoding of probabilistic temporal predictions during speech perception">Cortical encoding of probabilistic temporal predictions during speech perception</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">ehr-es <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span><span class="dpr-home-dashboard-tag">ehr-es <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -93,12 +93,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">1 篇</strong>
+    <strong class="dpr-home-dashboard-count">3 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Resilient Concurrent Causal Discovery for Topological Event Sequences">Resilient Concurrent Causal Discovery for Topological Event Sequences</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="LiFTER: A Grounded Neuro-Symbolic Microscope for Continuous-Time Dynamic Graph Forecasting">LiFTER: A Grounded Neuro-Symbolic Microscope for Continuous-Time Dynamic Graph Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Rethinking Irregular Time Series Forecasting from the Perspective of Basis Functions">Rethinking Irregular Time Series Forecasting from the Perspective of Basis Functions</span></li><li><span class="dpr-home-dashboard-paper-title" title="FLEET: Token-Based Feature Extraction for Event Camera-based Reinforcement Learning">FLEET: Token-Based Feature Extraction for Event Camera-based Reinforcement Learning</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span></div>
 </section>
 </div>
 

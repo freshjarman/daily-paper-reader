@@ -1,0 +1,2814 @@
+Beyond MSE: Rethinking the Evaluation Metric
+and Benchmarking for Irregular Time Series Forecasting
+Rongwen Li 1 Haixin Xie 1 Xiao Wang 1 Changjian Chen 1
+Abstract
+Existing research on irregular time-series forecast-
+ing has primarily focused on model design, while
+evaluation metrics remain insufficiently studied.
+Existing benchmarks typically use mean squared
+error (MSE) as the evaluation metric. We show
+that, in irregular forecasting, MSE is determined
+not only by the model prediction but also by the
+sample-specific timestamp sampling distributions,
+leading to a biased assessment of the models’
+continuous-time predictive performance. To ad-
+dress this issue, we propose the Continuous-time
+Squared Error (CSE), which employs importance
+weighting to eliminate the influence of the times-
+tamp sampling distributions. We further theo-
+retically prove that CSE’s asymptotic estimation
+error with respect to continuous-time risk is no
+greater than that of MSE. Finally, we construct a
+systematic benchmark covering synthetic, semi-
+synthetic, and eight real-world datasets to validate
+the effectiveness of CSE and systematically eval-
+uate models’ continuous-time predictive perfor-
+mance. Experiments show that CSE can recover
+continuous-time risk more accurately than MSE,
+while relying solely on MSE may not fully reflect
+models’ continuous-time predictive performance
+in real-world scenarios. Our code can be obtained
+at https://github.com/hnu-vis/ITS-Bench.
+1. Introduction
+Irregular time series are ubiquitous in real-world applica-
+tions such as healthcare, environmental monitoring, and hu-
+man activity analysis (Ghassemi et al., 2015; Decorte et al.,
+2024; Afrifa-Yamoah et al., 2020). Unlike regularly sampled
+time series, their observations occur at non-uniform times-
+tamps, and different samples may exhibit different sampling
+patterns. In recent years, considerable research effort has
+1College of Computer Science and Electronic Engineering,
+Hunan University, Changsha, Hunan, China. Correspondence to:
+Changjian Chen <changjianchen@hnu.edu.cn>.
+Preprint. August 19, 2026.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Continuous time t
+0.0
+0.2
+0.4
+0.6
+Value
+Rct
+MSE
+CSE
+Model A
+0.0091
+0.0029
+0.0097
+Model B 0.0038
+0.0036
+0.0040
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Sampling density
+Ground truth
+Model A
+Model B
+Timestamps
+Sampling density p(t)
+Figure 1. Illustration of evaluation bias under non-uniform sam-
+pling. Although Model B has lower continuous-time error, Model
+A obtains a lower MSE because of over-dense sampling within the
+interval [0.0, 0.4].
+been devoted to modeling such non-uniform temporal pro-
+cesses, leading to the development of continuous-time (Bi-
+los et al., 2021), attention-based (Shukla & Marlin, 2021),
+graph-based (Yalavarthi et al., 2024), and patch-based (Liu
+et al., 2026b) models. However, compared with the rapid
+progress in model design, evaluation metrics for irregular
+time-series forecasting remain insufficiently studied.
+For time-series forecasting, an ideal evaluation metric is the
+continuous-time discrepancy between the predicted trajec-
+tory and the true trajectory X over the entire future interval.
+Given X over a time span T , let ℓ(t, X) denote the pre-
+diction error of a model at time t. This continuous-time
+discrepancy is defined as the continuous-time risk:
+Rct = EX
+ 1
+|T |
+Z
+T
+ℓ(t, X) dt
+
+.
+(1)
+This risk directly characterizes the model’s continuous-time
+predictive performance over the future interval.
+Existing studies typically adopt mean squared error (MSE)
+and mean absolute error (MAE), which are widely used in
+regularly sampled forecasting. We argue that in irregular
+settings, MSE and MAE can be affected by the sample-
+specific timestamp sampling distributions and may there-
+fore fail to accurately reflect a model’s performance.
+As illustrated in Fig. 1, although Model B has a lower
+continuous-time error than Model A (i.e., the orange line
+1
+arXiv:2608.17293v1  [cs.LG]  18 Aug 2026
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+of Model B is closer to the black ground truth line over the
+whole time span), Model A obtains a lower MSE because of
+over-dense sampling within the interval [0.0, 0.4]. By theo-
+retical analysis, we find that MSE provides a biased estimate
+of the continuous-time risk Rct, as it actually measures the
+observation-time risk Robs = EX[
+R
+T ℓ(t, X)p(t | X) dt],
+where p(t | X) is the conditional sampling distribution for
+the timestamps. This distribution is sample-specific and thus
+causes model performance evaluations to be confounded by
+sample-specific sampling patterns.
+To eliminate the influence of the timestamp sampling dis-
+tributions on evaluation results, we begin directly from Rct
+and construct its empirical estimator, termed the Continuous-
+time Squared Error (CSE), through importance sampling.
+CSE reweights errors according to the observation-time den-
+sity p(t | X), reducing the contribution of densely sampled
+regions while increasing that of sparsely sampled regions,
+thereby mitigating evaluation bias caused by timestamp
+sampling distributions. Returning to Fig. 1, CSE correctly
+identifies Model B as having the lower continuous-time er-
+ror. We further prove that the asymptotic estimation error of
+CSE with respect to the continuous-time risk is no greater
+than that of MSE. Finally, we further decompose the discrep-
+ancy between MSE and CSE into a sampling-dependence
+gap and a temporal-distribution gap to investigate their re-
+spective effects in real-world settings. Similarly, we can
+derive the Continuous-time Absolute Error (CAE) as the
+debiased counterpart to MAE.
+To evaluate the effectiveness of CSE, we require access to
+the true trajectory X of each dataset. To this end, we con-
+struct a systematic benchmark for irregular time-series fore-
+casting covering synthetic, semi-synthetic, and real-world
+datasets. Both the synthetic and semi-synthetic datasets
+have the true continuous or regular trajectory. Based on a
+comprehensive evaluation of this benchmark, we have the
+following conclusions: (1) on synthetic and semi-synthetic
+datasets, CSE can recover continuous-time risk more accu-
+rately than MSE under non-uniform sampling; (2) on real-
+world datasets, relying solely on MSE may not fully reflect
+models’ continuous-time predictive performance; (3) the
+discrepancies between MSE and CSE are jointly influenced
+by the sampling-dependence and temporal-distribution gaps.
+The main contributions are summarized as follows:
+• Revealing the biased evaluation of MSE for model’s
+continuous-time predictive performance. We show
+that MSE estimates the observation-distribution risk
+rather than the continuous-time risk, thereby coupling
+model evaluation with sampling mechanisms.
+• A continuous-time evaluation metric with theo-
+retical guarantees. We propose Continuous-Time
+Squared Error (CSE), which estimates the continuous-
+time risk from irregular timestamps through impor-
+tance weighting, and prove that its asymptotic estima-
+tion error is no greater than MSE.
+• A systematic benchmark for continuous-time evalu-
+ation. We construct a benchmark covering synthetic,
+semi-synthetic, and real-world datasets to validate the
+effectiveness of CSE, systematically evaluate models’
+continuous-time predictive performance, and analyze
+the sources of discrepancies between MSE and CSE.
+2. Related Work
+2.1. Irregular Time Series Forecasting
+Irregular time series are typically characterized by sparse,
+asynchronous, and nonuniform sampling. Existing studies
+have primarily focused on modeling continuous-time dy-
+namics from limited observations. One line of work explic-
+itly describes the continuous evolution of latent states. For
+example, Latent ODE, Neural CDE, and Continuous Recur-
+rent Unit handle arbitrary time intervals based on ordinary
+differential equations, controlled differential equations, and
+continuous state transitions, respectively (Rubanova et al.,
+2019; Kidger et al., 2020; Schirmer et al., 2022). Another
+line of work directly models irregular observations together
+with their temporal information. SeFT represents a time
+series as a set of observations, mTAN employs multi-time
+attention to aggregate asynchronous observations, and Rain-
+drop uses graph structures to capture dynamic dependencies
+among variables (Horn et al., 2020; Shukla & Marlin, 2021;
+Zhang et al., 2022). More recent methods further integrate
+multiscale representations with graph structures. For in-
+stance, Warpformer models temporal patterns at different
+scales through time warping, whereas GraFITi formulates
+irregular forecasting as an information propagation process
+over a graph (Zhang et al., 2023; Yalavarthi et al., 2024).
+Despite these advances, existing studies primarily focus
+on model design and typically evaluate predictions using
+MSE or MAE at observed future timestamps. In contrast,
+we study the evaluation protocol itself and examine how
+irregular sampling affects model comparison and selection.
+2.2. Benchmarks and Evaluation for Irregular Time
+Series
+With the growing interest in irregular time series, prior stud-
+ies have developed related benchmarks from the perspec-
+tives of data resources, software frameworks, and standard-
+ized experimental settings. The MIMIC-IV benchmark or-
+ganizes unified tasks for sparse and irregular clinical time
+series and compares a range of representative models (Bui
+et al., 2024). PYRREGULAR provides unified data struc-
+tures and analytical tools, together with a standardized
+benchmark covering multiple datasets and classification
+2
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+methods (Spinnato & Landi, 2025). Time-IMM further
+introduces new datasets and evaluation benchmarks for ir-
+regular multimodal multivariate time series (Chang et al.,
+2025). For forecasting tasks, Physiome-ODE constructs
+controlled datasets from biological ODEs to provide more
+challenging and discriminative environments for comparing
+irregular forecasting models (Kl¨otergens et al., 2025).
+Existing benchmarks mainly improve datasets, tasks, and
+experimental standardization rather than the evaluation ob-
+jective itself. Physiome-ODE is the most closely related
+work: it provides controlled ODE-generated trajectories to
+improve model discrimination, but still evaluates predic-
+tions using MSE at sampled query times (Kl¨otergens et al.,
+2025). Consequently, it does not examine whether model
+conclusions depend on the query-time distribution or re-
+cover risk over the entire future interval. In contrast, we
+take continuous-time risk as the evaluation target, propose
+CSE to estimate it, and decompose the resulting evalua-
+tion discrepancy into sampling-dependence and temporal-
+distribution gaps.
+3. Preliminaries
+3.1. Irregular Time Series Forecasting
+The dataset contains S irregular time series. For the s-
+th sequence, its historical observations are denoted by
+Os = {(qs,i, xs,i)}Hs
+i=1, where qs,i ∈R and xs,i ∈RD
+denote the irregular timestamp and the corresponding mul-
+tivariate observation, respectively. Given the historical ob-
+servations Os, a forecasting model fθ aims to estimate the
+latent process over a future time interval T . For any query
+time t ∈T , the model output is given by ˆXs(t) = fθ(Os, t).
+Let Xs(t) denote the ground-truth latent process, and define
+the prediction error at time t as ℓ(t, Xs) = L(Xs(t), ˆXs(t)).
+In practical test datasets, the ground-truth values are avail-
+able only at a finite set of future timestamps {ts,j}Ls
+j=1,
+which are generated from the conditional sampling distribu-
+tion p(t | Xs).
+3.2. MSE and MAE under Irregular Sampling
+Existing studies on irregular time series forecasting typically
+compute MSE and MAE at the actually observed future
+timestamps. In the following, we use MSE as the example
+to illustrate the idea, i.e., ℓ(t, Xs) =
+Xs(t) −ˆXs(t)
+
+2
+.
+Accordingly, the MSE on the test set can be written as
+MSE = 1
+S
+S
+X
+s=1
+1
+Ls
+Ls
+X
+j=1
+ℓ(ts,j, Xs).
+(2)
+This metric first averages the prediction errors over the
+future observations of each trajectory and then assigns equal
+weight to different trajectories. When the future timestamps
+are regarded as conditional samples drawn from p(t | X),
+the above expression is essentially a Monte Carlo estimator
+of the following observation-distribution risk:
+Robs = EX
+Z
+T
+ℓ(t, X)p(t | X) dt
+
+= EX
+
+ET |X[ℓ(T, X)]
+
+.
+(3)
+Therefore, MSE aggregates prediction errors according to
+the empirical frequency of future timestamps: densely ob-
+served temporal regions receive higher weights in the eval-
+uation, whereas sparsely observed regions receive lower
+weights. In other words, the overall evaluation objective of
+MSE is determined not only by the model’s prediction errors
+but also by the conditional sampling distribution p(t | X).
+4. Continuous-Time Risk for Irregular
+Forecasting
+In this section, we first define the continuous-time risk that
+directly corresponds to the continuous-time forecasting ob-
+jective. We then construct its empirical estimator, CSE, us-
+ing importance sampling and analyze the asymptotic proper-
+ties of CSE relative to MSE. Finally, we introduce the global-
+time risk and decompose the evaluation discrepancy into
+two components associated with sample-dependent sam-
+pling and population-level temporal nonuniformity.
+4.1. Continuous-Time Risk
+As discussed above, the observation-distribution risk corre-
+sponding to MSE is affected by the conditional sampling
+distribution p(t | X), thereby coupling model evaluation
+with sample-specific sampling mechanisms. A natural way
+to reduce this dependence is to adopt a common target-time
+measure across all trajectories. For continuous-time fore-
+casting, an ideal evaluation objective should also measure
+the discrepancy between the predicted trajectory and the
+ground-truth process over the entire future interval. We
+therefore adopt the uniform temporal measure and define
+Rct = EX
+ 1
+|T |
+Z
+T
+ℓ(t, X) dt
+
+.
+(4)
+Rct assigns equal weight to each unit of time within the fu-
+ture interval and is independent of the sampling distribution
+of the actual observation times. It therefore characterizes the
+forecasting capability of a model over the entire continuous-
+time process.
+4.2. Estimating Continuous-Time Risk
+The test set provides ground-truth observations only at a
+finite number of future timestamps, making it impossible
+to directly compute the continuous-time integral over the
+entire interval T . To estimate Rct from the available irreg-
+ular observations, we use the actual conditional sampling
+3
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+distribution p(t | X) as the proposal distribution and rewrite
+the continuous-time risk through importance sampling as
+Rct = EX
+Z
+T
+ℓ(t, X)
+1
+|T |p(t | X)p(t | X) dt
+
+= EX
+
+ET |X
+
+ℓ(T, X)
+1
+|T |p(T | X)
+
+.
+(5)
+Here, 1/(|T |p(t | X)) corrects the actual conditional sam-
+pling distribution toward the uniform temporal distribution.
+It reduces the contribution of each observation in densely
+sampled regions while increasing the contribution of each
+observation in sparsely sampled regions, allowing each tem-
+poral location to contribute to the evaluation according to
+the length of the time interval it represents.
+In practical datasets, the conditional sampling density p(t |
+Xs) is typically unknown. Let ˆp(ts,i | Xs) denote the con-
+ditional temporal density estimated from the future times-
+tamps of the s-th trajectory. Since standard importance
+sampling may exhibit high finite-sample variance due to
+extreme weights, we adopt self-normalized importance sam-
+pling and define the resulting empirical metric under squared
+error as the Continuous-Time Squared Error (CSE):
+CSE = 1
+S
+S
+X
+s=1
+PLs
+i=1 ℓ(ts,i, Xs)/ˆp(ts,i | Xs)
+PLs
+i=1 1/ˆp(ts,i | Xs)
+.
+(6)
+The constant 1/|T | in the uniform temporal density can-
+cels between the numerator and denominator. For each
+trajectory, a continuous-time error estimate is first obtained
+through self-normalized weighting, after which these esti-
+mates are averaged equally across all test trajectories. The
+same construction naturally yields the Continuous-time Ab-
+solute Error (CAE) under absolute error. In the following,
+we focus on CSE under squared error.
+To reduce the influence of an evaluation timestamp on its
+own density estimate, we employ leave-one-out Gaussian
+kernel density estimation:
+ˆp(ts,i | Xs) =
+1
+(Ls −1)hs
+Ls
+X
+j=1
+j̸=i
+K
+ts,i −ts,j
+hs
+
+,
+(7)
+where K(·) is the Gaussian kernel function and hs is the
+bandwidth associated with the s-th trajectory. Excluding
+the current evaluation point prevents it from introducing
+additional kernel mass at its own location, thereby yielding
+a more robust estimate of the local temporal density.
+To further demonstrate the advantage of CSE over MSE,
+we theoretically compare their asymptotic estimation errors
+with respect to the continuous-time risk and introduce the
+following assumption and theorem.
+Assumption 4.1. Let T be a compact interval, and assume
+that different test trajectories are mutually independent. Con-
+ditional on Xs, the future timestamps are independently and
+identically distributed according to p(t | Xs). Suppose that
+the loss function is bounded, the conditional sampling den-
+sity satisfies p(t | X) ≥ρ > 0, and the density estimator
+ˆp(t | X) is strongly consistent over T .
+Theorem 4.2 (Asymptotic Non-Inferiority of CSE). Let
+L = min1≤s≤S Ls. Under Assumption 4.1, as both the
+number of test trajectories S and the minimum number of
+future observations per trajectory L tend to infinity, the
+following inequality holds almost surely:
+lim
+S,L→∞|CSE −Rct| ≤
+lim
+S,L→∞|MSE −Rct| .
+(8)
+In particular, equality holds when p(t | X) = 1/|T | almost
+everywhere.
+The complete proof is provided in the Appendix A. Theo-
+rem 4.2 shows that, under the stated conditions, the asymp-
+totic estimation error of CSE with respect to the continuous-
+time risk is no greater than that of MSE. When future
+observation times are uniformly distributed, the two met-
+rics are asymptotically equivalent. When the observation-
+distribution risk differs from the continuous-time risk, CSE
+achieves a strictly smaller asymptotic error.
+4.3. Sources of Evaluation Discrepancy
+Because MSE and CSE converge to the observation-
+distribution risk and the continuous-time risk, respectively,
+they may yield different model evaluation results. To further
+analyze this discrepancy, we introduce the global-time risk
+and decompose the overall discrepancy into two components
+arising from sample-dependent sampling and population-
+level temporal nonuniformity.
+Marginalizing the conditional sampling distribution over
+trajectories yields pT (t) = EX[p(t | X)], which describes
+the distribution of timestamps at the dataset level. Based on
+this distribution, we define the global-time risk as
+Rglobal = EX
+Z
+T
+ℓ(t, X)pT (t) dt
+
+.
+(9)
+Rglobal removes the influence of sample-specific sampling
+mechanisms while retaining the population-level nonuni-
+form temporal coverage of the dataset. In this sense, it
+preserves the global temporal distribution induced by the
+data collection process, but eliminates the instance-level
+irregularity that may bias model evaluation. It therefore
+serves as an intermediate reference between the observed
+risk Robs and the continuous-time risk Rct. Based on this
+risk, the overall evaluation discrepancy can be decomposed
+4
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+as
+Robs −Rct = Robs −Rglobal
+|
+{z
+}
+Gsamp
++ Rglobal −Rct
+|
+{z
+}
+Gtime
+,
+where
+Gsamp =
+Z
+T
+CovX (ℓ(t, X), p(t | X)) dt,
+Gtime = CovU∼Unif(T )
+ ¯ℓ(U), |T |pT (U)
+
+,
+(10)
+where ¯ℓ(t) = EX[ℓ(t, X)]. The detailed derivation is pro-
+vided in the Appendix B.
+Gsamp is determined by the covariance, across trajectories,
+between the model error ℓ(t, X) and the sample-specific
+sampling density p(t | X) at a fixed temporal location. If
+trajectories with larger errors are more likely to be observed
+at that time, this term is positive; otherwise, it is negative.
+When the sampling process is independent of the trajec-
+tory, i.e., p(t | X) = pT (t), we have Gsamp = 0. There-
+fore, Gsamp characterizes the effect induced by sample-
+dependent sampling.
+Gtime is determined by the covariance, across time, between
+the average model error ¯ℓ(t) and the population-level rel-
+ative sampling density |T |pT (t). If temporal regions with
+larger average errors have higher population-level sampling
+densities, this term is positive; otherwise, it is negative.
+When pT (t) = 1/|T |, we have Gtime = 0. Therefore,
+Gtime characterizes the actual effect of population-level
+temporal nonuniformity on the evaluation of the current
+model.
+To estimate the above discrepancies in practice, we first
+estimate the marginal temporal density using ˆpT (t) =
+1
+S
+PS
+r=1 ˆp(t | Xr). We then use ˆpT (t) as the target distri-
+bution to construct a self-normalized importance-sampling
+estimator of Rglobal, termed the Global-Time Squared Error
+(GSE). Its detailed form is provided in the Appendix C. The
+two discrepancy components can then be estimated as
+bGsamp = MSE −GSE,
+bGtime = GSE −CSE. (11)
+This decomposition enables us to separately quantify the
+effects of sample-dependent sampling and population-level
+temporal nonuniformity on model scores and rankings in
+practice, providing a basis for analyzing evaluation discrep-
+ancies in the subsequent experiments.
+5. Benchmark Protocol
+This section presents the benchmark setup, including the
+synthetic, semi-synthetic, and real-world datasets, represen-
+tative baseline models, and unified training and evaluation
+protocols adopted to ensure fair and consistent comparisons.
+5.1. Datasets
+Synthetic and Semi-Synthetic Data.
+To obtain di-
+rectly computable continuous-time risks, we construct two
+fully synthetic datasets and two semi-synthetic datasets.
+Synthetic-Regime gradually transitions from a smooth, low-
+amplitude regime to a high-frequency periodic regime, sim-
+ulating a process whose forecasting difficulty varies sub-
+stantially over time. Synthetic-Multiscale simultaneously
+contains trends, multiscale periodic patterns, and local tran-
+sient variations, covering more complex temporal patterns.
+Both fully synthetic datasets provide analytical continuous
+ground truth that can be queried at arbitrary future times.
+The semi-synthetic datasets are constructed from the reg-
+ularly sampled ETTm1 and Weather datasets (Wu et al.,
+2021). Specifically, we sample a finite number of historical
+and future timestamps from complete regular windows to
+form irregular samples, and use the equally weighted error
+over the complete future grid as the reference continuous-
+time risk. Training target times uniformly cover the future
+interval, whereas test timestamps are sampled from
+pα(u) = α Beta(u; 10, 60)+(1−α) Uniform(0, 1), (12)
+where α ∈{0, 0.3, 0.5, 0.9, 0.99} controls the degree of
+temporal nonuniformity. All sampling conditions share the
+same training data and model predictions, while only the
+test-time distribution is varied, thereby isolating the effect
+of the evaluation protocol itself. Detailed data-generation
+procedures and window configurations are provided in the
+Appendix D.1.
+Real-World Datasets.
+We select eight real-world irreg-
+ular time series datasets spanning different application
+domains and sampling patterns. USHCN contains long-
+term climate observations from weather stations across
+the United States (Menne et al., 2015). MIMIC-III con-
+sists of sparse clinical records from ICU patients (John-
+son et al., 2016). HumanActivity contains irregularly col-
+lected location-sensor measurements recorded during hu-
+man activities (Li et al., 2025). GDELT records multivariate
+event sequences triggered by international events (Leetaru &
+Schrodt, 2013). RepoHealth describes software repository
+development activities, whose sampling frequency varies
+with project activity (Chang et al., 2025). StudentLife con-
+tains mobile sensing data driven by user behavior and daily
+routines (Nepal et al., 2024). FNSPID consists of stock
+prices and trading information and exhibits structured tem-
+poral gaps induced by trading sessions (Chang et al., 2025).
+CESNET contains traffic records generated by network de-
+vices, with timestamps affected by system scheduling delays
+and logging jitter (Chang et al., 2025). For all datasets, we
+use only numerical time series and follow the corresponding
+public settings for preprocessing and data splitting. Detailed
+dataset statistics, preprocessing procedures, and window
+5
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+configurations are provided in the Appendix D.2.
+5.2. Baselines
+We select eleven representative irregular time series models
+covering different temporal modeling paradigms. These
+include recurrent or continuous-time models, namely GRU-
+D and NeuralFlow (Che et al., 2016; Bilos et al., 2021);
+set-, attention-, or Transformer-based models, including
+SeFT, mTAN, and Warpformer (Horn et al., 2020; Shukla
+& Marlin, 2021; Zhang et al., 2023); graph- or hypergraph-
+based models, including GraFITi, HyperIMTS, tPatchGNN,
+and ASTGI (Yalavarthi et al., 2024; Li et al., 2025; Zhang
+et al., 2024; Liu et al., 2026a); and pre-alignment and patch-
+aggregation methods, including KAFNet and APN (Zhou
+et al., 2026; Liu et al., 2026b). Detailed descriptions and
+hyperparameter configurations for all models are provided
+in the Appendix D.3.
+5.3. Training and Evaluation Protocol
+All models use the same data splits and input information,
+and their training objective is uniformly set to the MSE over
+observed timestamps. The remaining training and hyper-
+parameter settings follow the corresponding public imple-
+mentations, with model selection performed according to
+validation MSE. In each independent run, every model pro-
+duces only one set of test predictions, on which MSE, GSE,
+and CSE are computed. This ensures that the differences
+among the metrics arise solely from the temporal weighting
+applied during test-time evaluation. Both the conditional
+and marginal temporal densities are estimated exclusively
+from the test timestamps and are shared across all models on
+the same dataset. We further compute bGsamp and bGtime to
+analyze the sources of evaluation discrepancies. All experi-
+ments are independently repeated using five random seeds.
+The main text reports the mean results, while complete re-
+sults with standard deviations are provided in the Appendix.
+Detailed training configurations, density-estimation parame-
+ters, and other implementation details are also provided in
+the Appendix D.4.
+6. Experiments
+Using the proposed benchmark, we conduct experiments to
+investigate three questions: (1) Can CSE recover continuous-
+time risk and model rankings more accurately than MSE
+under non-uniform sampling? (2) Does observation-point
+MSE fully reflect models’ continuous-time predictive per-
+formance on real-world datasets? (3) How do the sampling-
+dependence and temporal-distribution gaps influence MSE–
+CSE discrepancies?
+6.1. Can CSE Better Recover Continuous-Time Risk
+and Rankings than MSE?
+In this section, we evaluate the ability of CSE to recover
+continuous-time risks and model rankings in controlled en-
+vironments with complete future ground truth. The exper-
+iments include two fully synthetic datasets and two semi-
+synthetic datasets, and consider five representative models:
+SeFT, GRU-D, GraFITi, tPatchGNN, and KAFNet. For
+the fully synthetic datasets, we compute Rct through dense
+temporal integration. For the semi-synthetic datasets, we
+compute the reference risk over the complete regular future
+grid. The main text reports the results on Synthetic-Regime
+and Weather, while the remaining results are provided in the
+Appendix E.1.
+Fig. 4(a) and Fig. 4(b) show the estimation errors of MSE
+and CSE with respect to Rct. Under uniform sampling, both
+metrics accurately recover the continuous-time risk. As α
+increases, the test-time distribution progressively deviates
+from the uniform distribution, causing the discrepancy be-
+tween MSE and Rct to increase consistently, whereas CSE
+maintains a substantially lower estimation error. For exam-
+ple, when α = 0.9, the relative errors of MSE and CSE
+on Synthetic-Regime are 80.6% and 34.7%, respectively.
+Under the more extreme setting of α = 0.99, although the
+error of CSE increases, it remains substantially lower than
+that of MSE.
+To further assess the recovery of model rankings, Table 2
+compares the evaluation results of the five models under
+α = 0.9. On both Synthetic-Regime and Weather, CSE
+recovers exactly the same ranking of all five models as Rct,
+whereas MSE produces a different ranking on both datasets.
+Overall, CSE effectively mitigates the influence of non-
+uniform test sampling on model evaluation. Across both syn-
+thetic and semi-synthetic datasets, CSE recovers continuous-
+time risk and model rankings more accurately than MSE,
+validating its effectiveness as a continuous-time evaluation
+metric.
+6.2. Does MSE Fully Reflect Continuous-Time
+Predictive Performance on Real-World Data?
+The previous section shows that CSE more accurately re-
+covers continuous-time risk and model rankings when the
+underlying future trajectory is available. We now examine
+whether observation-point MSE provides a sufficient evalua-
+tion of models’ continuous-time predictive performance on
+real-world datasets, where the complete continuous trajec-
+tory is unavailable. Table 1 reports the results of 11 models
+on eight datasets, while Fig. 3 summarizes pairwise rank in-
+versions and changes in the selection of the best-performing
+model. Comparisons between MAE and CAE, together with
+complete results including standard deviations, are provided
+6
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 1. Forecasting performance under MSE and CSE on eight real-world datasets. Superscripts denote ranks. The best and second-best
+results are highlighted in bold and underlined, respectively.
+CESNET
+×10−1
+FNSPID
+×10−1
+GDELT
+×100
+HumanActivity
+×10−2
+MIMIC-III
+×10−1
+RepoHealth
+×10−1
+StudentLife
+×10−1
+USHCN
+×10−1
+Average
+Model
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+Rank
+APN
+8.76(5)
+8.58(5)
+2.38(2) 2.38(2) 1.02(1) 0.99(1) 5.68(6)
+5.65(6)
+6.66(6)
+6.72(6)
+3.36(2)
+3.57(1) 6.61(2) 6.68(3) 6.04(4) 6.71(5)
+3.6
+ASTGI
+8.47(1)
+8.26(1) 3.28(6) 3.25(6) 1.10(4) 1.04(4)
+5.46(3)
+5.41(3) 10.50(11) 10.62(11) 6.27(7)
+6.53(7)
+6.65(3) 6.65(2) 5.14(3) 5.66(3)
+4.7
+GRU-D
+10.22(10) 9.91(10) 5.24(8) 5.20(8) 1.22(10) 1.15(10) 8.56(9)
+8.56(9)
+6.67(7)
+6.75(7) 11.68(11) 11.95(11) 7.21(8) 7.23(8) 7.78(11) 8.59(11)
+9.3
+GraFITi
+8.50(2)
+8.28(2)
+3.21(4) 3.22(4) 1.09(3) 1.01(2)
+5.44(2)
+5.40(2)
+5.89(1)
+6.02(2)
+3.32(1)
+3.61(2)
+6.72(6) 6.70(4) 4.50(1) 4.89(1)
+2.4
+HyperIMTS 8.90(7)
+8.65(7)
+2.72(3) 2.71(3) 1.18(8) 1.09(8) 5.42(1)
+5.38(1)
+5.94(2)
+5.92(1)
+3.72(3)
+3.97(3) 6.54(1) 6.56(1) 6.67(8) 7.30(8)
+4.1
+KAFNet
+8.73(4)
+8.54(4) 2.23(1) 2.22(1) 1.08(2) 1.02(3)
+5.62(4)
+5.58(4)
+6.41(3)
+6.47(3)
+5.72(6)
+5.98(6)
+6.66(4) 6.72(5) 7.14(9) 7.82(9)
+4.3
+NeuralFlow 9.98(8)
+9.69(8) 7.33(10) 7.29(10) 1.18(9) 1.09(9) 17.53(11) 17.51(11) 7.05(8)
+7.19(9) 10.13(10) 10.44(10) 7.83(10) 7.86(10) 6.07(5) 6.74(6)
+9.0
+SeFT
+10.11(9)
+9.79(9) 8.70(11) 8.66(11) 1.13(6) 1.05(5) 9.38(10) 9.36(10)
+7.10(9)
+7.15(8)
+9.13(8)
+9.44(8) 8.94(11) 8.95(11) 7.64(10) 8.41(10)
+9.1
+Warpformer 8.58(3)
+8.37(3)
+3.66(7) 3.63(7) 1.30(11) 1.20(11) 5.65(5)
+5.61(5)
+6.42(4)
+6.50(5)
+5.04(5)
+5.33(5)
+6.78(7) 6.80(7) 6.13(6) 6.67(4)
+5.9
+mTAN
+10.47(11) 10.14(11) 6.13(9) 6.09(9) 1.12(5) 1.05(6)
+7.33(8)
+7.30(8)
+7.47(10) 7.54(10) 10.09(9) 10.39(9) 7.32(9) 7.34(9) 4.84(2) 5.23(2)
+7.9
+tPatchGNN
+8.86(6)
+8.61(6)
+3.26(5) 3.24(5) 1.15(7) 1.08(7)
+5.80(7)
+5.76(7)
+6.44(5)
+6.48(4)
+4.55(4)
+4.82(4)
+6.68(5) 6.73(6) 6.36(7) 7.05(7)
+5.8
+CESNET
+FNSPID
+GDELT
+HumanActivity
+MIMIC-III
+RepoHealth
+StudentLife
+USHCN
+APN
+ASTGI
+GRU_D
+GraFITi
+HyperIMTS
+KAFNet
+NeuralFlow
+SeFT
+Warpformer
+mTAN
+tPatchGNN
++0.2
++0.7
++2.2
++0.6
+-0.7
+-7.9
+-0.6
+-8.8
++0.3
++0.8
++4.9
++0.6
+-1.3
+-4.9
+0.0
+-9.0
++0.5
++0.8
++5.4
++0.3
+-1.4
+-2.9
+0.0
+-8.1
++0.3
+-0.6
++7.8
++0.6
+-2.2
+-10.5
++0.2
+-7.3
++0.4
++0.1
++7.1
++0.6
++0.8
+-8.1
+-0.2
+-6.8
++0.3
++0.8
++5.2
++0.6
+-0.6
+-5.3
+-0.1
+-6.1
++0.4
++0.7
++7.3
++0.2
+-1.9
+-3.4
+-0.1
+-7.7
++0.4
++0.6
++7.2
++0.3
+-1.1
+-3.6
+0.0
+-6.9
++0.3
++0.9
++6.3
++0.6
+-0.9
+-6.5
+0.0
+-8.6
++0.4
++0.8
++6.3
++0.4
+-1.1
+-3.3
+-0.1
+-7.1
++0.3
++1.0
++5.6
++0.7
+-0.9
+-7.2
+-0.6
+-8.9̂
+Gsamp
+-10.5
+-5.2
+0.0
+5.2
+10.5
+Relative gap (%)
+(a) Sampling-dependence gap bGsamp
+CESNET
+FNSPID
+GDELT
+HumanActivity
+MIMIC-III
+RepoHealth
+StudentLife
+USHCN
+APN
+ASTGI
+GRU_D
+GraFITi
+HyperIMTS
+KAFNet
+NeuralFlow
+SeFT
+Warpformer
+mTAN
+tPatchGNN
++2.8
+-0.6
++0.8
+0.0
+-0.2
++1.8
+-0.3
+-2.2
++3.3
+0.0
++0.6
++0.2
++0.1
++0.7
+0.0
+-1.0
++3.6
+-0.2
++0.4
+-0.3
++0.1
++0.6
+-0.2
+-2.4
++3.3
++0.5
++0.4
++0.1
+0.0
++1.7
++0.1
+-1.6
++3.4
++0.3
++0.6
++0.1
+-0.2
++1.4
+-0.1
+-2.7
++1.9
+-0.2
++0.4
+0.0
+-0.2
++0.7
+-0.8
+-3.5
++3.5
+-0.2
++0.4
+-0.1
+0.0
++0.3
+-0.4
+-3.2
++3.7
+-0.1
++0.5
+-0.1
++0.2
++0.2
+-0.2
+-3.2
++3.2
+-0.1
++0.3
++0.1
+-0.2
++0.8
+-0.3
+-1.2
++3.7
+-0.2
++0.2
++0.1
++0.1
++0.3
+-0.2
+-1.0
++3.4
+-0.3
++0.5
++0.1
++0.2
++1.3
+-0.2
+-1.8̂
+Gtime
+-3.7
+-1.9
+0.0
+1.9
+3.7
+Relative gap (%)
+(b) Temporal-distribution gap bGtime
+Figure 2. Normalized decomposition of the evaluation discrepancy into the sampling-dependence gap bGsamp and temporal-distribution
+gap bGtime across models and datasets.
+Table 2. Model evaluation under non-uniform test sampling with
+α = 0.9. Superscripts denote ranks; the best and second-best
+results are highlighted in bold and underlined, respectively.
+Synthetic-Regime
+×10−2
+Weather
+×10−1
+Model
+MSE
+CSE
+Rct
+MSE
+CSE
+Rct
+SeFT
+1.09(3) 8.70(1) 6.26(1) 4.40(5) 4.96(5) 4.85(5)
+GRU-D
+0.65(1) 8.81(2) 6.48(2) 3.08(1) 4.61(3) 4.46(3)
+GraFITi
+2.57(5) 9.88(5) 7.66(5) 3.89(4) 4.92(4) 4.76(4)
+tPatchGNN 0.91(2) 9.38(4) 6.91(4) 3.88(3) 3.69(1) 3.53(1)
+KAFNet
+1.54(4) 9.04(3) 6.75(3) 3.48(2) 3.78(2) 3.65(2)
+in the Appendix E.2.
+The comparison shows that CSE is not a fixed-direction or
+fixed-ratio correction of MSE. The direction and magnitude
+of score changes vary across both datasets and models, in-
+dicating that the two metrics cannot be converted through
+simple rescaling. Moreover, five of the eight datasets exhibit
+pairwise rank inversions when replacing MSE with CSE.
+MIMIC-III and StudentLife each contain three inversions,
+GDELT and USHCN each contain two, and RepoHealth
+contains one. The best-performing model also changes on
+MIMIC-III and RepoHealth.
+The effects further differ across models. GraFITi ranks
+first on three datasets under MSE but on only one dataset
+under CSE. In contrast, the number of first-place rankings
+increases from two to three for HyperIMTS and from one
+to two for APN. Although GraFITi retains the best aver-
+age rank, MSE and CSE do not provide fully consistent
+conclusions regarding the relative advantages of different
+models.
+Overall, the substantial discrepancies in model scores,
+rankings, and model selection suggest that relying solely
+on observation-point MSE may not fully reflect mod-
+els’ continuous-time predictive performance on real-world
+7
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+0
+1
+2
+3
+Number of pairwise rank inversions
+CESNET
+FNSPID
+GDELT
+HumanActivity
+MIMIC-III
+RepoHealth
+StudentLife
+USHCN
+0
+0
+2
+0
+3
+1
+3
+2
+Top-1 unchanged
+Top-1 changed
+(a) Pairwise rank inversions
+across datasets
+0
+1
+2
+3
+Number of datasets ranked first
+HyperIMTS
+GraFITi
+APN
+ASTGI
+KAFNet
+2
+3
+1
+1
+1
+3
+1
+2
+1
+1
+MSE
+CSE
+(b) Changes in Top-1 model se-
+lection
+Figure 3. Model ranking changes when replacing MSE with CSE
+on eight real-world datasets. Panel (a) reports the number of
+pairwise rank inversions, while Panel (b) compares the frequency
+with which each model is ranked first.
+datasets.
+6.3. How Do the Sampling-Dependence and
+Temporal-Distribution Gaps Influence MSE–CSE
+Discrepancies?
+The previous section demonstrates that MSE and CSE can
+produce different model scores, rankings, and model selec-
+tions on real-world datasets. We now use the risk decomposi-
+tion introduced above to analyze the sources of these discrep-
+ancies. Fig. 2 reports the normalized sampling-dependence
+gap, bGsamp = (MSE −GSE)/MSE, and the normalized
+temporal-distribution gap, bGtime = (GSE −CSE)/GSE.
+The relative contributions of the two gaps vary substan-
+tially across datasets. GDELT and RepoHealth are pri-
+marily affected by the sampling-dependence gap, whose
+cross-model averages are approximately 5.9% and −5.8%,
+respectively. CESNET is mainly affected by the temporal-
+distribution gap, with an average value of approximately
+3.3%. On USHCN, the sampling-dependence and temporal-
+distribution gaps are approximately −7.8% and −2.2%, re-
+spectively, indicating that both components contribute to
+the discrepancy between MSE and CSE. The two gaps are
+comparatively small on the remaining datasets.
+Within the same dataset, models generally exhibit similar
+signs for each discrepancy component, suggesting that the
+overall direction is largely determined by the dataset’s sam-
+pling structure. However, the magnitude varies across mod-
+els because of their different temporal error patterns. This
+model-dependent effect can alter model rankings when the
+original performance differences are small. For example, on
+MIMIC-III, the sampling-dependence gaps of GraFITi and
+HyperIMTS are −2.2% and +0.8%, respectively, changing
+the best-performing model from GraFITi under MSE to Hy-
+perIMTS under CSE. On RepoHealth, GraFITi exhibits a
+more negative sampling-dependence gap than APN, giving
+it a larger apparent advantage under MSE; this advantage
+disappears under CSE, making APN the best-performing
+model.
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Relative error to Rct
+Synthetic-Regime
+MSE
+CSE
+(a) Synthetic-Regime
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+Relative error to Rct
+Weather
+MSE
+CSE
+(b) Weather
+Figure 4. Relative errors of MSE and CSE with respect to Rct
+under increasing sampling non-uniformity.
+Overall, the discrepancies between MSE and CSE are jointly
+influenced by the sampling-dependence and temporal-
+distribution gaps, whose relative contributions vary across
+datasets and models.
+7. Conclusion
+This work revisits the evaluation of irregular time series
+forecasting from a continuous-time perspective. We show
+that observation-point MSE and MAE effectively estimate
+the observation-distribution risk induced by the sampling
+distribution, rather than the continuous-time risk over the en-
+tire future interval. To mitigate this objective mismatch, we
+propose the Continuous-Time Squared Error (CSE), which
+estimates the continuous-time risk through self-normalized
+importance weighting, and prove that its asymptotic esti-
+mation error is no greater than that of MSE. We further
+decompose the discrepancy between the two risks into a
+sampling-dependence gap and a temporal-distribution gap,
+thereby characterizing how different sampling structures
+affect model evaluation. Finally, we construct a bench-
+mark covering synthetic, semi-synthetic, and real-world
+datasets to validate CSE and systematically evaluate mod-
+els’ continuous-time predictive performance.
+References
+Afrifa-Yamoah, E., Mueller, U. A., Taylor, S. M., and Fisher,
+A. J. Missing data imputation of high-resolution temporal
+climate time series data. Meteorological Applications, 27
+(1):e1873, 2020.
+Bilos, M., Sommer, J., Rangapuram, S. S., Januschowski,
+T., and G¨unnemann, S. Neural flows: Efficient alternative
+to neural ODEs.
+In Advances in Neural Information
+Processing Systems, pp. 21325–21337, 2021.
+Bui, H., Warrier, H., and Gupta, Y. Benchmarking with
+MIMIC-IV, an irregular, spare clinical time series dataset.
+arXiv preprint arXiv:2401.15290, 2024. doi: 10.48550/
+arXiv.2401.15290.
+Chang, C., Hwang, J., Shi, Y., Wang, H., Peng, W.-C., Chen,
+T.-F., and Wang, W. Time-IMM: A dataset and benchmark
+8
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+for irregular multimodal multivariate time series. CoRR,
+abs/2506.10412, 2025.
+Che, Z., Purushotham, S., Cho, K., Sontag, D. A., and Liu,
+Y. Recurrent neural networks for multivariate time series
+with missing values. CoRR, abs/1606.01865, 2016.
+Decorte, T., Mortier, S., Lembrechts, J. J., Meysman, F.
+J. R., Latr´e, S., Mannens, E., and Verdonck, T. Missing
+value imputation of wireless sensor data for environmen-
+tal monitoring. Sensors, 24(8):2416, 2024.
+Ghassemi, M., Pimentel, M. A. F., Naumann, T., Brennan,
+T., Clifton, D. A., Szolovits, P., and Feng, M. A multivari-
+ate timeseries modeling approach to severity of illness
+assessment and forecasting in ICU with sparse, heteroge-
+neous clinical data. In Proceedings of the Twenty-Ninth
+AAAI Conference on Artificial Intelligence, January 25-
+30, 2015, Austin, Texas, USA, pp. 446–453, 2015.
+Horn, M., Moor, M., Bock, C., Rieck, B., and Borgwardt,
+K. M. Set functions for time series. In International
+Conference on Machine Learning, pp. 4353–4363, 2020.
+Johnson, A. E. W., Pollard, T. J., Shen, L., Lehman, L.-w. H.,
+Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi,
+L. A., and Mark, R. G. MIMIC-III, a freely accessible
+critical care database. Scientific Data, 3:160035, 2016.
+doi: 10.1038/sdata.2016.35.
+Kidger, P., Morrill, J., Foster, J., and Lyons, T. J. Neural
+controlled differential equations for irregular time series.
+In Advances in Neural Information Processing Systems,
+2020.
+Kl¨otergens, C., Yalavarthi, V. K., Scholz, R., Stubbemann,
+M., Born, S., and Schmidt-Thieme, L. Physiome-ODE:
+A benchmark for irregularly sampled multivariate time-
+series forecasting based on biological ODEs. In Interna-
+tional Conference on Learning Representations, 2025.
+Leetaru, K. and Schrodt, P. A. Gdelt: Global data on events,
+location, and tone. ISA Annual Convention, 2013.
+Li, B., Luo, Y., Liu, Z., Zheng, J., Lv, J., and Ma, Q. Hyper-
+IMTS: Hypergraph neural network for irregular multivari-
+ate time series forecasting. In International Conference
+on Machine Learning, pp. 35502–35518, 2025.
+Liu, X., Qiu, X., Cheng, H., Wu, X., Guo, C., Yang, B., and
+Hu, J. ASTGI: Adaptive spatio-temporal graph interac-
+tions for irregular multivariate time series forecasting. In
+International Conference on Learning Representations,
+2026a.
+Liu, X., Qiu, X., Wu, X., Li, Z., Guo, C., Hu, J., and Yang,
+B. Rethinking irregular time series forecasting: A simple
+yet effective baseline. In AAAI Conference on Artificial
+Intelligence, pp. 23873–23881, 2026b.
+Menne, M. J., Williams, C. N. J., and Vose, R. S. Long-term
+daily and monthly climate records from stations across
+the contiguous united states (u.s. historical climatology
+network). Environmental System Science Data Infras-
+tructure for a Virtual Ecosystem (ESS-DIVE), 2015.
+Nepal, S., Liu, W., Pillai, A., Wang, W., Vojdanovski, V.,
+Huckins, J. F., Rogers, C., Meyer, M. L., and Camp-
+bell, A. T. Capturing the college experience: a four-year
+mobile sensing study of mental health, resilience and
+behavior of college students during the pandemic. Pro-
+ceedings of the ACM on interactive, mobile, wearable
+and ubiquitous technologies, 8(1):1–37, 2024.
+Rubanova, Y., Chen, T. Q., and Duvenaud, D. Latent ordi-
+nary differential equations for irregularly-sampled time
+series. In Advances in Neural Information Processing
+Systems, pp. 5321–5331, 2019.
+Schirmer, M., Eltayeb, M., Lessmann, S., and Rudolph, M.
+Modeling irregular time series with continuous recurrent
+units. In International Conference on Machine Learning,
+pp. 19388–19405, 2022.
+Shukla, S. N. and Marlin, B. M. Multi-time attention net-
+works for irregularly sampled time series. In International
+Conference on Learning Representations, 2021.
+Spinnato, F. and Landi, C. PYRREGULAR: A unified
+framework for irregular time series, with classification
+benchmarks. CoRR, abs/2505.06047, 2025.
+Wu, H., Xu, J., Wang, J., and Long, M. Autoformer: Decom-
+position transformers with auto-correlation for long-term
+series forecasting. In Advances in Neural Information
+Processing Systems 34: Annual Conference on Neural
+Information Processing Systems 2021, NeurIPS 2021, De-
+cember 6-14, 2021, virtual, pp. 22419–22430, 2021.
+Yalavarthi, V. K., Madhusudhanan, K., Scholz, R., Ahmed,
+N., Burchert, J., Jawed, S., Born, S., and Schmidt-Thieme,
+L. GraFITi: Graphs for forecasting irregularly sampled
+time series. In AAAI Conference on Artificial Intelligence,
+pp. 16255–16263, 2024.
+Zhang, J., Zheng, S., Cao, W., Bian, J., and Li, J. Warp-
+former: A multi-scale modeling approach for irregular
+clinical time series. In ACM SIGKDD Conference on
+Knowledge Discovery and Data Mining, pp. 3273–3285,
+2023.
+Zhang, W., Yin, C., Liu, H., Zhou, X., and Xiong, H.
+Irregular multivariate time series forecasting: A trans-
+formable patching graph neural networks approach. In In-
+ternational Conference on Machine Learning, pp. 60179–
+60196, 2024.
+9
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Zhang, X., Zeman, M., Tsiligkaridis, T., and Zitnik, M.
+Graph-guided network for irregularly sampled multivari-
+ate time series. In International Conference on Learning
+Representations, 2022.
+Zhou, Z., Huang, Y., Wang, Y., Wu, Y., Kwok, J., and Liang,
+Y.
+Revitalizing canonical pre-alignment for irregular
+multivariate time series forecasting. In AAAI Conference
+on Artificial Intelligence, pp. 29115–29123, 2026.
+A. Proof of Theorem 1
+For the s-th trajectory, denote
+ps(t) = p(t | Xs),
+ℓs(t) = ℓ(t, Xs),
+(13)
+and define
+rct(Xs) =
+1
+|T |
+Z
+T
+ℓs(t) dt,
+(14)
+robs(Xs) =
+Z
+T
+ℓs(t)ps(t) dt.
+(15)
+Accordingly,
+Rct = EX[rct(X)],
+Robs = EX[robs(X)].
+(16)
+We first introduce the oracle importance-sampling terms
+As = 1
+Ls
+Ls
+X
+i=1
+ℓs(ts,i)
+ps(ts,i),
+Bs = 1
+Ls
+Ls
+X
+i=1
+1
+ps(ts,i), (17)
+and their estimated counterparts
+bAs = 1
+Ls
+Ls
+X
+i=1
+ℓs(ts,i)
+bp(ts,i | Xs),
+bBs = 1
+Ls
+Ls
+X
+i=1
+1
+bp(ts,i | Xs).
+(18)
+By Assumption 1, ps(t) ≥ρ > 0 and bp(t | Xs) is uniformly
+consistent on T . Hence, almost surely, for sufficiently large
+Ls,
+inf
+t∈T bp(t | Xs) ≥ρ
+2,
+(19)
+and therefore
+sup
+t∈T
+
+1
+bp(t | Xs) −
+1
+ps(t)
+ ≤2
+ρ2 sup
+t∈T
+|bp(t | Xs) −ps(t)|
+a.s.
+−−→0.
+(20)
+Let M < ∞satisfy 0 ≤ℓ(t, X) ≤M. It follows that
+ bAs −As
+ ≤M sup
+t∈T
+
+1
+bp(t | Xs) −
+1
+ps(t)
+
+a.s.
+−−→0,
+(21)
+ bBs −Bs
+ ≤sup
+t∈T
+
+1
+bp(t | Xs) −
+1
+ps(t)
+
+a.s.
+−−→0.
+(22)
+Conditional on Xs, the future timestamps are independently
+and identically distributed according to ps(t). The strong
+law of large numbers therefore gives
+As
+a.s.
+−−→ET |Xs
+ ℓs(T)
+ps(T)
+
+=
+Z
+T
+ℓs(t) dt,
+(23)
+Bs
+a.s.
+−−→ET |Xs
+
+1
+ps(T)
+
+= |T |.
+(24)
+10
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Combining the above results yields
+bAs
+a.s.
+−−→
+Z
+T
+ℓs(t) dt,
+bBs
+a.s.
+−−→|T |.
+(25)
+Define the trajectory-level CSE estimator as
+brct,s =
+PLs
+i=1 ℓs(ts,i)/bp(ts,i | Xs)
+PLs
+i=1 1/bp(ts,i | Xs)
+=
+bAs
+bBs
+.
+(26)
+Since |T | > 0, the continuous mapping theorem gives
+brct,s
+a.s.
+−−→
+1
+|T |
+Z
+T
+ℓs(t) dt = rct(Xs).
+(27)
+For MSE, the conditional strong law directly gives
+brobs,s = 1
+Ls
+Ls
+X
+i=1
+ℓs(ts,i)
+a.s.
+−−→ET |Xs[ℓs(T)] = robs(Xs).
+(28)
+Let L = min1≤s≤S Ls. For the joint limit below, Assump-
+tion 1 is understood to hold uniformly over the test trajecto-
+ries. Consequently, Eqs. (27) and (28) imply
+1
+S
+S
+X
+s=1
+|brct,s −rct(Xs)|
+a.s.
+−−→0,
+(29)
+1
+S
+S
+X
+s=1
+|brobs,s −robs(Xs)|
+a.s.
+−−→0
+(30)
+as L →∞.
+Since the test trajectories are mutually independent and the
+trajectory-level risks are bounded, another application of the
+strong law yields
+1
+S
+S
+X
+s=1
+rct(Xs)
+a.s.
+−−→Rct,
+1
+S
+S
+X
+s=1
+robs(Xs)
+a.s.
+−−→Robs.
+(31)
+Therefore, as S, L →∞,
+CSE
+a.s.
+−−→Rct,
+MSE
+a.s.
+−−→Robs.
+(32)
+It follows that
+lim
+S,L→∞|CSE −Rct| = 0,
+(33)
+lim
+S,L→∞|MSE −Rct| = |Robs −Rct|
+(34)
+almost surely. Hence,
+lim
+S,L→∞|CSE −Rct| ≤
+lim
+S,L→∞|MSE −Rct| .
+(35)
+When p(t | X) = 1/|T | almost everywhere, we have
+Robs = Rct, and both asymptotic estimation errors are
+zero. More generally, equality holds whenever Robs = Rct,
+whereas the inequality is strict when Robs̸ = Rct. The self-
+normalized estimator may be biased at a finite sample size;
+the result above concerns its consistency and asymptotic
+estimation error.
+B. Derivation of the Evaluation Discrepancy
+Recall that
+pT (t) = EX[p(t | X)],
+ℓ(t) = EX[ℓ(t, X)].
+(36)
+For the sampling-dependence gap,
+Gsamp = Robs −Rglobal
+= EX
+Z
+T
+ℓ(t, X)p(t | X) dt
+
+−EX
+Z
+T
+ℓ(t, X)pT (t) dt
+
+=
+Z
+T
+{EX[ℓ(t, X)p(t | X)] −EX[ℓ(t, X)]EX[p(t | X)]} dt
+=
+Z
+T
+CovX (ℓ(t, X), p(t | X)) dt.
+(37)
+For the temporal-distribution gap, let U ∼Unif(T ). Since
+EU[|T |pT (U)] = 1, we have
+Gtime = Rglobal −Rct
+=
+Z
+T
+ℓ(t)pT (t) dt −1
+|T |
+Z
+T
+ℓ(t) dt
+= EU
+
+ℓ(U)|T |pT (U)
+
+−EU[ℓ(U)]EU[|T |pT (U)]
+= CovU∼Unif(T )
+ ℓ(U), |T |pT (U)
+
+.
+(38)
+Therefore,
+Robs −Rct = Gsamp + Gtime.
+(39)
+Here, Gsamp captures the effect of sample-dependent sam-
+pling, whereas Gtime captures the effect of population-level
+temporal non-uniformity.
+C. Global-Time Squared Error
+The marginal timestamp density is estimated by averaging
+the trajectory-specific conditional densities:
+bpT (t) = 1
+S
+S
+X
+r=1
+bp(t | Xr).
+(40)
+Using bp(t | Xs) as the proposal density and bpT (t) as the
+11
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 3. Complete MSE and CSE results on CESNET, FNSPID, GDELT, and HumanActivity. Values are mean ± standard deviation over
+three random seeds; standard deviations are rounded to three decimal places.
+Model
+CESNET
+×10−1
+FNSPID
+×10−1
+GDELT
+×100
+HumanActivity
+×10−2
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+APN
+8.76±0.007(5)
+8.58±0.008(5)
+2.38±0.143(2)
+2.38±0.144(2)
+1.02±0.001(1)
+0.99±0.001(1)
+5.68±0.035(6)
+5.65±0.039(6)
+ASTGI
+8.47±0.137(1)
+8.26±0.122(1)
+3.28±0.213(6)
+3.25±0.211(6)
+1.10±0.003(4)
+1.04±0.003(4)
+5.46±0.167(3)
+5.41±0.167(3)
+GRU-D
+10.22±0.464(10)
+9.91±0.466(10)
+5.24±0.800(8)
+5.20±0.791(8)
+1.22±0.003(10) 1.15±0.003(10)
+8.56±1.497(9)
+8.56±1.515(9)
+GraFITi
+8.50±0.113(2)
+8.28±0.102(2)
+3.21±0.755(4)
+3.22±0.760(4)
+1.09±0.002(3)
+1.01±0.002(2)
+5.44±0.038(2)
+5.40±0.034(2)
+HyperIMTS
+8.90±0.073(7)
+8.65±0.060(7)
+2.72±0.593(3)
+2.71±0.592(3)
+1.18±0.002(8)
+1.09±0.002(8)
+5.42±0.037(1)
+5.38±0.039(1)
+KAFNet
+8.73±0.012(4)
+8.54±0.003(4)
+2.23±0.047(1)
+2.22±0.043(1)
+1.08±0.005(2)
+1.02±0.005(3)
+5.62±0.021(4)
+5.58±0.025(4)
+NeuralFlow
+9.98±0.103(8)
+9.69±0.118(8)
+7.33±0.138(10) 7.29±0.140(10)
+1.18±0.005(9)
+1.09±0.005(9)
+17.53±2.512(11) 17.51±2.523(11)
+SeFT
+10.11±0.183(9)
+9.79±0.177(9)
+8.70±0.958(11) 8.66±0.957(11)
+1.13±0.003(6)
+1.05±0.003(5)
+9.38±0.422(10)
+9.36±0.406(10)
+Warpformer
+8.58±0.067(3)
+8.37±0.058(3)
+3.66±0.216(7)
+3.63±0.220(7)
+1.30±0.016(11) 1.20±0.016(11)
+5.65±0.143(5)
+5.61±0.141(5)
+mTAN
+10.47±0.153(11) 10.14±0.106(11)
+6.13±0.743(9)
+6.09±0.738(9)
+1.12±0.003(5)
+1.05±0.003(6)
+7.33±0.108(8)
+7.30±0.107(8)
+tPatchGNN
+8.86±0.140(6)
+8.61±0.114(6)
+3.26±0.269(5)
+3.24±0.269(5)
+1.15±0.006(7)
+1.08±0.006(7)
+5.80±0.121(7)
+5.76±0.132(7)
+target density, we define the Global-Time Squared Error as
+GSE = 1
+S
+S
+X
+s=1
+Ls
+X
+i=1
+ℓ(ts,i, Xs)
+bpT (ts,i)
+bp(ts,i | Xs)
+Ls
+X
+i=1
+bpT (ts,i)
+bp(ts,i | Xs)
+.
+(41)
+GSE evaluates each trajectory under the dataset-level
+marginal timestamp distribution, thereby removing sample-
+specific sampling effects while retaining population-level
+temporal non-uniformity. It serves as the empirical counter-
+part of Rglobal and an intermediate reference between MSE
+and CSE.
+D. Benchmark Details
+D.1. Synthetic and Semi-Synthetic Data
+Common setup.
+The controlled benchmark contains two
+fully synthetic datasets, Synthetic-Regime and Synthetic-
+Multiscale, and two semi-synthetic datasets constructed
+from ETTm1 and Weather. Each dataset contains 512 train-
+ing, 128 validation, and 128 test trajectories. For each
+trajectory, 16 historical observations are provided as input.
+Training and validation use 30 future target points, whereas
+each test realization contains 128 future query timestamps.
+For fully synthetic data, the historical and future intervals
+are [0, 0.5] and (0.5, 1], respectively. Gaussian noise with
+standard deviation 0.002 is added only to the historical ob-
+servations.
+Synthetic-Regime.
+Each trajectory is controlled by
+z1, z2
+i.i.d.
+∼N(0, 1). We first define
+r(t) = clip
+
+t −0.58
+0.68 −0.58, 0, 1
+
+,
+w(t) = r(t)2{3 −2r(t)}.
+(42)
+The smooth and periodic components are
+b1(t) = 0.10z1 + 0.015 sin(2πt),
+b2(t) = 0.10z2 + 0.012 cos(2πt),
+b3(t) = 0.07(z1 −z2) + 0.010 sin(4πt),
+p1(t) = (0.48 + 0.04z2) sin(12π(t −0.64)) ,
+p2(t) = (0.44 + 0.04z1) cos(10π(t −0.64)) ,
+p3(t) = {0.40 + 0.03(z1 + z2)} sin(8π(t −0.64)) .
+(43)
+The final three-dimensional trajectory is
+yj(t) = bj(t) + w(t)pj(t),
+j ∈{1, 2, 3}.
+(44)
+The transition function w(t) continuously changes the
+process from a low-amplitude smooth regime to a high-
+frequency periodic regime, producing different levels of
+forecasting difficulty across the future interval.
+Synthetic-Multiscale.
+For z1, z2, z3
+i.i.d.
+∼N(0, 1), we de-
+fine
+g0(t) = 0.25z1 + 0.18t + 0.32 sin(2π·1.25t + 0.20z2),
+gh(t) = 0.14(1 + 0.08z1) sin(2π·8t + 0.25z3),
+µ = 0.72 + 0.025 tanh(z3),
+gb(t) = 0.30(1 + 0.06z2) exp
+
+−(t −µ)2
+2(0.055)2
+
+.
+(45)
+The output channels are
+y1(t) = g0(t) + gh(t) + gb(t),
+y2(t) = 0.75g0(t) −0.80gh(t) + 0.65gb(t)
++ 0.08 cos(5πt),
+y3(t) = −0.45g0(t) + 0.55gh(t) −0.70gb(t)
++ 0.12t + 0.10 sin(1.5πt + 0.30z1).
+(46)
+This construction combines trend, low- and high-frequency
+periodicity, and a localized transient component.
+12
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 4. Complete MSE and CSE results on MIMIC-III, RepoHealth, StudentLife, and USHCN. Values are mean ± standard deviation
+over three random seeds; standard deviations are rounded to three decimal places.
+Model
+MIMIC-III
+×10−1
+RepoHealth
+×10−1
+StudentLife
+×10−1
+USHCN
+×10−1
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+MSE
+CSE
+APN
+6.66±0.038(6)
+6.72±0.038(6)
+3.36±0.069(2)
+3.57±0.080(1)
+6.61±0.009(2)
+6.68±0.006(3)
+6.04±0.554(4)
+6.71±0.686(5)
+ASTGI
+10.50±0.000(11) 10.62±0.000(11)
+6.27±2.310(7)
+6.53±2.378(7)
+6.65±0.036(3)
+6.65±0.038(2)
+5.14±0.169(3)
+5.66±0.179(3)
+GRU-D
+6.67±0.043(7)
+6.75±0.046(7)
+11.68±0.695(11) 11.95±0.672(11)
+7.21±0.045(8)
+7.23±0.045(8)
+7.78±0.690(11) 8.59±0.756(11)
+GraFITi
+5.89±0.264(1)
+6.02±0.278(2)
+3.32±0.341(1)
+3.61±0.342(2)
+6.72±0.164(6)
+6.70±0.162(4)
+4.50±0.252(1)
+4.89±0.299(1)
+HyperIMTS
+5.94±0.068(2)
+5.92±0.068(1)
+3.72±0.437(3)
+3.97±0.444(3)
+6.54±0.067(1)
+6.56±0.062(1)
+6.67±1.837(8)
+7.30±2.073(8)
+KAFNet
+6.41±0.021(3)
+6.47±0.022(3)
+5.72±3.034(6)
+5.98±3.061(6)
+6.66±0.023(4)
+6.72±0.024(5)
+7.14±0.418(9)
+7.82±0.406(9)
+NeuralFlow
+7.05±0.042(8)
+7.19±0.044(9)
+10.13±0.283(10) 10.44±0.320(10) 7.83±0.218(10) 7.86±0.212(10)
+6.07±0.720(5)
+6.74±0.764(6)
+SeFT
+7.10±0.060(9)
+7.15±0.060(8)
+9.13±0.454(8)
+9.44±0.463(8)
+8.94±1.706(11) 8.95±1.700(11) 7.64±0.137(10) 8.41±0.170(10)
+Warpformer
+6.42±0.041(4)
+6.50±0.045(5)
+5.04±0.555(5)
+5.33±0.598(5)
+6.78±0.065(7)
+6.80±0.066(7)
+6.13±0.168(6)
+6.67±0.195(4)
+mTAN
+7.47±0.034(10)
+7.54±0.032(10)
+10.09±0.438(9)
+10.39±0.443(9)
+7.32±0.069(9)
+7.34±0.067(9)
+4.84±0.174(2)
+5.23±0.232(2)
+tPatchGNN
+6.44±0.029(5)
+6.48±0.021(4)
+4.55±0.322(4)
+4.82±0.335(4)
+6.68±0.059(5)
+6.73±0.060(6)
+6.36±1.306(7)
+7.05±1.384(7)
+Semi-synthetic datasets.
+For ETTm1 and Weather, the
+original regularly sampled series are chronologically divided
+into training, validation, and test segments with a ratio of
+60%/20%/20%. Standardization statistics are fitted using
+the training segment. Each sample contains 96 historical
+grid points and 512 future grid points. We retain 16 histori-
+cal points as input and sample 30 future points for training
+and validation. At test time, 128 future points are selected
+from the complete 512-point future grid, which is retained
+to compute the reference continuous-time risk.
+For all four datasets, test timestamps are sampled from
+pα(u) = α Beta(u; 10, 60) + (1 −α) Uniform(0, 1),
+(47)
+where α ∈{0, 0.3, 0.5, 0.9, 0.99} controls the degree of
+temporal non-uniformity. For each α, the trained model,
+historical observations, and underlying future trajectory are
+fixed, while only the test query timestamps are resampled.
+Each setting is evaluated using 20 timestamp resamples
+shared across all models.
+For fully synthetic data, the reference Rct is computed by
+trapezoidal integration over a dense common time grid. For
+semi-synthetic data, it is computed as the equally weighted
+squared error over all 512 future grid points.
+D.2. Real-World Datasets
+We evaluate models on eight real-world datasets spanning
+healthcare, climate science, human sensing, finance, soft-
+ware engineering, international events, and network systems.
+These datasets exhibit diverse irregularity mechanisms, in-
+cluding event-triggered logging, activity-dependent collec-
+tion, operational constraints, human scheduling, missing
+observations, and system jitter (Chang et al., 2025). Only
+the numerical time-series modalities are used.
+The processed data are represented either as wide tables with
+one row per record and timestamp or as sparse triplets of
+timestamp, variable index, and value. Sparse observations
+are converted into multivariate tensors with binary masks.
+Filled values at unobserved positions are used only for ten-
+sor storage and do not contribute to training or evaluation.
+Record identifiers are deterministically divided into training,
+validation, and test partitions, and forecasting windows are
+constructed without crossing record boundaries.
+CESNET.
+CESNET contains network traffic measure-
+ments collected from 11 devices, with 10 traffic variables.
+Its irregular timestamps mainly arise from scheduling de-
+lay and logging jitter. Raw timestamps are aggregated to
+minute resolution, and duplicate observations within the
+same minute are averaged. We use 1,440 minutes of history
+to predict the following 1,440 minutes, producing 252, 84,
+and 126 training, validation, and test windows, respectively.
+FNSPID.
+FNSPID contains six financial variables for 10
+entities, including open, high, low, close, adjusted close,
+and trading volume. Observations are restricted by market
+operating hours, creating structured gaps between trading pe-
+riods. Timestamps are converted into relative calendar days
+without filling non-trading days. Both the historical and fore-
+casting windows contain 30 days, resulting in 496/171/176
+train/validation/test samples.
+GDELT.
+GDELT records international events and con-
+tains five numerical variables for eight event streams. Since
+observations are generated when geopolitical events occur,
+the sampling process is naturally event-driven. Individual
+events and fractional-day timestamps are retained without
+daily aggregation. We use 14-day historical and forecasting
+windows, yielding 208/52/156 train/validation/test samples.
+HumanActivity.
+HumanActivity contains 12 location
+variables obtained from sensors placed on the body during
+different human activities. The dataset contains 25 records,
+and the sensors are observed at asynchronous and slightly
+13
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 5. Complete MAE and CAE results on CESNET, FNSPID, GDELT, and HumanActivity. Values are mean ± standard deviation
+over three random seeds; standard deviations are rounded to three decimal places.
+Model
+CESNET
+×10−1
+FNSPID
+×10−1
+GDELT
+×10−1
+HumanActivity
+×10−1
+MAE
+CAE
+MAE
+CAE
+MAE
+CAE
+MAE
+CAE
+APN
+6.69±0.003(5)
+6.62±0.003(5)
+1.86±0.173(2)
+1.85±0.173(2)
+6.59±0.066(1)
+6.50±0.067(1)
+1.43±0.031(6)
+1.42±0.032(6)
+ASTGI
+6.55±0.064(1)
+6.48±0.067(1)
+2.19±0.092(6)
+2.18±0.093(6)
+6.69±0.088(4)
+6.60±0.088(4)
+1.38±0.024(3)
+1.38±0.024(3)
+GRU-D
+7.45±0.249(10) 7.37±0.262(10)
+2.76±0.286(8)
+2.75±0.284(8)
+6.81±0.033(10) 6.72±0.032(10)
+2.06±0.251(9)
+2.06±0.253(9)
+GraFITi
+6.56±0.033(2)
+6.49±0.033(2)
+1.96±0.097(4)
+1.95±0.096(4)
+6.66±0.146(3)
+6.57±0.146(3)
+1.37±0.012(2)
+1.37±0.013(2)
+HyperIMTS 6.79±0.056(7)
+6.75±0.063(7)
+1.91±0.391(3)
+1.91±0.390(3)
+6.74±0.072(8)
+6.65±0.074(8)
+1.36±0.013(1)
+1.36±0.013(1)
+KAFNet
+6.68±0.027(4)
+6.61±0.031(4)
+1.73±0.055(1)
+1.73±0.056(1)
+6.60±0.092(2)
+6.51±0.093(2)
+1.39±0.010(4)
+1.39±0.010(4)
+NeuralFlow
+7.41±0.122(8)
+7.35±0.127(8)
+3.46±0.234(10) 3.45±0.233(10)
+6.77±0.064(9)
+6.68±0.064(9)
+3.11±0.305(11) 3.11±0.304(11)
+SeFT
+7.44±0.118(9)
+7.36±0.115(9)
+4.33±0.828(11) 4.32±0.827(11)
+6.72±0.062(6)
+6.61±0.059(5)
+2.12±0.041(10) 2.12±0.041(10)
+Warpformer 6.63±0.054(3)
+6.56±0.059(3)
+2.20±0.053(7)
+2.19±0.054(7)
+7.48±0.110(11) 7.35±0.109(11)
+1.41±0.003(5)
+1.41±0.003(5)
+mTAN
+7.61±0.010(11) 7.53±0.016(11)
+2.96±0.314(9)
+2.94±0.314(9)
+6.70±0.062(5)
+6.63±0.063(6)
+1.85±0.018(8)
+1.85±0.018(8)
+tPatchGNN
+6.75±0.070(6)
+6.70±0.082(6)
+2.16±0.247(5)
+2.16±0.246(5)
+6.73±0.083(7)
+6.64±0.083(7)
+1.45±0.035(7)
+1.44±0.036(7)
+different timestamps. Relative timestamps are quantized,
+while duplicate measurements from the same sensor and
+timestamp are averaged. The history and forecasting lengths
+are 3,000 and 1,000 time units, producing 735/264/361
+train/validation/test samples.
+MIMIC-III.
+MIMIC-III is a large critical-care database
+containing de-identified clinical records from ICU patients
+(Johnson et al., 2016). We combine laboratory, input, out-
+put, and prescription events from the first 48 hours of each
+admission and aggregate them into half-hour bins. The pro-
+cessed data contain 22,406 admissions and 96 variables. The
+first 72 bins are used as history and the following 24 bins
+as the forecasting horizon, resulting in 11,156/3,699/3,703
+train/validation/test samples. Its irregularity mainly reflects
+clinician-driven measurements and heterogeneous clinical
+recording frequencies.
+RepoHealth.
+RepoHealth describes issue, pull-request,
+and development activities from four software repositories
+using 10 numerical variables. Observations become denser
+during active development periods and sparser during inac-
+tive periods. Timestamps are converted into relative days,
+and duplicated daily observations are averaged. We use 30-
+day history and forecasting windows, with 97/59/50 train/-
+validation/test samples.
+StudentLife.
+StudentLife contains daily mobile-sensing
+measurements from 20 students, including activity, loca-
+tion, sleep, and phone-use variables. Its nine variables are
+irregularly observed because data availability depends on
+individual routines and device usage. Both the historical and
+forecasting windows contain 30 days, producing 271/89/90
+train/validation/test samples.
+USHCN.
+USHCN contains long-term climate observa-
+tions from 1,114 weather stations across the United States
+(Menne et al., 2015). Five meteorological variables are used,
+and missing daily observations make the resulting trajec-
+tories sporadic. Following the commonly used irregular
+forecasting protocol, the first 150 time units are used as
+history and the following 50 units as the forecasting horizon.
+The resulting split contains 666/220/224 train/validation/test
+samples.
+D.3. Baselines and Hyperparameters
+We compare eleven representative models covering recur-
+rent, continuous-time, set-based, attention-based, graph-
+based, and pre-alignment forecasting paradigms. To ensure
+consistent comparisons, each model uses the same configu-
+ration across all real-world datasets.
+APN.
+APN aggregates irregular observations into learn-
+able temporal patches through soft boundaries and predicts
+values at arbitrary query timestamps (Liu et al., 2026b). We
+use hidden dimension d = 56, two layers, eight attention
+heads, time-embedding dimension 8, two patches, dropout
+0.1, and batch size 32.
+ASTGI.
+ASTGI directly represents each discrete obser-
+vation as a point in a learnable spatio-temporal space and
+adaptively constructs causal nearest-neighbor graphs for in-
+formation propagation (Liu et al., 2026a). We use hidden
+dimension 128, two propagation layers, time-embedding
+dimension 128, channel-embedding dimension 64, 96 can-
+didate neighbors, MLP ratio 4, dropout 0.1, and batch size
+8.
+GRU-D.
+GRU-D extends recurrent models with trainable
+decay mechanisms that explicitly incorporate missingness
+masks and elapsed time between observations (Che et al.,
+2016). We use one recurrent layer with hidden dimension
+128 and batch size 32.
+14
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 6. Complete MAE and CAE results on MIMIC-III, RepoHealth, StudentLife, and USHCN. Values are mean ± standard deviation
+over three random seeds; standard deviations are rounded to three decimal places.
+Model
+MIMIC-III
+×10−1
+RepoHealth
+×10−1
+StudentLife
+×10−1
+USHCN
+×10−1
+MAE
+CAE
+MAE
+CAE
+MAE
+CAE
+MAE
+CAE
+APN
+4.78±0.034(6)
+4.79±0.034(6)
+3.47±0.049(2)
+3.55±0.051(2)
+5.75±0.017(2)
+5.78±0.017(3)
+3.56±0.235(4)
+3.70±0.291(5)
+ASTGI
+6.74±0.001(11) 6.76±0.001(11)
+5.27±1.554(7)
+5.36±1.584(7)
+5.77±0.075(3)
+5.77±0.075(2)
+3.11±0.080(3)
+3.21±0.085(3)
+GRU-D
+4.98±0.018(7)
+5.00±0.020(7)
+7.56±0.614(11) 7.65±0.600(11)
+6.15±0.023(8)
+6.16±0.024(8)
+4.53±0.408(11) 4.69±0.408(11)
+GraFITi
+4.40±0.072(1)
+4.47±0.073(2)
+3.21±0.588(1)
+3.26±0.587(1)
+5.83±0.035(6)
+5.79±0.034(4)
+2.97±0.177(1)
+3.08±0.191(1)
+HyperIMTS 4.46±0.035(2)
+4.41±0.035(1)
+3.89±0.370(3)
+3.97±0.374(3)
+5.74±0.024(1)
+5.76±0.024(1)
+4.15±0.967(8)
+4.29±0.996(8)
+KAFNet
+4.60±0.035(3)
+4.61±0.033(3)
+5.17±1.978(6)
+5.25±1.997(6)
+5.78±0.023(4)
+5.83±0.023(5)
+4.31±0.291(9)
+4.47±0.288(9)
+NeuralFlow
+5.11±0.015(8)
+5.12±0.015(8)
+7.36±0.510(10) 7.46±0.531(10) 6.49±0.075(10) 6.51±0.073(10)
+3.58±0.615(5)
+3.77±0.638(6)
+SeFT
+5.15±0.048(9)
+5.16±0.046(9)
+6.63±0.152(8)
+6.72±0.152(8)
+6.93±0.851(11) 6.94±0.849(11) 4.43±0.008(10) 4.59±0.004(10)
+Warpformer 4.63±0.025(4)
+4.64±0.023(4)
+4.86±0.257(5)
+4.98±0.260(5)
+5.85±0.052(7)
+5.86±0.052(7)
+3.66±0.026(6)
+3.67±0.022(4)
+mTAN
+5.38±0.043(10) 5.39±0.045(10)
+6.96±0.242(9)
+7.05±0.229(9)
+6.19±0.127(9)
+6.20±0.125(9)
+3.01±0.106(2)
+3.13±0.107(2)
+tPatchGNN
+4.65±0.023(5)
+4.65±0.021(5)
+4.36±0.322(4)
+4.43±0.324(4)
+5.82±0.081(5)
+5.84±0.081(6)
+3.82±0.725(7)
+3.94±0.738(7)
+GraFITi.
+GraFITi represents observed and queried values
+as nodes in a bipartite graph and performs graph-based
+information propagation for irregular forecasting (Yalavarthi
+et al., 2024). We use hidden dimension 128, four graph
+layers, one attention head, zero dropout, and batch size 32.
+HyperIMTS.
+HyperIMTS constructs hypergraph inter-
+actions to model higher-order dependencies among asyn-
+chronously observed variables (Li et al., 2025). We use
+hidden dimension 128, three layers, one attention head,
+dropout 0.1, and batch size 32.
+KAFNet.
+KAFNet employs kernel aggregation to pre-
+align irregular observations before temporal modeling (Zhou
+et al., 2026). We use hidden dimension 16, pre-convolution
+dimension 32, one layer, one attention head, four Gaussian
+kernels, time-embedding dimension 10, and batch size 32.
+NeuralFlow.
+NeuralFlow parameterizes continuous latent
+dynamics through an invertible flow, providing an efficient
+alternative to numerical ODE solvers (Bilos et al., 2021).
+We use hidden dimension 100, two coupling-flow layers,
+latent dimension 20, time-encoding hidden dimension 8,
+three hidden layers, reconstruction dimension 30, and batch
+size 32.
+SeFT.
+SeFT treats all irregular observations as an un-
+ordered set and uses learned set functions and attention
+pooling to obtain a fixed-dimensional representation (Horn
+et al., 2020). We use hidden dimension 128, three ϕ/ρ lay-
+ers, two ψ layers, four attention heads, positional dimension
+4, dropout 0.1, and batch size 32.
+Warpformer.
+Warpformer applies multiscale temporal
+warping to transform irregular observations into representa-
+tions suitable for Transformer-based modeling (Zhang et al.,
+2023). We use hidden dimension 128, three layers, inner
+dimension 64, one attention head, key/value dimensions of
+8, and batch size 32.
+mTAN.
+mTAN employs multi-time attention to map ir-
+regular observations onto continuous reference timestamps
+(Shukla & Marlin, 2021). We use hidden dimension 128, la-
+tent dimension 32, one attention head, 128 reference points,
+observation standard deviation 0.01, and batch size 32.
+tPatchGNN.
+tPatchGNN organizes irregular observations
+into transformable temporal patches and models variable in-
+teractions using graph neural networks (Zhang et al., 2024).
+We use hidden dimension 32, one graph layer, one attention
+head, one Transformer layer, one-hop propagation, node-
+embedding dimension 10, time-embedding dimension 10, a
+linear output head, and batch size 32.
+Controlled-experiment baselines.
+The controlled experi-
+ments use SeFT, CRU, GraFITi, tPatchGNN, and KAFNet.
+SeFT uses hidden dimension 64, two ϕ/ρ layers, two ψ
+layers, two attention heads, and dropout 0.02. CRU uses
+hidden dimension 20 and 20 basis functions (Schirmer et al.,
+2022). GraFITi uses hidden dimension 28 and two graph
+layers. tPatchGNN uses hidden dimension 32, patch length
+4, one graph layer, and one Transformer layer. KAFNet
+uses hidden dimension 64, pre-convolution dimension 32,
+two layers, eight Gaussian kernels, and time-embedding
+dimension 16.
+D.4. Training and Evaluation Details
+Training protocol.
+All models are trained using the Adam
+optimizer and masked observation-point MSE. For predic-
+tion mask mbid, the training objective is
+Ltrain =
+P
+b,i,d mbid (bybid −ybid)2
+P
+b,i,d mbid
+.
+(48)
+15
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Relative error to Rct
+Synthetic-Regime
+MSE
+CSE
+(a) Synthetic-Regime
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+Relative error to Rct
+Synthetic-Multiscale
+MSE
+CSE
+(b) Synthetic-Multiscale
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+Relative error to Rct
+ETTm1
+MSE
+CSE
+(c) ETTm1
+0.00
+0.30
+0.50
+0.90
+0.99
+Sampling strength α
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+Relative error to Rct
+Weather
+MSE
+CSE
+(d) Weather
+Figure 5. Relative estimation errors of MSE and CSE with respect to Rct under increasing sampling non-uniformity on all synthetic and
+semi-synthetic datasets.
+All baselines are trained for 100 epochs, and the checkpoint
+with the lowest validation MSE is retained for testing. The
+learning rate is 10−3 for all models. NeuralFlow and mTAN
+use weight decay 10−4, while the remaining real-world base-
+lines use no weight decay. Models that originally employ
+probabilistic objectives, including mTAN and NeuralFlow,
+are also optimized using the common MSE objective to
+ensure a unified training protocol.
+The controlled experiments use learning rate 10−3, weight
+decay 10−5, batch size 64, and global gradient-norm clip-
+ping at 1.0. Training and validation target timestamps are
+uniformly sampled from the future interval.
+All model–dataset experiments are independently repeated
+with three random seeds, 2024, 2025, and 2026. We report
+the mean and standard deviation across the three runs. In the
+controlled sampling-shift experiment, each trained check-
+point is further evaluated using 20 independent timestamp
+resamples for each sampling strength α.
+Temporal-density estimation.
+Future timestamps are
+mapped to the common forecasting interval [0, 1] before den-
+sity estimation. We use a trajectory-specific leave-one-out
+Gaussian kernel density estimator. The bandwidth follows a
+robust Silverman rule:
+hs = max
+
+0.9 min
+
+σs, IQRs
+1.34
+
+L−1/5
+s
+,
+1
+max(20, 2Ls), 10−6
+
+.
+(49)
+Non-positive scale estimates are excluded when comput-
+ing the minimum. Estimated densities are lower-bounded
+by 10−8, and no importance-weight clipping or boundary
+reflection is applied. Conditional and marginal timestamp
+densities are estimated only from test timestamps and are
+shared by all models evaluated on the same dataset.
+Metric computation.
+For each model–dataset–seed com-
+bination, the selected checkpoint is loaded once, and MSE,
+GSE, and CSE are computed from the same test predic-
+tions. Let msid indicate whether variable d is observed at
+future timestamp ts,i and let ws,i denote the corresponding
+16
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 7. Complete model-evaluation results on the two synthetic datasets under α = 0.9. Values are mean ± standard deviation over 20
+timestamp resamples; Rct is computed from the complete trajectory. Superscripts denote ranks.
+Model
+Synthetic-Regime
+×10−2
+Synthetic-Multiscale
+×10−2
+MSE
+CSE
+Rct
+MSE
+CSE
+Rct
+SeFT
+1.0884±0.0228(3)
+8.6994±0.3760(1)
+6.2552(1)
+1.2655±0.0058(3)
+1.1169±0.0632(3)
+1.1659(3)
+CRU
+0.6527±0.0232(1)
+8.8105±0.3814(2)
+6.4831(2)
+1.3118±0.0055(4)
+0.8085±0.0380(1)
+0.9575(1)
+GraFITi
+2.5741±0.0233(5)
+9.8776±0.4644(5)
+7.6588(5)
+1.6822±0.0053(5)
+1.4708±0.0477(5)
+1.5059(5)
+tPatchGNN
+0.9132±0.0241(2)
+9.3798±0.3603(4)
+6.9119(4)
+0.8939±0.0052(2)
+1.1272±0.0687(4)
+1.1789(4)
+KAFNet
+1.5435±0.0232(4)
+9.0437±0.3602(3)
+6.7512(3)
+0.8088±0.0057(1)
+1.0751±0.0511(2)
+1.1567(2)
+temporal weight. The trajectory-level weighted error is
+bRs(w) =
+P
+i,d msidws,i (bysid −ysid)2
+P
+i,d msidws,i
+.
+(50)
+The observation-distribution, global-time, and continuous-
+time weights are
+wobs
+s,i = 1,
+wglobal
+s,i
+=
+bpT (ts,i)
+bp(ts,i | Xs),
+wct
+s,i =
+1
+bp(ts,i | Xs).
+(51)
+Each trajectory is normalized independently, after which
+the trajectory-level errors are averaged with equal weight.
+Padding positions and timestamps without any observed
+target variables are excluded from both density estimation
+and metric computation.
+Implementation environment.
+All experiments are im-
+plemented in Python 3.12 and PyTorch 2.10.0 with CUDA
+12.8. Training and evaluation are conducted on NVIDIA
+GeForce RTX 4090 GPUs.
+E. Additional Experimental Results
+E.1. Complete Results on Synthetic and Semi-Synthetic
+Data
+Figure 5 reports the relative estimation errors of MSE and
+CSE with respect to Rct on all four controlled datasets. The
+curves show the mean over 20 independent test-timestamp
+resamples, and the shaded regions denote one standard de-
+viation. Because the trained models and underlying future
+trajectories remain fixed across different values of α, the ob-
+served changes are caused solely by the shift in the test-time
+sampling distribution. Under uniform sampling, the inverse-
+density weights are constant and CSE consequently reduces
+to MSE. As α increases, observations become increasingly
+concentrated in a limited portion of the future interval. MSE
+therefore places disproportionate emphasis on densely sam-
+pled regions, and its deviation from Rct generally increases.
+In contrast, CSE compensates for this concentration through
+inverse-density weighting and remains substantially closer
+to Rct under strong non-uniform sampling. Although den-
+sity estimation and importance weighting may introduce
+additional finite-sample variability, the correction becomes
+increasingly beneficial as the mismatch between the ob-
+served and uniform temporal distributions grows. The con-
+sistent behavior on ETTm1 and Weather further shows that
+this advantage is not restricted to analytically generated
+trajectories.
+Tables 7 and 8 report the complete model-level results under
+α = 0.9. On all four datasets, CSE recovers exactly the
+same ranking of the five models as Rct, whereas MSE pro-
+duces at least one ranking inversion. This result indicates
+that the effect of temporal sampling is not limited to a uni-
+form shift in metric values: different models are affected
+to different degrees because their prediction errors vary dif-
+ferently over time. Correcting the target-time distribution
+therefore improves both risk estimation and the recovery of
+model comparisons, supporting the main-text conclusion
+that CSE more accurately reflects continuous-time predic-
+tive performance under non-uniform sampling.
+E.2. Complete Results on Real-World Datasets
+Tables 3 and 4 report the complete MSE and CSE results
+on the eight real-world datasets, including standard devia-
+tions over three random seeds. Tables 5 and 6 provide the
+corresponding MAE and Continuous-Time Absolute Error
+(CAE) results. The best and second-best mean values are
+shown in bold and underlined, respectively, and superscripts
+denote ranks computed from the unrounded means.
+Consistent with the observations in the main text, CSE is
+neither a fixed-direction nor a fixed-ratio transformation of
+MSE. On CESNET, FNSPID, GDELT, and HumanActivity,
+CSE is generally lower than MSE, whereas the opposite
+trend is more common on MIMIC-III, RepoHealth, and
+USHCN. Moreover, even within the same dataset, the mag-
+nitude of the change varies across models. This confirms
+that the sampling distribution interacts with model-specific
+temporal error patterns rather than simply applying a dataset-
+level scaling factor. The reported standard deviations also
+17
+
+
+Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting
+Table 8. Complete model-evaluation results on the two semi-synthetic datasets under α = 0.9. Values are mean ± standard deviation over
+20 timestamp resamples; Rct is computed on the complete future grid. Superscripts denote ranks.
+Model
+ETTm1
+×100
+Weather
+×10−1
+MSE
+CSE
+Rct
+MSE
+CSE
+Rct
+SeFT
+1.1032±0.0059(4)
+1.1145±0.0153(4)
+1.1130(4)
+4.4046±0.0146(5)
+4.9629±0.0629(5)
+4.8493(5)
+CRU
+1.3394±0.0058(5)
+1.1001±0.0153(3)
+1.0994(3)
+3.0839±0.0144(1)
+4.6087±0.0667(3)
+4.4631(3)
+GraFITi
+1.0886±0.0056(3)
+1.4140±0.0163(5)
+1.4016(5)
+3.8918±0.0147(4)
+4.9221±0.0665(4)
+4.7612(4)
+tPatchGNN
+0.9251±0.0056(2)
+0.9330±0.0151(1)
+0.9302(1)
+3.8789±0.0181(3)
+3.6856±0.0645(1)
+3.5274(1)
+KAFNet
+0.9093±0.0056(1)
+0.9640±0.0155(2)
+0.9584(2)
+3.4839±0.0144(2)
+3.7783±0.0607(2)
+3.6496(2)
+distinguish this systematic metric effect from training vari-
+ability: most model–dataset combinations remain relatively
+stable across seeds, although datasets such as RepoHealth
+and USHCN exhibit larger variation for several models.
+The MAE–CAE comparison exhibits a similar pattern. The
+direction of the correction is broadly consistent with the
+MSE–CSE comparison, while its magnitude remains depen-
+dent on both the dataset and the model. In particular, the
+best-performing model on MIMIC-III changes from GraFITi
+under MAE to HyperIMTS under CAE, accompanied by
+additional local rank changes on several datasets. Therefore,
+the discrepancies reported in the main text are not specific
+to squared error, but arise more generally from the tempo-
+ral distribution under which pointwise prediction losses are
+aggregated. Since the complete continuous trajectories of
+real-world datasets are unavailable, these results do not di-
+rectly identify which metric is exact; rather, the systematic
+differences suggest that relying solely on observation-point
+metrics may not fully characterize models’ continuous-time
+predictive performance.
+18

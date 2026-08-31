@@ -1,0 +1,821 @@
+Certifying What Helps Customer-Return Timing: A
+Screen-and-Confirm Test for Conditioning Signals, and Why
+Decay Is Nearly Enough
+Sang Su Lee
+Thumbtack, Inc.
+San Francisco, CA, USA
+psulee@thumbtack.com
+Vineeth Loganathan
+Thumbtack, Inc.
+San Francisco, CA, USA
+vloganathan@thumbtack.com
+Shishir Dash
+Thumbtack, Inc.
+San Francisco, CA, USA
+shishirdash@thumbtack.com
+Vijay Raghavan
+Thumbtack, Inc.
+San Francisco, CA, USA
+vraghavan@thumbtack.com
+Abstract
+Practitioners enrich customer-return models with ever more signals
+(lifetime value, category, recency/frequency, calendar, geography),
+and the temporal-point-process (TPP) literature follows suit with
+covariate- and external-covariate-conditioned intensities. But does
+any of it improve the timing, and how would you know? A null
+(“feature 𝑋doesn’t help”) is only meaningful if the model could
+have found a signal. We make two contributions—a method and a
+measurement—to answer this credibly. (i) A screen-and-confirm
+protocol that certifies whether a candidate signal improves a TPP’s
+event-timing likelihood: a positive control plants a coupling of
+known strength and confirms the model recovers it, so a real-data
+null can be read as “no signal” rather than “weak method.” The con-
+trol is validated for categorical and continuous encodings, and on a
+real clock-driven dataset (NYC taxi hour-of-day). (ii) A model-free
+ceiling quantifying how little of customer-return timing is point-
+predictable at all (≲5% of gap variance from any covariate; returns
+are near-memoryless). With these we certify a clean result on three
+public benchmarks (Amazon, Taobao, RetailRocket) and a real mar-
+ketplace (Thumbtack): the inter-event clock—continuous-time de-
+cay, long known to beat frozen-intensity models—is nearly sufficient,
+and the conditioning the field keeps adding is redundant or harmful
+on top of it (statistically null on the public benchmarks, ≲0.06 NLL;
+null to mildly harmful on the marketplace). We do not claim to
+discover that decay helps; our contribution is the tools that turn
+“conditioning doesn’t help” into a checkable, certified statement—
+plus an honest-evaluation account of the read-out/leakage pitfalls
+we hit and retracted.
+Keywords
+temporal point processes, customer return, conditioning, positive
+controls, evaluation
+1
+Introduction
+“When will this customer come back?” underlies notification tim-
+ing, CRM prioritization, and lifecycle modeling. Temporal point
+processes (TPPs) answer it by modeling the conditional intensity
+Accepted at the 5th Workshop on End-to-End Customer Journey Optimization (KDD
+2026).
+𝜆∗(𝑡| H𝑡)—the instantaneous event rate given the past. Neural
+TPPs (RMTPP [1] →NHP [2] →Transformer-Hawkes/SAHP [3, 4]
+→state-space models [9]) have steadily improved likelihood fit. But
+a practitioner choosing a model for customer return faces a ques-
+tion the literature does not answer cleanly: which components
+actually move return-timing, and how would you know? En-
+riching event models with such signals is common practice: marked
+TPPs condition on event type/category by design [1, 2]; covariate
+TPPs add feature vectors and even learn their importance [13];
+external-covariate TPPs inject seasonal/periodic drivers into the
+intensity [14]; and recency/frequency (RFM) and value features
+power deep churn and lifetime-value models [17]. These works
+typically add a signal and report a gain, in domains where it plausi-
+bly drives timing. We ask a different question for customer-return
+timing: not whether such a covariate can be added, but whether it
+adds anything once a strong inter-event backbone (decay) is already
+in place—and how to tell a true null from a method too weak to
+find the signal.
+We answer empirically on three public benchmarks (Amazon,
+Taobao, RetailRocket) plus a real marketplace (Thumbtack), report-
+ing temporal negative log-likelihood (NLL), inter-event RMSE, and
+MAE. Our contributions:
+• C1. A screen-and-confirm certification (method). A
+protocol that certifies whether a candidate signal improves
+a TPP’s event-timing likelihood: a positive control plants a
+coupling of known strength and confirms recovery (cate-
+gorical and continuous encodings, plus a real clock-driven
+dataset, NYC taxi), so a real-data null reads as “no signal,”
+not “weak method” (§5.5).
+• C2. A model-free ceiling (measurement). How little
+of customer-return timing is point-predictable at all: ≲
+5% of gap variance from any covariate; returns are near-
+memoryless (§5.4).
+• C3. The certified result. Using C1–C2, on three public
+benchmarks and a real marketplace: continuous-time de-
+cay (the inter-event clock) is nearly sufficient, and the con-
+ditioning practitioners keep adding—LTV, category, RFM,
+calendar, geography—is redundant or harmful on top of it
+(statistically null on the public benchmarks, ≲0.06 NLL;
+arXiv:2608.11555v1  [cs.LG]  12 Aug 2026
+
+
+Lee et al.
+null-to-harmful, up to +0.65, on the marketplace), for a dual
+mechanism reason (§5.1, §5.3, §6).
+The two contributions are one story. Our contribution is the
+tools—a screen-and-confirm certification (C1) and a model-free ceil-
+ing (C2); decay is a known mechanism, not our finding. The result
+(C3, decay nearly suffices) and the tools are inseparable: “condition-
+ing doesn’t help” is trustworthy only because the positive control
+shows the null means “no signal,” not “a method too weak to find it.”
+The tool is what licenses the result. (Plain THP, our frozen-intensity
+reference, is an ablation, not a deployment target.)
+The transferable lesson: for return-timing, the inter-event clock
+(decay) is the reliable lever, and before believing that a feature
+helps, screen it against a positive control—so that a null means
+“no signal in the data,” not “a method too weak to find it.”
+2
+Related Work
+Neural TPP methods. RMTPP [1] →NHP [2] →attention models
+THP [3] and SAHP [4] →AttNHP [5]; intensity-free density mod-
+els [6]; recent continuous-time state-space / latent-linear-Hawkes
+models (S2P2 [9]). EasyTPP [8] is the standard benchmark/codebase;
+the field evaluates on NLL, RMSE/MAE, and mark accuracy [10].
+We compare these backbones plus conditioning components on the
+customer-return task.
+Customer return / CLV. Buy-till-you-die models (BG/NBD [15];
+Pareto/NBD [16]) and deep CLV [17] model value/return but not
+the full event-time intensity. Notably, BTYD models assume Poisson
+purchasing while alive—exponential, memoryless inter-purchase
+gaps per customer; our model-free ceiling (§5.4) independently
+confirms that forty-year-old assumption on four datasets, and the
+small residual previous-gap regularity (𝑟2 1–6%) is the mild timing
+regularity the Pareto/GGG extension models [22]. Hazard/point-
+process treatments of user return include Kapoor et al. [19] and Du
+et al. [20]; the closest neural treatment is the RNN survival model
+of Grob et al. [11], which predicts a single next return time per user.
+We instead model the full intensity 𝜆∗and ask which component
+matters on what data, varying the backbone (NHP, THP, S2P2) and
+conditioning rather than committing to one architecture.
+Conditioning TPPs on covariates. Injecting side information
+into the intensity is well studied: covariate TPPs encode feature
+vectors and learn per-feature importance (TransFeat-TPP [13]);
+external-covariate TPPs decompose seasonal/periodic drivers
+across temporal granularities (METP [14]); and marked TPPs [1, 3]
+condition on event type by construction. These report accuracy
+gains in settings where the covariate drives event dynamics. We
+do not propose a new conditioning mechanism; we measure
+whether the standard ones help for customer-return timing against
+a decay backbone, and add a positive-control screen so a null is
+interpretable.
+Exogenous and causal TPPs. Estimating whether an external
+signal (calendar, geography, or an intervention such as marketing)
+drives event timing is, in general, a causal question; counterfac-
+tual/causal TPPs [12] formalize it but require interventional or
+carefully-controlled data. Our screen-and-confirm test (§5.5) is an
+observational necessary condition—a feature that fails to improve
+conditional likelihood when correctly supplied cannot be a useful
+timing signal—and we position the causal treatment as future work.
+3
+Models
+We hold the conditioning framework fixed and vary the backbone
+and components.
+Backbones. (i) NHP: continuous-time LSTM (CTLSTM); the
+hidden state decays between events, but the LSTM attenuates long-
+range history. (ii) THP: Transformer with causal self-attention over
+events; captures long-range dependence. In our plain THP ablation
+the intensity is fully frozen between events: we omit the origi-
+nal THP’s current-influence term 𝛼(𝑡−𝑡𝑗)/𝑡𝑗[3], so published
+THP is only state-frozen (its intensity is linearly time-modulated
+between events) while our ablation removes between-event time-
+dependence entirely. (iii) S2P2: a state-space / latent-linear-Hawkes
+layer whose intensity integral is computed in closed form (no Monte-
+Carlo error).
+Components (on the THP backbone). (a) Decay head (“-D”):
+let the hidden state decay between events, ℎ(𝑡) = ℎ(𝑡𝑖) exp(−𝛿Δ𝑡)
+with a small learned 𝛿; this relaxes THP’s frozen-intensity assump-
+tion. (b) LTV gate/shift and (c) category-aware decay: condition
+the intensity on a per-customer value signal and event category.
+(d) RFM: a causal recency/frequency/cadence feature—frequency
+= log(1 + position) and cadence = log 1p of the causal prefix-mean
+of inter-event times (using only events up to position 𝑖, to avoid
+leaking the target). (e) Exogenous: per-event season and region
+embeddings. (f) Continuous covariate (“-W”): a learned linear pro-
+jection that injects a per-event continuous covariate vector into
+the event representation (we call it the weather projection after its
+original use case); it carries the continuous positive control and the
+taxi hour-of-day covariate (§5.5). We make no architectural-novelty
+claim; these are standard components whose data-dependent value
+we measure.
+4
+Experimental Setup
+Datasets. Three public benchmarks—Amazon (product reviews,
+essentially one event type), Taobao (e-commerce actions, 17 types),
+RetailRocket (very long web-browsing sequences)—and Thumb-
+tack, a U.S. home-services marketplace where a customer sends
+a paid request to professionals for a job (we keep customers with
+≥3 such requests; a customer’s per-event “region” is their Desig-
+nated Market Area, DMA—one of ∼210 U.S. media-market regions).
+Public benchmarks use the EasyTPP-Gatech splits; Thumbtack is
+proprietary and reported in relative terms.
+Metrics. Our primary metric is the temporal NLL (↓). For
+an event-time sequence 𝑡1 < · · · < 𝑡𝑛with conditional intensity
+𝜆∗(𝑡) = 𝜆(𝑡| H𝑡), the temporal log-likelihood is
+log 𝐿=
+𝑛
+∑︁
+𝑖=1
+log 𝜆∗(𝑡𝑖) −
+∫𝑡𝑛
+𝑡0
+𝜆∗(𝑢) 𝑑𝑢,
+(1)
+and we report the per-event temporal NLL = −1
+𝑛log 𝐿. It isolates
+return-timing, is computed by one consistent pipeline across all
+datasets and model families (the integral in closed form for S2P2-
+F, by Monte-Carlo quadrature otherwise), and excludes the mark
+term. (Cross-model NLL therefore mixes a closed-form compen-
+sator for S2P2-F with an 𝑛mc = 10 Monte-Carlo estimate for the
+others; we treat the S2P2-F-vs-MC NLL gap cautiously and rest our
+claims on the same-estimator decay contrast (THP vs. THP-D, an
+identical Monte-Carlo compensator).) We also report inter-event
+
+
+Certifying What Helps Customer-Return Timing: A Screen-and-Confirm Test for Conditioning Signals, and Why Decay Is Nearly Enough
+RMSE/MAE (↓); these are comparable within a dataset only, as the
+time unit differs across datasets. The same training protocol (Adam,
+warmup, early stopping on validation NLL) is used for all models,
+with mean±std over seeds {42, 123, 456}. Throughout, we read a
+conditioning delta as null when |Δ| < 2× its seed std and as real
+otherwise; the taxi recovery of §5.5 (≈3×) clears this bar, and no
+decay-regime conditioning delta does.
+Backbone validation. Before drawing component conclusions
+we confirm our backbones reproduce known behavior: the relative
+ranking of S2P2, NHP, THP, and RMTPP matches the S2P2 pa-
+per [9]. (Three further reimplementations did not reproduce their
+published likelihoods in our pipeline; we omit them rather than
+report numbers we cannot trust, with details in App. A.)
+5
+Results
+We present the evidence bottom-up. The decay gain (§5.1) and
+backbone comparison (§5.2) establish that the inter-event clock
+dominates; the conditioning redundancy (§5.3) and the model-free
+ceiling (§5.4, contribution C2) measure how little signal remains;
+and the screen-and-confirm protocol (§5.5, contribution C1) is
+the method that makes the negatives credible. The two framed
+contributions thus arrive last by design—the earlier subsections
+build to them.
+5.1
+Decay is the dominant timing lever (a
+known mechanism, quantified here)
+Adding the decay head to a plain Transformer-Hawkes (THP →
+THP-D) yields large temporal-NLL gains on every dataset (Table 1):
+Amazon 0.32→−2.55 (Δ −2.9), RetailRocket 0.52→−3.53 (Δ −4.0),
+Taobao −2.09 →−2.58 (Δ −0.5); all mean over 3 seeds, std ≤0.09
+(Table 2); and on Thumbtack a Δ of −1.26. This gain is distribu-
+tional—it sharpens the timing likelihood, not point error: with the
+point-prediction leak removed (§7), THP-D’s RMSE/MAE match
+plain THP on every dataset (§5.4). An earlier large MAE reduction
+we reported here was that read-out artifact and is retracted; the
+point-prediction view is the model-free ceiling of §5.4. The gain’s
+size varies (small on Taobao, large elsewhere), but its sign is nega-
+tive on every dataset—this is the most consistent result in the study.
+Mechanism: decay relaxes THP’s frozen-between-events intensity
+so “time since last event” drives the rate—the classical mechanism of
+Hawkes processes and the neural Hawkes process [2, 18]. Is the gain
+just decay, or THP? Continuous-time models with built-in decay
+(NHP, and the state-space S2P2) likewise sit far below plain THP;
+the lever is the decay mechanism, not the backbone it is attached
+to. (Plain THP is a fair ablation—identical training and tuning, the
+between-event decay the single controlled variable—not a model
+one would deploy; modern attention TPPs are not frozen, and our
+plain THP omits the original’s current-influence term (§3), so the
+contrast quantifies the full between-event time-dependence chan-
+nel rather than a deficit of published THP.) The same mechanism
+underlies S2P2’s strong likelihood in §5.2—exponential decay is the
+dominant mode of its state-space relaxation dynamics—so “decay
+is the lever” spans architectures, not merely the THP head.
+Table 1: Decay gain: Δ temporal NLL from adding the decay
+head (THP →THP-D); negative = better. Mean over 3 seeds;
+Thumbtack relative. Negative on every dataset—size varies
+(smallest on Taobao), sign does not.
+Amazon
+Taobao
+RR
+Thumbtack
+Δ temporal NLL
+−2.9
+−0.5
+−4.0
+−1.26
+5.2
+No single best backbone—data decides on
+likelihood
+This comparison is not itself a contribution; it plays two supporting
+roles—confirming our reproductions track the literature (Backbone
+validation, above) and locating the decay mechanism. Table 2 re-
+ports temporal NLL (mean±std over three seeds) for the models we
+could seed cleanly. The robust, same-estimator comparison is the de-
+cay contrast (THP→THP-D, both Monte-Carlo): decay lowers NLL
+by whole nats on every dataset (std ≤0.09), confirming §5.1 with er-
+ror bars. The closed-form state-space S2P2-F is competitive-to-best
+on the public sets (−3.44 Taobao, −4.95 RR), but its compensator is
+exact while the THP models’ is Monte-Carlo, so we parenthesize it
+as a reference and do not rank it against the MC models (its Thumb-
+tack cell is unavailable). The Monte-Carlo S2P2 and NHP variants
+are omitted; single runs do not change the picture. We therefore
+make no universal-backbone-winner claim: decay is the first-order
+lever (whole nats), residual cross-backbone differences are second-
+order and data-dependent, and “sufficient” means decay reaches
+near the attainable ceiling—not that the backbone is irrelevant.
+This is consistent with the large-scale finding of Bosser and Ben
+Taieb [21] that time-NLL differences across neural TPP architectures
+are small; our multi-nat contrasts arise from the deliberately fully-
+frozen ablation (§3), not from cross-architecture spread. We also
+make no claim against IntensityFree/FullyNN/AttNHP (dropped;
+competitive in their own papers). (Apparent point-timing RMSE
+differences are largely a read-out artifact, not a backbone property;
+§7.)
+Pre-specified sanity filter. We apply one fixed exclusion rule, decided
+from data/model properties rather than the ranking we wished to
+see: implausible-given-inputs variants are dropped—e.g. browse-
+augmented models reporting NLL −8 to −16 including on Amazon,
+which contains no browse data, so the “gain” cannot come from the
+claimed signal.
+5.3
+Conditioning is redundant under decay
+Why test this at all? Because adding these signals is exactly what
+practitioners and the recent TPP literature do (§2 covers covariate-,
+marked-, and external-covariate-conditioned models); the screen
+and ceiling let us certify whether it actually pays for return-timing.
+We add each such signal on top of the backbone (Table 3). A weak
+(no-decay) baseline does benefit from category (CatOnly Δ −0.73).
+But once the decay head is present, every conditioning sig-
+nal is null or harmful: category worsens it (CatOnly-D +0.47;
+ExogCat-D +0.65, the worst), exogenous calendar/geography is
+null (ExogTHP-D +0.012), RFM collapses to ≈0 once its target
+leak is removed (§7), and proxy-LTV does not improve likelihood
+
+
+Lee et al.
+Table 2: Temporal NLL (↓), mean±std over 3 seeds. Public absolute; Thumbtack relative to THP-D (Δ). The same-estimator
+decay contrast (THP vs. THP-D, both Monte-Carlo) is the robust comparison. †S2P2-F uses an exact closed-form compensator
+(parenthesized; not ranked against the MC models; Thumbtack cell unavailable). Monte-Carlo S2P2 and NHP are omitted.
+Model
+Amazon
+Taobao
+RR
+tt1Δ
+THP
+0.32 ± 0.00
+−2.09 ± 0.00
+0.52 ± 0.09
++1.26 ± 0.01
+THP-D (THP+decay)
+−2.55 ± 0.01
+−2.58 ± 0.00
+−3.53 ± 0.07
+0.00
+S2P2-Base-F (cf.)†
+(−0.57 ± 0.00)
+(−3.44 ± 0.00)
+(−4.95 ± 0.00)
+—
+Table 3: Conditioning Δ temporal NLL relative to the same
+backbone (↓better; + is worse), Thumbtack (relative); mean
+over 3 seeds, ± the seed std of the Δ. The harmful decay-
+regime deltas carry large seed variance, consistent with the
+instability/overfitting reading (§5.3); ExogTHP-D is within
+seed noise. Conditioning helps only the weak baseline; under
+decay it is null or harmful.
+Variant
+Signal added
+Δ temporal NLL
+over THP (no decay)
+CatOnly
+category
+−0.73 ± 0.01
+ExogTHP
+season + region
++0.007 ± 0.005
+over THP-D (with decay)
+CatOnly-D
+category
++0.47 ± 0.11
+RFM-D
+recency/freq/cadence
+−0.01 ± 0.01
+LTV-CTPP-D
+proxy LTV
++0.47 ± 0.10
+ExogTHP-D
+season + region
++0.012 ± 0.016
+ExogCat-D
+season+region+cat
++0.65 ± 0.17
+(LTV-CTPP-D +0.47). The same holds on the public bench-
+marks (Table 4): under decay every signal moves temporal NLL
+by ≲0.06, while the weak (no-decay) baseline still gains from cate-
+gory. We distinguish two regimes the table conflates: on public data
+the decay-regime effect is statistically null (redundancy—the sig-
+nal carries no information the clock lacks); on Thumbtack adding
+category under decay is mildly harmful (+0.47), which we read
+as extra capacity overfitting in the absence of signal rather than
+as negative information (the harmful deltas’ large seed variance,
+±0.11–0.17 in Table 3, supports the instability reading). We there-
+fore treat LTV/category/RFM/exogenous here as measured compo-
+nents, not contributions: under the signals available offline they are
+redundant with decay. (Whether real customer-revenue LTV helps
+remains open—the offline proxy ceiling is low by construction.)
+To be explicit about scope: this is a claim about the per-customer
+timing likelihood conditional on the event history—not about target-
+ing, churn/propensity, mark/volume, or value models, where these
+same features remain informative (§5.5).
+5.4
+A model-free ceiling: returns are
+near-memoryless
+Why does conditioning fail? Because, model-free, there is almost
+nothing to condition on. By a model-free ceiling we mean an upper
+bound on predictability computed without fitting any TPP—the frac-
+tion of gap variance a covariate explains in a simple regression—so
+Table 4: Conditioning Δ temporal NLL on the public bench-
+marks, confirming the Thumbtack pattern: under decay ev-
+ery signal is ≲0.06; the weak (no-decay) baseline still gains
+from category. Mean±seed-std of Δ over 3 seeds; every decay-
+regime delta is within ∼1𝜎of zero (null by the §4 rule).
+Δ NLL vs. same backbone
+Amazon
+Taobao
+RR
+CatOnly-D (+decay)
++0.03 ± 0.04
++0.00 ± 0.00
+−0.06 ± 0.05
+RFM-D (+decay)
++0.00 ± 0.08
+−0.01 ± 0.00
+−0.01 ± 0.03
+CatOnly (no decay)
+−0.32 ± 0.00
+−0.02 ± 0.00
+−1.70 ± 0.04
+it bounds the mean-shift (point-prediction) signal available to any
+model. By the reconciliation argument below it does not bound
+distributional (likelihood) gains; the NLL-space redundancy claim
+rests on the measured deltas (Tables 3, 4) and the screen (§5.5),
+with the ceiling explaining why point-prediction gains, specifically,
+are unavailable. Table 5 shows that no available covariate explains
+more than a single-digit percentage of gap variance on any of the
+four datasets (we report the fraction of log-gap variance explained:
+𝑟2 for the continuous previous gap, one-way 𝜂2 for categoricals): on
+Thumbtack the previous gap is the best single predictor at ≈2.2%
+(𝑟= 0.147), category ≈1.7%, and season and DMA region explain
+effectively nothing (𝜂2 ≈5–8×10−4); on the public benchmarks the
+pattern repeats (previous gap 1.4–6.3%, event-type/mark 𝜂2 ≤1.1%).
+Two regularities: the ceiling is single-digit everywhere, and the best
+single covariate is always the previous gap—i.e. the inter-event clock
+itself, sequence-derivable and already captured by decay. Nor is the
+ceiling low by construction: on a genuinely clock-driven dataset
+(NYC taxi, §5.5), the same model-free check on the exogenous hour-
+of-day covariate yields corr = 0.15 (𝑟2 ≈2%)—an order of magni-
+tude above Thumbtack’s season 𝜂2—and the conditioning screen
+fires there; on customer-return data the seasonal signal simply is
+not present. Moreover, behavioral surge (a burst of sessions or a
+marketing touch) appears to carry near-zero lead-time—it coincides
+with the return rather than preceding it by days—so it could not
+be used to predict a return ahead of time (an informal observa-
+tion, not a measured result; §7). Return timing is dominated by
+an exogenous, near-memoryless latent need; the inter-event clock
+captured by decay is most of the recoverable signal. Precisely, the
+process is near-renewal: the hazard depends strongly on time since
+the last event (that is what decay captures) but on little else—“near-
+memoryless” throughout means memoryless beyond the current
+gap’s clock, not a constant hazard.
+
+
+Certifying What Helps Customer-Return Timing: A Screen-and-Confirm Test for Conditioning Signals, and Why Decay Is Nearly Enough
+Table 5: Model-free fraction of log-gap variance explained by
+each covariate (𝑟2 for the continuous previous gap; one-way
+𝜂2 for categoricals). Single-digit everywhere, and the best
+covariate is always the previous gap—the clock that decay
+captures. Public columns: pooled splits, category = event
+type (marks); season/region covariates are unavailable on
+the public benchmarks.
+Covariate
+Amazon
+Taobao
+RR
+Thumbtack
+Previous gap (𝑟2)
+1.4%
+3.4%
+6.3%
+≈2.2%
+Category/mark (𝜂2)
+1.1%
+0.4%
+0.3%
+≈1.7%
+Season (month, 𝜂2)
+—
+—
+—
+≈5 × 10−4
+Region (DMA, 𝜂2)
+—
+—
+—
+≈8 × 10−4
+Reconciling with the decay gain (§5.1). A natural objection:
+if returns are near-memoryless, how can decay lower NLL by 2–
+3 nats? Because the two measure different things. The ceiling is
+point-prediction variance—how much a covariate moves the con-
+ditional mean gap. The decay gain is a distributional (likelihood)
+improvement: even when the mean is nearly unpredictable, mod-
+eling the shape of the intensity (the post-event refractory dip and
+its drift back, and the compensator
+∫
+𝜆∗) calibrates the timing den-
+sity far better than a flat-rate baseline. Decay does not predict
+which gap better (low 𝑟2); it places probability mass over when far
+better (large ΔNLL). So the findings are consistent: little is point-
+predictable, yet correct temporal calibration is worth a lot—and it
+comes from the inter-event clock, not from external covariates. To
+make this concrete: on a perfectly memoryless process (i.i.d. Exp(𝜆)
+gaps, where no covariate has any predictive power), a model whose
+rate is off by a constant factor 𝑐pays 𝑐−1 −ln𝑐excess nats per
+event—1.6 at 𝑐=4, 6.7 at 𝑐=10. Multi-nat NLL gains are thus at-
+tainable at zero point-predictability: getting the rate scale/shape
+right (what decay does, versus THP’s frozen between-event rate)
+is worth nats even when which gap is unpredictable. Empirically
+this is exactly what we observe: once the point-prediction leak
+is removed (§7), THP, THP-D, and LTV-CTHP-D sit at the same
+inter-event RMSE (Amazon ≈0.30, Taobao ≈0.14, RetailRocket
+≈9.5), indistinguishable from predicting the global-mean gap, and a
+plain RFM→gradient-boosting regressor matches the neural TPPs
+on this point-prediction. Nothing beats the constant on which gap,
+while decay still wins whole nats on when—the point-prediction
+ceiling and the distributional decay gain are two faces of the same
+near-memoryless process.
+5.5
+Screening exogenous features: synthetic
+recover, real reject
+The protocol. (1) Fix the candidate feature’s encoding and the
+prediction target (here, inter-event timing). (2) On synthetic data,
+plant a feature→target coupling of tunable strength 𝛽and confirm
+the conditioned model recovers it monotonically in 𝛽—a positive
+control that calibrates sensitivity. (3) Run the identical pipeline on
+the real feature. (4) Interpret within the control’s scope: given a pass-
+ing control, a flat real result certifies “no signal in that encoding,”
+not a weak method. The pattern ports standard positive/negative-
+control practice—placebo and refutation tests in econometrics, san-
+ity checks in ML [23]—to TPP conditioning.
+A null is only informative if the method could have found a signal.
+We therefore validate the exogenous pipeline with a positive con-
+trol: we generate synthetic sequences in which an exogenous field
+(season) is coupled to the next gap at a tunable strength 𝛽(a causal
+coupling that a decay-only model cannot recover, since the field
+is i.i.d. across events), and check that a season/region-conditioned
+model recovers it. It does, monotonically in 𝛽(Fig. 1): ExogTHP
+improves by −0.059, −0.232, −0.824 at 𝛽= 0.5, 1, 2 (and +0.001 at
+𝛽= 0, correctly null); the decay variant ExogTHP-D recovers as
+well (−0.042, −0.143, −0.337). The protocol is not specific to categor-
+ical features: replacing the categorical season/region embedding
+with a learned linear projection of a per-event continuous covari-
+ate 𝑧, and planting a continuous coupling gap ∼Exp(𝑒𝛽𝑧) with
+𝑧∼N (0, 1), yields the same monotonic recovery under decay—Δ
+time-NLL +0.000, −0.092, −0.258, −0.738 at 𝛽= 0, 0.5, 1, 2. Both in-
+stantiations are correctly null at 𝛽= 0. The same pipeline, applied
+to real calendar/geography (Thumbtack), yields no improvement
+(Table 3).
+The real null is genuine, not a plumbing artifact. We veri-
+fied that the exogenous signal reaches the model with rich variation:
+Thumbtack carries all 12 calendar months and 207 DMA regions
+(99.8% non-zero), well-distributed, with loader keys matching the
+data. Because the positive control confirms “signal present ⇒re-
+covered,” the real-data null means “nothing to recover”—calendar
+and geography do not move the per-customer conditional gap. This
+screen-and-confirm pattern is the recommended way to read a
+conditioning null.
+Scope of the claim. The screen adjudicates a specific pair: the
+candidate feature as encoded and the chosen target (here, inter-
+event timing). A null therefore means “no signal in that encod-
+ing for that target,” bounded by what the positive control shows
+recoverable—not “no exogenous signal of any kind.” Likewise, of
+the signals in C3, calendar/geography passed through this planted-
+coupling screen; the LTV/category/RFM nulls are measured un-
+der the same pipeline and bounded by the same ceiling but were
+not separately screened—per-pathway positive controls are future
+work. This boundary is consistent with the broader literature: on
+canonical weather-sensitive data the exogenous covariate drives
+volume and marks rather than per-event timing. As a model-free
+check, Beijing PM2.5 alert onsets are near-uniform across calendar
+months and their inter-onset gaps are essentially season-invariant,
+and on the Walmart weather dataset temperature is uncorrelated
+with the inter-sale gap (𝑟=0.005); a timing screen is thus correctly
+null there, even though a mark/volume model benefits from the
+same covariate [13, 14]. Extending the screen to continuous and
+lagged encodings (each with its own positive control) is a direct
+generalization.
+A real positive control. The screen also fires on a real
+exogenous signal where one genuinely exists. On NYC green-
+taxi pickups (Jan 2019), inter-pickup gaps are modulated by
+hour-of-day (rate high at rush hour, low overnight; model-free
+corr(sin hour, log gap) = 0.15). Encoding hour as a continuous
+cyclic covariate, the screen lowers temporal NLL by Δ = −0.025
+
+
+Lee et al.
+0
+0.5
+1
+2
+−0.8
+−0.6
+−0.4
+−0.2
+0
+planted strength 𝛽
+Δ NLL (↓)
+(a) categorical season embedding
+ExogTHP
+ExogTHP-D (decay)
+0
+0.5
+1
+2
+−0.8
+−0.6
+−0.4
+−0.2
+0
+planted strength 𝛽
+Δ NLL (↓)
+(b) continuous covariate (learned projection)
+THP-D-W (decay)
+Figure 1: Positive control (two encodings). A planted
+exogenous→gap coupling of strength 𝛽is recovered mono-
+tonically in both: (a) a categorical season embedding (no-
+decay ExogTHP and decay ExogTHP-D), and (b) a continuous
+covariate via a learned linear projection (decay THP-D-W).
+𝛽= 0 is correctly null in both, so the screen is not categorical-
+specific. This is what a real signal would look like—real cal-
+endar/geography (Table 3) does not.
+(1.756 →1.731; 𝑛= 3, well outside seed noise ±0.008; replicated
+on a second month, Feb 2019, Δ = −0.021; hour is genuinely
+exogenous—each sequence starts at its zone-day’s first pickup,
+so cumulative time does not encode the clock hour)—a modest
+recovery that tracks the modest real signal, in contrast to the
+strong synthetic 𝛽and the flat (≈0) real calendar/geography.
+This closes the loop: synthetic controls calibrate sensitivity, real
+negatives (PM2.5, Walmart) and a real positive (taxi) confirm the
+screen discriminates on real data—so the customer-return null is
+a property of that data, not a weakness of the method. We still
+describe screen-and-confirm as a validation discipline (establish
+recoverability, then trust the null) rather than a turnkey discovery
+method.
+6
+Mechanism: why decay absorbs the rest
+The redundancy has a dual mechanism. (A) Sequence-derivable
+signals are already captured. RFM and category are deterministic
+functions of the observed event history, which the decay backbone
+already encodes; supplying them explicitly adds no information
+(RFM-D ≈0, CatOnly-D worse once decay is in). (B) Exogenous
+signals do not move the conditional gap. Season and region
+shift demand composition (who buys what, where) but not the per-
+customer timing of the next return, which is driven by an exogenous
+latent need realized same-day (§5.4). Timing ≠demand-composition.
+Together these explain why a single inter-event-clock mechanism
+(decay) is sufficient and the usual enrichments are redundant.
+What this buys the practitioner. For the notification-timing
+and CRM use cases of §1: a decay-calibrated intensity supports
+return-window estimation (when the hazard recovers from the post-
+event refractory dip) and send suppression during the dip; it does
+not support point-timed sends (point prediction sits at the global-
+mean ceiling, §5.4), and the effect of timing an intervention is a
+causal question requiring interventional data (§2, future work).
+7
+Limitations and honest evaluation
+We report results we initially got wrong and corrected, in the spirit
+of honest evaluation. An NHP target-indexing bug once produced
+a fake 7× MAE improvement; an RFM cadence feature once leaked
+the target through a full-sequence normalizer; an S2P2 RMSE was
+read from an untrained auxiliary head; and the decay head’s point-
+prediction read the hidden state after decaying it by the actual next
+inter-event interval, leaking the very gap it predicts (a counterfac-
+tual that alters only the held-out gap moves the prediction in lock-
+step, corr≈1)—which had inflated the decay models’ RMSE/MAE
+and the apparent point-timing decay gains. Each was caught by
+sanity-checking predictions against targets; we fixed the decay read-
+out to use the pre-decay (history-only) state, added a counterfactual
+regression test, and report only the corrected, leak-free numbers,
+which show decay-flat RMSE/MAE. Temporal NLL—a density eval-
+uated at the observed event times and treated identically across
+all models—is unaffected by these point-prediction read-out bugs.
+Separately, in earlier ranking experiments a TPP’s apparent rank-
+ing ability was dominated by the score read-out (intensity integral
+vs. a learned time head) and the held-out anchor rather than the
+architecture; an apparent “likelihood-vs-ranking decoupling” did
+not survive re-validation, so we make no ranking claim. Scope lim-
+its: one real dataset, reported only in relative terms; the customer
+filter (≥3 paid requests) conditions on repeat return, so seasonality
+acting on acquisition or the first return is excluded by construction;
+proxy-LTV understates real-LTV conditioning (open); and our S2P2
+point-timing is read from an auxiliary head, so we do not treat
+its RMSE as representative of the method. Three claims rest on
+argument more than on a dedicated experiment, which we flag: the
+model-free season/region ceilings (§5.4) are measured on Thumbtack
+only (the public benchmarks carry no calendar/geography covari-
+ates), and platforms with strong external seasonality may sit under
+a higher ceiling, so the one-day ceiling-plus-screen check should be
+re-run per dataset instead of assuming our ≲5% figure; the “decay
+already encodes RFM/category” mechanism (§6) is inferred, not
+probed (no representation-probing experiment); and the “surge has
+zero lead-time” observation is from exploratory analysis without a
+dedicated figure.
+8
+Conclusion
+Two tools, a model-free ceiling and a screen-and-confirm certi-
+fication, let us verify a clean result for customer-return timing:
+continuous-time decay (a known mechanism) is nearly sufficient,
+and once it is present, the conditioning practitioners add is redun-
+dant or harmful. A model-free analysis shows why: returns are
+
+
+Certifying What Helps Customer-Return Timing: A Screen-and-Confirm Test for Conditioning Signals, and Why Decay Is Nearly Enough
+near-memoryless, with ≲5% of gap variance explainable (and, in-
+formally, near-zero surge lead-time). Because a conditioning null
+is only meaningful against a positive control, we recommend a
+screen-and-confirm protocol: confirm the pipeline recovers a
+planted synthetic signal, then trust the real-data null. Future work:
+a causal/counterfactual TPP treatment of interventions (e.g. mar-
+keting), which needs interventional or randomized-holdout data;
+representation-probing (or mutual-information) experiments on the
+decay backbone’s hidden state, to turn the inferred “decay already
+encodes RFM/category” mechanism of §6 into a measured one; and
+generalizing screen-and-confirm into automatic exogenous-feature
+discovery.
+A
+Reproducibility details
+Splits. Public benchmarks use the EasyTPP-Gatech [8] train/dev/
+test splits; Thumbtack uses a chronological per-customer split, re-
+ported only in relative terms. Optimization (all models). Adam,
+learning rate 10−3, linear warmup over 5 epochs then Reduce-
+LROnPlateau (factor 0.5, patience 5, min lr 10−5), gradient clip-
+ping at 1.0, up to 50 epochs with early stopping (patience 10) on
+validation temporal NLL. Hidden size 𝑑model = 64; batch size 64
+(RetailRocket 16, sequences truncated to 512). ± is mean/std over
+seeds {42, 123, 456}. Backbones. THP: causal self-attention, inten-
+sity constant between events (the original’s current-influence term
+𝛼(𝑡−𝑡𝑗)/𝑡𝑗is omitted; §3); “-D” adds the per-dimension hidden-
+state decay head (small learned 𝛿). NHP: continuous-time LSTM.
+S2P2 is our reimplementation of a continuous-time state-space /
+latent-linear-Hawkes layer (𝑑state = 64, 2 layers); -F computes
+∫
+𝜆∗
+in closed form (𝑛mc = 0), the non-F variant uses 𝑛mc = 10. We do
+not use the original authors’ code. Dropped baselines. Intensi-
+tyFree [6], FullyNN [7], and AttNHP [5] reimplementations did not
+reproduce published likelihoods in our pipeline (e.g. Taobao Inten-
+sityFree LL −1.43 vs. +1.318 reported), so we exclude their numbers
+and cite the originals, which report competitive results. Synthetic
+positive control. Per-event season ∼Unif{1..12} i.i.d.; gap𝑗+1 ∼
+Exp(𝑟0 exp(𝛽sin(2𝜋season𝑗/12))) using the source event’s season
+(causal); region is an i.i.d. noise control. A pre-training validation
+confirms the planted correlation grows with 𝛽. The continuous
+variant draws 𝑧∼N (0, 1) per event and sets gap𝑗+1 ∼Exp(𝑒𝛽𝑧𝑗),
+fed through the weather projection. Model-free ceiling (public
+columns of Table 5). Computed over pooled train/dev/test splits,
+on log of positive inter-event gaps: 𝑟2 from the Pearson correlation
+of adjacent within-sequence gap pairs (log𝑔𝑗, log𝑔𝑗+1); 𝜂2 from a
+one-way decomposition of log𝑔𝑗+1 grouped by the source event’s
+type (ceiling_public.py). Applied to the Thumbtack event data,
+the same script yields 𝑟2 ≈2.0% and category 𝜂2 ≈1.1%, consis-
+tent in magnitude with the cohort-derived Thumbtack column of
+Table 5. Real positive control (taxi). NYC green-taxi pickups,
+Jan 2019; sequences are per (pickup-zone, day) with ≥20 pickups
+(capped at 200, 𝑛=4000); the per-event covariate is hour-of-day en-
+coded as [sin(2𝜋ℎ/24), cos(2𝜋ℎ/24), 0] through the same weather
+projection. Events are single-type (timing only).
+References
+[1] N. Du et al. Recurrent Marked Temporal Point Processes. KDD, 2016.
+[2] H. Mei and J. Eisner. The Neural Hawkes Process. NeurIPS, 2017.
+[3] S. Zuo et al. Transformer Hawkes Process. ICML, 2020.
+[4] Q. Zhang et al. Self-Attentive Hawkes Process. ICML, 2020.
+[5] C. Yang, H. Mei, J. Eisner. Transformer Embeddings of Irregularly Spaced Events
+and Their Participants (AttNHP). ICLR, 2022.
+[6] O. Shchur et al. Intensity-Free Learning of Temporal Point Processes. ICLR, 2020.
+[7] T. Omi, N. Ueda, and K. Aihara. Fully Neural Network based Model for General
+Temporal Point Processes. NeurIPS, 2019.
+[8] S. Xue et al. EasyTPP: Towards Open Benchmarking Temporal Point Processes.
+ICLR, 2024.
+[9] Y. Chang, A. Boyd, C. Xiao, T. Kass-Hout, P. Bhatia, P. Smyth, and A. Warrington.
+Deep Continuous-Time State-Space Models for Marked Event Sequences. NeurIPS,
+2025.
+[10] O. Shchur et al. Neural Temporal Point Processes: A Review. IJCAI, 2021.
+[11] G. Grob et al. A Recurrent Neural Network Survival Model: Predicting Web User
+Return Time. ECML PKDD, 2018.
+[12] K. Noorbakhsh and M. Gomez-Rodriguez. Counterfactual Temporal Point Pro-
+cesses. NeurIPS, 2022.
+[13] Z. Meng, B. Li, X. Fan, Z. Li, Y. Wang, F. Chen, and F. Zhou. TransFeat-TPP: An
+Interpretable Deep Covariate Temporal Point Processes. ECAI, 2024.
+[14] B. Li, L. Zhang, F. Tsung, and X. Zhang. METP: Multi-Granularity Integration of
+External Covariates for Temporal Point Processes. AAAI, 2026.
+[15] P. Fader, B. Hardie, K. Lee. “Counting Your Customers” the Easy Way: BG/NBD.
+Marketing Science, 2005.
+[16] D. Schmittlein, D. Morrison, R. Colombo. Counting Your Customers: Pareto/NBD.
+Management Science, 1987.
+[17] X. Wang, T. Liu, J. Miao. A Deep Probabilistic Model for Customer Lifetime Value
+(ZILN). arXiv:1912.07753, 2019.
+[18] A. G. Hawkes. Spectra of Some Self-Exciting and Mutually Exciting Point Pro-
+cesses. Biometrika, 1971.
+[19] K. Kapoor, M. Sun, J. Srivastava, and T. Ye. A Hazard Based Approach to User
+Return Time Prediction. KDD, 2014.
+[20] N. Du, Y. Wang, N. He, J. Sun, and L. Song. Time-Sensitive Recommendation
+from Recurrent User Activities. NeurIPS, 2015.
+[21] T. Bosser and S. Ben Taieb. On the Predictive Accuracy of Neural Temporal Point
+Process Models for Continuous-time Event Data. TMLR, 2023.
+[22] M. Platzer and T. Reutterer. Ticking Away the Moments: Timing Regularity Helps
+to Better Predict Customer Activity. Marketing Science, 2016.
+[23] J. Adebayo, J. Gilmer, M. Muelly, I. Goodfellow, M. Hardt, and B. Kim. Sanity
+Checks for Saliency Maps. NeurIPS, 2018.

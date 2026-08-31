@@ -1,0 +1,2218 @@
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+1
+LiFTER: A Grounded Neuro-Symbolic
+Microscope for Continuous-Time Dynamic
+Graph Forecasting
+Minwoo Yu and Young-guk Ha
+✦
+Abstract—Continuous-time dynamic graph models predict future links
+by compressing past interactions into neural states. Although effective
+for forecasting, this computation obscures which entities are shared
+across events and how temporal patterns contribute to a prediction. We
+treat this gap as a property of the predictive architecture rather than
+a problem to be addressed after prediction. Link-Fact Temporal Rule
+Inducer (LiFTER) is a neuro-symbolic predictor that preserves observed
+interactions as grounded temporal facts and applies executable tempo-
+ral rules to pre-query facts. Each score is a signed sum of rule exe-
+cutions whose historical facts, entity bindings, and temporal order are
+explicitly satisfied. The evidence and rules responsible for a prediction
+can therefore be inspected, independently recomputed, and intervened
+upon. Across four CTDG benchmarks, LiFTER achieves competitive
+historical-negative forecasting and the highest macro explanation ac-
+curacy and deletion fidelity. The same architecture also serves as a
+microscope that separates the contributions of recurrence, history po-
+sition, and transition across datasets and traces them to individual facts.
+Independent execution reconstructs all logits for 19,664 test predictions
+with a maximum error of 0.0000131. LiFTER turns future-link forecasting
+into a verifiable grounded computation.
+Index Terms—Continuous-time dynamic graph, neuro-symbolic learn-
+ing, temporal link prediction, rule induction, explainable artificial intelli-
+gence.
+1
+INTRODUCTION
+A link in a continuous-time dynamic graph (CTDG) is an
+event in time. Records of a user editing a page, a student ac-
+cessing course content, or a listener playing a song identify
+who interacted with whom and when. Future interactions
+depend not only on event counts, but also on repeated pairs,
+recurrence intervals, the positions of recent destinations,
+and the temporal state formed by successive choices.
+TGN, TGAT, GraphMixer, and DyGFormer compress
+history into memory, temporal neighborhoods, or event-
+sequence representations [1], [2], [3], [4]. They forecast well,
+but their final scores do not state how historical facts were
+combined by temporal relations and entity bindings. T-
+GNNExplainer and TempME search for an event subset or
+motif that preserves a trained predictor’s output [5], [6];
+TGIB and SIG couple an explanation mask or subgraph
+•
+M. Yu and Y.-g. Ha are with the Smart Computing Laboratory, De-
+partment of Computer Science & Engineering, Konkuk University, Seoul
+05029, Republic of Korea. E-mail: {snowypainter, ygha}@konkuk.ac.kr.
+•
+Y.-g. Ha is the corresponding author.
+to the predictor [7], [8]. These methods identify important
+evidence, but the selected facts do not themselves execute
+a rule whose signed contribution is a unit of prediction.
+Figure 1 contrasts these approaches at the levels of input,
+inference, and output.
+Neuro-symbolic learning on temporal knowledge graphs
+(TKGs) starts from a different representation. Each observed
+fact already contains a semantic predicate r in (h, r, o, t).
+Neural-LP can consequently learn differentiable first-order
+programs, while TLogic and TILP learn temporal rules over
+observed predicate sequences [9], [10], [11]. Their strength
+lies in grounding rule variables to entities and executing
+walks and temporal conditions that support a candidate.
+The CTDG benchmarks studied here record every event
+under a single interaction type, eliminating the relation-
+chain identity available in a TKG. Repeating one predicate
+cannot distinguish how a historical interaction binds to the
+query source, destination, or an existential entity; where a
+pair recurs in the source history; or how recent destinations
+lead to a candidate. LiFTER instead defines rule identity
+through query-relative entity bindings, pair renewal, history
+position, temporal order, and candidate-conditioned transi-
+tions.
+These primitives are not dataset-specific motifs named
+after inspecting scores. Entity bindings express equality
+between historical and query arguments; pair renewal binds
+both arguments simultaneously; and order and position
+preserve the event sequence induced by timestamps. All
+remain invariant under a consistent renaming of entity iden-
+tifiers. Candidate-conditioned transitions distinguish differ-
+ent Y values under the same source history. Independent
+CTDG studies have repeatedly established the importance
+of recurrence, recency, sequential dynamics, higher-order
+interaction, and target-aware matching [12], [13], [14], [15],
+[16]. LiFTER expresses them in one finite language executed
+directly by historical facts, rather than attaching them as
+separate heuristic features.
+Link-Fact Temporal Rule Inducer (LiFTER) preserves
+each raw interaction as a grounded fact Link(u, v, t) and
+treats the pre-query history as an executable fact database.
+The designer specifies admissible argument bindings and
+temporal operators. The future-link objective learns which
+groundings are predictive, which temporal compatibility
+applies, and how strongly each execution supports or in-
+arXiv:2608.06765v1  [cs.AI]  7 Aug 2026
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+2
+hibits a candidate. Here, rule induction means selecting and
+parameterizing predictive clauses and constructing query-
+specific executions within this finite hypothesis language,
+rather than unconstrained grammar discovery.
+Every logit term except the prior must identify a con-
+crete fact, a satisfied binding, a temporal condition, and a
+signed contribution. Prediction and explanation are there-
+fore the same forward execution. An independent verifier
+recomputes the grounding set and logit from raw history
+and frozen parameters; editing a cited fact re-executes the
+program, including alternative groundings. This property
+turns LiFTER into a neuro-symbolic microscope: its units of
+observation are individual facts, rule executions, and signed
+responsibility, rather than opaque representations.
+The microscope enables a finer diagnosis than ordinary
+component ablation. We compute exact Shapley values over
+all 27 coalitions of seven execution components, then trace
+dataset-level performance to individual evidence through
+query-regime deletion and grounded-fact intervention. The
+analysis attributes the largest predictive value to pair re-
+newal on Wikipedia and Reddit, two-event transitions on
+MOOC, and one-event transitions on LastFM.
+Our contributions are as follows.
+•
+We introduce a grounded temporal rule language for
+CTDGs without a semantic relation vocabulary.
+•
+We express the entire candidate logit as a signed
+sum of concrete grounded executions that can be
+independently verified and edited.
+•
+LiFTER competes directly with neural CTDG models
+on four historical-negative forecasting benchmarks
+and achieves the highest macro ACC-AUC and
+AUFSC among five explanation systems.
+•
+Exact coalition decomposition, query-regime analy-
+sis, and grounded-fact intervention diagnose predic-
+tive mechanisms down to individual facts.
+2
+RELATED WORK
+2.1
+Neural CTDG Link Prediction
+TGN updates temporal state through node memory and
+message passing, while TGAT uses time encoding and tem-
+poral attention. GraphMixer processes neighborhoods with
+temporal link encoding and MLP mixing, and DyGFormer
+compresses interaction sequences into patches [1], [2], [3],
+[4]. CRAFT applies cross-attention to source history with
+the candidate destination as the query; CRAFT-R further in-
+corporates repeat counts [15]. These approaches offer strong
+GPU-friendly forecasting with continuous representations.
+LiFTER is evaluated under the same protocol but constrains
+the score to a sum of grounded rule executions.
+EdgeBank showed that repeated-edge memory can be
+strong under random negatives [12]. Heuristics based only
+on recency and popularity also compete with neural models
+on several temporal benchmarks [13], and representative
+models deteriorate sharply on the sequential dynamics of
+TGB-Seq, which reduces repeated edges [14]. These findings
+establish recurrence and order as central structures that a
+prediction language should represent, rather than incidental
+metadata.
+2.2
+Explainable Temporal Graph Prediction
+T-GNNExplainer searches pre-query events for a prediction-
+preserving subset, and TempME uses temporal motifs as
+explanation units [5], [6]. TGIB learns sparse evidence
+through an information bottleneck, while SIG constructs a
+self-interpretable temporal subgraph [7], [8]. Their outputs
+are importance scores, masks, or subgraphs. LiFTER in-
+stead returns the historical facts, variable bindings, temporal
+conditions, and signed contributions actually used in score
+computation. This output is not a surrogate and accounts
+for the entire score apart from the prior.
+2.3
+Differentiable and Temporal Rule Learning
+Neural-LP learns differentiable inference over a finite first-
+order rule space [9]. TLogic converts temporal random
+walks that preserve timestamp order into rules, and TILP
+learns temporal intervals and confidence on relation-typed
+TKGs [10], [11]. CAW also structures temporal walks
+through recurring entity positions [17]. In this line of work,
+the designer supplies a language bias that specifies admissi-
+ble predicates, variable bindings, and maximum body struc-
+ture, rather than dataset-specific individual rules. LiFTER
+follows the same principle: it enumerates all admissible
+combinations and learns their weights and temporal com-
+patibility.
+The symbolic primitives differ. A TILP rule is identified
+by an observed semantic predicate sequence and temporal
+constraints; in a single-relation CTDG, that sequence col-
+lapses to repetitions of one predicate. LiFTER fills this gap
+with argument roles relative to query endpoints, same-pair
+recurrence, source-local position, and transitions from recent
+destination states to a candidate. Preserving a raw interac-
+tion as a ground atom does not invent semantic relations; it
+supplies the representation on which this language executes.
+The output contract also differs. In LiFTER, every final
+logit term other than the prior must be an enumerated
+execution with cited facts and a signed contribution, and
+it must be independently replayable from raw history. A
+direct numerical comparison with TILP would require an
+artificial conversion from CTDG interactions to a relation-
+typed interval TKG, changing both the input semantics
+and prediction protocol. The formulation-level distinction
+is therefore more faithful than such an adaptation.
+3
+PROBLEM FORMULATION
+A CTDG is a chronologically ordered sequence of inter-
+actions {(ui, vi, ti)}n
+i=1. A query q = Link(X, Y, Tq) asks
+whether source X will interact with candidate destination
+Y . LiFTER preserves every pre-query interaction as a fact
+whose source, destination, and timestamp are grounded,
+and executes a finite rule set R over these facts. For rule
+r, Gr(q, F<Tq) contains the historical fact substitutions that
+satisfy its argument bindings and temporal guards, and
+er(g, q) denotes the temporal evidence of grounding g. With
+a rule-specific existential aggregator Ar and signed weight
+wr, the formulation is
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+3
+INPUT
+INFERENCE
+OUTPUT
+Neural CTDG
+Post-hoc explanation
+TILP on TKG
+LiFTER on CTDG
+interaction events
+(u, v, t)
+memory / attention
+sequence representation
+link score
+events + frozen
+neural predictor
+subset search
+or mask optimization
+event attribution
+typed temporal facts
+(h, r, o, [ts, te])
+r
+relation-chain rules
++ matching walks
+r1
+r2
+score + rule evidence
+R ✓
+grounded facts
+Link(u, v, t)
+binding + temporal rules
++ signed execution
+f1
+f2
+R
+score + executable trace
++
++
+−
+latent state
+after prediction
+observed predicates
+prediction by execution
+Fig. 1. Neural CTDG models compress history, and post-hoc explainers select evidence after prediction. TILP executes rules over observed TKG
+predicates. LiFTER constructs predictions directly from grounded CTDG facts and signed rule executions.
+F<Tq = {Link(ui, vi, ti) | ti < Tq},
+(1a)
+Er(q) = Ar
+ {er(g, q) | g ∈Gr(q, F<Tq)}
+ ,
+(1b)
+s(q) = b +
+X
+r∈R
+wrEr(q) + spos(q) + str(q).
+(1c)
+Equation (1a) excludes future information and defines
+the fact database available at prediction time. Grounding
+uses the database’s actual integer entity identifiers, so a
+shared variable can bind only to the same entity. Equa-
+tion (1b) aggregates temporal evidence from valid ground-
+ings into clause evidence; Er(q) = 0 when no grounding
+exists.
+In Eq. (1c), b is a scalar prior, spos sums positioned-
+recurrence executions, and str sums one- and two-event
+transition contributions. Every non-prior term, including
+wrEr(q), is associated with concrete historical facts and
+a signed contribution. Equation (1c) therefore defines the
+candidate logit and its execution trace without a separate
+explanation surrogate. Predicate assignments are added to
+the execution only when the optional typed vocabulary is
+used.
+4
+LIFTER
+4.1
+Interaction-to-Fact Lifting
+An interaction (ui, vi, ti) records entity ui
+interacting
+with entity vi at time ti. LiFTER represents it as fi =
+Link(ui, vi, ti), with source, destination, and timestamp as
+the first, second, and temporal arguments. For example, user
+5619 editing page 949 at timestamp 2352512 becomes the fact
+Link(5619, 949, 2352512).
+This representation permits direct substitution of histor-
+ical entities for rule variables. For query Link(X, Y, Tq), the
+fact Link(5619, 949, t1) binds X = 5619 and Y = 949. If the
+same user edited page 103, the fact Link(5619, 103, t2) binds
+X = 5619 and Z = 103. The shared variable X receives
+the same integer identifier 5619 in both facts, preserving the
+structure that the two interactions share a source.
+The local fact database for a query contains the most
+recent H facts adjacent to its source and candidate end-
+points. Thus H bounds the number of entity substitutions
+examined per query. The selected facts retain their times-
+tamps, from which the executor computes event order, time
+to query, and recurrence intervals.
+4.2
+Grounded Temporal Rule Language
+LiFTER rules specify which entities must be equal across
+a query and historical facts, and in what temporal order
+the events must occur. In the forecasting experiments of
+Section 5.1, all interactions share one observed predicate P1.
+The typed extension generalizes it to Pk, k ∈{1, . . . , K}.
+Figure 2 illustrates four rule schemas.
+Endpoint-bound unary rules. These rules test the six
+orientations in which one historical fact shares an endpoint
+with the query source or destination.
+Pk(X, Y, T), Pk(Y, X, T), Pk(X, Z, T),
+Pk(Z, X, T), Pk(Y, Z, T), Pk(Z, Y, T),
+T < Tq.
+(2)
+Equation (2) distinguishes, for example, a historical X →Y
+interaction from X →Z and Z →Y roles. Equality with
+a query argument, rather than the entity identifier itself,
+determines the role, yielding 6K clauses.
+Pair-renewal rules. A query pair that occurred twice is
+represented as
+Pa(X, Y, T1) ∧Pb(X, Y, T2) ⇒Link(X, Y, Tq),
+T1 < T2 < Tq.
+(3)
+The rule compares the previous recurrence interval T2 −T1
+with the gap from the last interaction to the query, Tq −T2.
+The language includes all K2 predicate pairs.
+Positioned recurrence rules. These rules retain the po-
+sition of a historical interaction with the same pair in the
+source history.
+Pk(X, Y, T)∧PosX(T) = j ⇒Link(X, Y, Tq),
+1 ≤j ≤H,
+(4)
+In Eq. (4), j = 1 denotes the most recent fact. Rather than
+preselecting a position, the language includes every 1 ≤j ≤
+H, and training determines its signed weight.
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+4
+Ordered grounded transitions. These rules evaluate the
+next candidate from the destinations reached by recent
+outgoing facts of source X. The two-event body is
+Pa(X, Z1, T1) ∧Pb(X, Z2, T2),
+T1 ≤T2 < Tq.
+(5)
+The one-event schema uses only the second fact in Eq. (5).
+Distinct timestamps determine temporal order; equal times-
+tamps are treated as simultaneous recent facts. The executor
+first finds actual facts satisfying Eq. (5), and only then com-
+putes the compatibility from grounded destinations Z1, Z2
+to candidate Y .
+A transition score is the learned compatibility between
+grounded destinations and a candidate. If source X recently
+interacted with Z, the one-event transition asks whether
+Y follows Z. If recent interactions occurred in the order
+Z1, Z2, the two-event transition asks whether Y follows that
+ordered pair. Here az and by are d-dimensional vectors for
+a historical destination and candidate, and pk is a predicate
+factor. The two-event schema multiplies three vectors so that
+its value is large when both historical destinations support
+the candidate in the same latent dimension. Equations (6a)
+and (6b) define these computations.
+ctr,1 = (aZ ⊙pk)⊤bY
+√
+d
+s1,rH(X,Y ),
+(6a)
+ctr,2 = s2,rH(X,Y )
+√
+d
+d
+X
+ℓ=1
+(a(1)
+Z1,ℓp(1)
+a,ℓ)(a(2)
+Z2,ℓp(2)
+b,ℓ)b(2)
+Y,ℓ.
+(6b)
+Here rH(X, Y ) indicates whether the query pair ap-
+pears
+in
+the
+recent
+source
+history,
+and
+sm,r
+=
+softplus(ρm) softplus(ηm,r)/ log 2 is a learned positive scale.
+Equation (6a) evaluates a transition from one destination,
+while Eq. (6b) evaluates a transition from an ordered pair.
+These vectors are accessed only when a grounding satisfies
+Eq. (5); neural compatibility alone cannot create an execu-
+tion. The two potentials contain 5Nd+3Kd+6 parameters.
+4.3
+Grounded Execution and Score Accounting
+For each clause, the executor first finds historical facts that
+satisfy its body. Because facts satisfying the same rule can
+have different gaps to the query, Eq. (7) measures how
+closely each grounding matches the rule’s learned preferred
+gap.
+er(g, q) = exp
+
+−1
+2
+ 
+log(1 + Tq −t) −µr
+softplus(λr) + 0.05
+!2
+.
+(7)
+The kernel lies in [0, 1] and approaches one at the preferred
+gap. Parameter µr is rule r’s preferred log-time gap, and
+softplus(λr) + 0.05 is its tolerance. Renewal rules receive
+the difference between the previous recurrence interval and
+the current gap instead of absolute recency. Aggregating all
+grounding values yields Er. Direct-pair unary rules use a
+maximum to avoid repeatedly counting the same pair; other
+rules use the capped sum Er = min(e4, P
+g er(g, q)). If no
+valid grounding exists, Er = 0.
+The candidate logit contains no hidden residual scorer
+beyond this grounded evidence and is computed as
+s(X, Y, Tq) = b +
+X
+r∈R
+wrEr +
+H
+X
+j=1
+K
+X
+k=1
+uj,kRj,k +
+2
+X
+m=1
+ctr,m.
+(8)
+In Eq. (8), b is the global prior, wrEr represents unary and
+renewal rules, uj,kRj,k represents positioned recurrence,
+and ctr,m is an ordered-transition contribution. The weights
+wr and uj,k and the transition terms may be positive or
+negative, thereby supporting or inhibiting a candidate. Ev-
+ery nonzero term identifies the facts and conditions that
+produced it. Summing the prior and all signed contributions
+exactly reconstructs the logit. Figure 3 follows this account-
+ing from facts to score.
+4.4
+Learning and Efficient Execution
+All rule parameters are trained jointly through future-link
+prediction. The objective raises the positive-candidate logit
+s+ and lowers the sampled-negative logit s−:
+Lpred = −log σ(s+) −log σ(−s−).
+(9)
+Rather than assigning every clause a wholly independent
+weight, clauses with the same structural schema and predi-
+cates share the parameters in Eq. (10).
+wr = tanh
+
+t⊤
+τ(r)
+
+
+K
+s∈body(r)
+qks
+
++ θr
+
+.
+(10)
+Here tτ(r) represents a schema, qks represents a predicate
+slot in the body, and θr is a clause-specific residual. We
+add λs
+P
+r |θr| to the prediction loss and use a type-usage
+entropy regularizer only when K > 1.
+Finite histories and batched grounding bound execution
+cost. After indexing the global event stream once, each batch
+gathers recent fact tensors once. Unary and renewal clauses
+use parallel tensor operations, while Eqs. (6a) and (6b) use
+batched embedding operations. The full stream is never
+rescanned per query.
+4.5
+Optional Typed Predicate Vocabulary
+The JODIE streams evaluated in Section 5.1 provide one
+observed interaction type, so LiFTER uses K = 1. All facts
+then share a predicate but remain distinct ground atoms
+through their entity arguments and timestamps.
+For datasets in which multiple event semantics are dis-
+tinguishable from observed context, LiFTER also supports
+an optional K > 1 vocabulary. A fact encoder maps the
+pre-event context of event i to zi and selects a predicate by
+similarity to learned prototypes ck:
+πik = softmaxk (sim(zi, ck)/τ) ,
+k∗
+i = arg max
+k
+πik,
+(11a)
+bπi = onehot(k∗
+i ) + πi −stopgrad(πi).
+(11b)
+Forward
+execution
+uses
+the
+single
+discrete
+atom
+Pk∗
+i (ui, vi, ti) selected by Eq. (11a). Equation (11b) preserves
+this discrete choice while passing gradients from Eq. (9) to
+the encoder and prototypes. Section 5.3 and Appendix A
+establish the conditions under which K > 1 is useful.
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+5
+Endpoint binding
+P(X, Y, T)  or  P(X, Z, T)
+T < Tq
+X
+Y
+Pair renewal
+P(X, Y, T1) ∧P(X, Y, T2)
+T1
+T2
+X
+Y
+History position
+P(X, Y, T) ∧PosX(T) = j
+j
+j = 1 is most recent
+X
+Y
+Ordered transition
+P(X, Z1, T1) ∧P(X, Z2, T2)
+T1
+T2
+Q2(Z1, Z2, Y)
+X
+Z1
+Z2
+Y
+Fig. 2. Four grounded temporal rule schemas. A historical fact’s argument role is determined by its binding to query endpoints. All admissible
+predicates and history positions are enumerated in the same finite language.
+Pre-query facts
+f₁   Link(5619, 949, 2352512)
+f₂   Link(2959, 949, 2561495)
+f₃   Link(5619, 812, 2565101)
+f₄   Link(5619, 337, 2567840)
+Query   Link(5619, 949, Tq)
+Grounded rule execution
+pair recurrence
+f₁ binds X = 5619, Y = 949
+candidate context
+f₂ binds Z = 2959, Y = 949
+ordered transition
+f₃ ≺ f₄ → candidate 949
+facts · bindings · timestamps
+aggregate evidence · signed weight
+Signed execution ledger
+prior
+−0.42
+recurrence · f₁
++1.24
+context · f₂
++0.73
+transition · f₃,f₄
+−0.31
+candidate logit
++1.24
+prior + Σ signed executions
+Fig. 3. A prediction retains its grounded facts, satisfied conditions, and signed score ledger. The prior and ledger exactly reconstruct the candidate
+logit.
+5
+EXPERIMENTS
+5.1
+Experimental Setup
+We chronologically split the first 32,768 events of Wikipedia,
+Reddit, MOOC, and LastFM into 85% training and 15%
+testing. All forecasting models are evaluated for 10 epochs
+with seeds 7, 17, and 27. Across all four datasets, LiFTER
+uses a predicate vocabulary K = 1, hidden dimension 64,
+transition rank 32, dropout 0.1, and history length 128. The
+batch size is 512; AdamW uses a learning rate of 0.004 and
+weight decay 10−5. Forecasting, component, and explana-
+tion results report the mean and sample standard devia-
+tion across three seeds. Deterministic certificate verification
+covers the complete test split of the seed-7 model for each
+dataset; hardware latency is reported separately as the mean
+of repeated runs.
+Grounding capacity H is selected by chronological val-
+idation disjoint from the held-out test interval. After re-
+serving the final 15% for testing, we use the last 15% of
+the preceding 85% development prefix for validation. We
+apply each H ∈{10, 20, 40, 80} to all datasets and seeds
+and select the value with the highest macro mean validation
+Historical AUC, breaking ties in favor of smaller H. Table 1
+selects H = 10, which is fixed for every test evaluation.
+Although MOOC alone peaks at H = 20, the difference is
+only 0.02 percentage points. A shared capacity controls both
+predicate-position grammar size and per-query grounding
+cost.
+Historical-negative evaluation. For query (X, Y, Tq), we
+uniformly sample a historical negative from destinations
+that X interacted with before Tq, excluding the current posi-
+tive Y . A random negative is often an entity never observed
+with the source and is therefore easily separated through
+source preference, exposure, or direct recurrence. Historical
+positives and negatives both appeared in the source history;
+the task asks whether recency, intervals, history position,
+and transitions provide stronger current evidence for the
+positive [12].
+When no historical destination is available, we draw
+a random negative from the common destination pool.
+Historical-candidate coverage is 51.1% on Wikipedia, 48.9%
+on Reddit, 97.7% on MOOC, and 99.7% on LastFM. Candi-
+dates and fallbacks are identical across models and seeds.
+We report AUC and AP for both historical and random
+candidates.
+5.2
+Forecasting Results
+Table 2 compares LiFTER and EdgeBank with six neural
+CTDG baselines under both negative protocols. LiFTER
+ranks first on both historical metrics for Reddit and LastFM,
+second on both for Wikipedia, and second in AUC and first
+in AP for MOOC. Relative to the strongest neural baseline,
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+6
+TABLE 1
+Chronological-validation Historical AUC (%) on an interval disjoint from the held-out test set. Bold marks the shared capacity selected by the
+macro criterion.
+H
+Wikipedia
+Reddit
+MOOC
+LastFM
+Macro mean
+10
+89.85
+81.25
+85.09
+68.74
+81.23
+20
+88.77
+80.96
+85.11
+68.39
+80.81
+40
+87.89
+80.61
+85.05
+67.69
+80.31
+80
+86.76
+80.58
+84.97
+67.17
+79.87
+its Reddit AUC/AP is 2.05%/2.01% higher and its LastFM
+AUC/AP is 5.69%/9.22% higher. It trails TGN on Wikipedia
+by 2.75%/2.34%; on MOOC it trails GraphMixer by 0.43% in
+AUC but leads by 0.28% in AP.
+Under random negatives, LiFTER is within one percent-
+age point of the best AUC and AP on Wikipedia, Reddit,
+and MOOC. Grounded execution limits paths that reject an
+irrelevant random destination solely through unconstrained
+identity or popularity, yet the difference remains small on
+these datasets. On LastFM, random AUC/AP is 9.87/8.15
+points below the best baseline while historical AUC/AP
+ranks first. This contrast localizes LiFTER’s strength to
+temporal discrimination among plausible alternatives pre-
+viously present in the interaction history.
+EdgeBank often assigns the same memory score to
+several candidates because a historical alternative is, by
+definition, an observed pair. LiFTER exceeds EdgeBank by
+20.44–56.30 AUC points across the datasets. Its performance
+therefore cannot be reduced to the lookup “this pair existed
+before”; recurrence intervals, source-local position, and can-
+didate transitions determine the ranking through a single
+grounded program.
+5.3
+What Does Fact-Level Typing Reveal?
+LiFTER permits a latent vocabulary with K > 1 to represent
+multiple functional roles within one observed relation. We
+test whether this expressivity aids forecasting by comparing
+K = 1, 2, 4, 8 under the same architecture and protocol and
+by shuffling learned assignments across facts. Grounded
+binding, recurrence, temporal order, and transition execu-
+tion remain intact at K = 1.
+The changes from K > 1 in Table 3 are small and
+inconsistent. Wikipedia and Reddit changes are comparable
+to seed variation, and K = 1 obtains the best AP on MOOC.
+LastFM’s 1.08-point AP change nearly survives shuffling
+the fact–predicate correspondence and is therefore not an
+effect of functional typing. One predicate is the most concise
+executable representation for these four JODIE streams. This
+result, in which recurrence, temporal order, and exposure
+matter more than finer relation semantics, is consistent with
+findings on recency/popularity heuristics and TGB-Seq [13],
+[14].
+Typed predicates can nevertheless add expressivity in
+multi-action streams when event meaning is identifiable
+from pre-event history and changes the future distribution.
+The controlled experiment that isolates these two conditions
+and its complete heatmap appear in the semantic-predicate
+phase diagram in Appendix A.
+5.4
+Predictive-Mechanism Decomposition
+The learned K = 1 LiFTER logit decomposes into seven
+disjoint components: direct pair, source context, candidate
+context, pair renewal, positioned recurrence, one-event tran-
+sition, and two-event transition. If one fact executes multiple
+rules, each execution contribution is recorded under its com-
+ponent. Let sm(q) be the signed contribution of component
+m; then s(q) = b + P
+m sm(q) holds exactly.
+We evaluate all 27 = 128 execution coalitions with the
+same historical candidates. A component’s Shapley con-
+tribution averages the AUC or AP change produced by
+adding it over every possible addition order. It therefore
+includes both isolated effects and interactions, and the seven
+contributions sum to the difference between the complete
+and empty programs. The exact definition and computation
+are given in Appendix C; the maximum measured residual
+of this identity is 1.11 × 10−16.
+Figure 4 assigns the largest predictive value to pair-
+renewal intervals on Wikipedia and Reddit, the recent two-
+destination state on MOOC, and the transition from the
+most recent destination to a candidate on LastFM. On
+Wikipedia, pair renewal and one-event transition exhibit
++4.28 AP points of complementarity. The one-/two-event
+interaction is −9.27 points on MOOC and −5.10 on LastFM,
+indicating competition between the two temporal resolu-
+tions on some queries.
+Query regimes. We repeat component deletion after
+partitioning queries by direct recurrence, source activity,
+destination popularity, and early/late test interval. Activ-
+ity and popularity are measured from the complete pre-
+query history, not window-truncated counts, and divided
+at the dataset median. Table 4 localizes Wikipedia renewal
+to recurrent queries. Reddit uses renewal for high-activity
+sources and candidate context for low-activity sources.
+MOOC’s two-event transition contributes 20.91 AP points
+without recurrence, while LastFM’s one-event transition
+dominates in both regimes.
+Grounded-fact intervention. We select 512 queries dis-
+tributed throughout each dataset’s test interval and each
+seed. The fact with the largest absolute contribution in the
+dominant component is removed from the available prefix,
+and all rules are grounded again. The control removes a
+random fact matched on query, evidence bank, and recency
+quartile.
+In Table 5, top-fact deletion changes the MOOC
+and LastFM logits 3.63 and 9.29 times more than matched-
+random deletion and reduces AP by 13.38 and 9.61 points.
+The top Wikipedia fact also yields a larger logit change and
+AP drop. On Reddit, individual renewal executions have
+larger local logit effects without producing a dataset-level
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+7
+TABLE 2
+Historical- and random-negative forecasting (%). Parentheses on LiFTER report historical rank and relative change from the strongest neural
+baseline.
+Historical negatives
+Random negatives
+Dataset
+Model
+AUC ↑
+AP ↑
+AUC ↑
+AP ↑
+Wikipedia
+LiFTER
+89.20±.08 (2; −2.75%)
+89.63±.13 (2; −2.34%)
+97.47±.07
+98.04±.04
+EdgeBank
+67.08±.00
+60.67±.00
+92.63±.06
+92.46±.13
+TGN
+91.72±.22
+91.78±.22
+95.82±.25
+96.06±.24
+TGAT
+87.33±.13
+88.99±.13
+97.44±.13
+98.01±.09
+DyGFormer
+87.17±.26
+88.75±.42
+97.68±.18
+98.17±.10
+GraphMixer
+87.40±.26
+89.21±.37
+97.54±.21
+98.09±.10
+CRAFT
+85.68±1.17
+86.04±1.27
+97.90±.09
+98.34±.03
+CRAFT-R
+76.03±1.49
+71.48±2.63
+97.79±.10
+98.19±.11
+Reddit
+LiFTER
+83.52±.19 (1; +2.05%)
+82.72±.38 (1; +2.01%)
+96.65±.09
+97.20±.07
+EdgeBank
+63.08±.00
+57.92±.00
+87.36±.05
+87.21±.10
+TGN
+81.84±.05
+81.10±.29
+94.63±.11
+94.76±.20
+TGAT
+80.38±.15
+80.84±.24
+96.30±.16
+97.08±.05
+DyGFormer
+80.46±.30
+81.02±.36
+96.43±.28
+97.16±.15
+GraphMixer
+80.49±.08
+80.89±.17
+96.50±.12
+97.21±.04
+CRAFT
+79.60±.57
+76.95±.72
+97.53±.07
+97.90±.05
+CRAFT-R
+68.81±.66
+60.73±.53
+97.52±.09
+97.79±.04
+MOOC
+LiFTER
+86.72±.10 (2; −0.43%)
+85.07±.08 (1; +0.28%)
+97.05±.04
+96.51±.26
+EdgeBank
+30.42±.00
+42.66±.00
+71.86±.19
+67.45±.24
+TGN
+82.52±.21
+77.90±.13
+95.97±.23
+94.98±.17
+TGAT
+83.50±.51
+80.08±.80
+96.77±.08
+96.09±.09
+DyGFormer
+85.90±.76
+83.37±1.45
+97.21±.10
+96.76±.18
+GraphMixer
+87.09±.10
+84.84±.23
+97.45±.05
+96.99±.06
+CRAFT
+84.06±.41
+79.41±1.15
+96.87±.22
+95.95±.28
+CRAFT-R
+82.37±1.75
+76.43±3.28
+96.80±.15
+95.65±.49
+LastFM
+LiFTER
+70.46±.49 (1; +5.69%)
+71.75±.44 (1; +9.22%)
+81.54±.04
+84.62±.08
+EdgeBank
+38.88±.00
+45.14±.00
+85.24±.16
+82.32±.27
+TGN
+61.43±.87
+62.98±.46
+84.68±.88
+85.07±.85
+TGAT
+56.31±.38
+64.20±.54
+90.08±.18
+91.82±.16
+DyGFormer
+56.85±.29
+64.34±.43
+90.55±.20
+92.12±.17
+GraphMixer
+59.59±.26
+65.69±.47
+91.41±.36
+92.77±.26
+CRAFT
+66.67±.64
+65.21±1.39
+88.09±.50
+88.85±.57
+CRAFT-R
+55.35±.70
+60.08±.84
+90.87±.17
+91.56±.08
+TABLE 3
+Best matched K > 1 change over K = 1 on JODIE datasets and the
+effect of shuffling learned assignments (percentage points).
+Dataset
+Best K > 1 AUC/AP
+Shuffle drop AUC/AP
+Wikipedia
++.06/ + .03
+.04/.07
+Reddit
++.06/ + .14
+.00/.00
+MOOC
++.19/ −.20
+.30/.43 (K = 8)
+LastFM
++.58/ + 1.08
+≤.07/ ≤.07
+AP drop, separating local execution influence from global
+ranking responsibility.
+We also verify signed roles. A supporting fact has
+∆f = cf(q+) −cf(q−) > 0 and should reduce the margin
+when deleted; an opposing fact has ∆f < 0 and should
+increase it. Direction agreement for the top supporting facts
+is 99.4%/99.5% on Wikipedia/Reddit and 99.5%/93.9% for
+opposing facts. On MOOC/LastFM, supporting-fact dele-
+tion decreases the mean margin 5.22/8.22 times more than
+matched-random deletion.
+5.5
+Neural and Symbolic Responsibilities
+We retrain variants that alter exact binding, binding schema,
+renewal, and transition, and compare a matched-capacity
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+8
+Direct
+pair
+Source
+context
+Candidate
+context
+Pair
+renewal
+Positioned
+recurrence
+One-event
+transition
+Two-event
+transition
+Wikipedia
+Reddit
+Mooc
+Lastfm
+6.4
+-1.4
+9.1
+14.7
+9.3
+2.7
+-0.7
+2.5
+0.2
+7.2
+7.7
+6.3
+4.3
+5.9
+1.5
+-1.2
+3.1
+-0.5
+0.3
+11.7
+20.1
+1.1
+-0.9
+1.8
+2.6
+2.3
+9.7
+5.6
+−20
+−10
+0
+10
+20
+Shapley AP contribution (%p)
+Fig. 4. Historical-AP Shapley allocation over all 27 execution coalitions. An outline marks the largest positive contribution for each dataset.
+TABLE 4
+Dominant-component deletion by query regime. AP and its drop are in
+percentage points.
+Dataset, regime
+Deleted component
+AP
+Drop
+Wiki., recurrence
+Pair renewal
+94.90
+8.18
+Wiki., no recurrence
+Candidate context
+40.51
+.48
+Reddit, high activity
+Pair renewal
+88.30
+3.18
+Reddit, low activity
+Candidate context
+79.24
+2.52
+MOOC, recurrence
+Two-event trans.
+87.59
+5.55
+MOOC, no recurrence
+Two-event trans.
+80.84
+20.91
+LastFM, recurrence
+One-event trans.
+75.92
+4.70
+LastFM, no recurrence
+One-event trans.
+60.75
+5.69
+TABLE 5
+Grounded-fact intervention. The complete program is re-executed after
+deleting either the top-contributing fact or a recency-matched random
+fact.
+Dataset (component)
+Queries
+|∆s| top/rand.
+AP drop top/rand.
+Wikipedia (renewal)
+414
+1.820/1.172
+.38/.14
+Reddit (renewal)
+346
+1.949/1.571
+−.06/.52
+MOOC (two-event)
+492
+1.784/.492
+13.38/1.50
+LastFM (one-event)
+510
+4.490/.484
+9.61/.42
+MLP receiving the same input. In Table 6, the full program
+on LastFM outperforms every restricted variant and exceeds
+the matched MLP by 6.60 AP points. MOOC’s signal is
+concentrated in short ordered transitions, so transition-only
+execution reproduces full forecasting. This component is not
+an arbitrary low-rank recommender: removing exact source
+binding lowers AP by 1.91 points, and randomizing the
+prescribed binding schema lowers it by 2.23 points. The
+symbolic executor decides which facts satisfy binding and
+order and thus instantiate an execution; the neural potential
+determines candidate compatibility within that valid execu-
+tion.
+5.6
+Explanation Quality and Independent Verification
+Following TempME and TGIB, we retain only selected
+events at explanation ratios r ∈{.05, .10, . . . , .30} and mea-
+sure agreement with the original decision. ACC-AUC is the
+normalized area under this accuracy–ratio curve. Following
+SIG, Deletion AUFSC integrates the AP reduction caused
+by removing selected events at the same ratios. ACC-AUC
+measures explanation-only sufficiency, whereas Deletion
+TABLE 6
+Neural and symbolic responsibility (Historical AUC/AP, %).
+MOOC
+LastFM
+Variant
+AUC
+AP
+AUC
+AP
+Full LiFTER
+86.74
+85.08
+70.67
+71.87
+No exact binding
+86.31
+83.17
+69.41
+70.77
+Random binding schema
+86.15
+82.85
+69.28
+70.76
+No renewal
+86.66
+84.86
+70.01
+70.95
+Transition program only
+87.06
+85.25
+68.75
+70.26
+Clauses without transitions
+58.72
+62.03
+58.32
+62.54
+Same-input matched MLP
+87.24
+85.02
+65.78
+65.27
+TABLE 7
+Explanation quality, cost, and perturbation stability, macro-averaged
+over four datasets under a shared evidence universe.
+Model
+Base AP ACC-AUC AUFSC ms/query
+LiFTER
+.8095
+.8671
+.0552
+.0241
+TGN+T-GNNExplainer
+.7783
+.8158
+.0276
+91.5325
+TGN+TempME
+.7783
+.6533
+.0043
+.0060
+TGIB
+.7626
+.8034
+.0431
+.0046
+SIG
+.7478
+.8159
+.0011
+.0081
+AUFSC measures ranking responsibility. Exact definitions
+appear in Appendix B.
+For each dataset, we use the same 256 queries and
+three seeds. Every method receives the same evidence bank
+formed by the recent 10 events of the query source and
+candidate, with identical selection counts at each ratio. T-
+GNNExplainer runs explorer–navigator MCTS for 40 roll-
+outs using the coalition reward of a frozen TGN. TempME
+uses the same TGN. Search-budget sensitivity at 100 and 200
+rollouts and fixed budgets k ∈{1, 2, 3, 5, 10} are reported in
+Appendix B.
+Figure 5 and Table 7 show that LiFTER ranks first in
+both macro ACC-AUC (0.8671) and AUFSC (0.0552). It also
+achieves the best ACC and deletion fidelity for every fixed
+budget k ≤5. Evidence with high ACC-AUC need not
+have high deletion fidelity: the former measures decision
+reproduction by a small set, while the latter measures
+disruption of the global ranking after deletion. LiFTER’s
+signed execution and re-grounding expose these properties
+separately.
+Independent execution verification. Explanation met-
+rics quantify how selected evidence affects a prediction.
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+9
+LiFTER
+T-GNNExplainer
+TempME
+TGIB
+SIG
+0.0
+0.2
+0.4
+0.6
+0.8
+ACC-AUC ↑
+0.867
+0.816
+0.653
+0.803
+0.816
+LiFTER
+T-GNNExplainer
+TempME
+TGIB
+SIG
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+Deletion AUFSC ↑
+0.055
+0.028
+0.004
+0.043
+0.001
+LiFTER
+T-GNNExplainer
+TempME
+TGIB
+SIG
+10−2
+10−1
+100
+101
+102
+Time (ms/query) ↓
+0.024
+91.533
+0.006
+0.005
+0.008
+Fig. 5. Macro ACC-AUC, Deletion AUFSC, and runtime under a shared evidence universe.
+TABLE 8
+Certificate-corruption detection by the independent verifier.
+Certificate modification
+Detection
+Cited fact omitted from raw history
+100%
+Timestamp moved beyond query time
+100%
+Grounded entity changed
+100%
+Nonexistent fact execution inserted
+100%
+Signed contribution changed
+100%
+A separate verifier tests whether a LiFTER trace faithfully
+describes the claimed grounded execution. For all 19,664 test
+predictions across four datasets, it checks raw-fact existence,
+integer equality bindings, T < Tq, outgoing-fact selection
+for Q1/Q2, and temporal order. It then recomputes ground-
+ings and signed contributions from raw history and learned
+parameters and compares them with the trace and candi-
+date logit. All predictions are reproduced within numerical
+tolerance 2 × 10−5. Deliberate changes to a historical fact,
+timestamp, bound entity, execution, or signed contribution
+are all detected under the five corruption types in Table 8.
+5.7
+Full-Stream Scalability
+As Reddit grows from 32,768 to 672,447 events, indexing
+sustains 31.1–31.5k events/s and payload grows linearly
+from 7.5 to 153.9 MiB. The full index takes 21.63 s to con-
+struct. The query executor operates within fixed H without
+scanning the global stream. At H = 10, K = 1, it takes 0.041
+ms/query with batch 128 and reaches 101.6k queries/s with
+batch 2,048. Complete re-execution after a fact edit takes
+0.138 ms/query; a human-readable JSON certificate takes
+1.185 ms/query and averages 6.1 KiB.
+Under architecture-level timing with the same recent-10
+tensors and batch 512, neural predictors reach 234.0k–487.0k
+queries/s and LiFTER reaches 66.9k. Grounded execution
+incurs a cost but retains practical full-stream throughput.
+Intrinsic tracing takes 0.024 ms/query, approximately 3,800
+times faster than T-GNNExplainer’s 91.533-ms search. Feed-
+forward attribution by TempME, TGIB, and SIG is faster at
+0.006, 0.005, and 0.008 ms/query. Figure 6 therefore does
+not claim the fastest attribution; it shows that LiFTER emits
+an exact executable trace with its prediction and without a
+separate search.
+6
+CONCLUSION
+LiFTER provides a grounded temporal rule language for
+continuous-time interaction streams without semantic rela-
+tion chains. It preserves source, destination, and timestamp
+in ground atoms and defines rule identity through endpoint
+bindings, pair renewal, history position, and ordered tran-
+sitions. Candidate scores and explanations arise from the
+same program trace; the prior and signed contributions in
+Eq. (8) exactly reconstruct the logit.
+This constraint does not sacrifice forecasting perfor-
+mance. In Table 2, LiFTER ranks first in Historical AUC/AP
+on
+Reddit
+and
+LastFM,
+second
+on
+both
+metrics
+on
+Wikipedia, and second in AUC and first in AP on MOOC.
+Figure 5 and Table 7 show the highest macro explanation
+accuracy and deletion fidelity. Table 8 further establishes
+that each explanation is a prediction computation replayable
+from raw facts and frozen parameters, rather than a separate
+display.
+The neuro-symbolic microscope goes beyond describ-
+ing an output. Exact Shapley decomposition in Figure 4
+separates pair renewal on Wikipedia/Reddit, two-event
+transition on MOOC, and one-event transition on LastFM.
+Tables 4 and 5 trace these structures to query regimes and
+individual historical evidence. Dataset-level performance,
+component interactions, and fact responsibility are observ-
+able within the same forward program.
+The fact-level formulation is also distinct from semantic
+typing. Although K = 1 is sufficient for the JODIE streams
+in Table 3, the phase diagram in Appendix A activates
+K > 1 when event meaning is identifiable from pre-event
+context and changes the future distribution. LiFTER thus
+formulates CTDG forecasting from the outset as a verifiable
+and editable grounded temporal program, rather than an
+interpretation applied after event attribution.
+APPENDIX A
+SEMANTIC PREDICATE PHASE DIAGRAM
+The JODIE results in Section 5.3 do not establish when
+K > 1 becomes useful. We isolate this condition in a
+controlled single-relation stream over the complete 5 × 5
+grid α, β ∈{0, .25, .5, .75, 1}. Each query contains three
+facts with one of three hidden event types. Cyclic sequences
+(0, 1, 2), (1, 2, 0), (2, 0, 1) define the positive semantic class
+and all remaining sequences define the negative class, with
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+10
+200
+400
+600
+Stream events (thousands)
+5
+10
+15
+20
+Index construction (s)
+32
+128
+512
+Batch size
+0
+100
+200
+300
+400
+500
+Forecasting throughput
+(k queries/s)
+LiFTER
+CRAFT
+DyGFormer
+GraphMixer
+TGAT
+TGN
+LiFTER
+T-GNNExplainer
+TempME
+TGIB
+SIG
+10−2
+10−1
+100
+101
+102
+Explanation time
+(ms/query, log scale)
+0.024
+91.533
+0.006
+0.005
+0.008
+Fig. 6. Fact-index construction, forecasting throughput under a shared workload, and explanation latency.
+exact 50:50 class balance. The future label follows the se-
+mantic class with probability 0.5 + 0.5α. Thus types are
+independent of the future at α = 0, whereas their sequence
+determines the label at α = 1.
+Each fact receives a 10-dimensional pre-event context.
+The first three dimensions contain a type-specific center
+scaled by 3β plus unit Gaussian noise; the remaining seven
+contain independent unit Gaussian noise. Parameter β
+changes only the identifiability of hidden type from context,
+not the future-transition distribution. Training and testing
+use 6,000/3,000 queries with disjoint entity identifiers, 40
+epochs, and seeds 7/17/27. Type recovery is fact-level
+accuracy after aligning learned identifiers by Hungarian
+matching; we also report NMI and ARI. The oracle con-
+trol supplies ground-truth types, and the random control
+assigns fixed uniform predicates independent of context and
+label.
+In Figure 7, the AUC gain of learned K = 3 over
+K = 1 increases along both axes. At α = 0, β = 1,
+recovery reaches 79.2% but gain is −0.5 percentage points: a
+distinguishable type is not predictive when future outcomes
+are identical. At α = 1, β = 0, semantic effect is maximal but
+recovery remains 33.7%, limiting gain to 1.8 points. With
+both conditions at their maximum, recovery reaches 98.9%,
+NMI 0.943, ARI 0.968, and AUC gain 49.7 points; shuffling
+predicate assignments reduces AUC by 50.3 points. Oracle
+gain rises from 0.3 to 50.0 points with α and is invariant to
+β, while random-predicate gain remains between −0.4 and
+0.6 points in every cell.
+Consider a stream in which content views and add-to-
+cart actions are both recorded as the same interaction. If
+earlier frequencies or intervals distinguish the two, β is high.
+If their subsequent destination distributions are identical,
+α remains low and even exact recovery cannot improve
+forecasting. Both axes become high when add-to-cart events
+lead to related products, views lead to other content, and the
+pre-event history identifies the action. Under this condition,
+a typed predicate is a grounded rule variable that changes
+the future-link distribution, not a decorative relation label.
+TABLE 9
+T-GNNExplainer rollout sensitivity on 64 evenly spaced queries per
+dataset and three seeds. Values are macro averages over four
+datasets.
+Rollouts
+ACC-AUC ↑
+AUFSC ↑
+ms/query ↓
+40
+.8282
+.0279
+92.07
+100
+.8284
+.0270
+206.20
+200
+.8279
+.0263
+371.12
+APPENDIX B
+COMPLETE EXPLANATION RESULTS
+B.1
+Ratio-Controlled Evaluation
+At explanation ratio r ∈{.05, .10, . . . , .30}, let E(r)
+i
+denote
+the events selected by a method and Gi the complete
+evidence for query i. Explanation-only agreement and its
+normalized area are
+Accexp(r) = 1
+N
+X
+i
+1[ˆyi(E(r)
+i
+) = ˆyi(Gi)],
+(12)
+ACC-AUC = 1
+.25
+Z .30
+.05
+Accexp(r) dr.
+(13)
+After deleting selected events from the complete evidence,
+AP degradation and its normalized area are
+FIDAP (r) = AP(G) −AP(G −E(r)),
+(14)
+AUFSC = 1
+.25
+Z .30
+.05
+FIDAP (r) dr.
+(15)
+Equations (12)–(13) measure sufficiency; Eqs. (14)–(15) mea-
+sure deletion responsibility.
+B.2
+T-GNNExplainer Search Budget
+T-GNNExplainer’s MCTS cost grows with the number of
+rollouts, and its paper presents 100–200 rollouts as a prac-
+tical runtime–fidelity range [5]. Our ratio-controlled com-
+parison uses 40 rollouts over the shared recent-10 evidence
+universe at each endpoint. To test whether this budget limits
+search quality, we compare 40, 100, and 200 rollouts on 64
+queries evenly distributed over each dataset’s test interval
+with seeds 7/17/27. Table 9 shows that 100 and 200 rollouts
+increase runtime by 2.24 and 4.03 times without improving
+macro ACC-AUC or AUFSC. Neither metric increases con-
+sistently within individual datasets. Forty rollouts therefore
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+11
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+-0.6
+0.4
+0.9
+0.5
+-0.5
+-0.7
+-0.4
+3.2
+10.6
+12.2
+0.2
+0.8
+17.2
+23.1
+24.5
+1.0
+3.9
+27.0
+35.2
+37.1
+1.8
+12.6
+37.1
+47.6
+49.7
+Learned K=3 AUC gain (pp)
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+-0.0
+1.9
+1.3
+0.7
+0.3
+-1.4
+-0.1
+4.3
+10.8
+12.3
+1.9
+0.8
+17.1
+23.2
+24.3
+1.6
+4.0
+27.2
+35.6
+36.8
+3.0
+12.4
+37.7
+48.5
+50.3
+Predicate-shuffle AUC drop (pp)
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+34.0
+41.4
+59.1
+66.3
+79.2
+33.8
+41.5
+64.2
+92.4
+96.8
+33.7
+42.2
+82.5
+94.7
+98.3
+34.1
+50.5
+83.7
+94.9
+98.8
+33.7
+60.4
+83.8
+95.2
+98.9
+Type recovery accuracy (%)
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+0.00
+0.03
+0.17
+0.30
+0.50
+0.00
+0.03
+0.26
+0.72
+0.86
+0.00
+0.03
+0.49
+0.79
+0.92
+0.00
+0.08
+0.51
+0.79
+0.94
+0.00
+0.14
+0.51
+0.80
+0.94
+Type recovery NMI
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+0.3
+0.3
+0.3
+0.3
+0.3
+13.2
+13.2
+13.2
+13.2
+13.2
+25.0
+25.0
+25.0
+25.0
+25.0
+37.7
+37.7
+37.7
+37.7
+37.7
+50.0
+50.0
+50.0
+50.0
+50.0
+Oracle K=3 AUC gain (pp)
+0
+0.25
+0.5
+0.75
+1
+Identifiability β
+0
+0.25
+0.5
+0.75
+1
+Predictive effect α
+0.6
+0.6
+0.6
+0.6
+0.6
+0.5
+0.5
+0.5
+0.5
+0.5
+0.5
+0.5
+0.5
+0.5
+0.5
+-0.4
+-0.4
+-0.4
+-0.4
+-0.4
+-0.1
+-0.1
+-0.1
+-0.1
+-0.1
+Random K=3 AUC gain (pp)
+0
+10
+20
+30
+40
+0
+10
+20
+30
+40
+50
+40
+60
+80
+0.2
+0.4
+0.6
+0.8
+10
+20
+30
+40
+50
+−0.2
+0.0
+0.2
+0.4
+0.6
+Fig. 7. Complete α × β grid. A learned predicate becomes both recoverable and predictive only when its effect on the future and its identifiability
+from pre-event context are simultaneously high.
+provide a sufficient search budget for this shared evidence
+universe.
+Table 10 expands the macro result in Section 5.6 by
+dataset. Base AP is predictor AP before explanation. ACC-
+AUC is the normalized area under the accuracy curve
+obtained by retaining 5–30% of available evidence; Dele-
+tion AUFSC is the corresponding AP-degradation area after
+removal. Available/selected reports the mean number of
+available and selected events per query and their ratio.
+Stability measures preservation of top events after a small
+input perturbation.
+B.3
+Fixed-Event-Budget Evaluation
+A ratio budget allows longer histories to select more events.
+Tables 11 and 12 therefore give every method the same
+absolute budget k ∈{1, 2, 3, 5, 10} per query. ACC@k is
+the fraction of queries whose original binary decision is
+reproduced using only the selected k events. For example,
+LiFTER ACC@3 of 0.8774 means that three events reproduce
+87.74% of decisions.
+Deletion FID@k is AP(G) −AP(G −E(k)). LiFTER
+FID@3 of 0.0544 therefore means that deleting three selected
+events lowers AP by 5.44 percentage points. A negative
+value denotes a small AP increase after deletion. Lowercase
+k is the number of explanation events and is unrelated to
+predicate-vocabulary size K.
+APPENDIX C
+SHAPLEY PREDICTIVE-MECHANISM ATTRIBUTION
+Let M be the set of execution components in a trained
+LiFTER and v(S) the Historical AUC or AP obtained by
+executing only subset S ⊆M. The Shapley contribution of
+component m is
+ϕm(v) =
+X
+S⊆M
+m/∈S
+|S|!(|M| −|S| −1)!
+|M|!
+[v(S ∪{m}) −v(S)] .
+(16)
+Equation (16) averages the marginal change from adding m
+over all execution orders. With seven components, all 128
+subsets are evaluated and no sampling approximation is
+required. The result satisfies P
+m∈M ϕm(v) = v(M) −v(∅);
+the largest measured numerical residual is 1.11 × 10−16.
+ACKNOWLEDGEMENTS
+The authors have no acknowledgements to declare.
+FUNDING
+This research received no specific grant from funding agen-
+cies in the public, commercial, or not-for-profit sectors.
+DATA AVAILABILITY
+This study uses the public Wikipedia, Reddit, MOOC,
+and LastFM temporal interaction datasets distributed with
+JODIE. The raw data are available from the Stanford
+SNAP JODIE repository. The accompanying materialization
+pipeline records the source metadata and produces the
+chronological splits used in this study.
+CODE AVAILABILITY
+The implementation, experiment configurations, result sum-
+maries, and scripts for reproducing the tables and figures are
+publicly available at https://github.com/SnowyPainter/
+LiFTER-public.
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+12
+TABLE 10
+Ratio-controlled explanation results by dataset. Every method uses the same per-query evidence bank and ratio budget.
+Dataset
+Model
+Base AP
+ACC-AUC
+AUFSC
+Available/selected (%)
+ms/query
+Stability
+Wikipedia
+LiFTER
+.8814
+.9248
+.0246
+17.17/3.16 (19.39)
+.0241
+.9957
+TGN+T-GNNExplainer
+.9102
+.8068
+.0359
+17.17/3.16 (19.39)
+92.4891
+.4497
+TGN+TempME
+.9102
+.5641
+.0034
+17.17/3.16 (19.39)
+.0049
+1.0000
+TGIB
+.8709
+.7809
+.0435
+17.17/3.16 (19.39)
+.0047
+.9844
+SIG
+.8423
+.8233
+−.0118
+17.17/3.16 (19.39)
+.0081
+.9518
+Reddit
+LiFTER
+.8259
+.8773
+.0027
+14.55/2.86 (20.65)
+.0240
+.9718
+TGN+T-GNNExplainer
+.7902
+.8710
+.0027
+14.55/2.86 (20.65)
+83.0521
+.6146
+TGN+TempME
+.7902
+.7002
+−.0014
+14.55/2.86 (20.65)
+.0069
+1.0000
+TGIB
+.7977
+.8491
+.0092
+14.55/2.86 (20.65)
+.0046
+.9345
+SIG
+.7915
+.9124
+−.0180
+14.55/2.86 (20.65)
+.0080
+.9006
+MOOC
+LiFTER
+.8480
+.8473
+.1143
+18.88/3.37 (18.02)
+.0243
+.9983
+TGN+T-GNNExplainer
+.8034
+.7820
+.0629
+18.88/3.37 (18.02)
+97.7158
+.4874
+TGN+TempME
+.8034
+.6471
+.0128
+18.88/3.37 (18.02)
+.0056
+.5625
+TGIB
+.8131
+.7795
+.1240
+18.88/3.37 (18.02)
+.0047
+.9744
+SIG
+.7545
+.7346
+.0306
+18.88/3.37 (18.02)
+.0081
+.9800
+LastFM
+LiFTER
+.6826
+.8188
+.0791
+19.74/3.48 (17.66)
+.0241
+.9948
+TGN+T-GNNExplainer
+.6093
+.8033
+.0087
+19.74/3.48 (17.66)
+92.8732
+.5616
+TGN+TempME
+.6093
+.7018
+.0022
+19.74/3.48 (17.66)
+.0065
+.9939
+TGIB
+.5688
+.8041
+−.0041
+19.74/3.48 (17.66)
+.0046
+.9301
+SIG
+.6028
+.7932
+.0037
+19.74/3.48 (17.66)
+.0081
+.9896
+Macro
+LiFTER
+.8095
+.8671
+.0552
+17.59/3.22 (18.93)
+.0241
+.9901
+TGN+T-GNNExplainer
+.7783
+.8158
+.0276
+17.59/3.22 (18.93)
+91.5325
+.5283
+TGN+TempME
+.7783
+.6533
+.0043
+17.59/3.22 (18.93)
+.0060
+.8891
+TGIB
+.7626
+.8034
+.0431
+17.59/3.22 (18.93)
+.0046
+.9558
+SIG
+.7478
+.8159
+.0011
+17.59/3.22 (18.93)
+.0081
+.9555
+TABLE 11
+Decision agreement under fixed-event budgets.
+Model
+ACC@1
+@2
+@3
+@5
+@10
+LiFTER
+.7578
+.8760
+.8774
+.8968
+.9316
+T-GNNExplainer
+.7316
+.7840
+.8175
+.8600
+.9263
+TempME
+.6479
+.6491
+.6519
+.6745
+.7324
+TGIB
+.7388
+.7744
+.8040
+.8441
+.9064
+SIG
+.6987
+.7435
+.8296
+.8766
+.9508
+TABLE 12
+Deletion fidelity under fixed-event budgets.
+Model
+FID@1
+@2
+@3
+@5
+@10
+LiFTER
+.0361
+.0539
+.0544
+.0636
+.1224
+T-GNNExplainer
+.0151
+.0234
+.0266
+.0350
+.0604
+TempME
+−.0010
+.0012
+.0051
+.0095
+.1324
+TGIB
+.0159
+.0298
+.0393
+.0601
+.1034
+SIG
+−.0027
+−.0002
+.0027
+.0055
+.0363
+REFERENCES
+[1]
+E. Rossi, B. Chamberlain, F. Frasca, D. Eynard, F. Monti, and
+M. M. Bronstein, “Temporal graph networks for deep learning
+on dynamic graphs,” in ICML Workshop on Graph Representation
+Learning, 2020.
+[2]
+D. Xu, C. Ruan, E. Korpeoglu, S. Kumar, and K. Achan, “Induc-
+tive representation learning on temporal graphs,” in International
+Conference on Learning Representations, 2020.
+[3]
+W. Cong, S. Zhang, J. Kang, B. Yuan, H. Wu, X. Zhou, H. Tong, and
+M. Mahdavi, “Do we really need complicated model architectures
+for temporal networks?” in International Conference on Learning
+Representations, 2023.
+[4]
+L. Yu, L. Sun, B. Du, and W. Lv, “DyGFormer: A transformer-
+based architecture for dynamic graph representation learning,” in
+International Conference on Learning Representations, 2023.
+[5]
+W. Xia, M. Lai, C. Shan, Y. Zhang, X. Dai, X. Li, and D. Li, “Ex-
+plaining temporal graph models through an explorer-navigator
+framework,” in International Conference on Learning Representations,
+2023.
+[6]
+J. Chen and R. Ying, “TempME: Towards the explainability of
+temporal graph neural networks via motif discovery,” in Advances
+in Neural Information Processing Systems, vol. 36, 2023.
+[7]
+S. Seo, S. Kim, J. Jung, Y. Lee, and C. Park, “Self-explainable
+temporal graph networks based on graph information bottleneck,”
+in Proceedings of the 30th ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining, 2024, pp. 2572–2583.
+[8]
+L. Fang, Y. Yang, K. Wang, S. Feng, K. Feng, J. Gui, S. Wang, and Y.-
+S. Ong, “SIG: Efficient self-interpretable graph neural network for
+continuous-time dynamic graphs,” arXiv preprint arXiv:2405.19062,
+2024.
+[9]
+F. Yang, Z. Yang, and W. W. Cohen, “Differentiable learning of
+logical rules for knowledge base reasoning,” in Advances in Neural
+Information Processing Systems, vol. 30, 2017.
+[10] Y. Liu, Y. Ma, M. Hildebrandt, M. Joblin, and V. Tresp, “TLogic:
+Temporal logical rules for explainable link forecasting on tempo-
+ral knowledge graphs,” in Proceedings of the AAAI Conference on
+Artificial Intelligence, vol. 36, no. 4, 2022, pp. 4120–4127.
+[11] S. Xiong, A. Payani, R. Kompella, and F. Fekri, “Temporal induc-
+tive logic reasoning,” Transactions on Machine Learning Research,
+2024.
+[12] F. Poursafaei, S. Huang, K. Pelrine, and R. Rabbany, “Towards
+better evaluation for dynamic link prediction,” in Advances in
+Neural Information Processing Systems, vol. 35, 2022.
+[13] F. Cornell, O. Smirnov, G. Z. Gandler, and L. Cao, “On the power of
+heuristics in temporal graphs,” in ICLR Workshop on I Can’t Believe
+It’s Not Better, 2025.
+[14] L. Yi, J. Peng, Y. Zheng, F. Mo, Z. Wei, Y. Ye, Z. Yue, and Z. Huang,
+“TGB-Seq benchmark: Challenging temporal GNNs with complex
+sequential dynamics,” in International Conference on Learning Rep-
+resentations, 2025.
+
+
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING
+13
+[15] L. Yi, R. Lei, F. Mo, Y. Zheng, Z. Wei, and Y. Ye, “Future
+link prediction without memory or aggregation,” arXiv preprint
+arXiv:2505.19408, 2025.
+[16] M. Besta, A. C. Catarino, L. Gianinazzi, N. Blach, P. Nyczyk,
+H. Niewiadomski, and T. Hoefler, “HOT: Higher-order dynamic
+graph representation learning with efficient transformers,” in Pro-
+ceedings of the Second Learning on Graphs Conference, ser. Proceed-
+ings of Machine Learning Research, vol. 231, 2024, pp. 15:1–15:20.
+[17] Y. Wang, Y.-Y. Chang, Y. Liu, J. Leskovec, and P. Li, “Inductive rep-
+resentation learning in temporal networks via causal anonymous
+walks,” in International Conference on Learning Representations, 2021.
