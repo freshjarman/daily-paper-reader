@@ -4,6 +4,13 @@
     <a class="dpr-home-notice-tutorial" href="#/tutorial/README">使用教程 <span aria-hidden="true">›</span></a>
   </div>
   <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-09-05">09.05</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">CVPR 2026 已更新</strong>
+      <span class="dpr-home-notice-entry-summary">已收录 CVPR 2026 官方 Open Access 论文 4,042 篇，可在会议检索中查看。EMNLP 2026 预计于 10 月中下旬更新，具体以官方论文集开放时间为准。</span>
+    </div>
+  </div>
+  <div class="dpr-home-notice-entry">
     <time class="dpr-home-notice-date" datetime="2026-08-28">08.28</time>
     <div>
       <strong class="dpr-home-notice-entry-title">区间日报可正常点开</strong>
@@ -15,13 +22,6 @@
     <div>
       <strong class="dpr-home-notice-entry-title">反馈功能上线</strong>
       <span class="dpr-home-notice-entry-summary">新增反馈功能，欢迎大家踊跃反馈各种建议，我们会第一时间查看并协调处理。</span>
-    </div>
-  </div>
-  <div class="dpr-home-notice-entry">
-    <time class="dpr-home-notice-date" datetime="2026-07-19">07.19</time>
-    <div>
-      <strong class="dpr-home-notice-entry-title">首页新增社区统计</strong>
-      <span class="dpr-home-notice-entry-summary">现在可以看到今天看论文的人数和项目加入人数。</span>
     </div>
   </div>
   <div class="dpr-home-site-stats" data-dpr-site-stats hidden aria-live="polite">
@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-02 ~ 2026-08-31</span>
+      <span class="dpr-home-dashboard-kicker">2026-09-06</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 7 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 4 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>4</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-31 02:15:52 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-09-06 21:40:43 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>本期聚焦不规则时间序列预测与合成数据生成，共精选7篇论文，其中2篇精读获9分高分。</p>
-<p>最值得关注：跳出MSE评价指标的基准构建，以及基于Copula的纵向表格数据生成方法。</p>
-<p>建议先精读这两篇高分工作，再结合基准函数视角的预测研究拓展理解。</p>
+<p>今日共读4篇论文，其中精读1篇、速读3篇。最值得关注的是《Liquid Gated Attention》（8.0分），其动态门控机制在序列建模中表现突出。建议优先精读该文，再结合粒子滤波LSTM等速读内容拓展视野。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -80,12 +78,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">4 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting">Beyond MSE: Rethinking the Evaluation Metric and Benchmarking for Irregular Time Series Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Synthetic Longitudinal Tabular Data Generation via Copula">Synthetic Longitudinal Tabular Data Generation via Copula</span></li><li><span class="dpr-home-dashboard-paper-title" title="Cortical encoding of probabilistic temporal predictions during speech perception">Cortical encoding of probabilistic temporal predictions during speech perception</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Liquid Gated Attention">Liquid Gated Attention</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span><span class="dpr-home-dashboard-tag">ehr-es <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -96,7 +94,7 @@
     <strong class="dpr-home-dashboard-count">3 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="LiFTER: A Grounded Neuro-Symbolic Microscope for Continuous-Time Dynamic Graph Forecasting">LiFTER: A Grounded Neuro-Symbolic Microscope for Continuous-Time Dynamic Graph Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Rethinking Irregular Time Series Forecasting from the Perspective of Basis Functions">Rethinking Irregular Time Series Forecasting from the Perspective of Basis Functions</span></li><li><span class="dpr-home-dashboard-paper-title" title="FLEET: Token-Based Feature Extraction for Event Camera-based Reinforcement Learning">FLEET: Token-Based Feature Extraction for Event Camera-based Reinforcement Learning</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="A Unified Particle Filter LSTM for Data-Driven Process Simulation">A Unified Particle Filter LSTM for Data-Driven Process Simulation</span></li><li><span class="dpr-home-dashboard-paper-title" title="LLMODE: Aligning ODEs with LLMs via Gated Token Injection for Irregular Spatio-Temporal Forecasting">LLMODE: Aligning ODEs with LLMs via Gated Token Injection for Irregular Spatio-Temporal Forecasting</span></li><li><span class="dpr-home-dashboard-paper-title" title="Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs">Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>3</strong></span></div>
 </section>

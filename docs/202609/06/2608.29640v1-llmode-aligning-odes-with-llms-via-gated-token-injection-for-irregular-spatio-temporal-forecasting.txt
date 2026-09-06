@@ -1,0 +1,997 @@
+Title: LLMODE: Aligning ODEs with LLMs via Gated Token Injection for Irregular Spatio-Temporal Forecasting
+
+URL Source: https://arxiv.org/pdf/2608.29640v1
+
+Published Time: Tue, 01 Sep 2026 01:13:05 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# LLMODE: Aligning ODEs with LLMs via Gated Token Injection for Irregular Spatio-Temporal Forecasting 
+
+## Di Zhang, Jingyang Zhang, Ziqian Wang, Chi Zhang, Yikun Ban, Ziwei Zhang, Ruijie Wang ∗
+
+Beihang University Beijing, China ruijiew@buaa.edu.cn Large language models (LLMs) have shown promise for spatio-temporal forecasting, but existing approaches often rely on regularly sampled token sequences and struggle with irregular observations because of temporal asynchrony, representation-space misalignment, and limited context win-dows. We propose LLMODE, a token-efficient framework for irregular spatio-temporal forecasting with a frozen LLM backbone. LLMODE first uses a graph-aware ODE encoder to reconstruct irregular graph observations as a continuous-time latent trajectory. A Fixed-Budget Perceiver Resampler then compresses this variable-length trajectory into a fixed number of dynamic memory tokens. In parallel, compact statistical descriptors are encoded and resampled into con-text memory tokens. A dual-source gated cross-attention module injects both memories into the frozen LLM, en-abling controlled utilization of external spatio-temporal ev-idence. Experiments on three real-world urban datasets and two physical-dynamics benchmarks show competitive over-all performance, with clearer advantages under sparse or dynamically complex irregular sampling. Additional evalu-ations on unseen urban regions further demonstrate strong zero-shot generalization without adaptation. 
+
+## 1 Introduction 
+
+Irregularly sampled spatio-temporal data are common in ur-ban sensing and physical systems, as illustrated in Figure 1. Traffic flows, crime reports, mobility records, and interacting entities may be observed at non-uniform timestamps, with missing values and asynchronous updates across locations or objects. Because these observations evolve over relational structures, accurate forecasting must jointly model temporal irregularity, incomplete measurements, and graph-structured dependencies. Large language models (LLMs) have recently been applied to spatio-temporal forecasting through token-based condi-tioning. UrbanGPT (Li et al. 2024a), for example, com-presses spatio-temporal signals into soft tokens for a pre-trained LLM. However, most LLM-based forecasters as-sume regularly sampled sequences and fixed-step tokeniza-tion, which obscure actual time gaps, missing intervals, and asynchronous node updates. ISTS-PLM (Zhang et al. 2025) introduces interval-aware time encodings for irregular time series, but remains token-discrete and primarily targets in-dividual sequences. Extending such methods to graph-based 
+
+> ∗
+
+Corresponding author. Graph  
+
+> Observations Queries
+
+(a) Problem setup LLM reps 
+
+> Irregular timesteps
+> t
+> LLM tokens Inject
+> Soft tokens
+
+(b) Semantic alignment Token length (L) Attn compute   
+
+> 2Compute Lμ
+> Prompt tokens Soft tokens …
+
+(c) Context-length constraint 
+
+Figure 1: (a) Problem setup for irregular spatio-temporal graph forecasting. (b) Challenge 1: Semantic alignment be-tween soft tokens and LLM semantic space. "LLM reps" refer to the representations in the LLM’s hidden space. (c) Chal-lenge 2: Context-length constraint in conditioning LLMs. forecasting is therefore non-trivial because spatial coupling and temporal irregularity must be handled simultaneously. Neural ODEs offer a natural alternative by evolving latent states according to actual elapsed time, reconstructing trajec-tories between sparse observations, and supporting queries at arbitrary timestamps. Their integration with frozen LLMs nevertheless raises two challenges. First, ODE encoders pro-duce long trajectories containing many locally smooth and redundant neighboring states. Directly exposing all states in-creases the token budget and attention cost while potentially diluting informative transitions. Second, compressed numer-ical tokens remain misaligned with the representation space learned through language pretraining. Direct concatenation neither explicitly retrieves evidence relevant to a prediction request nor controls how strongly that evidence modifies frozen hidden representations. Effective integration there-fore requires compact memory construction and controlled, arXiv:2608.29640v1 [cs.LG] 30 Aug 2026 prediction-aware evidence injection. To address these challenges, we propose LLMODE, an ODE-enhanced frozen-LLM framework for irregular spatio-temporal forecasting. A graph-aware ODE encoder recon-structs asynchronous and partially observed graph sequences as a continuous-time latent trajectory without imposing a regular temporal grid. A Fixed-Budget Perceiver Resampler compresses this trajectory into dynamic memory tokens, us-ing a dynamics-aware attention bias and explicit time labels to preserve informative changes and their temporal locations. In parallel, compact statistical descriptors are encoded and resampled into context memory tokens that provide com-plementary global information. A dual-source gated cross-attention module then injects both memories into selected layers of the frozen LLM. For each requested prediction timestamp, the LLM prompt contains a dedicated query-slot token, whose final hidden state is mapped to the correspond-ing forecast. Experiments against 11 baselines on three ur-ban datasets and two physical-dynamics benchmarks show competitive overall performance, with more pronounced ad-vantages under sparse or dynamically complex observations. On NYCbike zero-shot, LLMODE reduces token usage by 89.2% and achieves a 7.7× inference speedup over Ur-banGPT while maintaining strong generalization to unseen regions. Our main contributions are as follows. 
+
+• We formulate irregular spatio-temporal graph forecasting with a frozen LLM and identify temporal irregularity, representation-space alignment, and context-length con-straints as the central challenges. 
+
+• We propose LLMODE , which combines a graph-aware ODE encoder with a Fixed-Budget Perceiver Resampler to reconstruct continuous-time graph dynamics and com-press them into dynamic memory tokens under a bounded token budget. 
+
+• We introduce dual-source gated cross-attention with gated feed-forward refinement to integrate dynamic and context memories into a frozen LLM in a controlled manner. 
+
+• Extensive experiments on urban and physical-dynamics benchmarks demonstrate competitive forecasting perfor-mance, improved robustness under sparse irregular ob-servations, and strong zero-shot generalization to unseen regions. 
+
+## 2 Problem Formulation 
+
+Let G = ( V, E) denote a fixed graph, where V and E represent the node and edge sets, respectively, and |V| = N is the number of nodes. Each node v ∈ V is associated with a D-dimensional observation vector xv (t) ∈ RD at continuous time t, where D denotes the number of observed features. Instead of observing all nodes on a shared regular time grid, we collect an irregular observation set: 
+
+Dobs = {(v, t v,i , xv (tv,i )) }, (1) where tv,i denotes the i-th observation timestamp of node 
+
+v and xv (tv,i ) is the corresponding observed feature vector. The observation intervals tv,i +1 − tv,i are non-uniform, and different nodes may have different timestamp sets. Given a set of query timestamps Qv = {t(q)
+
+> v,n
+
+}Lq 
+
+> n=1
+
+for node 
+
+v, where Lq denotes the number of query points, the goal is to jointly predict a multivariate target vector at each arbitrary query time: 
+
+byv
+
+
+
+t(q)
+
+> v,n
+
+
+
+= f
+
+
+
+G, Dobs , v, t (q)
+
+> v,n
+
+
+
+∈ RD , (2) where D denotes the number of jointly predicted target vari-ables, and byv (t(q)
+
+> v,n
+
+) is the predicted target vector of node v at query time t(q)
+
+> v,n
+
+.
+
+## 3 Method 
+
+As illustrated in Figure 2, LLMODE comprises a graph-aware ODE encoder that reconstructs continuous-time graph dynamics, a Fixed-Budget Perceiver Resampler that com-presses dynamic trajectories and context descriptors into fixed-size memories, and a dual-source gated cross-attention module that injects both memories into the frozen LLM for forecasting. 
+
+3.1 Graph-aware ODE Encoder 
+
+Irregular sampling and missing observations create nonuni-form time intervals during which the underlying system con-tinues to evolve without direct measurements. We therefore represent each node v by a continuous latent state governed by 
+
+dhv (t)
+
+dt = fθ (hv (t)) , (3) where hv (t) ∈ Rdode denotes the latent state of node v, and 
+
+fθ is a learnable vector field instantiated using a GRU-ODE parameterization. An ODE solver propagates the latent state over the actual elapsed interval between observations. When an observation xv,i ∈ RD arrives at time ti, the ODE solver first produces the propagated state hv (t− 
+
+> i
+
+). Be-cause continuous propagation may gradually deviate from the observed trajectory, we then use the newly arrived obser-vation to correct this state: 
+
+hv (t+ 
+
+> i
+
+) = GRU  hv (t− 
+
+> i
+
+), Φ xv,i , hv (t− 
+
+> i
+
+) , (4) where the superscripts − and + denote the latent states im-mediately before and after observation correction, respec-tively. The observation encoder Φ constructs the correction signal from the new observation and its discrepancy from the current latent prediction. To capture structural interactions, the corrected node states 
+
+{hv (t+ 
+
+> i
+
+)}v∈V are further refined through a gated graph-based residual update. The resulting graph-aware state ¯hv (t+ 
+
+> i
+
+) is used as the initial state for continuous propagation over the next interval. The detailed GRU-ODE parameterization, ob-servation encoding, and graph-aware correction are provided in Appendix A.4–A.6. At a set of solver timestamps {τl}Ll=1 , the states of all nodes are collected as ¯H(τl) ∈ RN ×dode and stacked along the temporal dimension to construct the continuous-time latent trajectory 
+
+Hdyn =  ¯H(τ1); . . . ; ¯H(τL) ∈ RN ×L×dode . (5) The resulting trajectory captures the continuous temporal evolution and structural interactions of all nodes and serves as the input to the subsequent fixed-budget resampler. <10:01> Inflow: 28 Outflow: 19   
+
+> <11:34> Inflow: 31 Outflow: 22
+> Perceiver resampler
+
+𝑲 ≪ 𝑳 
+
+Irregular Spatio-Temporal Observations     
+
+> 𝑡 1
+> node v
+> xv
+> missing
+> 𝑡 2𝑡 3𝑡 4𝑡 L
+
+… 𝑡 
+
+Task : Predict future inflow and outflow at the query slots given historical observations over NYC regions, where each node corresponds to a region described by its POI profile 
+
+Region : Bronx area with dominant POls: Cultural Facility 
+
+> Residential, and Education Facility
+
+Query-slots :<10:01><11:34><15:47>...< 𝑞 𝐿 𝑞 >
+
+Frozen LLM (Vicuna-7B) 
+
+Transformer Block 1 
+
+> Dual-Source Gated Cross-Attention
+
+Transformer Block 2 
+
+Transformer Block L 
+
+Hidden states (after Block 1) 
+
+> Gated Cross-Attention
+
+Updated Hidden States  
+
+> ODE propagation
+> Observation update
+> Graph correction ( ) ( )
+
+( )v v    
+
+> dtftdt
+> 
+> =
+> hh
+
+Sec 3.1 Graph-aware ODE encoder   
+
+> text encoder
+> Kcontext memory tokens
+
+Vicuna-7B ... 
+
+Final hidden states  
+
+> Query-slot tokens
+> Regression Head
+
+Regression Layer Continuous-time 
+
+> latent trajectory
+> Perceiver resampler
+> …
+> Static
+> Information
+
+Sec 3.2 Fixed-Budget Perceiver Resampler             
+
+> L123
+> 4
+> …
+> തℎ𝑣 𝑡 1+തℎ𝑣 𝑡 𝐿 +
+> Kdynamic
+> memory tokens
+> തℎ𝑣 𝑡 1+തℎ𝑣 𝑡 2+
+> തℎ𝑣 𝑡 3+
+> തℎ𝑣 𝑡 4+
+> തℎ𝑣 𝑡 𝐿 +
+> തℎ𝑣
+
+Continuous-time latent trajectory 
+
+> 𝑡
+
+User 
+
+Sec 3.3 Figure 2: Framework of LLMODE. LLMODE constructs two memory streams to condition a frozen LLM backbone. The graph-aware ODE encoder first reconstructs a continuous-time latent trajectory, which is resampled into a fixed number of dynamic memory tokens. In parallel, compact statistical descriptors are encoded and resampled into context memory tokens. Prompt hidden states retrieve information from both memories through dual-source gated cross-attention, and the final query-slot states are mapped to forecasts. 
+
+3.2 Fixed-Budget Perceiver Resampler 
+
+Given an irregularly sampled input trajectory, the graph-aware ODE encoder uses its smallest observation gap as the ODE integration step and records the propagated latent states as Hdyn ∈ RN ×L×dode . These states are projected into the resampler space Rdmem before resampling. Although the re-constructed trajectory provides fine-grained dynamic states, directly injecting all L states is computationally expensive and may dilute informative changes because adjacent states can be highly redundant. We therefore use a Perceiver Resampler to distill each re-constructed latent trajectory into a fixed number of dynamic memory tokens. For clarity, we omit the node index v in the following derivation and describe the resampling for a sin-gle node. Specifically, the resampler uses K learnable latent queries to attend to the input sequence and outputs {zk}Kk=1 ,where zk ∈ Rdmem . Rapidly changing intervals generally contain more informative dynamic evidence. However, stan-dard attention alone does not explicitly encourage the re-sampler to preserve states from these intervals. We therefore introduce the magnitude of the latent dynamics directly into the attention logits: 
+
+αk,i = softmax i
+
+ q⊤ 
+
+> k
+
+ki
+
+√dmem 
+
++ β Norm 
+
+ ˙h(ti) 2
+
+
+
+. (6) Here, αk,i is the attention weight from the k-th latent query to the state at timestamp ti; qk ∈ Rdmem is a learnable latent query, and ki ∈ Rdmem is the key representation obtained from the latent state h(ti) through a learnable projection; 
+
+dmem denotes the resampler and memory-token dimension; 
+
+˙h(ti) = fθ (h(ti)) represents the instantaneous latent change given by the ODE vector field; Norm( ·) denotes normaliza-tion over the latent trajectory; and β controls the strength of the dynamics-aware bias. This bias encourages the resampler to retain states from intervals with more pronounced changes while preserving content-based attention. The downstream forecasting prompt specifies the times-tamps to be predicted. To align the distilled dynamic mem-ory content with these query times, we assign each resampled vector an explicit time label derived from the same attention weights. The time label is fused with zk to form the time-aware representation ˜zk. Collecting the K tokens yields the dynamic memory 
+
+˜Z = [˜ z1; . . . ; ˜ zK ] ∈ RK×dmem . (7) The detailed resampling and time-labeling process is pro-vided in Appendix A.7– A.8. 
+
+3.3 Dual-Source Gated Cross-Attention 
+
+In addition to the dynamic memory eZ extracted from the continuous-time latent trajectory, we construct a context memory P from the observed history. The observations are Table 1: Main results on NYC and physics benchmarks, measured by MAE and MSE. Results are averaged over 5 independent runs. Overall, LLMODE achieves an average relative improvement of 6.3% across all datasets and evaluation metrics. ∗ indicates the statistically significant improvements over the best baseline, with p-value smaller than 0.001 .Method NYCtaxi NYCbike NYCcrime Springs Charged inflow outflow inflow outflow robbery burglary X Y X YMAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE TGCN 0.1145 0.0367 0.0875 0.0331 0.2211 0.1572 0.1506 0.0657 0.9970 1.0849 0.6746 1.0029 0.1971 0.0741 0.1934 0.0708 0.4706 0.3038 0.4710 0.3042 STSGCN 0.0847 0.0286 0.0704 0.0349 0.1951 0.1734 0.1669 0.1119 0.9162 1.5371 0.6293 0.8300 0.3306 0.1686 0.3114 0.1754 0.3804 0.2153 0.4152 0.2879 MTGNN 0.0371 0.0143 0.0337 0.0365 0.0786 0.0263 0.0824 0.0265 0.8252 1.1408 0.6283 0.7857 0.1053 0.0237 0.1086 0.0249 0.1410 0.0533 0.1482 0.0535 BiTGraph 0.0731 0.0305 0.0540 0.0301 0.0837 0.0298 0.0830 0.0275 0.8555 1.2376 0.5321 0.4988 0.1271 0.0312 0.1290 0.0321 0.1501 0.0578 0.1527 0.0593 FourierGNN 0.1234 0.0246 0.1026 0.0187 0.1533 0.0734 0.1523 0.0626 0.4074 0.8993 0.2666 0.2899 0.2108 0.0767 0.2127 0.0788 0.2305 0.1000 0.2309 0.1003 ISTS-PLM 0.0329 0.0068 0.0263 0.0059 0.1061 0.0461 0.1077 0.0488 0.4271 0.4055 0.3040 0.2143 0.1513 0.0427 0.1505 0.0423 0.1524 0.0569 0.1539 0.0576 UrbanGPT 0.0359 0.0080 0.0262 0.0068 0.0787 0.0301 0.0833 0.0292 0.9336 1.7088 0.6192 0.8341 0.1519 0.0420 0.1514 0.0424 0.1633 0.0702 0.1746 0.0908 GPT4TS 0.0424 0.0260 0.0312 0.0209 0.1592 0.2072 0.1636 0.2129 0.3350 0.2578 0.2398 0.1229 0.4549 0.2826 0.4549 0.2838 0.4996 0.3447 0.5009 0.3469 GRU-ODE 0.0956 0.0645 0.0708 0.0607 0.3100 0.4081 0.3443 0.4964 0.3678 0.4161 0.2483 0.1815 0.3132 0.1664 0.3080 0.1615 0.3001 0.1543 0.2888 0.1399 tPatchGNN 0.0338 0.0082 0.0347 0.0095 0.0800 0.0476 0.0849 0.0484 0.3052 0.1428 0.2483 0.1119 0.1391 0.0370 0.1384 0.0367 0.1439 0.0504 0.1497 0.0504 ViTST 0.3548 0.1718 0.2938 0.1377 0.4371 0.6891 0.4542 0.7136 0.4582 0.5084 0.3267 0.2325 0.4519 0.2751 0.4524 0.2767 0.4842 0.3174 0.4849 0.3181                     
+
+> LLMODE 0.0336 0.0066 0.0252 0.0057 0.0767 ∗0.0243 ∗0.0817 0.0242 ∗0.3050 0.1396 ∗0.2394 0.0790 ∗0.0973 ∗0.0191 ∗0.0986 ∗0.0196 ∗0.1402 0.0483 ∗0.1461 ∗0.0493 ∗
+
+summarized as compact statistical descriptions, encoded by a language encoder, and compressed by a resampler into K
+
+context memory tokens, P ∈ RK×dmem . While eZ captures fine-grained temporal dynamics, P provides complementary global statistics. Details of the context-memory construction are provided in Appendix A.9. The two memories are injected into the frozen LLM through dual-source gated cross-attention, avoiding the un-controlled mixing caused by direct prompt concatenation. A forecasting prompt specifies the task and arbitrary query timestamps. Representative prompts are provided in Ap-pendix A.10. After a Transformer layer, its hidden states 
+
+Y are updated as follows: 
+
+∆mem = λ CrossAttn 
+
+
+
+Y, eZ
+
+
+
++(1 −λ) CrossAttn ( Y, P) .
+
+(8) 
+
+bY = Y + αattn ∆mem . (9) 
+
+Y′ = bY + αffn FFN 
+
+ bY
+
+
+
+, (10) where αattn = tanh ( gattn ) ,αffn = tanh ( gffn ) . (11) Here, Y, bY, Y′ ∈ RLp×dLLM denote the prompt-token hid-den states before injection, after cross-attention, and after feed-forward refinement, respectively. Among the Lp prompt tokens, Lq serve as query slots. CrossAttn( Y, M) projects the prompt states and memory tokens into a shared attention space, using them as queries and keys/values, respectively, and returns an update in RLp×dLLM , while λ balances the two memories. The learnable parameters gattn and gffn are initialized to zero, making the module an identity mapping at the beginning of training. For Vicuna-7B, we insert two such modules after Trans-former Layers 1 and 16. The updated states are propagated through the remaining layers. Each query-slot token corre-sponds to a prediction timestamp, and its final-layer hidden state is extracted and projected by a lightweight regression head to produce the corresponding forecast. The model is trained using MSE, with the complete training configuration provided in Appendix A.2. 
+
+## 4 Experiments 
+
+Our experiments are designed to answer the following ques-tions: 
+
+Q1: Overall effectiveness. Can LLMODE achieve com-petitive forecasting performance across both real-world ur-ban datasets and physical-dynamics benchmarks? 
+
+Q2: Unseen-region generalization. Can LLMODE trans-fer to spatial regions that are entirely unseen during training and forecast their future states without additional adaptation? 
+
+Q3: Necessity of continuous-time modeling. Does continuous-time encoding become increasingly important as observations become sparser, compared with discrete spatio-temporal encoders and existing baselines? 
+
+Q4: Effectiveness of fixed-budget dynamic evidence. 
+
+Can a small number of adaptively selected dynamic states preserve the forecasting-relevant information in the continu-ous trajectory more effectively than exposing the full trajec-tory or applying simple compression? 
+
+Q5: Contribution and utilization of the frozen LLM. 
+
+First, do pretrained frozen representations provide benefits beyond a prediction network or a Transformer trained from scratch? Second, does the frozen backbone effectively use the injected dynamic and contextual evidence, and does con-trolled gated injection improve this utilization? We first describe the experimental setup and then address Q1–Q5, followed by a qualitative case study. 
+
+4.1 Experimental Setup 
+
+Datasets and protocols. We use NYCtaxi, NYCbike, and NYCcrime for urban forecasting, and Springs and Charged for particle dynamics. NYCtaxi/NYCbike use 24-hour histo-ries to predict 12 hours; NYCcrime uses 96 days to predict 48 days. The supervised setting evaluates training regions, while the zero-shot setting holds out 80 NYC regions. Springs and Charged predict future 2D particle positions from asyn-chronous partial observations. Dataset construction and pre-processing details are provided in Appendix A.1. 
+
+Baselines. We compare against classical spatio-temporal models, including TGCN, STSGCN, MTGNN, BiTGraph, and FourierGNN; LLM-based forecasters, including ISTS-PLM, UrbanGPT, and GPT4TS; and irregular-aware meth-ods, including GRU-ODE, tPatchGNN, and ViTST (Zhao et al. 2019; Song et al. 2020; Wu et al. 2020; Chen et al. Table 2: Zero-shot performance on NYC benchmarks, mea-sured by MAE and MSE. Results are averaged over inflow and outflow for NYCtaxi and NYCbike, and over robbery and burglary for NYCcrime. Average results on 5 independent runs are reported. Numbers below our results indicate rela-tive changes compared with the strongest baseline for each metric. Averaged over all six metrics, LLMODE achieves an average relative improvement of 11.4%. Method NYCtaxi NYCbike NYCcrime MAE MSE MAE MSE MAE MSE TGCN 0.3233 0.6351 0.2457 0.2105 0.7266 2.6862 STSGCN 0.2758 0.4385 0.2221 0.2723 0.7431 2.8640 MTGNN 0.0878 0.0748 0.0769 0.0357 0.5574 1.7864 BiTGraph 0.0964 0.0563 0.0880 0.0415 0.4703 1.5098 FourierGNN 0.1538 0.0628 0.1528 0.0680 0.5304 1.4962 ISTS-PLM 0.1042 0.0931 0.0822 0.0371 0.2041 0.3421 UrbanGPT 0.0798 0.0634 0.0778 0.0292 0.7418 2.0739 GPT4TS 0.1210 0.1524 0.1017 0.0834 0.2885 0.8108 GRU-ODE 0.2510 0.4434 0.2348 0.2410 0.4219 1.6564 tPatchGNN 0.0830 0.0577 0.0765 0.0323 0.1644 0.3863 ViTST 0.4427 0.5576 0.3676 0.3013 0.8560 2.7815       
+
+> LLMODE (Ours)
+> 0.0801
+> ↑0.4%
+> 0.0396
+> ↓29 .7%
+> 0.0745
+> ↓2.6%
+> 0.0260
+> ↓11 .0%
+> 0.1527
+> ↓7.1%
+> 0.2791
+> ↓18 .4%
+
+2023; Yi et al. 2023; Zhang et al. 2025; Li et al. 2024a; Zhou et al. 2023; De Brouwer et al. 2019; Zhang et al. 2024; Li, Li, and Yan 2023). Regular-grid baselines use linearly in-terpolated inputs. Detailed descriptions of the baselines are provided in Appendix A.16. 
+
+Implementation. We use frozen Vicuna-7B (Zheng et al. 2023) as the default backbone. Detailed model configura-tions, optimization settings, and hardware information are provided in Appendix A.3. 
+
+4.2 Q1: Overall Forecasting Effectiveness 
+
+To answer Q1, Table 1 compares LLMODE with conven-tional spatio-temporal models, irregular-aware methods, and LLM-based forecasters on three real-world urban datasets and two physical-dynamics benchmarks. Overall, LLMODE achieves competitive or superior per-formance across all five benchmarks. The strongest gains are observed on NYCcrime, Springs, and Charged, where observations are more event-driven, sparse, or governed by complex interactions. This result answers Q1 affirmatively and indicates that the complete framework is not restricted to either urban data or physical systems. The smaller gains on the denser mobility datasets are further analyzed in the Appendix A.11. 
+
+4.3 Q2: Unseen-Region Generalization 
+
+To answer Q2, we evaluate LLMODE under the zero-shot protocol on the NYC benchmarks. The model is trained on 80 regions and directly tested on another 80 unseen regions without fine-tuning. This setting tests whether LLMODE can infer future dynamics for unseen regions from their ob-served histories, rather than relying on region-specific pat-terns learned during training. As shown in Table 2, LLMODE achieves the best perfor-mance on five of the six metrics. The gains are particularly clear on the much sparser NYCcrime dataset, indicating ef-fective generalization to unseen regions under sparse and irregular observations. The contribution of the frozen LLM to this transferability is further analyzed in Q5. 
+
+4.4 Q3: Necessity of Continuous-Time Modeling 
+
+To answer Q3, Figure 3 compares LLMODE with represen-tative methods under controlled missing rates. ST-Encoder replaces the graph-aware ODE encoder with the discrete spatio-temporal encoder used in UrbanGPT, while keeping all other components unchanged. The remaining methods include representative regular- and irregular-sampling base-lines. 204060800.060.080.100.120.140.16 MAE on SpringsMissing Rate(%)  ST-Encoder tPatchGNN MTGNN ISTS-PLM LLMODE 204060800.020.04 MSE on SpringsMissing Rate(%)  ST-Encoder tPatchGNN MTGNN ISTS-PLM LLMODE 
+
+Figure 3: Forecasting performance under different missing rates on the Springs system. As the missing rate increases, ST-Encoder degrades more rapidly than LLMODE, indicating the limitation of discrete encoders under sparse observations. MTGNN remains rela-tively robust due to its adaptive graph and multi-scale tem-poral modeling, whereas tPatchGNN and ISTS-PLM also show increasing errors. In contrast, LLMODE consistently achieves the lowest errors, with a widening advantage at higher missing rates. These results support the importance of continuous-time modeling for reconstructing dynamics over long unobserved intervals. Solver and step-size sensitivity analyses are provided in Appendix A.12. 
+
+4.5 Q4: Effectiveness of Fixed-Budget Dynamic Evidence 
+
+To answer Q4, we examine both the token budget and the trajectory-state selection strategy. The continuous-time en-coder reconstructs each trajectory into L = 120 latent states, and Figure 4 compares different fixed-budget set-tings and full-trajectory exposure, with UrbanGPT included as an LLM-based reference. Compared with UrbanGPT, LLMODE reduces the reported token budget by nearly 90% and inference latency by approximately 87%, while achiev-ing better zero-shot accuracy. An extremely small budget (K = 1 ) loses substantial trajectory information, whereas 
+
+K = 5 and K = 8 achieve the strongest accuracy–efficiency trade-off. Across datasets and task settings, these two bud-gets consistently perform best, indicating that a small fixed token budget is robust across different forecasting settings. Larger budgets and full-trajectory exposure yield no consis-tent gains, suggesting that forecasting-relevant information is concentrated in a small subset of states. Detailed results, together with the inference latency of representative non-LLM methods for reference, are provided in Appendix A.13. K=1 64 K=5 K=8 K=30 w/o compression UrbanGPT 
+
+72 78 122 302 665 Best trade-off K=3 K=90 68 242 Figure 4: Token-budget efficiency analysis on NYCbike zero-shot. Numbers inside the markers indicate token counts. Figure 5 further compares learned resampling with random selection and linear projection. Learned resampling consis-tently performs better, indicating that adaptive state selection is more effective than simple sequence reduction. Removing either the dynamics-aware bias or explicit time labels also degrades performance, confirming that compact dynamic memory must preserve both salient state changes and their temporal locations. +5.4%+12.2%+4.9%+10.4% Random-5LinearProj-5w/o time labelsw/o dynamics biasLLMODE 0.000.040.080.120.16 MAE NYCtaxi SupervisedNYCtaxi ZeroshotSprings +6.9% +14.5%+9.7%+21.0%+9.3% Random-5LinearProj-5w/o time labelsw/o dynamics biasLLMODE 0.000.040.16 MSE  NYCtaxi Supervised NYCtaxi Zeroshot Springs +9.1%+19.9%+22.2% 
+
+Figure 5: Comparison of different evidence-selection mech-anisms under a fixed token budget. The left and right panels report MAE and MSE, respectively. 
+
+4.6 Q5: Frozen-LLM Contribution and Evidence Utilization 
+
+To answer Q5, we compare the frozen LLM with an MLP and a randomly initialized six-layer Transformer to examine the benefits of pretrained representations beyond trainable models. We further evaluate different frozen backbones, evi-dence injection mechanisms, and evidence contents to assess the robustness of the backbone and the effectiveness of evi-dence utilization. 
+
+Contribution of the Frozen LLM. As shown in Table 3, replacing the frozen LLM with trainable alternatives, in-cluding an MLP prediction head and a randomly initialized Transformer, achieves comparable supervised performance but substantially degrades zero-shot performance. This sug-gests that trainable models can capture forecasting patterns from observed regions, whereas the pretrained LLM provides additional modeling ability that is particularly important for transfer to unseen regions. Moreover, the three frozen LLM backbones achieve com-parable performance on both seen and unseen regions. This Table 3: Contribution and robustness of the frozen LLM, evaluated by MAE and MSE. Percentage changes next to each result are computed relative to the default Vicuna-7B backbone.                                                  
+
+> Model NYCtaxi Supervised NYCtaxi Zero-shot MAE MSE MAE MSE
+> Pretraining and capacity controls
+> Ours w/ MLP 0.0317 ↑7.2% 0.0071 ↑12 .6% 0.1131 ↑41 .2% 0.1048 ↑164 .6%
+> Ours w/ random Transformer 0.0301 ↑2.4% 0.0065 ↑4.8% 0.0925 ↑15 .5% 0.0521 ↑31 .6%
+> Frozen-backbone robustness
+> Best baseline 0.0296 ↑0.7% 0.0064 ↑3.2% 0.0798 ↓0.4% 0.0563 ↑42 .2%
+> Ours w/ Llama-3.1-8B 0.0288 ↓2.0% 0.0060 ↓3.2% 0.0804 ↑0.4% 0.0378 ↓4.5%
+> Ours w/ Llama-2-13B 0.0296 ↑0.7% 0.0067 ↑8.1% 0.0793 ↓1.0% 0.0371 ↓6.3%
+> Ours w/ Vicuna-7B (default) 0.0294 0.0062 0.0801 0.0396
+
+consistency shows that the benefit of the frozen LLM is not specific to Vicuna-7B, and that LLMODE can effectively work with different pretrained backbones. 
+
+Evidence Utilization. As shown in Figure 6, cross-attention outperforms prompt concatenation, and learnable gating provides further gains, confirming the benefit of con-trolled retrieval from separate memories. Figure 7 shows that the gate gains αattn and αffn , together with their up-date contributions, increase from zero and stabilize during training. Details of the Effective Contribution metric and additional insertion-frequency experiments are provided in Appendix A.14. PromptConcat.CAw/o GDyn. onlyDyn. +shuffled ctx.Full 0.000.020.040.060.080.100.120.14 MAE NYCtaxi Supervised NYCtaxi Zeroshot Springs +17.3%+27.1%+22.1%+13.5%+12.0%+24.8%+13.5% PromptConcat.CAw/o GDyn. onlyDyn. +shuffled ctx.Full 0.000.020.040.060.10 MSE NYCtaxi Supervised NYCtaxi Zeroshot Springs +17.5%+16.0%+13.9%+18.4%+11.4%+21.6% 
+
+Figure 6: Ablation study of evidence access mechanisms and evidence sources. “Prompt Concat.” denotes prompt con-catenation, “CA w/o G” denotes cross-attention without gat-ing, “Dyn. only” uses only dynamic memory, and “Dyn. + shuffled ctx.” uses dynamic memory with randomly shuffled context memory. The source ablations show that dynamic memory alone is insufficient and that shuffled context degrades performance, showing that sample-specific context provides complemen-tary information rather than merely additional tokens. Over-all, the frozen LLM effectively utilizes both memory sources, with gated injection further improving their integration. 
+
+4.7 Qualitative Case Study 
+
+Figure 8 compares LLMODE with tPatchGNN (Zhang et al., 2024), a strong baseline for irregular temporal modeling, on a representative supervised NYCtaxi case. LLMODE follows the ground-truth trajectory more closely and better captures the magnitude and timing of peak variations. This behavior is consistent with its continuous-time modeling, fixed-budget dynamic memory, and gated injection design. For visualiza-0.0 0.5 1.0       
+
+> Training Progress
+> 0.00 0.01 0.02 0.03 0.04
+> FFN Tanh Gain  Layer 0 Gain Layer 0 Cont. Layer 1 Gain Layer 1 Cont.
+> 0.00 0.20 0.40 0.60 0.80
+> Effective Contribution 0.0 0.5 1.0
+> Training Progress
+> 0.00 0.02 0.04
+> Attention Tanh Gain  Layer 0 Gain Layer 0 Cont. Layer 1 Gain Layer 1 Cont.
+> 0.00 0.05 0.10 0.15
+> Effective Contribution 0.0 0.5 1.0
+> Training Progress
+> 0.00 0.02 0.04 0.06
+> FFN Tanh Gain  Layer 0 Gain Layer 0 Cont. Layer 1 Gain Layer 1 Cont.
+> 0.00 0.02 0.04 0.06
+> Effective Contribution 0.0 0.5 1.0
+> Training Progress
+> 0.00 0.02 0.04 0.06
+> Attention Tanh Gain  Layer 0 Gain Layer 0 Cont. Layer 1 Gain Layer 1 Cont.
+> 0.00 0.02 0.04 0.06 0.08
+> Effective Contribution
+
+Figure 7: Training-time evolution of the global injection gates on the NYC datasets. Layer 0 and Layer 1 denote the two injection modules; “Cont.” denotes the normalized contribution proxy. tion, predictions from multiple samples are concatenated, with details provided in Appendix A.15. Ground Truth Our Method TpatchGNN 0 24 48 72 96 120    
+
+> Hour
+> 02000 4000
+> Flow Value
+> 58 60 62 64 01000
+
+(a) Inflow 0 24 48 72 96 120    
+
+> Hour
+> 02000 4000
+> Flow Value
+> 58 60 62 64 01000
+
+(b) Outflow 
+
+Figure 8: Qualitative comparison on NYCtaxi over a 124-hour evaluation period. The enlarged region highlights a rep-resentative demand peak. LLMODE more closely follows the ground-truth temporal patterns than tPatchGNN, particularly around rapid variations. 
+
+## 5 Related Work 
+
+Spatio-temporal Forecasting. Deep spatio-temporal fore-casting models typically combine temporal modeling with spatial dependency encoding. Early methods focus on grid-structured data and integrate recurrent or temporal convo-lutional networks with convolutional spatial operators (Yu et al. 2017; Zhang, Zheng, and Qi 2017). Graph-based meth-ods instead combine GNNs with recurrent or convolutional temporal modules (Zhao et al. 2019; Song et al. 2020; Wu et al. 2020, 2019). Recent approaches further improve fore-casting through adaptive graph learning and multi-scale or frequency-aware representations (Jin, Chen, and Yang 2023; Ye et al. 2022; Yuan et al. 2024; Dong et al. 2024; Wang et al. 2024a; Chen et al. 2023; Yi et al. 2023). However, most are developed for supervised and regularly sampled settings, leaving severe irregularity and zero-shot generalization to unseen regions relatively underexplored. 
+
+LLM-based Forecasting. LLM-based spatio-temporal fore-casting remains relatively limited. UrbanGPT (Li et al. 2024a) represents spatio-temporal signals as soft tokens and inserts them into the LLM prompt. Related time-series meth-ods either convert numerical sequences into text (Xue and Salim 2023) or align compact numerical tokens with the LLM representation space through prompting, projection layers, adapters, or partial fine-tuning (Cao et al. 2024; Wang et al. 2024b; Pan et al. 2024; Hu et al. 2025; Chang et al. 2025; Sun et al. 2024; Jin et al. 2023; Liu et al. 2025; Jiang et al. 2025; Liu et al. 2024). Similar to multimodal architectures such as Flamingo (Alayrac et al. 2022), some methods use cross-attention to inject external features. Nevertheless, ro-bust integration of spatio-temporal evidence under irregular and asynchronous observations remains underexplored. 
+
+Irregularly Sampled Time Series Modeling. A common strategy regularizes irregular time series through interpola-tion or resampling (Lipton, Kale, and Wetzel 2016), which may distort dynamics under sparse observations or large time gaps (Shukla and Marlin 2021). Direct approaches include time-aware recurrent networks (Neil, Pfeiffer, and Liu 2016; Che et al. 2018; Baytas et al. 2017; Jhin, Kim, and Park 2024), neural ODEs that evolve latent states in continu-ous time (Chen et al. 2018; Rubanova, Chen, and Duve-naud 2019; De Brouwer et al. 2019; Huang, Sun, and Wang 2020; Biloš et al. 2021; Kidger et al. 2020; Dupont, Doucet, and Teh 2019), and attention-based models for missing and nonuniform observations (Zhang et al. 2024; Li, Li, and Yan 2023). However, most studies focus on limited tasks or clas-sification (Zhang et al. 2023; Zhong et al. 2025; Yehuda, Freedman, and Radinsky 2023), leaving LLM-based irreg-ular spatio-temporal forecasting with spatial dependencies underexplored. 
+
+## 6 Conclusion 
+
+In this work, we presented LLMODE, a frozen-LLM frame-work for irregular spatio-temporal forecasting. LLMODE reconstructs continuous-time graph dynamics from asyn-chronous and partially observed data, distills long latent trajectories into fixed-budget dynamic memory, and injects dynamic and context memories into selected layers of the frozen LLM through dual-source gated cross-attention. Ex-periments on urban and physical-dynamics benchmarks val-idate the framework and its key components, demonstrating competitive forecasting performance, improved robustness under sparse observations, strong generalization to unseen regions, and substantially reduced token usage and inference latency compared with existing LLM-based forecasters. References 
+
+Alayrac, J.-B.; Donahue, J.; Luc, P.; Miech, A.; Barr, I.; Hasson, Y.; Lenc, K.; Mensch, A.; Millican, K.; Reynolds, M.; et al. 2022. Flamingo: a visual language model for few-shot learning. Advances in neural information processing systems , 35: 23716–23736. Baytas, I. M.; Xiao, C.; Zhang, X.; Wang, F.; Jain, A. K.; and Zhou, J. 2017. Patient subtyping via time-aware LSTM networks. In Proceedings of the 23rd ACM SIGKDD interna-tional conference on knowledge discovery and data mining ,65–74. Biloš, M.; Sommer, J.; Rangapuram, S. S.; Januschowski, T.; and Günnemann, S. 2021. Neural flows: Efficient alternative to neural ODEs. Advances in neural information processing systems , 34: 21325–21337. Cao, D.; Jia, F.; Arik, S. O.; Pfister, T.; Zheng, Y.; Ye, W.; and Liu, Y. 2024. TEMPO: Prompt-based Generative Pre-Trained Transformer for Time Series Forecasting. arXiv:2310.04948. Chang, C.; Wang, W.-Y.; Peng, W.-C.; and Chen, T.-F. 2025. LLM4TS: Aligning Pre-Trained LLMs as Data-Efficient Time-Series Forecasters. ACM Trans. Intell. Syst. Technol. ,16(3): 1–20. Che, Z.; Purushotham, S.; Cho, K.; Sontag, D.; and Liu, Y. 2018. Recurrent neural networks for multivariate time series with missing values. Scientific reports , 8(1): 6085. Chen, R. T.; Rubanova, Y.; Bettencourt, J.; and Duvenaud, D. K. 2018. Neural ordinary differential equations. Advances in neural information processing systems , 31. Chen, X.; Li, X.; Liu, B.; and Li, Z. 2023. Biased temporal convolution graph network for time series forecasting with missing values. In The Twelfth International Conference on Learning Representations .De Brouwer, E.; Simm, J.; Arany, A.; and Moreau, Y. 2019. GRU-ODE-Bayes: Continuous modeling of sporadically-observed time series. Advances in neural information pro-cessing systems , 32. Dong, Z.; Jiang, R.; Gao, H.; Liu, H.; Deng, J.; Wen, Q.; and Song, X. 2024. Heterogeneity-informed meta-parameter learning for spatiotemporal time series forecasting. In Pro-ceedings of the 30th ACM SIGKDD conference on knowledge discovery and data mining , 631–641. Dupont, E.; Doucet, A.; and Teh, Y. W. 2019. Augmented neural odes. Advances in neural information processing sys-tems , 32. Hu, Y.; Li, Q.; Zhang, D.; Yan, J.; and Chen, Y. 2025. Context-Alignment: Activating and Enhancing LLM Capa-bilities in Time Series. arXiv:2501.03747. Huang, Z.; Sun, Y.; and Wang, W. 2020. Learning continuous system dynamics from irregularly-sampled partial observa-tions. Advances in Neural Information Processing Systems ,33: 16177–16187. Jhin, S. Y.; Kim, S.; and Park, N. 2024. Addressing pre-diction delays in time series forecasting: A continuous gru approach with derivative regularization. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 1234–1245. Jiang, H.; Qu, B.; Zhu, J.; Zeng, F.; Lin, X.; and Zhong, W. 2025. HyperLoad: A Cross-Modality Enhanced Large Language Model-Based Framework for Green Data Center Cooling Load Prediction. arXiv:2512.19114. Jin, M.; Wang, S.; Ma, L.; Chu, Z.; Zhang, J. Y.; Shi, X.; Chen, P.-Y.; Liang, Y.; Li, Y.-F.; Pan, S.; et al. 2023. Time-llm: Time series forecasting by reprogramming large lan-guage models. arXiv preprint arXiv:2310.01728 .Jin, Y.; Chen, K.; and Yang, Q. 2023. Transferable graph structure learning for graph-based traffic forecasting across cities. In Proceedings of the 29th ACM SIGKDD conference on knowledge discovery and data mining , 1032–1043. Kidger, P.; Morrill, J.; Foster, J.; and Lyons, T. 2020. Neural controlled differential equations for irregular time series. Ad-vances in neural information processing systems , 33: 6696– 6707. Kipf, T.; Fetaya, E.; Wang, K.-C.; Welling, M.; and Zemel, R. 2018. Neural relational inference for interacting systems. In 
+
+International conference on machine learning , 2688–2697. Pmlr. Li, Z.; Li, S.; and Yan, X. 2023. Time Series as Images: Vision Transformer for Irregularly Sampled Time Series. arXiv:2303.12799. Li, Z.; Xia, L.; Tang, J.; Xu, Y.; Shi, L.; Xia, L.; Yin, D.; and Huang, C. 2024a. Urbangpt: Spatio-temporal large language models. In Proceedings of the 30th ACM SIGKDD Confer-ence on Knowledge Discovery and Data Mining , 5351–5362. Li, Z.; Xia, L.; Tang, J.; Xu, Y.; Shi, L.; Xia, L.; Yin, D.; and Huang, C. 2024b. UrbanGPT: Spatio-Temporal Large Language Models. arXiv:2403.00813. Lipton, Z. C.; Kale, D.; and Wetzel, R. 2016. Directly mod-eling missing data in sequences with rnns: Improved clas-sification of clinical time series. In Machine learning for healthcare conference , 253–270. PMLR. Liu, C.; Xu, Q.; Miao, H.; Yang, S.; Zhang, L.; Long, C.; Li, Z.; and Zhao, R. 2025. Timecma: Towards llm-empowered multivariate time series forecasting via cross-modality align-ment. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 18780–18788. Liu, Y.; Qin, G.; Huang, X.; Wang, J.; and Long, M. 2024. AutoTimes: Autoregressive Time Series Forecasters via Large Language Models. Advances in Neural Information Processing Systems , 37: 122154–122184. Neil, D.; Pfeiffer, M.; and Liu, S.-C. 2016. Phased lstm: Accelerating recurrent network training for long or event-based sequences. Advances in neural information processing systems , 29. Pan, Z.; Jiang, Y.; Garg, S.; Schneider, A.; Nevmyvaka, Y.; and Song, D. 2024. $S^2$IP-LLM: Semantic Space In-formed Prompt Learning with LLM for Time Series Fore-casting. In Forty-First International Conference on Machine Learning .Rubanova, Y.; Chen, R. T.; and Duvenaud, D. K. 2019. Latent ordinary differential equations for irregularly-sampled time series. Advances in neural information processing systems ,32. Shukla, S. N.; and Marlin, B. M. 2021. Multi-time attention networks for irregularly sampled time series. arXiv preprint arXiv:2101.10318 .Song, C.; Lin, Y.; Guo, S.; and Wan, H. 2020. Spatial-temporal synchronous graph convolutional networks: A new framework for spatial-temporal network data forecasting. In 
+
+Proceedings of the AAAI conference on artificial intelligence ,volume 34, 914–921. Sun, C.; Li, H.; Li, Y.; and Hong, S. 2024. TEST: Text Prototype Aligned Embedding to Activate LLM’s Ability for Time Series. arXiv:2308.08241. Wang, B.; Ma, J.; Wang, P.; Wang, X.; Zhang, Y.; Zhou, Z.; and Wang, Y. 2024a. Stone: A spatio-temporal ood learning framework kills both spatial and temporal shifts. In Proceed-ings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 2948–2959. Wang, X.; Feng, M.; Qiu, J.; Gu, J.; and Zhao, J. 2024b. From news to forecast: Integrating event analysis in llm-based time series forecasting with reflection. Advances in Neural Information Processing Systems , 37: 58118–58153. Wu, Z.; Pan, S.; Long, G.; Jiang, J.; Chang, X.; and Zhang, C. 2020. Connecting the dots: Multivariate time series fore-casting with graph neural networks. In Proceedings of the 26th ACM SIGKDD international conference on knowledge discovery & data mining , 753–763. Wu, Z.; Pan, S.; Long, G.; Jiang, J.; and Zhang, C. 2019. Graph wavenet for deep spatial-temporal graph modeling. 
+
+arXiv preprint arXiv:1906.00121 .Xue, H.; and Salim, F. D. 2023. Promptcast: A new prompt-based learning paradigm for time series forecasting. IEEE Transactions on Knowledge and Data Engineering , 36(11): 6851–6864. Ye, J.; Liu, Z.; Du, B.; Sun, L.; Li, W.; Fu, Y.; and Xiong, H. 2022. Learning the evolutionary and multi-scale graph struc-ture for multivariate time series forecasting. In Proceedings of the 28th ACM SIGKDD conference on knowledge discov-ery and data mining , 2296–2306. Yehuda, Y.; Freedman, D.; and Radinsky, K. 2023. Self-supervised classification of clinical multivariate time series using time series dynamics. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 5416–5427. Yi, K.; Zhang, Q.; Fan, W.; He, H.; Hu, L.; Wang, P.; An, N.; Cao, L.; and Niu, Z. 2023. FourierGNN: Rethinking Multivariate Time Series Forecasting from a Pure Graph Perspective. arXiv:2311.06190. Yu, R.; Li, Y.; Shahabi, C.; Demiryurek, U.; and Liu, Y. 2017. Deep learning: A generic approach for extreme con-dition traffic forecasting. In Proceedings of the 2017 SIAM international Conference on Data Mining , 777–785. SIAM. Yuan, Y.; Ding, J.; Feng, J.; Jin, D.; and Li, Y. 2024. Unist: A prompt-empowered universal model for urban spatio-temporal prediction. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 4095–4106. Zhang, J.; Zheng, S.; Cao, W.; Bian, J.; and Li, J. 2023. Warpformer: A multi-scale modeling approach for irregu-lar clinical time series. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 3273–3285. Zhang, J.; Zheng, Y.; and Qi, D. 2017. Deep spatio-temporal residual networks for citywide crowd flows prediction. In 
+
+Proceedings of the AAAI conference on artificial intelligence ,volume 31. Zhang, W.; Yin, C.; Liu, H.; and Xiong, H. 2025. Unleashing the power of pre-trained language models for irregularly sam-pled time series. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 ,3831–3842. Zhang, W.; Yin, C.; Liu, H.; Zhou, X.; and Xiong, H. 2024. Ir-regular multivariate time series forecasting: A transformable patching graph neural networks approach. In Forty-first In-ternational Conference on Machine Learning .Zhao, L.; Song, Y.; Zhang, C.; Liu, Y.; Wang, P.; Lin, T.; Deng, M.; and Li, H. 2019. T-GCN: A temporal graph con-volutional network for traffic prediction. IEEE transactions on intelligent transportation systems , 21(9): 3848–3858. Zheng, L.; Chiang, W.-L.; Sheng, Y.; Zhuang, S.; Wu, Z.; Zhuang, Y.; Lin, Z.; Li, Z.; Li, D.; Xing, E.; et al. 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Ad-vances in neural information processing systems , 36: 46595– 46623. Zhong, S.; Zhuo, W.; Song, S.; Li, G.; Yu, Z.; and Chan, S.-H. G. 2025. MTM: A Multi-Scale Token Mixing Trans-former for Irregular Multivariate Time Series Classification. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , 4074–4085. Zhou, T.; Niu, P.; Sun, L.; Jin, R.; et al. 2023. One fits all: Power general time series analysis by pretrained lm. Ad-vances in neural information processing systems , 36: 43322– 43355. A Appendix 
+
+A.1 Dataset Details 
+
+Urban Datasets (NYC) We evaluate on three New York City spatio-temporal datasets: NYCtaxi , NYCbike , and NY-Ccrime , which capture taxi flows, bike-share flows, and crime incidents, respectively. Following common practice in urban computing, we partition the city into grid-like regions using latitude and longitude coordinates. NYCtaxi contains 263 regions at approximately 3 km × 3 km resolution, while NYCbike and NYCcrime contain 2162 regions at approxi-mately 1 km × 1 km resolution. To better reflect real-world urban data characteristics, we formulate all three datasets as 
+
+irregularly sampled sequences. 
+
+Event-Level Source Records. The original NYC datasets are collected in an event-level format, where each row records an individual event rather than a value ag-gregated over a predefined temporal grid. For example, in NYCtaxi, each row corresponds to a single taxi trip. Ta-ble 4 shows one representative record. The vendor_id 
+
+identifies the data provider, while pickup_datetime and 
+
+dropoff_datetime indicate the start and end times of the trip. The passenger_count records the number of passengers, and the pickup and drop-off longitude–latitude pairs specify the origin and destination of the event. There-fore, the raw dataset consists of asynchronously occurring trips with event-specific timestamps and spatial locations, rather than regularly sampled regional time series. To construct the spatio-temporal forecasting benchmarks, we first assign individual events to spatial regions according to their coordinates and then aggregate them into region-level signals. For NYCtaxi and NYCbike, pickup and drop-off events are converted into regional inflow and outflow counts, while NYCcrime events are aggregated by region and crime category. In this way, the original event stream is transformed into graph-structured node observations, where each node corresponds to an urban region. 
+
+Irregular Sampling Construction. Unlike standard time-series preprocessing that places all observations on a uniformly spaced temporal grid, we retain non-uniform ob-servation intervals when constructing the input sequences. Consequently, consecutive observations can be separated by different elapsed times, and different spatial nodes may con-tain asynchronous or incomplete histories. For NYCtaxi and NYCbike, the resulting sampling intervals range from 10 to 360 minutes, with an average interval of approximately 60 minutes. For NYCcrime, the intervals range from 1 to 16 days, with an average interval of approximately 4 days. This construction preserves the event-driven and irregular characteristics of the original data and provides a realistic setting for evaluating forecasting models under non-uniform timestamps and missing observations. 
+
+Task Setup. We define the observations and forecasting horizons as follows. For taxi and bike datasets, the observa-tion at time t is defined as the cumulative flow from 00:00 of the same day up to time t. For crime data, we use a sliding time window to compute a sequence of cumulative crime counts within the window as observations. We adopt fore-casting horizons of using the past 24 hours to predict the next 12 hours for taxi/bike datasets, and using the past 96 days to predict the next 48 days for crime data. 
+
+Training and Evaluation Protocols. Following the ex-perimental protocol of UrbanGPT (Li et al. 2024a), dur-ing the instruction-tuning stage, we randomly select 80 re-gions from the three NYC datasets as training data. The re-gion indices are kept consistent for NYCbike and NYCcrime datasets. We use the following time spans for instruction tuning: for NYCtaxi , Jan. 1, 2017 to Mar. 31, 2017; for NY-Cbike , Apr. 1, 2017 to Jun. 30, 2017; and for NYCcrime ,Jan. 1, 2016 to Dec. 31, 2018. For pretraining the spatio-temporal dependency encoder and training baseline models, we use the same training data and set the maximum number of epochs to 100. In the testing stage, we conduct two evaluation settings: 1. Supervised prediction: We evaluate the model on a long continuous interval using all data from Dec. 2021 for NYCtaxi and NYCbike, and all data from the entire year of 2021 for NYCcrime. 2. Zero-shot prediction: We use an additional 80 regions from the NYC datasets as unseen test regions. For NYC-taxi and NYCbike, we use the first two weeks of data in 2020 for testing. For NYCcrime, we use the entire year of 2020 for testing. 
+
+Normalization. We normalize each NYC dataset inde-pendently using statistics computed from its training split 
+
+only, and apply the same transformation to validation/test data to avoid information leakage. Specifically, for each vari-able we perform z-score normalization: 
+
+˜x = x − μtrain 
+
+σtrain 
+
+, (12) where μtrain and σtrain denote the mean and standard devi-ation estimated on the training split. 
+
+Physics-Based Simulation Datasets We additionally eval-uate our model on two physics-based simulated datasets, namely Springs and Charged , following Kipf et al. (Kipf et al. 2018). Each sample contains five interacting particles moving in a 2D box without external forces, where particles may collide with the box boundaries but do not experience friction or damping. Using a standard physics simulator, we generate trajectories of 60,000 integration steps for Springs and 12,000 steps for Charged. 
+
+Irregular Sampling Construction. To simulate realis-tic sensing scenarios with limited and asynchronous obser-vations, we construct irregularly sampled partial observa-tions as follows. First, we reduce the temporal resolution by subsampling the simulated trajectories using different down-sampling factors: 500 for the Springs system and 100 for the charged system, reflecting their different characteristic Table 4: An example of an event-level taxi-trip record.               
+
+> vendor_id pickup_datetime dropoff_datetime passenger_count pickup_longitude pickup_latitude dropoff_longitude dropoff_latitude
+> 12016-03-14 17:24:55 2016-03-14 17:32:30 1-73.982154846191406 40.767936706542969 -73.964630126953125 40.765602111816406
+
+timescales. Then, for each particle independently, we sam-ple the number of observations n ∼ U (20 , 28) and select 
+
+n observation timestamps uniformly from the subsampled time grid. This procedure creates asynchronous observations where different particles are observed at different times, mim-icking real-world sensor networks. 
+
+Task Setup. We formulate the forecasting task on the subsampled trajectories. For both systems, the first 60 sam-pled time steps define the history window, from which 
+
+n ∼ U (20 , 28) timestamps are retained as irregular obser-vations. The subsequent 60 sampled time steps are used as prediction targets. Due to different downsampling factors, this corresponds to different numbers of original integration steps: 30,000 steps for the Springs system (downsampling factor 500) and 6,000 steps for the charged particles sys-tem (downsampling factor 100). This extrapolation setting evaluates the model’s ability to forecast long-term dynamics beyond the observation window. 
+
+Normalization. We compute the min–max statistics 
+
+only on the training split and apply the same transformation to validation/test data to avoid information leakage. Specif-ically, we linearly rescale each state variable to the range 
+
+[−1, 1] :
+
+˜x = 2 · x − xtrain min 
+
+xtrain max − xtrain min 
+
+− 1, (13) where xtrain min and xtrain max denote the minimum and maximum values of the corresponding state variable over the training split. 
+
+A.2 Training Configuration 
+
+LLMODE is trained with a two-stage strategy to separately optimize the continuous dynamic representation learning and the frozen-LLM forecasting objective. 
+
+Stage 1: Training the Graph-Aware ODE Encoder. In the first stage, we pretrain the graph-aware ODE encoder using the GRU-ODE-Bayes parameterization (De Brouwer et al. 2019), which jointly considers the reconstruction likelihood of observed features and the Bayesian posterior consistency regularization: 
+
+LODE = X
+
+> k
+
+
+
+L(k)pre + βpost L(k)post 
+
+
+
+, (14) where L(k)pre and L(k)post denote the pre-update reconstruction loss and the post-update posterior regularization loss at ob-servation step k, respectively, and βpost controls the strength of the posterior regularization. Both losses are computed only on observed dimensions to accommodate feature-wise missing observations. After this stage, the graph-aware ODE encoder generates continuous-time latent trajectories Hdyn from irregular ob-servations, which are subsequently distilled into dynamic memory tokens for the subsequent forecasting stage. 
+
+Stage 2: Training the Frozen-LLM Forecasting Framework. 
+
+In the second stage, we optimize the forecasting framework while keeping the pretrained LLM backbone and the graph-aware ODE encoder frozen. Specifically, the trainable parameters include the dynamic memory resampler, the language encoder and context-memory resampler, dual-source gated cross-attention modules, and the forecasting regression head. The parameters of the LLM backbone and the graph-aware ODE encoder are not updated during training. The final objective minimizes the prediction error between the forecasts and ground-truth states at all query timestamps: 
+
+Lforecast = 1
+
+P 
+
+> v
+
+|Qv |
+
+X
+
+> v
+
+X
+
+> t∈Qv
+
+∥ˆyv (t) − yv (t)∥22 , (15) where Qv denotes the query timestamps of node v,
+
+byv (t), yv (t) ∈ RD denote the predicted and ground-truth multivariate target vectors, respectively. 
+
+A.3 Implementation Configuration 
+
+Model configuration. The latent dimension of the graph-aware ODE encoder is set to dode = 50 . The ODE states and text-encoder outputs are separately projected into the mem-ory space of dimension dmem before dynamic- and context-memory resampling, respectively. For Vicuna-7B, the LLM hidden dimension is dLLM = 4096 . Both memory streams are compressed using a two-layer Perceiver Resampler with eight attention heads and a per-head dimension of 64. The fixed token budget is set to K = 5 for both the dynamic and context memories. The strength coefficient of the dynamics-aware attention bias is set to β = 0 .1, and the mixing co-efficient λ is set to 0.5 to balance the contributions of the two memories. For Vicuna-7B, the dual-source gated cross-attention modules are inserted after Transformer Layers 1 and 16. The maximum prompt length is set to 2048 tokens. 
+
+Optimization and hardware. The trainable modules are optimized using AdamW with a learning rate of 2 × 10 −4,cosine learning-rate scheduling, and a warmup ratio of 0.03. We use a per-device batch size of 32 and apply early stopping according to the validation loss with a patience of 10 epochs. All experiments are repeated using five random seeds, i.e., 42, 43, 44, 45, and 46, and the average results are reported. All results are obtained from the best validation checkpoint. Training is performed in BF16 precision on NVIDIA A100 GPUs. A.4 GRU-ODE Parameterization and Continuous Propagation 
+
+For each node v, the latent state evolves according to the Neural ODE in Eq. 3. Following the GRU-ODE formula-tion (De Brouwer et al. 2019), we instantiate the vector field as 
+
+dhv (t)
+
+dt = fθ (hv (t)) =  1−zv (t)⊙ gv (t)−hv (t), (16) where zv (t) is the update gate, gv (t) is the candidate state, and ⊙ denotes element-wise multiplication. Both quantities are computed from the current latent state through learnable projections included in θ. This parameterization gives the continuous vector field a gated update structure analogous to a discrete GRU while preserving continuous-time state evolution. Let ti−1 and ti be two consecutive observation times of node v. The pre-update state at ti is obtained by numerical integration: 
+
+hv (t− 
+
+> i
+
+) = ODESolve  fθ , ¯hv (t+
+
+> i−1
+
+), [ti−1, t i] . (17) Here, ODESolve( ·) denotes a numerical ODE solver that in-tegrates the vector field fθ from the initial state ¯hv (t+
+
+> i−1
+
+) over the interval [ti−1, t i], yielding the propagated state hv (t− 
+
+> i
+
+)
+
+immediately before the observation at ti is incorporated. We use the Euler method as the default solver due to its simplicity and computational efficiency. Because the integration inter-val explicitly uses ti − ti−1, the encoder naturally handles nonuniform sampling gaps and can be queried at arbitrary in-termediate timestamps. The graph-corrected state ¯hv (t+
+
+> i−1
+
+)
+
+is used as the initial condition for the next interval. 
+
+A.5 Observation Encoding and State Correction 
+
+At time ti, hv (t− 
+
+> i
+
+) represents the propagated latent state before the new observation xv,i is incorporated. The role of 
+
+Φ is to convert this observation into a correction signal for updating the propagated state. To do so, Φ first estimates what the observation should be according to the current latent state, and then compares this estimate with the actually observed value. Under a Gaussian observation model, we use a learnable observation head Γω to predict the feature-wise mean and scale from the propagated latent state: 
+
+[μv,i ; σv,i ] = Γ ω
+
+ hv (t− 
+
+> i
+
+) , Γω : Rdode → R2D ,
+
+(18) where Γω is a lightweight neural network parameterized by 
+
+ω. It maps the dode -dimensional latent state to the predicted mean μv,i ∈ RD and scale σv,i ∈ RD of the D input features. The predicted mean represents the observation ex-pected from the current latent state, while the predicted scale characterizes the corresponding feature-wise uncertainty. For the r-th feature, we compute the normalized discrep-ancy between the new observation and its predicted value: 
+
+δv,i,r = xv,i,r − μv,i,r 
+
+σv,i,r + ϵ , r = 1 , . . . , D, (19) where ϵ is a small constant for numerical stability. A large magnitude of δv,i,r indicates that the newly observed value differs substantially from the value expected by the propa-gated latent state. We then combine the predicted observation, the actual observation, and their discrepancy into a feature-wise de-scriptor: 
+
+sv,i,r = [ μv,i,r ; σv,i,r ; xv,i,r ; δv,i,r ] . (20) Each descriptor is mapped to a feature embedding: 
+
+uv,i,r = ρ(Ar sv,i,r + br ) , (21) where Ar and br are learnable parameters for the r-th fea-ture, and ρ(·) is a nonlinear activation function. Finally, the feature embeddings are concatenated to obtain the complete observation encoding: 
+
+Φ xv,i , hv (t− 
+
+> i
+
+) = [ uv,i, 1; . . . ; uv,i,D ] . (22) Therefore, Φ summarizes what the current latent state pre-dicts, what is actually observed, and how much the two differ. The correction GRU combines this observation information with hv (t− 
+
+> i
+
+) to obtain the corrected state hv (t+ 
+
+> i
+
+) in Eq. 4. This observation-driven correction anchors the continuously propagated state to newly arrived measurements and reduces accumulated propagation errors. 
+
+A.6 Graph-Aware State Correction 
+
+After the observation-driven jump, all node states at the cur-rent event time are aligned by propagating nodes without new observations to the same timestamp. We then use the graph structure to refine each node state with information from its neighboring nodes. For each edge (u, v ) ∈ E , we compute a relative message from node u to node v:
+
+mu,v = ψ hu(t+ 
+
+> i
+
+) − hv (t+ 
+
+> i
+
+)
+
+− ψ hv (t+ 
+
+> i
+
+) − hu(t+ 
+
+> i
+
+) , (23) where ψ(·) is a lightweight MLP. The messages from all neighboring nodes are aggregated as 
+
+av = X 
+
+> u∈N (v)
+
+mu,v , (24) where N (v) denotes the set of neighboring nodes of node 
+
+v, and av summarizes the structural information received by node v.A node-specific gate is then computed to control how much neighboring information is incorporated: 
+
+ηv = σ Wη [hv (t+ 
+
+> i
+
+); av ] + bη
+
+ , (25) where [·; ·] denotes concatenation and σ(·) is the sigmoid function. The graph-aware state is obtained through a resid-ual correction: 
+
+¯hv (t+ 
+
+> i
+
+) = hv (t+ 
+
+> i
+
+) + γ ηv ⊙ av , (26) where ⊙ denotes element-wise multiplication and γ controls the overall correction strength. The relative messages characterize the state differences between connected nodes, while the gate adaptively deter-mines how strongly the aggregated neighboring information modifies the current node state. The resulting ¯hv (t+ 
+
+> i
+
+) is used as the initial state for the next continuous propagation in-terval and is also recorded to construct the latent trajectory 
+
+Hdyn .A.7 Perceiver-Based Fixed-Budget Resampling 
+
+For clarity, we omit the node index v in this subsection and describe the resampling for a single-node trajectory. The Perceiver Resampler maintains K learnable latent queries 
+
+{qk}Kk=1 , where qk ∈ Rdmem . For each latent state h(ti), the corresponding key and value vectors are computed as 
+
+ki = WK h(ti), vi = WV h(ti), (27) where WK , WV ∈ Rdmem ×dode are learnable mappings, and ki, vi ∈ Rdmem .To encourage the resampler to preserve states from rapidly changing intervals, we directly introduce the magnitude of the instantaneous latent change into the attention logits: 
+
+αk,i = softmax i
+
+ q⊤ 
+
+> k
+
+ki
+
+√dmem 
+
++ β Norm 1: L(∥fθ (h(ti)) ∥2)
+
+
+
+.
+
+(28) Here, αk,i is the attention weight from the k-th latent query to the state at timestamp ti; fθ (h(ti)) = ˙h(ti) is the instan-taneous latent change determined by the ODE vector field; 
+
+Norm 1: L(·) denotes normalization over the L timestamps of the current trajectory; and β controls the strength of the dynamics-aware bias. The representation produced by the k-th latent query is obtained by aggregating the value vectors: 
+
+zk =
+
+> L
+
+X
+
+> i=1
+
+αk,i vi, zk ∈ Rdmem . (29) Because K is fixed independently of the original trajec-tory length L, the resampler converts trajectories of different lengths into a fixed number of dynamic memory tokens. 
+
+A.8 Explicit Time Labeling 
+
+Each resampled vector zk aggregates information from mul-tiple timestamps. To indicate the temporal location of the se-lected dynamic content, we compute an attention-weighted center time using the same attention weights: 
+
+tcenter  
+
+> k
+
+=
+
+> L
+
+X
+
+> i=1
+
+αk,i ti. (30) The center time represents the temporal position around which the information selected by the k-th latent query is concentrated. We first encode tcenter  
+
+> k
+
+using multi-frequency sinusoidal features: 
+
+ϕ(t) = [sin( ω1t), cos( ω1t), . . . , sin( ωMτ t), cos( ωMτ t)] .
+
+(31) The sinusoidal features are then transformed into a dmem -dimensional time representation: 
+
+τk = Γ τ
+
+ ϕ(tcenter  
+
+> k
+
+) ∈ Rdmem , (32) where Γτ is a lightweight learnable network for time encod-ing. The time representation is fused with the resampled dy-namic content through element-wise addition: 
+
+˜zk = zk + τk, ˜zk ∈ Rdmem . (33) Finally, the K time-aware dynamic memory tokens are stacked as 
+
+˜Z = [˜ z1; . . . ; ˜ zK ] ∈ RK×dmem . (34) The resulting ˜Z serves as the dynamic memory for subse-quent alignment and interaction with the query-slot hidden states in the frozen LLM. 
+
+A.9 Construction of Context Memory 
+
+Descriptor format. We first summarize the historical obser-vations into segment-wise statistics and serialize them into a compact, structured textual description of the form       
+
+> [SEG_STATS S= S]seg1: ... seg S:... max_gap=... [/SEG_STATS]
+
+where S is the number of segments used to partition the history window. 
+
+Meaning of fields. For each segment seg j, we report: (i) 
+
+*_mean : the mean value of the corresponding variable within the segment (computed over observed points); (ii) 
+
+[max: *, min: *] : the maximum and minimum values within the segment (over observed points); (iii) obs_rate :the observation rate in the segment, i.e., the fraction of timestamps in the segment that are observed. In addition, 
+
+max_gap denotes the time gap between the last observed timestamp in the history window and the first query time to be predicted. After obtaining the textual description, we encode it into context token representations, i.e., contextualized token rep-resentations using a pretrained text encoder: 
+
+EP = [ e1; . . . ; eL′ 
+
+> p
+
+] ∈ RL′ 
+
+> p×dmem
+
+, (35) where L′ 
+
+> p
+
+is the number of contextualized token representa-tions, and dmem is the memory-token dimension after pro-jecting the text-encoder outputs. We then apply the context-memory resampler, which uses the same latent-query re-sampling mechanism introduced in Sec. 3.2, without the dynamics-aware attention bias and explicit time labeling, to compress the variable-length token representations into a fixed number of context memory tokens: 
+
+P = [ p1; . . . ; pK ] ∈ RK×dmem , (36) where K is the fixed number of context memory tokens. 
+
+Example: Springs.                                              
+
+> [SEG_STATS S=4] seg1: pos_mean=[x: -0.05, y: -0.10], x=[max: 0.11, min: -0.16], y=[max: 0.04, min: -0.19], obs_rate=60.00% seg2: pos_mean=[x: 0.16, y: -0.72], x=[max: 0.35, min: 0.05], y=[max: -0.47, min: -0.85], obs_rate=20.00% seg3: pos_mean=[x: 0.31, y: -0.74], x=[max: 0.52, min: 0.06], y=[max: -0.67, min: -0.83], obs_rate=20.00% seg4: pos_mean=[x: 0.33, y: -0.65], x=[max: 0.42, min: 0.24], y=[max: -0.35, min: -0.98], obs_rate=40.00% max_gap=0.00 [/SEG_STATS]
+
+Here, pos_mean summarizes the average 2D posi-tion (x, y ) in each segment, while x=[max,min] and 
+
+y=[max,min] capture the range of motion along each axis. The obs_rate indicates how densely the trajectory is ob-served within the segment, and max_gap measures the gap from the last observation to the first query time. 
+
+Example: NYCtaxi. 
+
+[SEG_STATS S=4] seg1: inflow_mean=-0.34, outflow_mean=-0.26, inflow=[max: -0.34, min: -0.34], outflow=[max: -0.26, min: -0.26], obs_rate=83.33% seg2: inflow_mean=-0.29, outflow_mean=-0.26, inflow=[max: -0.27, min: -0.32], outflow=[max: -0.25, min: -0.26], obs_rate=100.00% seg3: inflow_mean=-0.23, outflow_mean=-0.25, inflow=[max: -0.18, min: -0.26], outflow=[max: -0.25, min: -0.25], obs_rate=50.00% seg4: inflow_mean=-0.08, outflow_mean=-0.24, inflow=[max: -0.07, min: -0.11], outflow=[max: -0.24, min: -0.24], obs_rate=83.33% max_gap=5.00 [/SEG_STATS] 
+
+This snippet summarizes the segment-wise statistics of inflow and outflow for a region. The *_mean 
+
+fields describe the average level within each segment, the [max,min] fields capture within-segment variation, 
+
+obs_rate reflects missingness, and max_gap indicates the forecast gap from the last observed record to the first query slot. 
+
+A.10 Prompt Examples 
+
+Below, we provide representative prompt examples for the urban and physical-dynamics datasets. NYCtaxi region prompt. 
+
+Task : Predict future inflow and outflow at the query slots given historical observations over NYC regions, where each node corresponds to a region described by its POI profile. 
+
+Region : Bronx area with dominant POIs: Cultural Facility, Residential, and Education Facility. 
+
+Query-Slots : < q1> < q2> . . . <qLq >. 
+
+Charged interacting-particle prompt. 
+
+Task : Given irregularly sampled observations of the parti-cle system, predict each particle’s future 2D position (x, y )
+
+at the query slots. 
+
+System : A 2D interacting-particle system governed by pair-wise forces. 
+
+Query-Slots : < q1> < q2> . . . <qLq >. 0 5 10 15 
+
+Normalized Value ( )
+
+> 0510
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(a) Taxi: Inflow 0 10   
+
+> Normalized Value ( )
+> 0510
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(b) Taxi: Outflow 0 5 10  
+
+> Normalized Value ( )
+> 024
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(c) Bike: Inflow 0 5 10   
+
+> Normalized Value ( )
+> 024
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(d) Bike: Outflow 0 5 10  
+
+> Normalized Value ( )
+> 024
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(e) Crime: robbery 0 5  
+
+> Normalized Value ( )
+> 024
+> Density
+> 5
+> Train Test Supervised Test Zero-shot
+
+(f) Crime: burglary 
+
+Figure 9: Normalized distribution analysis across datasets. The vertical dashed line indicates the 5σ threshold used for data filtering. Spring-coupled particle prompt. 
+
+Task : Given irregularly sampled observations of the parti-cle system, predict each particle’s future 2D position (x, y )
+
+at the query slots. 
+
+System : A 2D particle system with spring-based interac-tions. 
+
+Query-Slots : < q1> < q2> . . . <qLq >. 
+
+Each query-slot token <q i> corresponds to an irregular query timestamp t(q) 
+
+> i
+
+and represents a time-specific pre-diction request. For example, when predicting traffic flow at 10:01, 11:34, and 15:47, the query slots <q1>, <q2>,and <q3> are instantiated as <10:01> , <11:34> , and 
+
+<15:47> , respectively. The temporal information is en-coded using the same time-embedding scheme introduced in Appendix A.8. 
+
+A.11 Distribution Shift Analysis of NYC Datasets 
+
+In this work, we use z-score normalized data for both train-ing and testing on the NYC datasets, where normalization is performed using the mean and standard deviation com-puted from the training split. From Figure 9, we observe that all three datasets exhibit long-tail distributions. To avoid the impact of these long-tail distributions on model perfor-mance in irregular forecasting and ensure a fair comparison across methods, we remove points with values greater than +5 σ, resulting in an approximately 2.2% data removal rate. Importantly, this filtering is performed once during dataset preprocessing, and the resulting processed data are used iden-tically for all baseline methods and LLMODE. Therefore, no method receives method-specific outlier treatment. Although the same preprocessing protocol is applied to all datasets and methods, differences remain between the train-ing and test distributions. We therefore further analyze two representative cases: the relatively large errors observed on NYCcrime and the comparatively small performance gains on NYCtaxi inflow. 
+
+Distribution Shift in NYCcrime. Despite this normaliza-tion and outlier removal, we find that the test distributions for the NYCcrime dataset still exhibit a mismatch compared to the training split. This discrepancy persists due to dif-ferences in the data distribution between the training and test sets. Since all models are trained and evaluated on the normalized data, this mismatch can disproportionately af-fect methods sensitive to scale or extreme values. In such cases, a small number of large errors can be amplified un-der squared-error metrics like MSE, leading to significantly worse performance on the NYCcrime dataset. 
+
+Distribution Shift in NYCtaxi Inflow. The distribution shift of NYCtaxi inflow is less visually apparent in Figure 9a; however, its summary statistics reveal a substantial contrac-tion from the training split to the supervised test split. After normalization using the training-split statistics, the standard deviation decreases from 1.000 to 0.321 , while the 95th per-centile decreases from 1.569 to 0.195 . These statistics indi-cate that the supervised test period has a considerably nar-rower and more stable value range than the training period. Under such a concentrated evaluation distribution, dominant temporal patterns are relatively stable, and the advantage of explicitly reconstructing continuous-time dynamics may be less pronounced in terms of MAE. As a result, interval-aware but token-discrete methods such as ISTS-PLM can remain competitive on this specific variable. Nevertheless, LLMODE still achieves a slightly lower MSE on NYC-taxi inflow, suggesting better suppression of relatively large prediction errors. Together with the stronger improvements observed on NYCbike, NYCcrime, and the physical-system benchmarks, we therefore regard the NYCtaxi inflow result as a dataset-specific case arising from its concentrated test distribution. 
+
+A.12 Numerical Configuration Sensitivity 
+
+LLMODE formulates the evolution between observations as differential equations and obtains continuous states through numerical integration. To verify that its performance is not tied to a particular numerical configuration, we further ana-lyze the effects of the solver step size and solver choice on the Springs-X forecasting task. 
+
+Sensitivity to Solver Step Size. The default solver step size ∆t0 is set to the minimum sampling interval. As shown in Table 5, increasing the step size to 2∆ t0 slightly increases the MAE and MSE from 0.0973 /0.0191 to 0.1039 /0.0207 .This is expected because a finer integration grid provides a Table 5: Sensitivity to the solver step size on the Springs dataset.         
+
+> Configuration MAE MSE Best baseline 0.1053 0.0237
+> ∆t00.0973 0.0191
+> 2∆ t00.1039 0.0207
+
+Table 6: Sensitivity to the choice of ODE solver on the Springs dataset.          
+
+> Solver MAE MSE Latency (ms/sample) Euler 0.0973 0.0191 0.5854
+> RK4 0.0986 0.0197 1.6876
+
+more accurate approximation of the continuous trajectory. Nevertheless, LLMODE with the larger step size still outper-forms the best baseline, demonstrating its robustness to the choice of solver step size. 
+
+Sensitivity to ODE Solver. We further replace the default Euler solver with the higher-order RK4 solver. As reported in Table 6, RK4 provides no accuracy improvement but increases the ODE-solving latency from 0.5854 to 1.6876 
+
+ms per sample. This indicates that Euler already provides sufficient numerical accuracy when the step size matches the minimum sampling interval, while offering substantially lower computational cost. Together, these results show that LLMODE is not dependent on a specific solver or step-size configuration. 
+
+A.13 Detailed Token-Budget and Efficiency Results 
+
+Table 7 provides the detailed numerical results corresponding to the token-budget efficiency analysis in Figure 4, includ-ing token consumption and inference latency under different LLM-based forecasting settings. Compared with UrbanGPT, LLMODE reduces the inference latency from 646.73 ms to approximately 84 ms while substantially lowering the token budget, thereby reducing the computational overhead within the frozen-LLM forecasting paradigm. The reported token budget includes prompt tokens and both dynamic and context memory tokens. Unlike the ap-pended spatio-temporal tokens used by UrbanGPT, the ODE-derived tokens are maintained as external memory and in-jected through gated cross-attention, without increasing the length of the LLM self-attention sequence. Compared with full-trajectory exposure, fixed-budget compression reduces the reported token budget by approximately 75% while main-taining or improving forecasting accuracy. Nevertheless, the compressed and full-trajectory settings exhibit relatively sim-ilar inference latency, since changing the external-memory size has a more limited computational impact than changing the LLM input-sequence length. Our objective is to explore a new modeling paradigm for irregular spatio-temporal forecasting by leveraging the rep-resentation capacity, prior knowledge, and transferability of Table 7: Token-budget and efficiency analysis on NYCbike zero-shot. Non-LLM forecasting methods are included for reference, while token-budget analysis focuses on LLM-based forecasting settings.                                                   
+
+> Variant MAE MSE Latency (ms) Tokens
+> LLM-based forecasting settings
+> UrbanGPT 0.0778 0.0292 646.73 665
+> K= 1 0.0863 0.0402 83.29 64
+> K= 3 0.0826 0.0301 83.49 68
+> K= 5 0.0745 0.0260 83.81 72
+> K= 8 0.0748 0.0254 84.10 78
+> K= 30 0.0782 0.0288 85.48 122
+> K= 90 0.0831 0.0322 86.04 242 w/o compression 0.0839 0.0331 86.54 302
+> Non-LLM forecasting methods
+> MTGNN 0.0769 0.0357 9.87 –tPatchGNN 0.0765 0.0323 10.63 –
+
+pretrained LLMs. Accordingly, the efficiency analysis fo-cuses on reducing the cost of processing external spatio-temporal evidence, rather than making an absolute speed comparison with all non-LLM methods. Nevertheless, we additionally report the inference latency of representative non-LLM forecasting methods as a computational reference. Their substantially lower latency reveals the remaining effi-ciency gap and motivates future work to further improve the computational efficiency of LLM-based forecasting while preserving the predictive and generalization benefits of pre-trained language models. 
+
+A.14 Additional Analysis of Gated Evidence Injection 
+
+Insertion Frequency and Number. The frozen Vicuna-7B backbone contains 32 Transformer blocks. We insert the dual-source gated injection modules between these blocks and jointly vary their insertion frequency and number. Specif-ically, we consider three configurations: (i) one early in-jection at Block 1, (ii) two injections with an interval of 16 blocks, and (iii) four injections with an interval of 8 blocks. Figure 10 reports the results on NYCtaxi-Supervised, NYCtaxi-Zero-shot, and Springs. As shown in Figure 10, inserting two modules every 16 blocks achieves the best overall performance and consistently improves over using only one early injection. Increasing the insertion frequency to every 8 blocks does not yield fur-ther gains and can even degrade accuracy. This suggests that overly frequent injection may introduce redundant updates into the frozen representations. Moreover, each additional module requires extra cross-attention computation at another depth of the LLM, increasing both computational cost and inference latency. We therefore adopt two gated injection modules with a 16-block interval as the default configura-tion. 
+
+Gate Evolution and Effective Contribution. Under the default every-16-blocks configuration, two gated injection modules are inserted into the frozen Vicuna-7B backbone. Layer 0 and Layer 1 in Figure 7 denote the first and second injection modules, respectively. For each module, the learn-able gate parameter g is transformed into the effective gate gain α = tanh( g). The solid curves in Figure 7 show the evolution of α throughout training. Because the gate gain alone does not fully characterize the actual magnitude of the injected update, we additionally report the normalized Effective Contribution: 
+
+C = α∥h∥2
+
+∥hprompt ∥2
+
+, (37) where h denotes the representation produced by the corre-sponding cross-attention branch, and hprompt denotes the prompt-token representation before the gated residual up-date. The metric therefore measures the magnitude of the injected update relative to the current backbone representa-tion. The shaded regions in Figure 7 visualize this normalized contribution. Starting from zero initialization, the gate gains of both modules gradually increase and eventually stabilize. This behavior shows that the model progressively opens the injec-tion paths, incorporates the external dynamic and contextual tokens, and finally converges to stable injection strengths. Although Layer 0 generally learns a smaller gate gain than Layer 1, the gate values cannot be compared in isolation because the actual update also depends on the magnitude of the attended representation h. The Effective Contribution provides this complementary view and confirms that both in-jection modules maintain meaningful non-zero updates after convergence. 
+
+A.15 Qualitative Case Study 
+
+Figure 8 presents a representative forecasting example on NYCtaxi under the supervised setting, comparing LLMODE with the strong irregular-aware baseline tPatchGNN (Zhang et al. 2024). For each evaluation window, the models use a 24-hour history to predict the following 12 hours. For visu-alization, forecasts from consecutive windows are arranged chronologically to form a 124-hour trajectory. Across the evaluation period, LLMODE follows the ground-truth trends more consistently and exhibits smaller deviations than tPatchGNN. The enlarged region around hours 58–64 further illustrates their difference during a sharp demand variation. LLMODE more accurately captures both the magnitude and temporal location of the peak, whereas tPatchGNN exhibits larger amplitude errors and temporal misalignment. Similar behavior is observed for both inflow and outflow, indicating that the improvement is not limited to a single forecasting variable. Overall, the case study qualita-tively demonstrates that LLMODE better preserves complex temporal patterns and produces more stable forecasts under irregular spatio-temporal observations. 
+
+A.16 Baseline Details 
+
+To ensure fair comparisons across methods with different temporal assumptions, we apply a unified adaptation for base-lines that only operate on a regular time grid. On the input Inject once Inject twice Inject 4 times Inflow Outflow           
+
+> 0.00 0.02 0.04
+> Metric Value (a) NYC Sup. MAE Inflow Outflow
+> 0.0000 0.0025 0.0050 0.0075
+> Metric Value (b) NYC Sup. MSE Inflow Outflow
+> 0.00 0.05 0.10
+> Metric Value (c) NYC Zero MAE Inflow Outflow
+> 0.00 0.02 0.04 0.06
+> Metric Value (d) NYC Zero MSE X-axis Y-axis
+> 0.00 0.05 0.10
+> Metric Value (e) Springs MAE X-axis Y-axis
+> 0.00 0.01 0.02 0.03
+> Metric Value (f) Springs MSE
+
+Figure 10: Performance under different injection frequencies. We use Vicuna-7B as the frozen backbone with 32 Transformer blocks and insert the dual-source gated injection modules between the blocks. We compare three configurations: one insertion after Block 1, two insertions with a 16-block interval, and four insertions with an 8-block interval. NYC Sup. and NYC Zero denote the supervised and zero-shot settings, respectively. side, we linearly interpolate the irregular observations along time to obtain regularly sampled sequences before feeding them into such models. On the evaluation side, the proto-col differs across datasets. For the NYC datasets, the obser-vations are event-driven and do not provide an underlying complete regularly sampled series from which a missing-ness mask can be defined, so we standardize the target as predicting the next 12 regular time steps and evaluate all methods on these aligned horizons. For the physics simu-lation datasets, the original trajectories are generated and recorded on a fixed-step grid, and we create irregular inputs by subsampling this complete regular sequence and speci-fying irregular query times as prediction targets. This con-struction provides explicit indices indicating which future regular steps correspond to the query times. Therefore, for methods that can only produce regular-step forecasts, we ask them to predict the next 60 regular steps and then select the predictions at the indexed query-aligned steps for evalua-tion, enabling consistent assessment under irregular query horizons. We compare our method with a diverse set of baselines, including pre-trained language model based approaches and graph neural network based methods, covering both irreg-ularly sampled and regularly sampled spatio-temporal fore-casting settings. 
+
+TGCN (Zhao et al. 2019) is a temporal graph convolu-tional network for spatio-temporal forecasting, which com-bines graph convolution to model spatial dependencies with recurrent units to capture temporal dynamics, and is origi-nally designed for regularly sampled data defined over a fixed graph. 
+
+STSGCN (Song et al. 2020) is a spatial-temporal graph convolutional network for spatio-temporal forecasting, which jointly models spatial and temporal dependencies through lo-calized spatial-temporal subgraphs. It is originally designed for regularly sampled spatio-temporal data defined over a fixed graph. 
+
+MTGNN (Wu et al. 2020) utilizes a learnable graph struc-ture to model multivariate temporal correlations. MTGNN employs 1-D dilation convolutions to generate temporal rep-resentations. 
+
+BiTGraph (Chen et al. 2023) is a biased temporal convo-lution based graph network for time series forecasting with missing values, which combines graph neural networks to model spatial dependencies with biased temporal convolu-tions to handle irregular sampling patterns and missing ob-servations. 
+
+FourierGNN (Yi et al. 2023) transforms multivariate se-quences into the frequency domain to model spatio-temporal dependencies via spectral graph convolutions. 
+
+ISTS-PLM (Zhang et al. 2025) is a pre-trained language model based approach for irregularly sampled time series forecasting, designed to handle non-uniform time gaps and missing observations through LLM-compatible series repre-sentations. 
+
+UrbanGPT (Li et al. 2024b) integrates a spatio-temporal dependency encoder with a Large Language Model to cap-ture complex urban dynamics via spatio-temporal instruction tuning. 
+
+GPT4TS (Zhou et al. 2023) reframes time series forecast-ing as a language modeling task by processing patch-based representations through a frozen pre-trained GPT-2 back-bone. 
+
+GRU-ODE (De Brouwer et al. 2019) combines Gated Recurrent Units with Neural Ordinary Differential Equations to model continuous-time latent states for irregularly sampled time series. 
+
+tPatchGNN (Zhang et al. 2024) is a graph neural network based approach for modeling irregularly sampled time se-ries, which represents observations as temporal patches and captures temporal dependencies through patch-level message passing to handle non-uniform time gaps and missing obser-vations. 
+
+ViTST (Li, Li, and Yan 2023) is a vision transformer based model for irregularly sampled time series analysis, which transforms irregular multivariate time series into line graph images and leverages vision transformers for representation learning and forecasting.

@@ -1,0 +1,224 @@
+Title: Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs
+
+URL Source: https://arxiv.org/pdf/2609.02965v1
+
+Published Time: Fri, 04 Sep 2026 00:02:47 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 
+
+Philipp Schlinge 1, Jean-Luc Schnipper 1, and Martin Atzmueller 1,2 
+
+> 1
+
+Osnabr¨ uck University, 49074 Osnabrueck,Germany, 
+
+{philipp.schlinge,jschnipper }@uos.de , 
+
+> 2
+
+German Research Centre for Artificial Intelligence (DFKI), 49084 Osnabr¨ uck, Germany 
+
+martin.atzmueller@uos.de 
+
+Abstract. Dynamic networks are being applied in many domains, from social media to logistics systems, each with their own set of special char-acteristics. A model employed on this type of data must capture the duality between temporal/structural and feature-based information. Yet state-of-the-art deep learning models often struggle to learn especially short-term behavioral interaction signals, such as sender intensity or in-teraction inertia, directly from raw event streams. To address this gap, we propose a statistical feature augmentation method that explicitly encodes behavioral interaction statistics into the input feature space. We evaluate our proposed method on an anomaly detection task across three real-world datasets (Reddit, Wikipedia, MOOC) and seven mod-els spanning both continuous-time and discrete-time architectures. As a baseline, we apply the same models trained on the original embeddings. Our results show, that augmentation consistently improves detection per-formance. Beyond performance, the enriched input enables fine-grained post-hoc analysis of behavioral importance, since each statistic occupies a dedicated input dimension. In particular, this work showcases a promis-ing approach for merging classical network analysis with deep learning. Code is available at: https://github.com/uos-sis/base-stat-aug-ad 
+
+Keywords: Dynamic Networks, Anomaly Detection, Augmentation 
+
+# 1 Introduction 
+
+Deep learning models for dynamic graphs can be categorized into discrete-time models leveraging static graph learning frameworks like GraphSAGE [15] and continuous-time models that focus on sequence learning designs, for example DyGFormer [31]. The former employs discrete snapshots aggregated over a fixed time interval as the data format, while the latter directly operates on the contin-uous event stream. These representations impose different structural and tem-poral constraints on learning, motivating distinct architectural choices such as graph convolution, memory modules, or temporal neighborhood sampling. Each of these choices targets a specific subcategory of interaction patterns, capturing arXiv:2609.02965v1 [cs.SI] 2 Sep 2026 2 Philipp Schlinge et al. 
+
+the behavior within those, e.g., when considering a directed dynamic graph and the respective interactions between senders and receivers of events. Despite this diversity, both model families struggle to reliably learn short-term behavioral characteristics such as sender intensity or interaction inertia. Re-cent proposals to encode comparable interaction patterns focus on complex motif learning strategies deeply embedded in the architecture, e.g., through random walks or other discovery mechanisms [18]. In network analysis, heavily structured models like relational event models (REMs) [6] explicitly exploit such statistics, but are restricted to transitive feature combinations and relatively simple mod-els. Recent extensions, e.g., STREAM [12] and DREAM [11] aim to integrate deep learning into the REM framework, but remain restricted by the model structure. In this paper, we address this gap between deep learning and explicit statis-tical modeling by augmenting the input feature space with temporally-decayed behavioral statistics from classical social network analysis. This yields short-term information directly available to arbitrary deep learning architectures and creates dedicated input dimensions that can be propagated in post-hoc analysis. To evaluate our proposed approach, we choose anomaly detection, motivated by the assumption that short-term interaction characteristics carry high discrimi-native information in this setting. We cover a broad range of models spanning continuous-time and discrete-time architectures. With individual input dimen-sions for statistics, our setting facilitates the use of general post-hoc explainabil-ity methods such as SHAP [20] to quantify the influence of individual behavior characteristics on model decisions. This also addresses the often under-explored task of explaining the characteristics of predicted anomalies. As an example, let us consider a discussion forum in the context of a Massive Open Online Course (MOOC): If a student u typically posts one question per day to a forum but if at time t she suddenly sends 20 messages to student v within a span of two minutes up to t′, then this can indicate anomalous interaction behavior. Here, discrete-time models might aggregate these events into a single snapshot, in consequence losing the burstiness of the interaction. Continuous-time models, however, are able to capture the specific timestamps but rely on learned embeddings to infer that this burst is anomalous, which often requires a large set of training data to recognize such short-term patterns. In our example, we can observe deviations from the user’s historical interaction intensity, with a sudden change in rate, as well as the inertia considering respective edges ( u, v )during the time interval [ t, t ′]. Without augmenting the input by explicit features, the model must thus implicitly learn these temporal statistics. In addition, during post-hoc analysis, a method like SHAP can directly attribute the anomaly score to the high value of suitable features, for example, intensity, and can thus provide immediate interpretability in contrast to only considering raw embeddings. Our contributions are summarized as follows: (1) We propose and formal-ize statistical feature augmentation approach for anomaly detection in dynamic graphs. (2) We show that our proposed augmentation approach increases anomaly detection performance, often by a considerable margin. (3) We demonstrate that Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 3
+
+moving classic interaction statistics into the input feature space, substantially improves explainability of the studied anomaly-detection models. 
+
+# 2 Related Work 
+
+Below, we discuss related work on dynamic interaction networks, statistical net-work models and motifs as well as anomaly detection in this context. Further-more, we discuss explainability, in particular focusing on post-hoc explanations. 
+
+2.1 Dynamic Interaction Networks 
+
+A network is often modeled as a graph consisting of a set of nodes and a set of edges connecting the nodes. For example, social networks represent people or groups of people (nodes) and relationships between them (edges). Social inter-action networks [28] model interaction relations between actors represented by 
+
+people . We can then empirically study such networks to gain an understanding of their underlying structures. Furthermore, we can also consider other relation-ships which are mediated via specific resources. According to this, the principle of object-centric sociality [19] then induces connections between actors, based on implicit user interactions on specific joint resources. The analysis of social in-teraction networks is discussed in [3], specifically focusing on dynamic networks captured during certain events such as conferences, i.e., as human behavioral (offline) networks. The analysis of dynamic interaction networks – as a form of feature-rich networks [17], also potentially including attributes – represents a considerable evolution beyond static interaction models by explicitly integrating the timing, duration, and sequence of connections. Static networks aggregate interactions into a single topology. This can obscure the causal order necessary for understanding complex interaction processes. Dynamic frameworks preserve the time-resolved structure of edges, allowing for the identification of transient structures such as motifs and communities which could otherwise by masked [16]. Hence, this is the scope of this paper, focusing on dynamics and the respective time-dependent characteristics and features. 
+
+2.2 Statistical Network Models and Motifs 
+
+Statistical analysis of dynamic networks [8,13,25], has a long history, with classi-cal methods such as Relational Event Models (REMs) [6] that model the charac-teristics of a network through point processes. Recent extensions increase the ex-pressiveness from such REMs by introducing non-linear effects modeled through splines (STREAM [12]) or neural networks (DREAM [11]), but remain tied to the statistical modeling paradigm. Complementary to these generative approaches, motif discovery or motif learning such as DyG2Vec [2] are established meth-ods for capturing characteristic interaction patterns. Techniques in this line also include motif retrieval through random walks [18, 27] or discovery through sta-tistical hypothesis testing [21]. This paper proposes an approach augmenting the 4 Philipp Schlinge et al. 
+
+input features with characteristic behavioral features, adressing the gap between deep learning and explicit statistical modeling. 
+
+2.3 Anomaly Detection on Dynamic Graphs 
+
+From an abstract point of view, an anomaly is defined as a pattern that does not conform to some notion of the expected, normal behavior. Therefore, a straight-forward general anomaly detection approach defines a region covering the ex-pected behavior and declares any observation in the data that does not belong to this region as an anomaly. For static networks, respective methods are discussed in [1, 24]. In contrast, anomaly detection in dynamic networks is more challeng-ing, and concerns a large research area, spanning both continuous-time [22,30,31] and discrete-time [7, 15], typically in supervised [10] or semi-supervised [26] set-tings. Continuous-time models often rely on neighborhood sampling with atten-tion mechanisms [26,30,31] to capture the structural context, while discrete-time models ingest snapshots and use for example graph convolutional layers [7, 15] from the static domain. Within this space, we position our work as a data-centric augmentation strategy that is model-agnostic: it enriches the input features, not the architecture, and is therefore applicable to any of the above models, thus providing a general approach. 
+
+2.4 Post-hoc Explanations 
+
+Explainability and explanations [4, 14, 23] are important for enhancing inter-pretability and comprehension of complex models, tackled by methods in the area of Explainable AI (XAI). According to [5], XAI should produce details and/or reasons in order to “make its functioning clear or easy to understand” [5]. Here, specifically post-hoc approaches are relevant for many cases, since these are typically model agnostic. For machine learning on graphs, and specifically for dynamic graphs, explainability remains both underexplored and loosely de-fined [4]. Approaches for motif-level explanations such as TempME [9] and T-GNNExplainer [29] are rather restrictive to dataset and model formats. A clear explanation of the found motif is an additional challenge typically not covered in such methods. Post-hoc feature attribution methods such as SHAP [20] have seen wide adoption in static deep learning models. These general-purpose explainers are applied to the input feature space, which makes them useful for our augmen-tation as each statistic maps to a dedicated input dimension. This results in an importance analysis over a clearly defined set of basic motifs/statistics, which is a simple yet highly interpretable setting. In summary, prior deep learning approaches encode statistical patterns only implicitly with complex architectures, and explainability remains an underdevel-oped feature on most dynamic graph models. By explicitly placing the statistics into the input space, our work offers a model-agnostic approach that both im-proves detection and simplifies explanations. In this regard, we see our work as complementary to the existing literature in the form of a sophisticated prepro-cessing approach. Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 5
+
+# 3 Statistical Feature Augmentation 
+
+We formalize the input to any downstream model as a sequence of interaction events E = {et}Tt=0 , where each event et = ( st, r t, t, xt) consists of a sender st, a receiver rt, a timestamp t, and edge features xt ∈ Rd. Anomaly detection then amounts to classifying each event as normal or anomalous. In the following, we describe how we augment each event’s feature vector to bring the statistical information into the input space. The core hypothesis of this work is that short-term interaction characteris-tics – such as how often a sender interacts, how recent that interaction was, and whether the sender is repeating past interaction patterns – carry high discrim-inative information especially for anomaly detection. Classical social network analysis defines these characteristics as statistics over the recent event history. We encode them with an exponential time-decay function, so we have a contin-uous range where recent events carry more weight. The temporal weight assigned to an event occurring at time u and evaluated at time t is defined as 
+
+w(u, t ) = λe −λ(t−u), λ = ln(2) 
+
+T1/2
+
+, t ≥ u. (1) The parameter T1/2 controls the half-life of the decay and thereby determines the relevance of historical events for the current statistic. A smaller T1/2 gives more weight to recent events; a larger T1/2 smoothes the statistic over a longer window. In our experiments we set T1/2 to half the duration of the dataset, retaining substantial weight on a large part of the history, which keeps information of long range patterns intact. To incorporate cyclic interactions into our statistical augmentation, we define the following notation. For an event t associated with sender s′, let pm(t) denote the m-th preceding event involving s′, where 
+
+p0(t) = t, pm(t) = max {u < p m−1(t) : su = s′} , m ≥ 1. (2) The set of events in which s′ changes its receiver is given by 
+
+Ds′ = et ∈ E : st = s′, p 1(t) exists , r t̸ = rp1(t) . (3) A cyclic interaction of sender s′ containing k unique receivers is then defined as 
+
+Ck(t) = 1{et∈Ds′ }1{rt=rpk (t)}
+
+> k−1
+
+Y
+
+> ℓ=1
+
+1{rt̸ =rpℓ(t)}
+
+> k
+
+X
+
+> ℓ=0
+
+w(pℓ(t), t ). (4) Table 1 lists the considered set of statistics in our context. Here, the inten-sity statistic captures the overall activity of a sender/receiver, while the inertia statistic quantifies the recent activity on a specific sender-receiver edge. The interaction-cycle statistics capture whether a sender changes its receiver in a way that completes a (directed) cycle of length k. These statistics are computed 6 Philipp Schlinge et al. 
+
+Table 1: The dynamic network statistics used for augmentation.          
+
+> Statistic Equation Node Intensity I(i, t ) = P
+> j:( i,j )∈E
+> P
+> eu∈Eij w(u, t )Edge Inertia I(i, j, t ) = P
+> eu∈Eij w(u, t )Pair interaction cycle C2(t)Triad interaction cycle C3(t)
+
+per event based on the entire history up to time t. Using the directed and undi-rected interaction case, we compute a set of 9 statistics per event. We consider two augmentation variants. The first, (+Stats), is the baseline of our augmentation and simply concatenates a normalized version of the statistics vector s(t), to the original edge features so that 
+
+x′ 
+
+> t
+
+= [ xt; s(t)] .
+
+This variant does not address asymmetries between the embedding feature space and the distributions of individual statistics. That is why, in our second variant, statistical feature encoding (+Stats +Encoded), we encode the concatenated vector through a bottleneck autoencoder. The encoder maps x ∈ Rd through a sequence of hidden layers into a latent vector z ∈ Rk; a decoder reconstructs the input. To make each latent dimension informative for anomaly detection, we opti-mize the Kolmogorov-Smirnov (KS) separation between normal and anomalous distributions, together with a reconstruction term and a variance penalty: 
+
+L = − 1
+
+k
+
+> k
+
+X
+
+> d=1
+
+sup 
+
+> z
+
+F (d) 
+
+> n
+
+(z) − F (d) 
+
+> a
+
+(z) + λvar kX
+
+> d=1
+
+(std( zd) − 1) 2 + λrec MSE( x, ˆx) ,
+
+(5) where F (d) 
+
+> n
+
+and F (d) 
+
+> a
+
+are the CDFs of the d-th latent dimension over normal and anomalous samples, respectively. The KS statistic is computed with a differen-tiable, temperature-smoothed CDF so it can be optimized via backpropagation. The KS-Loss is suitable for our setting because each statistic encodes a dis-tinct behavioral dimension (intensity, inertia, cyclic activity), so we expect the latent dimensions to be approximately disentangled. This assumption cannot be made for the compressed embedding vector, which is why we use the recon-struction term to retain input information and the variance penalty to prevent collapse or trivial scaling. The computation of the actual statistics is efficient for large datasets: each statistic can be updated in constant time per new event. This is enabled by the exponential decay weight function: for a history of length 
+
+n, the statistics over a node or edge are computed using only O(1) operations per step, yielding O(n) total complexity for the entire stream. Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 7
+
+# 4 Experiments 
+
+We evaluate all models on the task of binary edge classification: given the his-torical event stream up to time t, predict whether the current edge event et is anomalous or normal. We compare three feature configurations for each model: (1) the original edge features without augmentation (baseline), (2) the original features concatenated with the statistics (+Stats), and (3) the encoded latent representation from the KS-autoencoder (+Stats +Encoded). We use three standard dynamic graph datasets (Reddit, Wikipedia, MOOC) commonly used in anomaly detection evaluation. Table 2 summarizes the prop-erties of our dataset splits. All datasets provide ground truth anomaly labels for their events. Each dataset is split chronologically into 70/15/15 for train-ing, validation, and testing. All models are chosen by their highest ROC-AUC performance on the validation split, and the final performance is evaluated on the test split. The encoder model used to generate our (+Stats+Encoded) data variants is also trained on the training split and chosen based on the smallest loss on the validation split. We evaluate seven anomaly detection models, spanning both architecture families from Section 2: continuous-time models (TGAT [30], TGN [22], DyG-Former [31], AER [10], SAD [26]) and discrete-time models (GraphSAGE [15], StrGNN [7]). For the discrete-time models, we convert the continues edge stream in discrete snapshots using a fixed number of 2000 edges to balance snapshot sizes. As we use user-item interaction datasets, with an anomalous event in-dicating the removal of that user from the dataset, we generate node features as follows: for user nodes the edge feature vector of the last interaction in the snapshot is used, for item nodes an average over all edges associated with that item is computed. Further, model specific preprocessing steps are used on all dataset configurations. For all models, we use the recommended default param-eters from the original repositories, except for the input dimensions, which are reasonably adjusted to match the feature dimension of each configuration. All runs are repeated over 4 random seeds and we report mean ± standard deviation. Table 2: Class distribution across dataset splits (70/15/15). Percentages indicate the proportion of normal and anomaly samples within each split.                          
+
+> Dataset Split Total Normal Anomaly Reddit Train 470,713 470,523 (99.96%) 190 (0.04%) Val 100,867 100,785 (99.92%) 82 (0.08%) Test 100,867 100,773 (99.91%) 94 (0.09%) MOOC Train 288,224 285,247 (98.97%) 2,977 (1.03%) Val 61,762 61,252 (99.17%) 510 (0.83%) Test 61,763 61,184 (99.06%) 579 (0.94%) Wikipedia Train 110,232 110,076 (99.86%) 156 (0.14%) Val 23,621 23,604 (99.93%) 17 (0.07%) Test 23,621 23,577 (99.81%) 44 (0.19%) 8Philipp Schlinge et al.
+
+To summarize, this setup allows us to answer three questions: (1) does sta-tistical augmentation improve detection performance? (2) which architectures benefit most from the augmentation, and is this effect consistent across datasets? (3) does the encoding strategy further improve performance and alter the con-tribution of statistical features compared to standard augmentation? 
+
+# 5 Results 
+
+We evaluate the impact on model performance (ROC-AUC) and interpretability (SHAP importance share between embedding and statistics). Table 3 reports the detection performance of all models across the three feature configurations on all datasets. Table 4 then breaks down the importance share of the statistical features relative to the original embedding. Table 3 shows a consistent and often substantial improvement from the aug-mentation. Across all three datasets, at least one augmented configuration out-performs the baseline for every model except DyGFormer on the MOOC dataset, which exhibits a small degradation of −0.42%. The most striking gains occur on the Reddit dataset, where GraphSAGE improves by +21 .18% (from 62 .98% to 84 .15% ROC-AUC) through the + Stats + Encoded configuration. Three patterns emerge from Table 3. First, the augmentation consistently improves performance on at least one dataset for every model, but the gain varies strongly across datasets and models. This indicates that the anomaly generation process differs between domains and is reflected in our statistics to different degrees. Second, the gain of the augmentation varies between models and is not consistent over the discrete- nor the continuous-time category. Third, the magnitude of the gain is not correlated with the baseline performance: both low-performing and already high-performing models benefit from the augmentation sometimes to a similar degree. This indicates that the statistics are not merely used to close a modelling deficiency of weaker models but provide information that is orthogonal to existing features. Beyond detection performance, we analyze the extent to which the model relies on the statistical features for its decision. Table 4 reports the SHAP impor-tance share of the statistical dimensions versus the original embedding features. Table 4 reveals two main trends. First, the +Stats +Encoded configuration generally shifts SHAP importance toward statistical features, particularly on Wikipedia, where statistics account for more than 80% of the importance for most models. On Reddit and MOOC, the effect is more model-dependent, with several models showing a more balanced contribution. Second, the nine statistical features often contribute substantially more than their dimensionality would suggest. The best performing model-variant pairs (underscored results) rely, with 80–88% on Reddit and Wikipedia, heavily on the statistical information. On the MOOC dataset, results from the best performing models shows the opposite, with statistical information as a supportive addition instead of the main source of information. Nevertheless, this indicates that the statistics can provide substantial predictive information beyond the embeddings. Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 9
+
+Table 3: Performance comparison of anomaly detection models across feature configurations (ROC-AUC in %, mean ±std over 4 runs with different seeds).                                                                                                                                                                                                                                                               
+
+> Dataset Model Original +Stats +Stats +Encoded Max Gain Reddit GraphSAGE [15] 62 .98 ±2.84 61 .86 ±1.92 84 .15 ±1.00 +21 .18 ±3.37 StrGNN [7] 59 .68 ±3.45 61 .72 ±2.25 60 .83 ±2.79 +3 .87 ±3.85 AER [10] 72 .95 ±2.41 72 .91 ±1.57 79 .62 ±0.77 +6 .67 ±2.51 SAD [26] 69 .26 ±1.17 69 .80 ±1.99 73 .35 ±0.67 +4 .09 ±1.41 TGAT [30] 61 .48 ±0.37 61 .40 ±0.38 72 .68 ±0.28 +11 .20 ±0.44 TGN [22] 60 .96 ±0.85 61 .58 ±0.66 67 .88 ±0.44 +6 .91 ±1.01 DyGFormer [31] 68 .01 ±2.45 67 .58 ±1.38 74 .63 ±0.69 +6 .61 ±2.99 Wikipedia GraphSAGE [15] 72 .61 ±1.40 69 .33 ±1.56 76 .31 ±1.14 +3 .70 ±0.71 StrGNN [7] 63 .56 ±2.52 66 .57 ±2.69 67 .91 ±2.46 +6 .08 ±2.82 AER [10] 68 .86 ±1.77 71 .22 ±0.88 76 .65 ±0.62 +7 .79 ±1.73 SAD [26] 84 .77 ±1.56 84 .85 ±1.01 88 .85 ±0.47 +4 .08 ±1.72 TGAT [30] 76 .85 ±6.03 81 .87 ±2.76 75 .72 ±0.54 +5 .02 ±5.13 TGN [22] 78 .46 ±1.80 78 .99 ±1.30 82 .01 ±0.20 +3 .54 ±1.61 DyGFormer [31] 83 .36 ±2.02 81 .70 ±2.84 86 .92 ±1.64 +3 .56 ±2.15 MOOC GraphSAGE [15] 56 .51 ±0.08 71 .13 ±0.39 69 .34 ±0.48 +14 .62 ±0.34 StrGNN [7] 66 .48 ±0.87 66 .44 ±2.60 67 .63 ±0.79 +1 .46 ±1.29 AER [10] 76 .69 ±0.43 84 .45 ±0.55 84 .23 ±0.28 +7 .91 ±0.56 SAD [26] 67 .77 ±2.37 67 .76 ±7.59 71 .77 ±0.34 +4 .44 ±2.23 TGAT [30] 60 .08 ±0.34 70 .91 ±0.12 72 .05 ±0.09 +11 .98 ±0.37 TGN [22] 63 .46 ±0.51 69 .58 ±0.34 71 .90 ±0.04 +8 .44 ±0.55 DyGFormer [31] 76 .71 ±0.62 75 .72 ±0.63 76 .10 ±0.20 −0.42 ±0.76
+
+The encoded configuration also often reduces seed variability, especially on Wikipedia and Reddit, but this effect is not consistent across all datasets. For example, the standard deviation decreases for Reddit DyGFormer from 8 .2% to 4.2%, but increases for MOOC DyGFormer from 4 .6% to 9 .8%. Thus, encoding changes the balance of feature importance and can improve stability, but neither effect is universal. To summarize the results with respect to the experimental questions from Section 4 we observe the following: 1. In general, statistical augmentation improves detection performance in the majority of the applied configurations, often by substantial margins. 2. Overall, no architecture consistently benefits the most across datasets, indi-cating that the effect of augmentation is dataset- and model-dependent. 3. Furthermore, the encoded configuration often tends to outperform the con-catenation strategy, shifts SHAP importance toward the statistical features and improves stability, although these effects are not consistent across all datasets and models. 10 Philipp Schlinge et al. 
+
+Table 4: Share of SHAP importance between embeddings and statistics (mean ±std over 4 runs with different seeds, in %). 
+
+Dataset Model +Stats +Stats +Encoded Emb Stat Emb Stat Reddit GraphSAGE [15] 70 .9 ± 2.5 29 .1 ± 2.5 20 .0 ± 0.0 80 .0 ± 0.0
+
+StrGNN [7] 65 .2 ± 1.7 34 .8 ± 1.7 49 .1 ± 1.7 50 .9 ± 1.7AER [10] 50 .0 ± 1.1 50 .0 ± 1.1 45 .2 ± 1.5 54 .8 ± 1.5
+
+SAD [26] 80 .0 ± 6.1 20 .0 ± 6.1 34 .3 ± 0.9 65 .7 ± 0.9
+
+TGAT [30] 80 .3 ± 0.8 19 .7 ± 0.8 46 .4 ± 2.6 53 .6 ± 2.6
+
+TGN [22] 82 .9 ± 2.4 17 .1 ± 2.4 43 .7 ± 2.7 56 .3 ± 2.7
+
+DyGFormer [31] 63 .6 ± 8.2 36 .4 ± 8.2 46 .2 ± 4.2 53 .8 ± 4.2
+
+Wikipedia GraphSAGE [15] 55 .0 ± 5.7 45 .0 ± 5.7 18 .8 ± 3.4 81 .2 ± 3.4
+
+StrGNN [7] 45 .5 ± 3.7 54 .5 ± 3.7 54 .2 ± 2.3 45 .8 ± 2.3
+
+AER [10] 65 .2 ± 1.7 34 .8 ± 1.7 50 .8 ± 3.6 49 .2 ± 3.6
+
+SAD [26] 72 .9 ± 3.8 27 .1 ± 3.8 11 .4 ± 1.3 88 .6 ± 1.3
+
+TGAT [30] 47 .6 ± 13 .8 52 .4 ± 13 .8 6.0 ± 0.9 94 .0 ± 0.9TGN [22] 55 .9 ± 11 .1 44 .2 ± 11 .1 9.8 ± 1.5 90 .2 ± 1.5
+
+DyGFormer [31] 49 .1 ± 20 .5 50 .9 ± 20 .5 9.9 ± 2.3 90 .0 ± 2.3
+
+MOOC GraphSAGE [15] 40 .5 ± 6.7 59 .5 ± 6.7 35 .2 ± 6.4 64 .8 ± 6.4StrGNN [7] 27 .2 ± 3.9 72 .8 ± 3.9 64 .8 ± 3.8 35 .2 ± 3.8
+
+AER [10] 78 .8 ± 2.1 21 .2 ± 2.1 52 .2 ± 1.3 47 .8 ± 1.3SAD [26] 47 .5 ± 7.4 52 .5 ± 7.4 31 .4 ± 8.7 68 .6 ± 8.7
+
+TGAT [30] 35 .3 ± 9.4 64 .7 ± 9.4 20 .4 ± 2.0 79 .6 ± 2.0
+
+TGN [22] 36 .8 ± 17 .4 63 .2 ± 17 .4 20 .0 ± 2.1 80 .0 ± 2.1
+
+DyGFormer [31] 84 .9 ± 4.6 15 .1 ± 4.6 43 .6 ± 9.8 56 .4 ± 9.8
+
+# 6 Discussion 
+
+Our results indicate that statistical feature augmentation provides information complementary to existing dynamic graph representations. Performance im-proves for most models, but the magnitude of the gain varies across datasets and architectures. This suggests that the applicability and usefulness of short-term behavioral statistics depends on the characteristics of the underlying interaction data rather than on a specific model family. In general, the results of the SHAP analysis supports this interpretation. The nine statistical features often account for a substantial share of decision importance despite their small dimensionality. The encoded configuration gen-erally increases their contribution, particularly on Wikipedia, while Reddit and MOOC show more model-dependent effects. Thus, the augmentation not only improves performance in many settings but also makes the contribution of spe-cific behavioral statistics more directly interpretable. Statistical Feature Augmentation for Anomaly Detection in Dynamic Graphs 11 
+
+# 7 Conclusion 
+
+In this paper we showed the positive impact of enriching dynamic network data with interaction statistics. We argue, that augmenting the data with classical statistics enables us to learn network dynamics in a simplified manner and on top, it can be used as a strong basis for the explainability aspect of these models. Therefore, with this work we want to highlight the broader question: What kind of interaction behavior can be moved from the learning task in the input space to increase performance and interpretability. For future work, we aim to address this question by increasing the set of statistics, especially focusing on more complex interaction patterns that are grounded in the theory of social analysis. Our work showed the impact of an additional projection into a combined feature space of embeddings and statis-tics, which should also be researched further. In addition, we aim to extend our approach for more datasets. Here, also an analysis of causal relationships becomes important, since large standard deviations of SHAP importance may indicate an association with the training process. Future work should therefore examine specifically additional more complex behavioral statistics and a broader range of datasets. 
+
+# References 
+
+1. Akoglu, L., Tong, H., Koutra, D.: Graph Based Anomaly Detection and Descrip-tion. Data. Min. Knowl. Disc. 29 (3), 626–688 (2015) 2. Alomrani, M.A., Biparva, M., Zhang, Y., Coates, M.: Dyg2vec: Representation learning for dynamic graphs with self-supervision. ArXiv abs/2210.16906 (2022) 3. Atzmueller, M.: Data Mining on Social Interaction Networks. JDMDH 1 (2014) 4. Atzmueller, M., F¨ urnkranz, J., Kliegr, T., Schmid, U.: Explainable and inter-pretable machine learning and data mining. Data Min Knowl Disc 38 (5), 2571– 2595 (2024) 5. Barredo Arrieta, A., D´ ıaz-Rodr´ ıguez, N., Del Ser, J., Bennetot, A., Tabik, S., Bar-bado, A., Garcia, S., Gil-Lopez, S., Molina, D., Benjamins, R., Chatila, R., Herrera, F.: Explainable Artificial Intelligence (XAI): Concepts, taxonomies, opportunities and challenges toward responsible AI. Inf. Fusion 58 , 82–115 (2020) 6. Butts, C.T.: 4. a relational event framework for social action. Sociol. Methodol. 
+
+38 , 155 – 200 (2008) 7. Cai, L., Chen, Z., Luo, C., Gui, J., Ni, J., Li, D., Chen, H.: Structural temporal graph neural networks for anomaly detection in dynamic graphs. In: Proc. ACM CIKM, pp. 3747–3756 (2021) 8. Carley, K.M., Diesner, J., Reminga, J., Tsvetovat, M.: Toward an interoperable dynamic network analysis toolkit. Decis. Support Syst. 43 (4), 1324–1347 (2007) 9. Chen, J., Ying, R.: Tempme: Towards the explainability of temporal graph neural networks via motif discovery. ArXiv abs/2310.19324 (2023) 10. Fang, L., Feng, K., Gui, J., Feng, S., Hu, A.: Anonymous edge representation for inductive anomaly detection in dynamic bipartite graph. Proc. VLDB Endowment 
+
+16 (5), 1154–1167 (2023) 12 Philipp Schlinge et al. 11. Filippi-Mazzola, E., Wit, E.C.: Modeling non-linear effects with neural networks in relational event models. Soc. Networks 79 , 25–33 (2023). URL https://api. semanticscholar.org/CorpusID:266362538 12. Filippi-Mazzola, E., Wit, E.C.: A stochastic gradient relational event additive model for modelling us patent citations from 1976 to 2022. J. R. Stat. Soc. C Appl. Stat. 73 (4), 1008–1024 (2024). DOI 10.1093/jrsssc/qlae023 13. Goldenberg, A., Zheng, A.X., Fienberg, S.E., Airoldi, E.M.: A survey of statistical network models. Found. Trends Mach. Learn. 2(2), 129–233 (2010) 14. Gunning, D., Stefik, M., Choi, J., Miller, T., Stumpf, S., Yang, G.Z.: XAI - Ex-plainable Artificial Intelligence. Sci. Robot. 4 (2019) 15. Hamilton, W.L., Ying, R., Leskovec, J.: Inductive representation learning on large graphs. In: Proc. NIPS (2017) 16. Holme, P., Saram¨ aki, J.: Temporal networks. Phys. Rep. 519 (3), 97–125 (2012) 17. Interdonato, R., Atzmueller, M., Gaito, S., Kanawati, R., Largeron, C., Sala, A.: Feature-rich networks: going beyond complex network topologies. Appl. Netw. Sci. 
+
+4(1), 1–13 (2019) 18. Jin, M., Li, Y.F., Pan, S.: Neural temporal walks: Motif-aware representation learn-ing on continuous-time dynamic graphs. In: A.H. Oh, A. Agarwal, D. Belgrave, K. Cho (eds.) Proc. NIPS (2022) 19. Knorr-Cetina, K.: Sociality with Objects: Social Relations in Postsocial Knowledge Societies. Theory Cult. Soc. 14 (4), 1–43 (1997) 20. Lundberg, S.M., Lee, S.I.: A unified approach to interpreting model predictions. Proc. NIPS 30 (2017) 21. von Pichowski, J., Perri, V., Qarkaxhija, L., Scholtes, I.: Inference of sequential patterns for neural message passing in temporal graphs. In: Proc. Learning on Graphs Conference (2024) 22. Rossi, E., Chamberlain, B., Frasca, F., Eynard, D., Monti, F., Bronstein, M.: Temporal graph networks for deep learning on dynamic graphs. arXiv preprint arXiv:2006.10637 (2020) 23. Roth-Berghofer, T., Richter, M.M.: On explanation. K¨ unstliche Intell. 22 (2), 5–7 (2008) 24. Savage, D., Zhang, X., Yu, X., Chou, P., Wang, Q.: Anomaly Detection in Online Social Networks. Soc. Networks 39 , 62–70 (2014) 25. Snijders, T.A.: The statistical evaluation of social network dynamics. Sociol. Methodol. 31 (1), 361–395 (2001) 26. Tian, S., Dong, J., Li, J., Zhao, W., Xu, X., Song, B., Meng, C., Zhang, T., Chen, L., et al.: Sad: Semi-supervised anomaly detection on dynamic graphs. arXiv preprint arXiv:2305.13573 (2023) 27. Wang, Y., Chang, Y.Y., Liu, Y., Leskovec, J., Li, P.: Inductive representation learn-ing in temporal networks via causal anonymous walks. ArXiv abs/2101.05974 
+
+(2021) 28. Wasserman, S., Faust, K.: Social Network Analysis: Methods and Applications, 1 edn. Structural Analysis in the Social Sciences. Cambridge University Press (1994) 29. Xia, W., Lai, M., Shan, C., Zhang, Y., Dai, X., Li, X., Li, D.: Explaining temporal graph models through an explorer-navigator framework. In: Proc. ICLR (2023). URL https://api.semanticscholar.org/CorpusID:259298210 30. Xu, D., Ruan, C., Korpeoglu, E., Kumar, S., Achan, K.: Inductive representation learning on temporal graphs. arXiv preprint arXiv:2002.07962 (2020) 31. Yu, L., Sun, L., Du, B., Lv, W.: Towards better dynamic graph learning: New architecture and unified library. Proc. NIPS 36 , 67,686–67,700 (2023)
