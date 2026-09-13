@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-09-13 <!--dpr-date:20260913-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/13/2609.08813v1-dynamic-latent-space-modeling-of-inhomogeneous-poisson-network-processes-with-applications-to-international-relations" data-sidebar-item="{&quot;title&quot;: &quot;Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.08813v1-dynamic-latent-space-modeling-of-inhomogeneous-poisson-network-processes-with-applications-to-international-relations&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;tpp-es&quot;}], &quot;evidence&quot;: &quot;非齐次泊松过程与事件强度建模&quot;}">Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations</a>
   * 2026-09-06 <!--dpr-date:20260906-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/06/2608.30695v1-liquid-gated-attention" data-sidebar-item="{&quot;title&quot;: &quot;Liquid Gated Attention&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.30695v1-liquid-gated-attention&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;tpp-es&quot;}], &quot;evidence&quot;: &quot;面向不规则采样时间序列的连续时间归纳偏置与任意间隔建模&quot;}">Liquid Gated Attention</a>

@@ -1,0 +1,1698 @@
+Title: Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations
+
+URL Source: https://arxiv.org/pdf/2609.08813v1
+
+Published Time: Wed, 09 Sep 2026 04:10:25 GMT
+
+Number of Pages: 37
+
+Markdown Content:
+# Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations 
+
+Jie Jian 1, Owen G. Ward 2, and Jiguo Cao 21Data Science Institute, University of Chicago 
+
+2Department of Statistics and Actuarial Science, Simon Fraser University 
+
+Abstract 
+
+We study continuous-time relational event data, where time-stamped dyadic interactions reflect both individual node propensities and evolving relational proximity. We propose a dynamic latent space model for inhomogeneous Poisson processes, where event intensities depend on node-specific activity parameters and time-varying latent distances modeled via flexible B-splines. We prove model identifiability by decoupling baseline activity from latent position, ensuring high interaction volumes do not warp the spatial map. For scalability, we develop a minibatch stochastic gradient algorithm with stable initialization and geometric anchoring, alongside an effective-degrees-of-freedom BIC for tuning model complexity. Simulations confirm accurate parameter recovery and out-of-sample prediction. Applied to cooperative diplomatic events among 60 major economies (1995–2022), the model uncovers shifting patterns of international cooperation and isolates mobile geopolitical actors from stationary institutional anchors. 
+
+# 1 Introduction 
+
+Understanding how entity relationships evolve over time is a fundamental goal across the social, political, and biological sciences. Latent space models [LSMs; Hoff et al., 2002 ] offer a powerful geometric framework for this task, embedding entities in a low-dimensional space where proximity represents relational affinity. However, modern relational data rarely arrive as static networks. Instead, they consist of continuous streams of individual event records that precisely mark when two entities connect. 1arXiv:2609.08813v1 [stat.AP] 8 Sep 2026 Figure 1: Dyad-level ICEWS cooperative interactions. The left panel reports total events between countries i and j over 1995–2022 across 60 economies. The right panel shows monthly counts for three dyads with comparable totals (Israel to UAE, Japan to Korea, and US to China), whose contrasting dynamics aggregate totals conceal. 
+
+A motivating example is the Integrated Crisis Early Warning System [ICEWS; Boschee et al., 2015 ], a machine-coded archive that records directed political actions capturing who did what to whom and when between pairs of nations over decades, and that has been externally validated against human coding [Bagozzi et al., 2019 ]. Such data invite questions about how dyadic alignments drift, how networks realign, and whether global shocks alter long-term cooperation. Yet, collapsing these event streams into static summary counts discards the temporal dynamics needed to answer them. As Figure 1 demonstrates, dyads with similar aggregate totals can mask fundamentally distinct interaction histories, ranging from abrupt onsets and recurrent bursts to gradual drift. Many dynamic LSMs attempt to track temporal changes by fitting separate latent geometries across sequences of discrete snapshots [Sarkar and Moore, 2005; Sewell and Chen, 2015; Durante and Dunson, 2014; Loyal, 2025; MacDonald et al., 2025 ]. Extensions like Durante and Dunson [2016 ] allow latent positions to evolve in continuous time via stochastic differential equations, but their likelihoods remain bound to time-aggregated network snapshots rather than point-process event streams. Alternatively, some approaches fix spatial geometries entirely while allowing only baseline node activity to vary [He et al., 2025 ]. Consequently, these snapshot-based frameworks lack an instantaneous event-generating mechanism, making it difficult to 2capture fine-grained temporal dynamics or perform smooth forward-in-time forecasting. This paper develops a continuous-time dynamic latent space model built directly on point-process event streams. By representing latent positions as continuous curves, our framework models trajectory paths and instantaneous velocities while avoiding temporal aggregation. We establish conditions under which time-varying latent geometry and node-level baseline activity are separately identified, and we demonstrate the model’s predictive accuracy and interpretability by analyzing cooperative political events among 60 major economies from 1995 to 2022. Existing methods that model continuous event timestamps resolve parts of this challenge, but key gaps remain. Continuous-time stochastic blockmodels [Corneli et al., 2018; Matias et al., 2018; Xin et al., 2017 ] capture discrete community shifts rather than continuous spatial geometries, whereas latent Hawkes models [Huang et al., 2022; Ward et al., 2022 ] accommodate temporal dynamics while keeping latent positions static. Most relevant to our work are continuous latent position models [Artico and Wit, 2023; Rastelli and Corneli, 2023; Romero et al., 2023 ], which allow positions to move over time. However, current formulations suffer from major limitations: they constrain trajectories to piecewise-linear paths with unnatural directional kinks, omit node-specific baseline activity parameters—forcing overall interaction volume to be confounded with spatial distance, and face severe computational bottlenecks when evaluating point-process likelihoods over large networks. To address these challenges, we introduce a continuous-time dynamic latent space model built directly on relational event streams. We model interactions between nodes i and j as independent inhomogeneous Poisson processes with intensity log λi j (t) = βi + βj − ∥ zi (t) − zj (t)∥2, 1 ≤ i < j ≤ n, (1.1) where zi (t) ∈ R2 denotes a smooth latent trajectory and βi captures node i’s intrinsic activity. In diplomatic networks, omitting βi artificially pulls "busy" high-volume actors toward the geometric center, confounding baseline activity with political alignment [Krivitsky et al., 2009; Rastelli and Corneli, 2023 ]. Our formulation decouples activity from spatial geometry so that positions reflect true relational affinity. Crucially, we prove that this joint specification is fully identifiable without ad hoc constraints, yielding a smooth continuous-time framework that avoids temporal aggregation artifacts while scaling to large event archives. This paper provides the following four key contributions. 1. Continuous-time smooth embeddings with identified nodal effects. We formulate latent trajectories as smooth, continuous curves governed by flexible roughness penalties rather than piecewise approximations. Notably, additive nodal parameters decouple base-3line activity heterogeneity from spatial distance, making intrinsic interaction propensity and relational geometry separately inferable components. 2. Theoretical identifiability of smooth geometry and activity. We provide formal identi-fiability proofs for both the continuous-time geometry and node-level activity parameters. Our anchoring framework resolves continuous-time rotational and translational invariance, while strict concavity guarantees unique activity estimates. 3. Scalable computation and model selection. We overcome the severe optimization bottlenecks of dynamic LSMs, enabling inference on large-scale datasets via dyadic mini-batch stochastic gradient descent, while delivering a BIC criterion powered by generalized Gauss-Newton optimization and Hutchinson trace estimation of effective degrees of freedom. 4. Evidence on the changing geometry of international cooperation. Applied to coopera-tive ICEWS events among 60 major economies over 1995–2022, the proposed method yields excellent predictive performance and latent trajectories of nations, and the nested specifications let us test whether both the geometry and the activity parameters are needed. The rest of the paper is organized as follows: Section 2 presents the model framework, Section 3 establishes theoretical identifiability, Section 4 outlines the estimation pipeline, Section 5 reports simulations, and Section 6 analyzes the ICEWS data. Section 7 concludes, with technical proofs deferred to the Supplementary Material, and code reproducing all analyses is provided with the submission. 
+
+# 2 A dynamic latent space model for network event data 
+
+We model the observed interactions as a collection of dyadic point processes whose intensities are governed by the time-varying positions of the nodes in a low-dimensional latent space. Section 2.1 fixes notation and the observation scheme, Section 2.2 introduces the intensity model and the two reduced specifications against which it is compared. Section 2.3 gives the functional representation of the latent trajectories, Section 2.4 the penalty, and Section 2.5 the anchoring method, objective and the estimator. 
+
+2.1 Data structure and notation 
+
+Let V = {1, . . . , n} be a fixed set of nodes observed over the window [0, T ], and let 
+
+D = (i, j) : 1 ≤ i < j ≤ n , |D| =  n
+
+> 2
+
+,4denote the set of unordered dyads. For each dyad we observe the times at which an interaction between i and j is recorded, 
+
+Hi j = ti j ,1 < · · · < ti j ,mi j ⊂ [0, T ],pooling events in both directions, with mi j = |H i j |. We write mi = P  
+
+> j̸=i
+
+mi j for the number of events involving node i and m = P  
+
+> (i,j)∈D
+
+mi j for the total number of events. Without loss of generality, time is rescaled so that T = 1, and we retain T in the notation to keep the role of the observation length explicit. The node set is fixed over [0, T ] and the observation window is common to all dyads. Treating dyads as unordered is a modelling choice rather than a property of the data. We empirically support this symmetry in Section 6. 
+
+2.2 Intensity model 
+
+Each node i is assigned a latent trajectory 
+
+zi (t) =  xi (t), yi (t)⊤
+
+∈ R2, t ∈ [0, T ],and we write di j (t) = ∥zi (t) − zj (t)∥ for the latent distance between i and j at time t. Condi-tionally on the trajectories Z(·) = {z1(·), . . . , zn(·)} and on activity parameters β = ( β1, . . . , βn)⊤,the dyadic processes are taken to be independent inhomogeneous Poisson processes with log intensities log λi j (t) = βi + βj − di j (t)2, (i, j) ∈ D . (2.1) We refer to (2.1) as the Dynamic Latent Space Poisson Process ( DLS-PP ) model. The parameter 
+
+βi captures the overall propensity of node i to interact, absorbing the degree heterogeneity. We adopt squared distance in (2.1) rather than raw Euclidean distance for computational tractability and differentiability, which ensures that the log-intensity function log λi j (t) remains quadratic in the latent coordinates. Two reduced specifications serve as benchmarks throughout. Both are nested in (2.1), and we record them because the comparison in Section 5 and 6 demonstrates that both the latent geometry and the activity parameters are needed. 
+
+Homogeneous baseline : log λi j (t) = β − di j (t)2, (2.2) 
+
+Poisson β-model : log λi j (t) = βi + βj . (2.3) Specification (2.2) is the continuous-time analogue of the classical latent distance model [Hoff et al., 2002 ] with a single intercept. Specification (2.3) discards the geometry and is the Poisson form of the β-model for undirected networks [Holland and Leinhardt, 1981; Chatterjee et al., 2011 ].5z1 
+
+> z2
+> z3z1z2
+> z3
+
+(a) (b) (c) (d) (e)  
+
+> Figure 2: Trajectory estimation for three converging nodes under varying model constraints: (a) True reference configuration; (b) Pointwise estimates exhibiting temporal instability; (c) Unpenalized splines showing overfitting; (d) Unanchored rigid-motion invariance with identical objective values (2.13); and (e) Smooth trajectory recovery using penalized splines under anchored parameterization (2.12).
+
+Conditional independence gives the log-likelihood 
+
+ℓ(Z, β) = 
+
+X 
+
+> (i,j)∈D
+
+ X
+
+> t∈H i j
+
+log λi j (t) −
+
+Z T
+
+> 0
+
+λi j (t) d t 
+
+
+
+. (2.4) Expression (2.4) is a function of infinitely many parameters, since the unknowns are the positions zi (t) of all n nodes at every t in [0, T ]. We now describe how we constrain this quantity to give us a tractable representation, allowing inference. Section 2.3 represents each coordinate function in a spline basis, which turns the infinite-dimensional estimation problem into a finite-dimensional one, and Section 2.4 adds penalties on velocity and acceleration. These penalties are functions of the coordinates while the likelihood is a function of the distances alone, and Section 2.5 therefore fixes the coordinate frame through anchoring. Figure 2 shows what fails when any one of the three is omitted. 
+
+2.3 Functional representation of the trajectories 
+
+We assume that xi (t) and yi (t) are smooth functions of time for every node i. Each coordinate function is represented by a linear combination of B-spline basis functions. Let {φk}Kk=1 be a clamped B-spline basis of degree p on [0, T ] with knots 0 = κ0 < κ 1 < · · · < κ M = T , and set 
+
+zi (t) = 
+
+xi (t)
+
+yi (t)
+
+
+
+=
+
+P Kk=1 c(x) 
+
+> ik
+
+φk(t)
+
+PKk=1 c( y) 
+
+> ik
+
+φk(t)
+
+
+
+, i = 1, . . . , n. (2.5) We fix p = 3 with equally spaced interior knots, giving K = M + p total basis functions, and arrange the corresponding coefficients as 
+
+c(x) 
+
+> i
+
+=  c(x) 
+
+> i1
+
+, . . . , c(x)
+
+> iK
+
+⊤
+
+, Cx = c(x) 
+
+> 1
+
+, . . . , c(x)
+
+> n
+
+⊤
+
+∈ Rn×K ,and analogously for the second coordinate, writing c = ( Cx , Cy ) and ci = ( c(x) 
+
+> i
+
+, c( y) 
+
+> i
+
+). Under (2.5) the squared latent distance is a quadratic form in the coefficient differences, 
+
+di j (t)2 =
+
+¦  c(x) 
+
+> i
+
+− c(x)
+
+> j
+
+⊤
+
+φ(t)
+
+©2
+
++
+
+¦  c( y) 
+
+> i
+
+− c( y)
+
+> j
+
+⊤
+
+φ(t)
+
+©2
+
+, (2.6) 6where φ(t) =  φ1(t), . . . , φK (t)⊤
+
+. Therefore, log λi j (t) is a piecewise polynomial of degree 2 p
+
+in t and the log-likelihood (2.4) becomes an explicit function of (c, β). We repeatedly exploit two key properties of this representation, as the basis exactly reproduces affine functions of t
+
+and the compact support of φk ensures that all derivative Gram matrices are banded. 
+
+2.4 Roughness penalties and the penalized objective 
+
+To enforce temporal smoothness and prevent unpenalized trajectories from overfitting localized event noise (Figure 2c), we estimate (c, β) by maximizing a penalized log-likelihood. The roughness penalty comprises three components that regulate trajectory velocity, curvature, and overall spatial scale. 
+
+Path length The arc length of the trajectory of node i,
+
+Ai =
+
+Z T
+
+> 0
+
+Æ˙xi (t)2 + ˙yi (t)2 d t ,is neither quadratic in ci nor differentiable where the integrand vanishes. We penalize instead the integrated squared velocity, 
+
+f1(ci ) = 
+
+Z T
+
+> 0
+
+˙xi (t)2 + ˙yi (t)2 d t =  c(x)
+
+> i
+
+⊤
+
+Ω1 c(x) 
+
+> i
+
++  c( y)
+
+> i
+
+⊤
+
+Ω1 c( y) 
+
+> i
+
+, (2.7) where [Ω1]kℓ = R T 
+
+> 0
+
+φ′
+
+> k
+
+(t) φ′
+
+> ℓ
+
+(t) d t . By the Cauchy–Schwarz inequality, 
+
+A 2 
+
+> i
+
+≤ T f 1(ci ), (2.8) so penalizing f1 therefore controls arc length from above. The matrix Ω1 is symmetric, positive semidefinite and banded, with [Ω1]kℓ = 0 whenever |k − ℓ| > p.
+
+Curvature The second penalty controls the smoothness of the paths through the integrated squared acceleration, 
+
+f2(ci ) = 
+
+Z T
+
+> 0
+
+¨xi (t)2 + ¨yi (t)2 d t =  c(x)
+
+> i
+
+⊤
+
+Ω2 c(x) 
+
+> i
+
++  c( y)
+
+> i
+
+⊤
+
+Ω2 c( y) 
+
+> i
+
+, (2.9) where [Ω2]kℓ = R T 
+
+> 0
+
+φ′′  
+
+> k
+
+(t) φ′′  
+
+> ℓ
+
+(t) d t is again symmetric positive semidefinite and banded. The two penalties act on complementary features: f1 governs how far a node travels, f2 how directly it does so. Both are of substantive interest in the application, where the length of a country’s path and the abruptness of its movements admit distinct interpretations. 7Penalized objective Adding a ridge term on the coefficients, the overall penalty is given by 
+
+P (c) = 12τ2 ∥c∥2 
+
+> F
+
++ ρ1
+
+> n
+
+X
+
+> i=1
+
+f1(ci ) + ρ2
+
+> n
+
+X
+
+> i=1
+
+f2(ci ), (2.10) where ∥c∥2 
+
+> F
+
+= P
+
+> i,k
+
+{(c(x) 
+
+> ik
+
+)2 + ( c( y) 
+
+> ik
+
+)2}. In practice, the structured terms evaluate compactly in matrix form as Pni=1 fr (ci ) = tr  Cx Ωr C⊤
+
+> x
+
+ + tr  Cy Ωr C⊤
+
+> y
+
+ for r = 1, 2, facilitating efficient matrix-based gradient evaluations. The coefficient-wise Hessian of P is block diagonal with common 
+
+K × K block 
+
+Π = τ−2IK + 2ρ1Ω1 + 2ρ2Ω2 ≻ 0, (2.11) which is strictly positive definite for any finite τ2. Throughout, τ2 is fixed at a large value to maintain a weak ridge penalty, while (ρ1, ρ2) are selected via the BIC in Section 4.5. 
+
+Remark 2.1 (Bayesian interpretation) . The penalty (2.10) corresponds to the negative log-density of a proper prior on c, rendering ˆ c a maximum a posteriori estimate. The terms f1 and 
+
+f2 represent continuous-time analogues of first- and second-order random-walk priors [Lang and Brezger, 2004 ], penalizing deviations from stationary and linear trajectories, respectively. Although f1 and f2 are individually improper, the weak ridge term guarantees overall prior properness ( Π ≻ 0). This framework motivates the approximated BIC in Section 4.5, replacing raw parameter counts with an effective-dimension penalty. 
+
+2.5 Anchored parameterization 
+
+In principle, fitting the model simply requires maximizing the penalized log-likelihood ℓ − P .However, invariance under translations, rotations, and reflections prevents a unique solution without identifying constraints. Three configurations differing by such a rotation are shown in Figure 2(d). We remove the ambiguity by anchoring two nodes, 
+
+C0 = c : c(x) 
+
+> 1
+
+= c( y) 
+
+> 1
+
+= 0, c( y) 
+
+> 2
+
+= 0 , (2.12) so that z1(t) ≡ (0, 0 )⊤ and z2(t) lies on the x-axis for all t, as in Figure 2(e). The sign of x2(t)
+
+is left free, and the anchor pair is chosen by the rule of Section 4.4, which keeps the two nodes well separated. The constraints in (2.12) are imposed by holding the corresponding entries of c
+
+at zero throughout the optimization, so the free parameters have dimension dfree = ( 2n − 3)K.The estimator is then 
+
+(ˆc, ˆβ) = argmax  
+
+> (c,β)∈ C 0×Rn
+
+J (c, β), J (c, β) = ℓ(c, β) − P (c). (2.13) Defining the model directly on the anchored space C0 rather than quotienting an unconstrained spline space is computationally efficient. Section 3 shows that (2.12) leaves only a finite ambiguity, and that the ambiguity acts trivially on every quantity we report. 83 Identifiability 
+
+Restricting coefficients to the anchored set C0 in (2.12), identifiability of (c, β) follows the mapping law of {H i j } (a)
+
+−−→ { λi j (·)} (b)
+
+−−→  β, {di j (t)2} (c)
+
+−−→ { zi (t)} (d)
+
+−−→ (Cx , Cy ). (3.1) Step (a) holds because continuous Poisson intensities are uniquely determined by their point-process law [Karr, 1991 ], and step (d) follows directly from B-spline linear independence. The remaining steps form the theoretical core of this section. Proposition 3.1 addresses step (c) by showing that dynamic distance matrices uniquely recover spatial trajectories up to a time-invariant discrete reflection under C0. Proposition 3.2 establishes conditional concav-ity and existence bounds for β given node positions, which serves as a building block for Proposition 3.3 to resolve step (b) by jointly decoupling activity parameters from geometry. Finally, Proposition 3.4 guarantees local non-degeneracy by proving that the expected Fisher information matrix is strictly positive definite on C0 × Rn, establishing the foundation for valid asymptotic inference. Three conditions on the trajectories are used below. (A1) The two anchor nodes in Section 2.5 do not collide, inf t∈[0, T ] |x2(t)| > 0. (A2) The nodes are not collinear at any time, min t∈[0, T ] max i>2 | yi (t)| > 0. Under (A1) this is equivalent to rank Z(t) = 2 for every t with Z(t) = [ z1(t), . . . , zn(t)] ⊤.(A3) At some t† ∈ [0, T ], no subset of n − 4 nodes lies on a common straight line in R2.Condition (A1) keeps the constrained coordinate system well defined, since the orientation of the x-axis will become arbitrary if the two nodes approach one another. Condition (A2) prevents the residual ambiguity from varying over time, and (A3) is used for Proposition 3.3. The proofs of all propositions are given in Supplementary Section 2. 
+
+3.1 Identifiability of the trajectories 
+
+In general dynamic latent space models, distance-based likelihoods are invariant under rotation, translation, and reflection at each time point. The anchoring constraints in C0 resolve this continuous time-varying non-identifiability, reducing the space of isometric latent configurations to a discrete, time-invariant symmetry group. 
+
+Proposition 3.1. Let c, c∗ ∈ C 0 induce trajectories Z(·) and Z∗(·) with d ∗ 
+
+> i j
+
+(t) = di j (t) for all 
+
+(i, j) ∈ D and all t ∈ [0, T ], and let Z(·) satisfy (A1). 
+
+9(i) For each t, there is a matrix U(t) that belongs to the Klein four-group V4 = {I2, −I2, diag (1, −1),diag (−1, 1 )}, such that Z∗(t) = Z(t)U(t).(ii) If Z(·) satisfies (A2) as well, then U(t) = U ∈ V4 for all t. (iii) Conversely, each U ∈ V4 acts on the coefficients by (Cx , Cy ) 7 → (ϵ1Cx , ϵ2Cy ) with ϵ1, ϵ2 ∈{− 1, 1 }, maps C0 onto itself, and leaves ℓ, f 1, f 2 and ∥c∥F unchanged. Under (A1) and (A2) the four resulting coefficient arrays are distinct. 
+
+Every quantity reported in Sections 5 and 6 is invariant under V4, including the distances di j (t),the intensities λi j (t), the penalties f1 and f2 and the arc lengths Ai . Proposition 3.1 provides the theoretical basis for the initialization method presented in Section 4.4. 
+
+3.2 Identifiability of the activity parameters 
+
+In contrast to network formulations with node-wise effects requiring sum-to-zero or corner constraints of β, the activity vector β is identified without explicit normalization. 
+
+Proposition 3.2. Fix the trajectories Z(·), let I i j = R T 
+
+> 0
+
+exp {− di j (t)2} d t, which is positive for every dyad, and let n ≥ 3.(i) The map β 7 → { λi j (·)}(i, j)∈D is injective, so β is identified without further constraints. (ii) The profile objective β 7 → ℓ(Z, β) is strictly concave, with 
+
+−v⊤∇2 
+
+> β
+
+ℓ v =
+
+X 
+
+> (i,j)∈D
+
+eβi +βj Ii j (vi + vj )2 > 0 for every v̸ = 0. (3.2) 
+
+(iii) The supremum of ℓ(Z, ·) is attained, and the maximizer is then unique, if and only if m i , the number of events involving node i, satisfies 
+
+0 < mi < m for every i ∈ V. (3.3) The quadratic form in (3.2) vanishes if and only if vi + vj = 0 for all observed dyads. This linear system forces v = 0 provided the graph of observed dyads is connected and non-bipartite. Bipartiteness permits non-trivial alternating shifts βi 7 → βi + α and βj 7 → βj − α. In our setup, observing all dyads yields the complete graph, which satisfies this condition for n ≥ 3. Finally, condition (3.3) guarantees the existence of a unique maximizer by requiring every node to participate in at least one event without monopolizing the entire process. 10 3.3 Joint identifiability 
+
+This subsection establishes step (b) of (3.1) by showing that β and the dynamic distances 
+
+{di j (·)2} are jointly identifiable, ensuring baseline activity cannot be traded off against spatial position. Suppose two configurations (c, β), (c∗, β∗) ∈ C 0×Rn generate identical intensities λ∗ 
+
+> i j
+
+(t) = λi j (t)
+
+for all (i, j) ∈ D and t ∈ [0, T ]. Setting a = β∗ − β yields 
+
+d∗ 
+
+> i j
+
+(t)2 = di j (t)2 + ai + aj , (i, j) ∈ D , t ∈ [0, T ]. (3.4) Let D(t) = [ di j (t)2]ni, j=1 denote the squared distance matrix, Q = In − n−111 ⊤ the projection matrix onto the orthogonal complement of span (1), and G(t) = − 12 QD (t)Q = QZ (t)Z(t)⊤Q the centered Gram matrix, so that rank G(t) ≤ 2 for all t ∈ [0, T ].
+
+Proposition 3.3. Let n ≥ 7 and suppose (c, β), (c∗, β∗) ∈ C 0 × Rn satisfy λ∗ 
+
+> i j
+
+(t) = λi j (t) for all 
+
+(i, j) ∈ D and t ∈ [0, T ]. Define a = β∗ − β and S = {i : ai̸ = 0}.(i) The activity shift vector a satisfies 
+
+Q diag (a)Q = G∗(t) − G(t), t ∈ [0, T ], (3.5) 
+
+where G∗(t) is the centered Gram matrix of Z∗(t). We have rank (G∗(t)−G(t)) ≤ 4, therefore, at most four activity parameters can differ, i.e., |S | ≤ 4.(ii) Under (A3), β∗ = β. If (A1)–(A3) hold, (c∗, β∗) and (c, β) coincide up to an action of V4,and (c, β) is uniquely identified on C0 × Rn.
+
+Geometrically, if ak̸ = 0 for some node k, matching d∗
+
+> ik
+
+(t)2 = dik (t)2 + ak across all unshifted nodes i ∈ U = { j : aj = 0} forces the at least n − 4 positions {zi (t)}i∈U onto a single line in R2.This collinear degeneracy contradicts Assumption (A3), forcing a = 0.Beyond global uniqueness, asymptotic theory and model selection require local non-degeneracy. The following Proposition 3.4 ensures this by establishing strict positive definiteness of the expected Fisher information matrix on C0 × Rn.
+
+Proposition 3.4. Let n ≥ 7 and let (c, β) ∈ C 0 × Rn satisfy (A1), (A2), and (A3). Then the mapping (c, β) 7 → { log λi j (·)}(i, j)∈D has an injective differential on the (2n−3)K +n free coordinates, and the expected Fisher information matrix 
+
+I (c, β) = 
+
+X 
+
+> (i,j)∈D
+
+Z T
+
+> 0
+
+∇ log λi j (t) ∇ log λi j (t)⊤λi j (t) d t (3.6) 
+
+is strictly positive definite. 
+
+11 Algorithm 1 Estimation of the DLS-PP model  
+
+> 1:
+
+Input: events {H i j }, basis {φk}, quadrature {(sg , wg )}, tuning (ρ1, ρ2, τ2), batch size B,step sizes {ηs}. 
+
+> 2:
+
+Precompute Φ, Ω1, Ω2. 
+
+> 3:
+
+Initialize c(0) ∈ C 0 by Section 4.4; set β(0) by (4.3) at c(0). 
+
+> 4:
+
+for s = 0, 1, 2, . . . until convergence do  
+
+> 5:
+
+(a) Trajectory block. For one pass over a random partition of D into batches of size B:draw B, form Ò∇cJ by (4.1), and update c ← c + ηs Ò∇cJ , holding anchored entries at zero.  
+
+> 6:
+
+(b) Activity block. Iterate (4.3) to tolerance ϵβ at the current c. 
+
+> 7:
+
+end for  
+
+> 8:
+
+Output: ˆc, ˆβ.Strict positive definiteness of I (c, β), combined with Π ≻ 0 in (2.11), guarantees local strict concavity of the penalized log-likelihood surface. Consequently, the approximation of BIC in Section 4.5 is mathematically well-posed. 
+
+# 4 Estimation 
+
+To avoid joint optimization over a non-convex parameter space, we decouple (2.13) into two conditionally efficient updates. Given β, Section 4.1 develops a stochastic gradient ascent scheme over subsampled dyad minibatches. Given c, Section 4.3 solves the strictly concave profile problem in β via a parallel fixed-point update. Both blocks rely on Gauss–Legendre quadrature to evaluate cumulative dyadic intensities (Section 4.2). To avoid local minima from trajectory misalignment, Section 4.4 leverages the idea of optimal transport alignment to construct a piecewise-linear initializer, while Section 4.5 selects smoothing parameters via a curvature-adjusted Bayesian information criterion accelerated by randomized trace estima-tion.Algorithm 1 summarizes the complete procedure. 
+
+4.1 Stochastic gradient ascent for the trajectories 
+
+Evaluating the exact gradient ∇cℓ demands O(n2QK ) operations due to summation over all 
+
+ n
+
+> 2
+
+ dyads and Q quadrature nodes. At iteration s, we sample a minibatch Bs ⊂ D of B dyads uniformly at random without replacement and construct the unbiased estimator 
+
+Ò∇c J =
+
+ n
+
+> 2
+
+
+
+B
+
+X 
+
+> (i,j)∈B s
+
+∇c ℓi j (c, β) − ∇ c P (c), (4.1) 12 where ℓi j is the log-likelihood contribution of dyad (i, j) and the cheap penalty gradient is evaluated in full. We update coefficients via c ← c + ηs Ò∇cJ , holding anchored entries at zero to enforce c ∈ C 0. Subsampling reduces the computational cost from O(n2QK ) to O(BQK ). A decaying step size ηs is used until the relative change in J falls below tolerance. 
+
+4.2 Numerical evaluation of the cumulative intensity 
+
+We use Λi j = R T 
+
+> 0
+
+λi j (t) d t to denote the cumulative intensity of dyad (i, j). Under (2.6) the integrand of Λi j is the exponential of a piecewise polynomial of degree 2 p, so the integral has no closed form and is evaluated by Gauss–Legendre quadrature [Stroud and Secrest, 1966 ].Let {(sq, wq)}Qq=1 be the nodes and weights of the rule with Q points on [0, T ], so that 
+
+Λi j ≈
+
+> Q
+
+X
+
+> q=1
+
+wq exp βi + βj − di j (sq)2 . (4.2) Although the log-likelihood is re-evaluated at every iteration, the grid is fixed throughout so the basis matrix Φ ∈ RQ×K with Φqk = φk(sq) is formed only once and (4.2) is therefore a weighted sum over a fixed grid for every dyad at every iteration. Similarly, the Gram matrices (2.7) and (2.9) depend only on the basis and are computed once. Further details are given in the Supplement Section 1. 
+
+4.3 Profile update for the activity parameters 
+
+Fix c and recall Ii j = R T 
+
+> 0
+
+exp {− di j (t)2} d t , evaluated by (4.2). Differentiating (2.4) with respect to βi gives 
+
+∂ ℓ ∂ β i
+
+= mi − eβi
+
+X 
+
+> j̸=i
+
+eβj Ii j ,since node i appears in exactly the n − 1 dyads containing it and each dyad is counted once. Setting the score to zero yields the system eβi
+
+P  
+
+> j̸=i
+
+eβj Ii j = mi for i = 1, . . . , n, which has no closed-form solution. We solve it by the parallel fixed-point iteration 
+
+β(s+1) 
+
+> i
+
+= log mi − log 
+
+X 
+
+> j̸=i
+
+exp  β(s) 
+
+> j
+
++ log Ii j 
+
+, i = 1, . . . , n, (4.3) evaluated in the log-sum-exp form shown to avoid overflow when βj or log Ii j is large in magnitude. By Proposition 3.2 the limit is the unique maximizer whenever mi > 0 for all i.The updates for β under the homogeneous baseline (2.2) and the Poisson β-model (2.3) are included in Supplementary Section 3. 13 4.4 Initialization 
+
+The log-likelihood is nonconvex in the spline coefficients, so the optimizer may be trapped in local minima, and initialization matters in practice. We therefore construct a starting configuration that carries the dominant latent movement, using a two-stage piecewise-linear procedure. 
+
+Stage 1: block-wise static fits We first partition [0, T ] into subintervals [0, T /2] and [T /2, T ].Within each block b ∈ { 1, 2 }, we fit a static Poisson latent space model with cumulative intensity log Λ(b) 
+
+> i j
+
+= log (T /2) + β(b) 
+
+> i
+
++ β(b) 
+
+> j
+
+− ∥ w(b) 
+
+> i
+
+− w(b) 
+
+> j
+
+∥2. (4.4) Positions W(b) ∈ Rn×2 and node intercepts are estimated jointly by maximizing the block log-likelihood with a light ridge penalty γ
+
+> 2
+
+P 
+
+> i
+
+∥w(b) 
+
+> i
+
+∥2. We discard the fitted intercepts, retaining only 
+
+W(1) and W(2). Each block is anchored as in (2.12), so each is determined only up to V4.
+
+Stage 2: alignment and projection Since each static block is anchored independently, directly connecting W(1) and W(2) across time can artificially twist or invert node trajectories. Proposition 3.1 establishes that this mismatch is restricted to coordinate axis sign flips in V4.We test W(2) against all four candidates in V4 to minimize total spatial displacement 
+
+U∗ = arg min U∈V4
+
+> n
+
+X
+
+> i=1
+
+∥w(1) 
+
+> i
+
+− U⊤ w(2) 
+
+> i
+
+∥2, W(2)∗ = W(2)U∗. (4.5) This discrete Procrustes alignment frames gauge selection as an optimal transport problem with minimal Euclidean displacement cost. We then connect w(1) 
+
+> i
+
+and w(2)∗ 
+
+> i
+
+linearly and project these paths onto the B-spline basis via least squares yields c(0) ∈ C 0. This warm start captures broad movement trends while preventing erratic path oscillations during early optimization steps. Figure 3 illustrates the construction on a simulated network. 
+
+4.5 Selection of tuning parameters 
+
+We select smoothing parameters (ρ1, ρ2) over a grid by minimizing the Bayesian information criterion [Schwarz, 1978 ]
+
+BIC (ρ1, ρ2) = −2 ℓ(ˆc, ˆβ) + keff (ρ1, ρ2) + n log m, (4.6) where m is the total event count across all dyads and keff is the effective degrees of freedom of the trajectory component [Gu and Ma, 2005 ]. Standard trace formulas rely on the log-likelihood Hessian, but non-convex distance mappings produce negative eigenvalues away from local modes. We therefore substitute the positive-semidefinite Gauss–Newton information matrix 14 2 0 2 4 6
+
+x
+
+> 4
+> 2
+> 02
+> y
+
+(a) True trajectories. 2 1 0 1 2 3 4 5 6
+
+x      
+
+> 4
+> 3
+> 2
+> 1
+> 0123
+> y 11223344556677889910 10 11 11 12 12 13 13 14 14 15 15 16 16 17 17 18 18 19 19 20 20 21 21 22 22 23 23 24 24 25 25 26 26 27 27 28 28 29 29 30 30 31 31 32 32 33 33 34 34 35 35 36 36 37 37 38 38 39 39 40 40
+> First-half estimate Second-half estimate (aligned) Second-half estimate (raw)
+
+(b) Block-wise static fits. 2 0 2 4 6
+
+x 
+
+> 4
+> 2
+> 02
+> y
+
+(c) Piecewise-linear initializer. 
+
+Figure 3: Initialization of the spline coefficients. Static models in (b) are fit on [0, T /2] and [T /2, T ]
+
+separately; each is anchored as in (2.12) and is therefore determined only up to the four elements of 
+
+V4. The orientation minimizing (4.5) is retained, and connecting the two configurations in time gives (c), which is projected onto the B-spline basis to obtain c(0).
+
+F for the Hessian, which discards second-derivative distance terms while capturing pure data curvature, yielding 
+
+keff = tr F (F + HP )−1 , (4.7) where HP = I2n−3 ⊗ Π represents the penalization block. To scale to large networks, we evaluate (4.7) via a Hutchinson randomized trace estimator [Hutchinson, 1989 ] accelerated by preconditioned conjugate gradients. Supplementary Section 4 details the curvature construction, linear system implementations, and optimization surface dynamics. 
+
+# 5 Simulation studies 
+
+We conduct two simulation studies to evaluate the in-sample and out-of-sample empirical performance of the proposed dynamic latent space model. Motivated by international relations networks, our designs consider both fluid multipolar movements and structured bipolar coalition formations: • S1: Fluid multipolar drift: N nodes start from random initial locations and move along smooth, continuous trajectories generated via a Fourier basis expansion. This setup models unconstrained diplomatic wandering without imposing global spatial symmetries. • S2: Bipolar alliance consolidation: N nodes are partitioned into two dynamic clusters centered at (0, 0 ) and (4, 0 ), contracting inward toward their centers over time. This setup tests the model’s ability to capture sharp clustering and converging pairwise distances. Across both settings, true activity parameters β are linearly spaced from 1.5 to 2.5 across the 
+
+N nodes. With an average of 4.8 interactions per dyad in S1 and 27.1 in S2, these settings 15 evaluate the model across contrasting sparse and dense network regimes. Figure 4 displays the true, initial and estimated trajectories of each design. 
+
+True Initialization Estimation S1 5 0 5    
+
+> x
+> 6
+> 4
+> 2
+> 024
+> y505
+> x
+> 6
+> 4
+> 2
+> 024
+> y505
+> x
+> 6
+> 4
+> 2
+> 024
+> y
+
+S2 5.0 2.5 0.0 2.5 5.0         
+
+> x
+> 6
+> 4
+> 2
+> 024
+> y5.0 2.5 0.0 2.5 5.0
+> x
+> 6
+> 4
+> 2
+> 024
+> y5.0 2.5 0.0 2.5 5.0
+> x
+> 6
+> 4
+> 2
+> 024
+> y
+
+Figure 4: True (left), initial (middle) and estimated (right) latent trajectories for one replication of designs S1 (top) and S2 (bottom). Each curve is one node’s path over [0, T ]. Grey points mark t = 0and the red point marks the origin. 
+
+Comparison baselines We compare the proposed DLS-PP against four baselines. The first two methods were introduced in Section 2, the homogeneous baseline (2.2) where log λi j (t) = 
+
+β −∥ zi (t)−zj (t)∥2 with zi (t) modeled by B-spline and Poisson β-model (2.3) where log λi j (t) = 
+
+βi + βj . As two more comparisons, we consider: • The continuous latent position models of Rastelli and Corneli [2023 ] (CLPM): This is the closest method to ours where log λi j (t) = β − ∥ zi (t) − zj (t)∥2 and the trajectories 
+
+zi (t) is assumed to be piece-wise linear curves. • A dyad-independent Poisson process (DIPP): This simple baseline estimates each pairwise conditional intensity function log λi j (t) independently by fitting a B-spline. 
+
+In-sample and out-of-sample We evaluate the proposed method from two complementary perspectives: in-sample estimation and out-of-sample prediction. For in-sample evaluation, 16 the model is fit using the full observation period, with tuning parameters selected according to the proposed BIC. For out-of-sample evaluation, we divide the observation period into a training interval [0, Ttr ] and a held-out interval (Ttr , T ]. In this section, Ttr is set as 0.9 in all experiments. The model is fitted and tuned using the training data, with the estimated β and B-spline coefficients fixed for prediction on the held-out interval. Since the latent trajectories represented by B-splines are not directly observed beyond Ttr , we consider two forecasting strategies for extending the estimated trajectories into the held-out interval. Under persistence (P) , each node is held fixed at its estimated terminal position in the training interval, ˆzP 
+
+> i
+
+(t) = ˆzi (Ttr ), t ∈ (Ttr , T ],whereas under constant-velocity extrapolation (CV) , each trajectory is extended linearly using its estimated terminal velocity, ˆzCV  
+
+> i
+
+(t) = ˆzi (Ttr ) + ( t − Ttr )ˆz′ 
+
+> i
+
+(Ttr ), t ∈ (Ttr , T ].
+
+Performance evaluation We use in-sample data to assess the recovery of the latent trajectories and model parameters, whereas the out-of-sample evaluates the ability of the fitted model to predict future latent configurations and observed events. In both in-sample and out-of-sample data, we assess trajectory recovery using the integrated mean squared error of the pairwise distances, IMSE d :IMSE d = 1
+
+T  N
+
+> 2
+
+Z T
+
+> 0
+
+X 
+
+> 1≤i<j≤N
+
+ ˆdi j (t) − di j (t)
+
+2
+
+d t , RMSE d = pIMSE d .In practice, we evaluate the integral via a Riemann sum over a temporal grid 0 = t1 < · · · <
+
+tK = T with step sizes ∆tk = tk+1 − tk:
+
+ÖIMSE d = 1
+
+T  N
+
+> 2
+
+
+
+> K−1
+
+X
+
+> k=1
+
+ X 
+
+> 1≤i<j≤N
+
+ ˆdi j (tk) − di j (tk)
+
+2
+
+
+
+∆tk, ØRMSE d =
+
+ÇÖIMSE d .We additionally report the Kolmogorov–Smirnov (KS) statistic based on the time-rescaling theorem [Brown et al., 2002 ] to assess the goodness of fit of the fitted point process in both in-sample and out-of-sample data. With in-sample data, representative estimated and true latent trajectories are also visualized to illustrate the quality of trajectory recovery. Moeover, parameter recovery using the estimation error of the node-specific effects βi . With held-out data, we also assess event-count predic-tion. For each dyad (i, j), the predicted expected number of events in the held-out interval is ˆμi j := R TTtr 
+
+ˆλi j (t) d t so that the model implies N out  
+
+> i j
+
+∼ Poisson   ˆμi j 
+
+ . We compare these predicted expected counts with the held-out counts N out  
+
+> i j
+
+. All out-of-sample metrics are computed sepa-rately for the persistence and constant-velocity forecasting strategies. More details are given in Supplementary Section 5. 17 5.1 S1: Fluid multipolar drift 
+
+The first simulation evaluates model performance in an unconstrained, non-linear setting representing fluid multipolar state interactions. We generate trajectories for N = 50 nodes in R2 over t ∈ [0, 1 ]. Initial positions are drawn from a standard normal distribution around the origin, zi (0) ∼ N (0, σ20I2), with nodes 1 and 2 adhering to the identification constraints defined above. For all remaining nodes i ∈ { 3, . . . , N }, trajectories are constructed via a smooth Fourier basis expansion around their initial positions: 
+
+zi (t) = zi (0) + 
+
+> M
+
+X
+
+> m=1
+
+
+
+ai,m sin (mπt) + bi,m
+
+ 1 − cos (mπt) 
+
+, t ∈ [0, 1 ],where ai,m, bi,m ∼ N (0, σ2 
+
+> v
+
+I2) are random velocity vectors and M = 3 controls path curva-ture. This setup produces random dynamics without spatial symmetries, rigorously testing the flexibility of our trajectory regularizers. The true trajectories are shown in Figure 4. 0.0001 0.001 0.005 0.01 0.05 0.1      
+
+> 2
+> 0.001 0.01 0.1 1
+> 1
+> 9800 10200 10600 11000 11400 11800 12200 12600
+> log  L
+> (a) Log-likelihood 0.0001 0.001 0.005 0.01 0.05 0.1
+> 2
+> 0.001 0.01 0.1 1
+> 1
+> 280 360 440 520 600 680 760
+> keff (b) Effective degrees of freedom 0.0001 0.001 0.005 0.01 0.05 0.1
+> 2
+> 0.001 0.01 0.1 1
+> 1
+> 19800
+> 19400
+> 19000
+> 18600
+> 18200
+> 17800
+> 17400
+> BIC (c) BIC
+
+Figure 5: Tuning surfaces over the two-dimensional (ρ1, ρ2) grid in S1. The star marks the selected pair, minimizing BIC. 
+
+Figure 5 reports the log-likelihood, effective degrees of freedom keff , and BIC evaluated over a two-parameter tuning grid of (ρ1, ρ2). Both the log-likelihood and keff decrease as either penalty increases, as expected, since stronger penalization trades fit for smoothness. BIC balances the two and attains an interior minimum, as indicated by the star in the figure. All three surfaces vary far less along ρ1 than along ρ2, indicating that fit and selection are driven primarily by ρ2
+
+over the ranges tested. Figure 6 shows the estimation of β over 30 replications and the true and estimated distance of 18 randomly selected pairs. Table 1 reports the mean and standard error over 30 trials, DLS-PP achieves the good predictive performance across most metrics. 18 0 20 40 
+
+Node index i
+
+−5.0 
+
+−2.5 0.0 2.5 5.0 7.5 10.0 12.5 15.0 
+
+> Estimated ˆβi
+
+Mean ± 1 sd Estimated ˆβ (mean) True β(a) β estimation 345
+
+3-34 
+
+> 234
+
+6-8 
+
+> 2345
+
+7-20 
+
+> 1234
+
+9-24 
+
+> 468
+
+10-37 
+
+> 246
+
+11-14 
+
+> 2345
+
+13-22 
+
+> 34567
+
+16-36 
+
+> 2345
+
+17-40 
+
+> 5678
+
+19-22 
+
+> 3.0 3.5 4.0 4.5 5.0
+
+21-33 
+
+> 234
+
+23-48   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 468
+
+24-44   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 23456
+
+25-32   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 123
+
+28-38   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 24
+
+30-47   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 123
+
+35-43   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 3456
+
+40-46 
+
+True Estimated (b) Randomly selected pairwise distances 
+
+Figure 6: Estimation of β across 30 trials and of the latent distance in one trial under S1. Both components are recovered well, with a few outlying βi estimates expected under this extremely sparse regime. 0 50 100 150 200 
+
+Node index i
+
+1.6 1.8 2.0 2.2 2.4 
+
+> Estimated ˆβi
+
+Mean ± 1 sd Estimated ˆβ (mean) True β
+
+(a) β estimation 234
+
+3-138 
+
+> 1234
+
+7-155 
+
+> 3.5 4.0 4.5 5.0
+
+16-193 
+
+> 3.00 3.25 3.50 3.75 4.00
+
+19-164 
+
+> 01234
+
+25-89 
+
+> 4567
+
+33-187 
+
+> 01234
+
+41-86 
+
+> 4567
+
+52-187 
+
+> 4567
+
+60-193 
+
+> 3.00 3.25 3.50 3.75 4.00
+
+81-143 
+
+> 234
+
+89-149 
+
+> 0.0 0.5 1.0 1.5 2.0
+
+108-190   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 01234
+
+112-161   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 01234
+
+125-174   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 012
+
+131-151   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 0123
+
+140-176   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 012
+
+173-191   
+
+> 0.0 0.5 1.0
+
+Time 
+
+> 0.0 0.1 0.2 0.3 0.4
+
+182-185 
+
+True Estimated (b) Randomly selected pairwise distances 
+
+Figure 7: Estimation of β across 30 trials and of the latent distance in one trial under S2. Both components are recovered accurately, with tight uncertainty across all nodes. 
+
+5.2 S2: Bipolar alliance consolidation 
+
+The second simulation examines a structured configuration modeling bipolar alliance formation and bloc consolidation. We consider N = 200 nodes in R2 over t ∈ [0, 1 ], partitioned equally into two communities centered at cA = ( 0, 0 ) and cB = ( 4, 0 ). Node 1 is anchored at cA and node 101 is anchored at cB across all time. The remaining nodes begin on circles of radius r = 2centered at their respective group origin, with initial positions zi (0) equally spaced in angle. Each node moves linearly toward its group center at constant velocity according to: 
+
+zi (t) = ( 1 − t) zi (0) + t cg , t ∈ [0, 1 ],for group g ∈ { A, B}. Each cluster forms a contracting ring that collapses deterministically into its focal pole, as shown in Figure 4. This geometric structure tests the model’s ability to recover sharp dynamic clustering and resolve pairwise distances during spatial collapse. 19 Table 1: (S1) Comparison of methods on in-sample fit and two out-of-sample scenarios. Scenario Metric CLPM DIPP Poisson-β
+
+model Homogeneous baseline DLS-PP In-sample IMSE 1.5715 (0.3967) N/A N/A 0.8389 (0.1607) 
+
+0.5383 
+
+(0.4080) KS 0.1069 (0.0382) 0.0553 (0.0039) 0.4520 (0.0053) 0.0484 (0.0040) 
+
+0.0224 
+
+(0.0130) Err β 1.5646 (0.1328) N/A 1.9081 (0.0204) 1.7739 (0.0184) 
+
+1.1264 
+
+(1.1404) Out-of-sample Persistence IMSE 4.6412 (0.7737) N/A N/A 1.6882 
+
+(0.6525) 1.7648 (0.9096) KS 0.3449 (0.0258) 0.2670 (0.0294) 0.4648 (0.0155) 0.2468 (0.0148) 
+
+0.2418 
+
+(0.0179) Log-likelihood -712.2064 (507.4203) -1356.5623 (360.5870) -109.3386 (27.7944) 154.6839 (600.1946) 
+
+297.4742 
+
+(106.0829) Count 0.7206 
+
+(0.0446) 2.0605 (0.5539) 0.8498 (0.0380) 0.7516 (0.0410) 0.7774 (0.0660) Out-of-sample Constant-velocity IMSE 10.4659 (1.8391) N/A N/A 2.1064 (0.8600) 
+
+2.0988 
+
+(0.9905) KS 0.4520 (0.0460) 0.2891 (0.0247) N/A 0.2769 (0.0186) 
+
+0.2678 
+
+(0.0213) Log-likelihood -3888.1787 (1412.4392) 
+
+−7.019 × 10 13 
+
+(7.5 × 10 12 ) N/A -76.3435 (703.7006) 
+
+79.6065 
+
+(170.5268) Count 0.8051 (0.0482) 1.296 × 10 11 
+
+(7.31 × 10 9) N/A 0.7697 
+
+(0.0459) 1.0001 (0.4870) 
+
+In this synthetic experiment, the ground-truth trajectories are straight lines, so stronger smooth-ing is well aligned with the data-generating process. To illustrate the effect of ρ2, Figure 8 displays estimated trajectories for ρ2 ∈ { 0.001, 1, 100 } with ρ1 fixed at 0.1: all three recover the true shapes, while larger ρ2 produces trajectories that are progressively straighter. Similar to S1, Figure 7 shows the estimation of β over 30 replications and the true and estimated distance of 18 randomly selected pairs. Table 2 reports the mean and standard error over 30 trials, DLS-PP achieves the good predictive performance across most metrics. 20 4 2 0 2                      
+
+> x
+> 4
+> 2
+> 02
+> y
+> 1= 0.1, 2= 0.001 4202
+> x
+> 4
+> 2
+> 02
+> y
+> 1= 0.1, 2= 1.0 4202
+> x
+> 4
+> 2
+> 02
+> y
+> 1= 0.1, 2= 100.0 Figure 8: Estimated trajectories in S2 for increasing ρ2(ρ1=0.1). Larger ρ2yields progressively straighter and smoother trajectories while preserving the true shapes.
+
+# 6 Application 
+
+6.1 Data 
+
+We study cooperative diplomatic interaction among 60 major economies over 1995–2022. Using GDP adjusted for purchasing power parity (GDP PPP) from the World Bank World Development Indicators, we therefore rank all country economies in each year, and retain the 60 with the smallest median rank over 1995–2022. Samples of the largest N economies constructed in this way are standard in empirical macroeconomics and international political economy 
+
+[di Giovanni and Levchenko, 2012, 2013; Ossa, 2015 ]. More details and the selected list are given in Supplementary Section 6. Interactions are measured with ICEWS coded event data [Boschee et al., 2015 ], a machine-coded archive of more than 17 million events from 1995 onward, extracted from international news sources by natural language processing and coded to the Conflict and Mediation Event Observations (CAMEO) ontology. Each record carries a date, a source actor, a target actor, an event type and a Goldstein score measuring cooperative or conflictual intensity. Our model uses only the actor pair and the timestamp. ICEWS has been used extensively for crisis forecasting 
+
+[O’Brien, 2010 ], for latent-factor and tensor models of country–dyad event counts [Schein et al., 2015, 2016 ] and for constructing measures of state behaviour [Bagozzi et al., 2021; Korkmaz et al., 2016 ]. Since coverage derives from news reporting it is uneven, with events in less covered regions underreported [Bagozzi et al., 2019 ], so event volume reflects media attention as well as political activity and our estimates describe the reported interaction network. We retain events whose top-level CAMEO category lies between 01 and 08, comprising verbal and material cooperation, and exclude the conflictual categories 09–20, so that latent proximity admits a single unambiguous reading as cooperative engagement. For each unordered pair of countries we take the recorded event dates as the realization Hi j of the dyadic point process, 21 Table 2: (S2) Comparison of methods on in-sample fit and two out-of-sample scenarios. Scenario Metric CLPM DIPP Poisson-β
+
+model Homogeneous baseline DLS-PP In-sample IMSE 0.7472 (0.2110) N/A N/A 0.2442 
+
+(0.2012) 0.5966 (0.5766) KS 0.3862 (0.0159) 0.0269 (0.0004) 0.3278 (0.0005) 0.0334 (0.0030) 
+
+0.0098 
+
+(0.0081) Err β 1.1504 (0.0495) N/A 0.8697 (0.0012) 2.2769 (0.0132) 
+
+0.0532 
+
+(0.0256) Out-of-sample Persistence IMSE 1.1213 (0.3785) N/A N/A 0.1816 (0.0779) 
+
+0.0851 
+
+(0.0168) KS 0.4881 (0.0089) 0.0999 (0.0024) 0.4382 (0.0009) 0.0609 (0.0121) 
+
+0.0381 
+
+(0.0134) Log-likelihood 2.821 × 10 5
+
+(4.452 × 10 3)3.205 × 10 5
+
+(2.47 × 10 3)2.812 × 10 5
+
+(789) 3.854 × 10 5
+
+(1.27 × 10 3)
+
+3.932 × 10 5
+
+(1.5 × 10 3)Count 4.3695 (0.0311) 4.3120 (0.0559) 4.0769 (0.0142) 2.4631 (0.0400) 
+
+1.8305 
+
+(0.0394) Out-of-sample Constant-velocity IMSE 4.3763 (1.7896) N/A N/A 0.1657 (0.1529) 
+
+0.0930 
+
+(0.0539) KS 0.5478 (0.0090) 0.1884 (0.0030) N/A 0.0523 (0.0173) 
+
+0.0276 
+
+(0.0184) Log-likelihood 1.937 × 10 5
+
+(1.030 × 10 4)
+
+−3.567 × 10 13 
+
+(5.04 × 10 12 ) N/A 3.844 × 10 5
+
+(1.53 × 10 3)
+
+3.936 × 10 5
+
+(1.62 × 10 3)Count 4.5850 (0.0305) 1.614 × 10 10 
+
+(1.80 × 10 9) N/A 2.5129 (0.0454) 
+
+1.8067 
+
+(0.0534) 
+
+pooling the two directions, and rescale calendar time to the unit interval. This yields n = 60 nodes and a total of m retained events. Treating dyads as unordered is a modelling choice, and the aggregate data support it. Writing 
+
+Wi j for the total number of events from sender i to receiver j, as displayed in Figure 1, the weighted reciprocity rw = 1 −       
+
+> P
+> i<j|Wi j −Wji |
+> P
+> i̸=jWi j
+
+= 0.934 leaves approximately 6.6% of total volume as net directional imbalance, and the correlation between log (1 + Wi j ) and log (1 + Wji ) across dyads is 0.987. Figure 1 shows that recorded events concentrate among high-GDP countries, consistent with heterogeneous media coverage in automated event data. This is the degree heterogeneity that the activity parameters βi in (2.1) are designed to absorb. 22 6.2 Baseline comparison 
+
+We fit the DLS-PP model (2.1) and four competing methods as described in Section 4. Details of tuning are reported in Supplementary Section 5. Table 3 compares model performance under in-sample and out-of-sample evaluation. For the out-of-sample scenario, we hold out the final month across all country pairs (93,773 events) while fitting the model on the remaining 4,198,928 events. Our model achieves the best performance across all metrics, excelling in both in-sample fit and predictive capability.                                                               
+
+> Table 3: Comparison of methods on application ICEWS dataset across in-sample fit and out-of-sample scenarios. Scenario Metric CLPM DIPP Poisson-β
+> model Homogeneous baseline DLS-PP In-sample KS 0.7278 0.6868 0.3121 0.4360 0.2435
+> Out-of-sample Persistence KS 0.8878 0.7055 0.3622 0.4540 0.2777
+> Log-likelihood 3.16 ×10 57.03 ×10 57.00 ×10 56.52 ×10 57.25 ×10 5
+> Count 124.65 188.93 87.80 114.36 79.43
+> Out-of-sample Constant-velocity KS 0.8916 0.7057 N/A0.4576 0.2945
+> Log-likelihood 3.04 ×10 5−8.42 ×10 7N/A6.40 ×10 57.15 ×10 5
+> Count 124.65 8.1892 ×10 5N/A115.09 84.90
+
+6.3 Estimation in DLS-PP 
+
+We now examine the in-sample estimates under DLS-PP to interpret the underlying network dynamics. Figure 9 displays the estimated activity parameters ˆβi , which measure each country’s baseline propensity for diplomatic interaction. Since countries are ordered by descending GDP rank, the general downward slope confirms that diplomatic volume broadly scales with economic capacity, led by major powers like the United States, China, and the Russian Federation. Conversely, established middle powers such as Canada, the Netherlands, and Sweden exhibit ˆβi values noticeably below their economic rank, capturing a more low-key diplomatic posture relative to their output. To illustrate the continuous latent space geometry, Figure 10 displays four temporal snapshots with the United States fixed as the origin anchor. Notably, China, Japan, and South Korea display tight clustering and parallel migration toward the core, illustrating how regional in-23 United States China India Japan Russian Federation Germany Brazil France United Kingdom Italy Mexico Indonesia Spain Canada Korea, Rep. Turkiye Saudi Arabia Nigeria Australia Thailand Egypt, Arab Rep. Iran, Islamic Rep. Argentina Netherlands Poland Pakistan Ukraine South Africa Malaysia Belgium Colombia Viet Nam Switzerland Bangladesh Philippines Sweden Algeria Austria United Arab Emirates Greece Romania Singapore Kazakhstan Norway Czechia Chile Iraq Portugal Hong Kong SAR, China Denmark Peru Finland Hungary Ireland Israel Morocco Angola Syrian Arab Republic Sri Lanka Kuwait 
+
+23456
+
+> i
+
+Figure 9: Estimated activity parameters ˆβi , with countries ordered by GDP rank. 
+
+terdependence drives coordinated diplomatic trajectories in latent space. Other key actors, such as Russia and Germany, trace unique paths reflecting broader realignment in international relations. The animation is provided with the submission. 
+
+Figure 10: Estimated continuous-time latent trajectories at four equally spaced dates, with the United States anchored at the origin. Highlighted paths showcase dynamic spatial alignments among six key nations over time. 
+
+We report the length and arc of each estimated trajectory in Table 4. Length measures how far a country moved in the latent space between 1995 and 2022, and arc measures how sharply it changed direction. Countries high on both, such as Ukraine, Iraq and Poland, shifted their international relationships more abruptly. Bangladesh moved just as far but far more smoothly, changing gradually rather than abruptly. Canada, the United Kingdom, the Netherlands and France barely moved at all, staying stable throughout. 24 Table 4: Top and bottom 10 countries by trajectory length and arc, reported in units of 10 3.                                              
+
+> Top 10 Length (Mobile) Bottom 10 Length (Static) Top 10 Arc (Curved) Bottom 10 Arc (Straight)
+> Country Length Country Length Country Arc Country Arc Ukraine 7.01 United States †0.00 Poland 9.98 United States †0.00 Iraq 5.57 Canada 1.46 Indonesia 8.61 Denmark 0.72 Poland 4.92 United Kingdom 1.62 Iraq 8.35 Netherlands 0.83 Pakistan 4.75 Netherlands 1.67 Brazil 8.11 Austria 0.90 Sri Lanka 4.59 Ireland 1.73 Philippines 7.66 Ireland 0.97 Brazil 4.28 China ‡1.78 Turkiye 7.56 Israel 1.28 Syrian Arab Republic 4.17 Switzerland 1.92 Argentina 6.93 Canada 1.37 Iran, Islamic Rep. 4.09 Italy 1.95 Romania 6.87 Sweden 1.40 Saudi Arabia 4.01 France 2.03 Syrian Arab Republic 6.81 Italy 1.42 Korea, Rep. 4.01 Israel 2.08 Ukraine 6.55 Bangladesh 1.52
+> †
+
+The United States is the origin anchor, z1(t) ≡ (0, 0 ), so its length and arc are identically zero by construction rather than by estimation. ‡China is the axis anchor, y2(t) ≡ 0, so it moves along a line and its values are not directly comparable with the remaining countries. 
+
+# 7 Conclusion 
+
+We have developed a dynamic latent space framework for continuous-time event networks (DLS-PP), supported by an scalable estimation pipeline and an effective-degrees-of-freedom selection criterion. Methodologically, a key feature of the model is the separation of node-specific activity levels ( βi ) from dynamic spatial geometry ( zi (t)). By preventing baseline interaction rates from masquerading as central spatial positioning, this construction eliminates degree-driven core-periphery artifacts, ensuring that estimated trajectories reflect genuine shifts in dyadic alignment, which is a crucial distinction for isolating mobile geopolitical actors from stationary institutional anchors. More broadly, our approach serves as a modular template for continuous-time spatial modeling. Because the spline trajectories, dyadic minibatching, warm starts, and geometric penalties interact solely through the log-intensity, the computational architecture extends directly to discrete network snapshots, weighted edge counts, or self-exciting Hawkes processes. Future extensions include allowing activity parameters to evolve continuously over time, integrating gravity model covariates directly into the intensity function, and leveraging Laplace curvature approximations for formal trajectory uncertainty quantification. 
+
+AI Usage Disclosure. The authors used Google Gemini and Anthropic Claude to assist with language refinement, code refinement, plotting implementation, and literature-search support during manuscript preparation. These tools were used only for non-substantive implementation and presentation tasks. In particular, Claude was used to generate the illustrative trajectories shown in Figure 2. All AI-assisted text, code, and outputs were reviewed and revised by the authors, who developed the manuscript’s structure, 
+
+25 substantive arguments, and analysis and take full responsibility for its accuracy and integrity. 
+
+# References 
+
+Irene Artico and Ernst C Wit. Dynamic latent space relational event model. Journal of the Royal Statistical Society Series A: Statistics in Society , 186(3):508–529, 2023. Benjamin E. Bagozzi, Patrick T. Brandt, John R. Freeman, Jennifer S. Holmes, Alisha Kim, Agustin Palao Mendizabal, and Carly Potz-Nielsen. The prevalence and severity of underreporting bias in machine- and human-coded data. Political Science Research and Methods , 7(3):641–649, 2019. doi: 10.1017 /psrm.2018.11. Benjamin E. Bagozzi, Daniel Berliner, and Ryan M. Welch. The diversity of repression: Measuring state repressive repertoires with events data. Journal of Peace Research , 58(5):1126–1136, 2021. doi: 10.1177 /0022343320983424. Elizabeth Boschee, Jennifer Lautenschlager, Sean O’Brien, Steve Shellman, James Starz, and Michael Ward. ICEWS coded event data. Harvard Dataverse, 2015. Versioned event data from the Integrated Crisis Early Warning System (ICEWS). https://doi.org/10.7910/DVN/28075 .Emery N Brown, Riccardo Barbieri, Valérie Ventura, Robert E Kass, and Loren M Frank. The time-rescaling theorem and its application to neural spike train data analysis. Neural computation ,14(2):325–346, 2002. Sourav Chatterjee, Persi Diaconis, and Allan Sly. Random graphs with a given degree sequence. 
+
+The Annals of Applied Probability , 21(4):1400–1435, 2011. doi: 10.1214 /10-AAP728. Marco Corneli, Pierre Latouche, and Fabrice Rossi. Multiple change points detection and clustering in dynamic networks. Statistics and Computing , 28(5):989–1007, 2018. Julian di Giovanni and Andrei A. Levchenko. Country size, international trade, and aggregate fluctuations in granular economies. Journal of Political Economy , 120(6):1083–1132, 2012. doi: 10.1086 /669161. Julian di Giovanni and Andrei A. Levchenko. Firm entry, trade, and welfare in zipf’s world. 
+
+Journal of International Economics , 89(2):283–296, 2013. doi: 10.1016 /j.jinteco.2012.08. 002. Daniele Durante and David B Dunson. Nonparametric bayes dynamic modelling of relational data. Biometrika , 101(4):883–898, 2014. Daniele Durante and David B Dunson. Locally adaptive dynamic networks. The Annals of Applied Statistics , 10(4):2203–2232, 2016. Chong Gu and Ping Ma. Generalized nonparametric mixed-effect models: Computation and smoothing parameter selection. Journal of Computational and Graphical Statistics , 14(2): 485–504, 2005. Yinqiu He, Jiajin Sun, Yuang Tian, Zhiliang Ying, and Yang Feng. Semiparametric modeling and 26 analysis for longitudinal network data. The Annals of Statistics , 53(4):1406–1430, 2025. doi: 10.1214 /25-AOS2506. Peter D Hoff, Adrian E Raftery, and Mark S Handcock. Latent space approaches to social network analysis. Journal of the american Statistical association , 97(460):1090–1098, 2002. Paul W. Holland and Samuel Leinhardt. An exponential family of probability distributions for directed graphs. Journal of the American Statistical Association , 76(373):33–50, 1981. doi: 10.1080 /01621459.1981.10477598. Zhipeng Huang, Hadeel Soliman, Subhadeep Paul, and Kevin S Xu. A mutually exciting latent space hawkes process model for continuous-time networks. In Uncertainty in Artificial Intelligence , pages 863–873. PMLR, 2022. Michael F Hutchinson. A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines. Communications in Statistics-Simulation and Computation , 18(3):1059– 1076, 1989. Alan F. Karr. Point Processes and Their Statistical Inference , volume 7 of Probability: Pure and Applied . Marcel Dekker, New York, 2 edition, 1991. Gizem Korkmaz, Jose Cadena, Chris J. Kuhlman, Achla Marathe, Anil Vullikanti, and Naren Ramakrishnan. Multi-source models for civil unrest forecasting. Social Network Analysis and Mining , 6(1):50, 2016. doi: 10.1007 /s13278-016-0355-8. Pavel N Krivitsky, Mark S Handcock, Adrian E Raftery, and Peter D Hoff. Representing degree distributions, clustering, and homophily in social networks with latent cluster random effects models. Social Networks , 31(3):204–213, 2009. Stefan Lang and Andreas Brezger. Bayesian p-splines. Journal of computational and graphical statistics , 13(1):183–212, 2004. Joshua Daniel Loyal. Fast variational inference of latent space models for dynamic networks using Bayesian P-splines. Bayesian Analysis , 2025. doi: 10.1214 /25-BA1545. Advance publication. Peter W MacDonald, Elizaveta Levina, and Ji Zhu. Latent process models for functional network data. Journal of Machine Learning Research , 26(147):1–69, 2025. Catherine Matias, Tabea Rebafka, and Fanny Villers. A semiparametric extension of the stochastic block model for longitudinal networks. Biometrika , 105(3):665–680, 2018. Sean P . O’Brien. Crisis early warning and decision support: Contemporary approaches and thoughts on future research. International Studies Review , 12(1):87–104, 2010. doi: 10. 1111 /j.1468-2486.2009.00914.x. Discusses the design and goals of the Integrated Crisis Early Warning System (ICEWS). Ralph Ossa. Why trade matters after all. Journal of International Economics , 97(2):266–277, 2015. doi: 10.1016 /j.jinteco.2015.07.002. Riccardo Rastelli and Marco Corneli. Continuous latent position models for instantaneous interactions. Network Science , 11(4):560–588, 2023. doi: 10.1017 /nws.2023.14. 27 Raphaël Romero, Jefrey Lijffijt, Riccardo Rastelli, Marco Corneli, and Tijl De Bie. Gaussian embedding of temporal networks. IEEE Access , 11, 2023. Purnamrita Sarkar and Andrew W Moore. Dynamic social network analysis using latent space models. In ACM SIGKDD Explorations Newsletter , volume 7, pages 31–40, 2005. Aaron Schein, John Paisley, David M. Blei, and Hanna Wallach. Bayesian poisson tensor factorization for inferring multilateral relations from sparse dyadic event counts. In Proceedings of the 21st ACM SIGKDD International Conference on Knowledge Discovery and Data Mining ,pages 1045–1054, Sydney, Australia, 2015. ACM. doi: 10.1145 /2783258.2783414. Aaron Schein, Mingyuan Zhou, David M. Blei, and Hanna M. Wallach. Bayesian poisson tucker decomposition for learning the structure of international relations. In Proceedings of the 33rd International Conference on Machine Learning (ICML) , volume 48 of Proceedings of Machine Learning Research , pages 2810–2819, New York, NY, USA, 2016. URL https: //proceedings.mlr.press/v48/schein16.html .Gideon Schwarz. Estimating the dimension of a model. The Annals of Statistics , 6(2):461–464, 1978. Daniel K Sewell and Yuguo Chen. Latent space models for dynamic networks. Journal of the american statistical association , 110(512):1646–1657, 2015. Arthur H. Stroud and Don Secrest. Gaussian Quadrature Formulas . Prentice-Hall, Englewood Cliffs, NJ, 1966. Owen G Ward, Jing Wu, Tian Zheng, Anna L Smith, and James P Curley. Network hawkes process models for exploring latent hierarchy in social animal interactions. Journal of the Royal Statistical Society Series C: Applied Statistics , 71(5):1402–1426, 2022. Lu Xin, Mu Zhu, and Hugh Chipman. A continuous-time stochastic block model for basketball networks. The Annals of Applied Statistics , 11(2):553–597, 2017. 28 A Gauss–Legendre quadrature 
+
+The rule used in (22) is the standard Gauss–Legendre rule mapped to the observation window. Let (uq, ωq)Qq=1 be the nodes and weights of the Q-point rule on the reference interval [−1, 1 ],obtained as the roots of the degree-Q Legendre polynomial and the associated weights. The affine change of variable from [−1, 1 ] to [0, T ] gives 
+
+sq = T 
+
+> 2
+
+(uq + 1), wq = T 
+
+> 2
+
+ωq, q = 1, . . . , Q,and the weights satisfy P 
+
+> q
+
+wq = T , since the rule integrates the constant function exactly. We use Q = 40 points for the cumulative intensities (22) and a finer grid of QΩ = 200 points for the Gram matrices Ω1, Ω2, the latter computed once before optimization begins. 
+
+# B Proofs for Section 3 
+
+Throughout, Q = In − n−111 ⊤, D(t) = [ di j (t)2] and G(t) = − 12 QD (t)Q.
+
+B.1 Proof of Proposition 1 
+
+Proof. (i) We fix t and suppress it. Since the distances remain unchanged, 
+
+d21i = ∥zi ∥2 = ∥z∗ 
+
+> i
+
+∥2 = ( d∗ 
+
+> 1i
+
+)2,and 
+
+∥zi ∥2 + ∥zj ∥2 − 2z⊤ 
+
+> i
+
+zj = ∥z∗ 
+
+> i
+
+∥2 + ∥z∗ 
+
+> j
+
+∥2 − 2z∗⊤  
+
+> i
+
+z∗ 
+
+> j
+
+,we have ZZ ⊤ = Z∗Z∗⊤ . There is an orthogonal map U gives Z∗ = ZU with U ∈ O(2). Now, on the first two nodes:  0 0
+
+z21 0
+
+  u11 u12 
+
+u21 u22 
+
+
+
+=
+
+ 0 0
+
+z⋆ 
+
+> 21
+
+0
+
+
+
+,sets u12 = u21 = 0, u11 = u22 = ±1. (ii) Under (A2), the matrix Z(t) has full column rank for every t, so U(t) = {Z(t)⊤Z(t)}−1Z(t)⊤Z∗(t)
+
+is the unique solution of Z∗(t) = Z(t)U(t) and is continuous on [0, T ]. A continuous map from a connected set into the four-point set V4 is constant. (iii) By (6) the trajectories Z(t) diag (ϵ1, ϵ2) are generated by (ϵ1Cx , ϵ2Cy ), which satisfies (13) whenever c does. All pairwise distances are unchanged, hence so is ℓ, and f1, f2 and ∥c∥F are quadratic in each of Cx and Cy separately, hence invariant under independent sign changes. The four arrays are distinct if and only if Cx̸ = 0 and Cy̸ = 0, which hold under (A1) and (A2) respectively. 29 B.2 Proof of Proposition 2 
+
+Proof. By equations (2) and (5), the profile log-likelihood takes the form 
+
+ℓ(Z, β) = 
+
+X
+
+> i∈V
+
+mi βi −
+
+X 
+
+> (i,j)∈D
+
+eβi +βj Ii j + const. (B.1) Differentiating twice yields gives (16). The quadratic form is non-negative and vanishes only if 
+
+vi + vj = 0 for all i̸ = j. For n ≥ 3, subtracting vi + vj = 0 from vi + vk = 0 implies vj = vk for all j, k̸ = i, forcing v = v1 and 2 v = 0. This establishes strict concavity in (ii), and (i) follows immediately because equal intensities require vi + vj = 0 for v = β∗ − β.For (iii), strict concavity implies that a unique finite maximizer exists if and only if ℓ(Z, β) is coercive, meaning ℓ(β + sv) → −∞ as s → ∞ along every direction v̸ = 0. Define the recessive cone V = {v̸ = 0 : vi + vj ≤ 0 for all (i, j) ∈ D} .If v /∈ V , at least one dyad has vi +vj > 0, so the exponential term −eβi +βj +s(vi +vj ) Ii j grows without bound and drives ℓ → −∞ . If v ∈ V , the exponential terms remain bounded as s → ∞ , leaving the asymptotic slope determined entirely by the linear term sm⊤v. Consequently, coercivity holds if and only if m⊤v < 0 for every v ∈ V .It remains to show that m⊤v < 0 on V is equivalent to 0 < mi < m for all i.To establish necessity, suppose mi = 0 for some i. Taking v = −ei ∈ V gives m⊤v = 0, violating strict negativity. Next, suppose mi ≥ m for some i. Taking vi = 1 and vj = −1 for all j̸ = i gives 
+
+v ∈ V and m⊤v = mi − P  
+
+> j̸=i
+
+mj = 2(mi − m) ≥ 0, again violating strict negativity. To establish sufficiency, assume 0 < mi < m holds for all i and pick any v ∈ V . Order coordinates so that v1 = max i vi . If v1 ≤ 0, then all coordinates are non-positive and at least one is strictly negative, yielding m⊤v < 0 since mi > 0. If v1 > 0, the constraint v1 + vj ≤ 0 forces vj ≤ − v1
+
+for all j ≥ 2, whence 
+
+m⊤v ≤ m1 v1 − v1
+
+> n
+
+X
+
+> j=2
+
+mj = v1
+
+m1 − (2m − m1) = 2v1(m1 − m) < 0. (B.2) Thus m⊤v < 0 holds for all v ∈ V , ensuring coercivity and completing the proof. 
+
+B.3 Proof of Proposition 3 
+
+Proof. (i) In (18), we have equation for pairwise intensity 
+
+d∗ 
+
+> i j
+
+(t)2 = di j (t)2 + ai + aj , (i, j) ∈ D , t ∈ [0, T ], (B.3) which leads to the matrix form 
+
+D∗(t) − D(t) = a1⊤ + 1a⊤ − 2 diag (a). (B.4) 30 Multiplying Q to both sides of (B.4) eliminates the vector a
+
+QD ∗(t)Q − QD (t)Q = 0 + 0 − 2Q diag (a)Q, (B.5) which is Equation (19) in Proposition (i). The conclusion that rank G(t) ≤ 2 for all t ∈ [0, T ] comes from the representation of D(t). The squared distance between node positions zi (t), zj (t) ∈ R2 is 
+
+di j (t)2 = ∥zi (t) − zj (t)∥2 = ∥zi (t)∥2 + ∥zj (t)∥2 − 2zi (t)⊤zj (t)
+
+Let b(t) = ( ∥z1(t)∥2, . . . , ∥zn(t)∥2)⊤ be the n × 1 vector of squared norms. Expanding across all pairs yields the matrix equation: 
+
+D(t) = b(t)1⊤ + 1b (t)⊤ − 2Z(t)Z(t)⊤.Multiplying D(t) on the left and right by Q yields 
+
+G(t) := − 12 QD (t)Q = QZ (t)Z(t)⊤Q (B.6) Therefore, G(t) and G∗(t) both have rank of at most 2. Consequently, rank (G∗(t) − G(t)) ≤ 4and |S | ≤ 4. (ii) First, we show that a1 = 0. Let U = {i : ai = 0}. By definition, for any i, j ∈ U , (B.3) yields di j (t) = d∗ 
+
+> i j
+
+(t) for all t. Therefore, the positions {z∗ 
+
+> i
+
+(t)}i∈U and {zi (t)}i∈U are isometric. There exist an orthogonal matrix R(t) ∈ O(2) and a translation vector e(t) ∈ R2 such that 
+
+z∗ 
+
+> i
+
+(t) = R(t)zi (t) + e(t) i ∈ U , t ∈ [0, T ]. (B.7) The distance between i ∈ U and the first node satisfies 
+
+d∗
+
+> i1
+
+(t)2 = di1(t)2 + a1 for all i ∈ U ,and plugging (B.7) into it yields 
+
+∥R(t)zi (t) + e(t)∥2 = ∥zi (t)∥2 + a1.Expanding and canceling ∥zi (t)∥2 from both sides, we get 2 R(t)⊤e(t)⊤
+
+zi (t) = a1 − ∥ e(t)∥2 for all i ∈ U .If R(t)⊤e(t) is not 0, then at each time t, all nodes in U lie on the same line which contradicts (A3). Thus, R(t)⊤e(t) = 0 which implies e(t) = 0 and a1 = 0. 31 Then we show that a = 0. For k ∈ S and i ∈ U , we have d∗
+
+> ik
+
+(t)2 = dik (t)2 + ak. Expanding, plugging in z∗ 
+
+> i
+
+(t) = R(t)zi (t), and arranging the equation, we have 2zi (t)⊤ z∗ 
+
+> k
+
+(t) − zk(t) = ∥z∗ 
+
+> k
+
+(t)∥2 − ∥ zk(t)∥2 − ak (B.8) As node 1 ∈ U , we have the right-hand side of (B.8) as 0. Since |U | ≥ n − 4 ≥ 3, the unshifted nodes {zi (t)}i∈U contain at least 3 non-collinear points, which implies z∗ 
+
+> k
+
+(t) − zk(t) = 0, and thus ak = 0. Given a = 0, by Proposition 1, under the anchoring system, we also know that the two positions {z∗ 
+
+> i
+
+(t)} and {zi (t)} are identifiable up to V4.
+
+B.4 Proof of Proposition 4 
+
+Proof. Let u = ( uβ , uc) ∈ Rn+( 2n−3)K be a tangent vector in the coordinate space of C0 × Rn. The quadratic form associated with the expected Fisher information matrix I (c, β) evaluates to 
+
+u⊤I (c, β)u =
+
+X 
+
+> (i,j)∈D
+
+Z T
+
+> 0
+
+
+
+∇ log λi j (t)⊤u
+
+2
+
+λi j (t) d t . (B.9) Because intensity functions satisfy λi j (t) > 0 everywhere on [0, T ], this quadratic form equals zero if and only if the directional derivative vanishes identically across time, meaning 
+
+∇ log λi j (t)⊤u = 0 for all (i, j) ∈ D and t ∈ [0, T ]. (B.10) Proving that (B.10) forces u = 0 simultaneously establishes that the differential of the map 
+
+(c, β) 7 → { log λi j (·)} is injective and that I (c, β) is strictly positive definite. Let B(t) = ( B1(t), . . . , BK (t)) ⊤ ∈ RK denote the vector of K B-spline basis functions evaluated at time t. The trajectory perturbation for node i driven by coefficient vector uci is hi (t) = (B(t)⊤ ⊗ I2)uci . Expanding (B.10) yields 
+
+uβi + uβj − 2 zi (t) − zj (t)⊤ hi (t) − hj (t) = 0. (B.11) Under the gauge constraints defining C0, node 1 is fixed at the spatial origin, imposing z1(t) ≡ 0
+
+and h1(t) ≡ 0. For any dyad (1, j) with j ≥ 2, equation (B.11) simplifies to 
+
+uβ1 + uβj − 2zj (t)⊤hj (t) = 0, (B.12) showing that 2 zj (t)⊤hj (t) = uβ1 + uβj is constant over t ∈ [0, T ].For any dyad (i, j) with i, j ≥ 2, expanding (B.11) and substituting (B.12) gives 2zi (t)⊤hj (t) + 2zj (t)⊤hi (t) = 2uβ1 . (B.13) 32 Under assumptions (A1), (A2), and (A3) with n ≥ 7, the trajectories {zi (t)}ni=1 span two spatial dimensions non-degenerately over time. The time-varying inner products in (B.13) cannot sum to a temporal constant across all dyadic pairings unless hi (t) corresponds to an infinitesimal rigid spatial transformation hi (t) = Rzi (t) for a skew-symmetric matrix R. Under the rotational gauge constraint of C0 restricting node 2 (e.g., h2 y (t) ≡ 0), we obtain R = 0, forcing hi (t) ≡ 0
+
+for every node i.Setting hi (t) ≡ 0 reduces (B.12) to uβ1 + uβj = 0 for all j ≥ 2. Substituting this relation into 
+
+uβi + uβj = 0 for i, j ≥ 2 forces uβ1 = 0, which immediately implies uβi = 0 for all i ∈ V .Finally, because hi (t) = ( B(t)⊤ ⊗ I2)uci ≡ 0 and the B-spline basis functions are linearly independent, we obtain uci = 0 for all i. Thus u = 0 is the unique kernel element, confirming that the differential is injective and I (c, β) ≻ 0.
+
+# C Node activity updates in reduced models 
+
+Under the homogeneous baseline (3) the score is linear in eβ and the update is closed-form, ˆβ(c) = log m − log 
+
+X 
+
+> (i,j)∈D
+
+Ii j , (C.1) while under the Poisson β-model (4) we have Ii j = T , so we can iteratively update 
+
+β(s+1) 
+
+> i
+
+= log mi − log T − log 
+
+X 
+
+> j̸=i
+
+exp  β(s)
+
+> j
+
+, (C.2) a coordinate-ascent recursion of the same form as classical Bradley–Terry scaling. 
+
+# D Details on BIC computation 
+
+D.1 Gauss–Newton curvature substitution 
+
+The log-likelihood ℓ(c, β) depends on trajectory coefficients c nonlinearly through pairwise Euclidean distances di j (t) = ∥zi (t)−zj (t)∥. Standard Laplace approximations expand ℓ quadrat-ically using the observed negative Hessian Hℓ = −∇ 2 
+
+> c
+
+ℓ. However, because the distance mapping is non-convex, Hℓ can possess negative eigenvalues away from local maxima. We resolve this instability by replacing Hℓ with the positive-semidefinite Gauss–Newton curvature matrix F = J⊤WJ , where J is the Jacobian of predicted dyadic intensities with respect to c, and 
+
+W is the diagonal weight matrix derived from model expectations. This substitution omits only second-derivative terms of the distance mapping responsible for negative curvature, isolating information provided by the data. 33 The penalized curvature operator A = F + HP combines data curvature with the penalty matrix 
+
+HP = I2n−3 ⊗ Π, where Π = τ−2IK + 2ρ1Ω1 + 2ρ2Ω2 ≻ 0. Because Π is strictly positive definite, A
+
+satisfies A ⪰ τ−2Idfree with dfree = ( 2n − 3)K. Consequently, A remains strictly invertible and well-conditioned across all grid locations, ensuring that keff ∈ (0, dfree ] is rigorously defined. 
+
+D.2 Matrix-free Hutchinson trace estimation 
+
+Direct computation of (27) via dense matrix inversion costs O(d3free ) operations, which becomes intractable when dfree is large. We avoid explicit construction of A by using the complementary trace identity 
+
+keff = dfree − t r  HP A−1 ≈ dfree − 1
+
+P
+
+> P
+
+X
+
+> p=1
+
+u⊤ 
+
+> p
+
+HP xp, (D.1) where u1, . . . , uP ∈ {− 1, +1}dfree are independent Rademacher probe vectors, and each xp is the unique solution to the linear system Ax p = up.Matrix-vector products Av = Fv +HP v are computed without forming dense matrices. The action 
+
+Fv is evaluated via two-pass automatic differentiation, while HP v exploits the block-Kronecker structure of HP , requiring only banded matrix operations involving Π.Each system Ax p = up is solved using a preconditioned conjugate gradient solver. To ensure smooth output across the (ρ1, ρ2) evaluation grid, we fix the random seeds generating probe vectors {up}Pp=1 across all grid cells and warm-start conjugate gradient iterations using solutions from adjacent grid points. This eliminates Monte Carlo sampling noise, producing a continuous criterion surface. 
+
+D.3 Optimization surface characteristics 
+
+Empirically, the criterion surface displays distinct sensitivities along the two tuning axes. The surface responds strongly to variations in ρ2, which governs path curvature and balances model flexibility against spatial smoothness. Sensitivity to ρ1 is comparatively muted, as ρ1 primarily scales total path length. To maximize computational efficiency, we recommend evaluating a broad preliminary grid over (ρ1, ρ2), followed by a refined unidimensional search over ρ2 at a fixed moderate value of ρ1.
+
+# E Details of simulations and application 
+
+This section includes the additional details for the simulation studies of Section 5 and application in Section 6, covering the evaluation metrics, the two extrapolation rules used out of sample, and the implementation of each competing method. 34 Metrics. The distance IMSE is {T  n
+
+> 2
+
+}−1 P 
+
+> i<j
+
+R T 
+
+> 0
+
+{ ˆdi j (t) − di j (t)}2 d t , which is invariant to rotation, reflection and translation of either configuration and so needs no Procrustes alignment. The held-out log-likelihood is P 
+
+> e
+
+log ˆλie je (te)−P  
+
+> i̸=j
+
+R TTtr 
+
+ˆλi j , the sum running over held-out events and the integral evaluated by Gauss–Legendre quadrature. CLPM and the dyad-independent Poisson process pool the two directions of each dyad into a single process, so their fitted intensity estimates twice the per-ordered-pair rate and every quantity reported for them uses ˆfi j (t) − log 2. Without that adjustment every predicted count would be doubled. The count metric compares that integral with the observed held-out count on each ordered pair. The Kolmogorov–Smirnov statistic rescales each ordered pair’s event times by its own compensator, completing the right-censored final interval as its residual plus an independent unit exponential draw, and comparing the pooled intervals with the uniform distribution. Since the parameters are estimated from the same events and m is large, it is reported as a comparative discrepancy across specifications rather than as a test. 
+
+Extrapolation rules. Persistence freezes the latent positions, or the log-intensity where there are no positions, at Ttr . Constant velocity continues them at the analytic spline derivative for DLS-PP and the homogeneous baseline, at the slope of the segment containing Ttr for CLPM, whose piece-wise linear paths have no derivative at a change point, and at the fitted log-intensity derivative for the dyad-independent Poisson process. The Poisson β-model has no trajectory, so the two rules coincide and one held-out block is reported, an identity we verify numerically rather than assume. 
+
+Implementation of CLPM. We use the distance variant of the authors’ implementation. It carries a single increment penalty, the analogue of ρ1, and no analogue of ρ2, since piece-wise linear paths have no curvature within a segment. The penalty is selected by BIC with the parameter count 2 nK cp + 1, no effective dimension being available, and the number of change points is fixed so that the coefficient count per coordinate matches K.
+
+Implementation of the dyad-independent Poisson process. Each pooled dyad is fitted inde-pendently with an unpenalized B-spline log-intensity of dimension K, giving  n
+
+> 2
+
+K coefficients against (2n−3)K + n for DLS-PP . The log-likelihood of a dyad depends on its events only through 
+
+P 
+
+> e
+
+φ(te), so all dyads are fitted simultaneously by a batched Newton iteration. A dyad with no events in the fitting window has ˆλi j ≡ 0, which attains its maximum contribution of exactly zero and requires no optimization, and a held-out event on such a dyad has log-intensity −∞ .The held-out log-likelihood is therefore accumulated over dyads with at least one training event and the number of held-out events on the remainder is reported separately, with no floor placed on ˆλ. Coefficients are bounded during optimization only to keep the arithmetic finite, since 35 with fewer events than coefficients on a dyad the maximum is approached but not attained. Because the endpoint derivative of such a fit is large and is exponentiated, the constant-velocity cell is reported as unstable rather than as a figure, and the distance IMSE is replaced by IMSE λ
+
+on the conditional intensities. 
+
+Implementation of the Poisson β-model. This specification has no tuning parameters. As shown in Section C, given mi events involving node i, the profile score is mi 2T exp (βi ) P  
+
+> j̸=i
+
+exp (βj )
+
+and we solve it by the half-stepped iteration βi ← 12 [βi + log mi − log {2T P  
+
+> j̸=i
+
+exp (βj )}]. The half step is necessary because the undamped map has eigenvalue −1 along the uniform direction, so its overall level oscillates with period two while the deviations from the mean converge. 
+
+Replication and tuning. Each design uses a ground truth fixed across replications, with one dataset drawn per replication and the optimizer seeded by that replication’s data seed, so the reported standard deviations cover both sources of variation. Tuning is selected once by BIC for DLS-PP , homogeneous baseline and CLPM, and then held fixed. The error in β is undefined for the dyad-independent Poisson process, and for CLPM and the homogeneous baseline it is reported on the single-intercept scale. 
+
+Selected tuning parameters. Table 5 records the values used. The in-sample and held-out columns differ because the two blocks come from separate fits, the first to the whole window and the second to [0, Ttr ] only, each with its tuning selected on the events that fit saw. The basis dimension is K = 10 throughout for models with B-spline representations including DLS-PP ,homogeneous baseline, and DIPP , and for CLPM the number of change points is selected and fixed at 9. 
+
+# F 60 selected countries in application 
+
+To select the cohort for Section 6, economic size was measured using constant purchas-ing power parity (PPP) GDP from the World Bank World Development Indicators (series 
+
+NY.GDP.MKTP.PP.KD ), which adjusts for inflation and local price levels to ensure real comparability across time. We excluded regional aggregates and retained sovereign entities with at least 23 years of non-missing GDP and population data over 1995–2022. Eligible economies were ranked annually by descending PPP GDP . The 60 countries with the lowest median annual rank across the study period form the final panel. Table 6 lists the selected economies and their rankings. 36 Table 5: Tuning parameters used for each method, in the two simulation designs and in the application. The dyad-independent Poisson process carries nothing beyond the basis dimension per dyad and the Poisson β-model carries nothing at all. 
+
+S1 S2 Application Method Parameter In-sample Held-out In-sample Held-out In-sample Held-out DLS-PP ρ1 0.1 0.01 0.1 0.1 0.1 0.0001 
+
+ρ2 0.005 0.01 100 100 0.0001 0.0001 Homogeneous baseline 
+
+ρ1 1 0.01 0.1 0.1 0.0001 0.0001 
+
+ρ2 0.001 0.01 100 100 0.0001 0.0001 CLPM penalty 1 0.1 0.1 0.001 1 1DIPP K 10 Poisson-β — none 
+
+Table 6: Selected 60 economies (index order), 1995–2022. 
+
+# Country # Country # Country # Country 1 United States 16 Turkiye 31 Colombia 46 Chile 2 China 17 Saudi Arabia 32 Viet Nam 47 Iraq 3 India 18 Nigeria 33 Switzerland 48 Portugal 4 Japan 19 Australia 34 Bangladesh 49 Hong Kong SAR, China 5 Russian Federation 20 Thailand 35 Philippines 50 Denmark 6 Germany 21 Egypt, Arab Rep. 36 Sweden 51 Peru 7 Brazil 22 Iran, Islamic Rep. 37 Algeria 52 Finland 8 France 23 Argentina 38 Austria 53 Hungary 9 United Kingdom 24 Netherlands 39 United Arab Emirates 54 Ireland 10 Italy 25 Poland 40 Greece 55 Israel 11 Mexico 26 Pakistan 41 Romania 56 Morocco 12 Indonesia 27 Ukraine 42 Singapore 57 Angola 13 Spain 28 South Africa 43 Kazakhstan 58 Syrian Arab Republic 14 Canada 29 Malaysia 44 Norway 59 Sri Lanka 15 Korea, Rep. 30 Belgium 45 Czechia 60 Kuwait 
+
+37
