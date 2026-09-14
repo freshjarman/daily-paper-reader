@@ -1,0 +1,1163 @@
+Title: Edit-Based Flow Matching for Temporal Point Processes
+
+URL Source: https://arxiv.org/pdf/2510.06050v3
+
+Published Time: Thu, 05 Feb 2026 02:00:22 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+Published as a conference paper at ICLR 2026 
+
+# EDIT -B ASED FLOW MATCHING FOR TEMPORAL 
+
+# POINT PROCESSES 
+
+David L ¨ udke *, Marten Lienen *, Marcel Kollovieh, Stephan G ¨ unnemann 
+
+{d.luedke,m.lienen,m.kollovieh,s.guennemann }@tum.de 
+
+School of Computation, Information and Technology & Munich Data Science Institute Technical University of Munich 
+
+## ABSTRACT 
+
+Temporal point processes (TPPs) are a fundamental tool for modeling event se-quences in continuous time, but most existing approaches rely on autoregres-sive parameterizations that are limited by their sequential sampling. Recent non-autoregressive, diffusion-style models mitigate these issues by jointly interpolating between noise and data through event insertions and deletions in a discrete Markov chain. In this work, we generalize this perspective and introduce an Edit Flow process for TPPs that transports noise to data via insert, delete, and substitute edit operations. By learning the instantaneous edit rates within a continuous-time Markov chain framework, we attain a flexible and efficient model that effectively reduces the total number of necessary edit operations during generation. Empirical results demonstrate the generative flexibility of our unconditionally trained model in a wide range of unconditional and conditional generation tasks on benchmark TPPs. 
+
+## 1 INTRODUCTION 0.11  0.50  0.95 
+
+> 0.51
+
+𝒕1 
+
+𝒕0 
+
+> 0.50
+
+𝒕0.05 
+
+> 0.21 0.11
+
+𝒕0.19 
+
+> 0.21 0.11
+> 0.51
+
+𝒕0.55  
+
+> 0.21 0.11
+> 0.21 0.51
+> 0.95
+
+𝒕0.73  
+
+> 0.11 0.50
+> ins
+> sub
+> del
+> del
+
+Figure 1: Edit process transporting t0 ∼
+
+pnoise (t) to t1 ∼ qtarget (t) by inserting, delet-ing and substituting events. Temporal point processes (TPPs) capture the distri-bution over sequences of events in time, where both the continuous arrival-times and number of events are random. They are widely used in domains such as finance, healthcare, social networks, and trans-portation, where understanding and forecasting event dynamics and their complex interactions is crucial. Most (neural) TPPs capture the complex interactions between events autoregressively , parameterizing a conditional intensity/density of each event given its history (Daley & Vere-Jones, 2006; Shchur et al., 2021). While natural and flexible, this factorization comes with inherent limitations: sampling scales lin-early with sequence length, errors can compound in multi-step generation, and conditional generation is restricted to forecasting tasks. 
+
+Beyond autoregression. Recent advances demon-strate that modeling event sequences jointly proposes a sound alternative to overcome these limitations. Inspired by diffusion, A DD THIN (L¨ udke et al., 2023) and PSD IFF (L¨ udke et al., 2025) leverage the thinning and superposition properties of TPPs to construct a discrete Markov chain that learns to transform noise sequences t0 ∼ pnoise (t) into data sequences t1 ∼ qtarget (t) through insertions and deletions of events. These methods highlight the promise of joint sequence modeling for TPPs by learning stochastic set interpolations and have shown state-of-the-art results, especially in forecasting. In parallel, Havasi et al. (2025) introduced Edit Flow, a discrete flow-matching framework (Gat et al., 2024; Campbell et al., 2024; Shi et al., 2025) for variable-length sequences of tokens (e.g., 
+
+> *
+
+Equal contribution Find the code at cs.cit.tum.de/daml/editpp 
+
+1
+
+> arXiv:2510.06050v3 [cs.LG] 4 Feb 2026
+
+Published as a conference paper at ICLR 2026 language). Their approach models discrete flows in sequence space through insertions , deletions , and 
+
+substitutions , formalized as a continuous-time Markov Chain (CTMC). To make the learning process tractable, they introduce an expanded auxilliary state space that aligns sequences, simultaneously reducing the complexity of marginalizing over possible transitions and enabling efficient element-wise parameterization in sequence space. In this paper, we unify these perspectives and propose E DI TPP, an Edit Flow for TPPs that learns to transport noise sequences t0 ∼ pnoise (t) to data sequences t1 ∼ qtarget (t) via atomic edit operations 
+
+insertions, deletions, and substitutions (see figure 1). We define these operations specifically for TPPs, efficiently parameterize their instantaneous rates within a CTMC, propose an auxiliary alignment space for TPPs, and show that our unconditionally trained model can be flexibly applied to both unconditional and conditional tasks with adaptive complexity. Our main contributions are: • We introduce E DI TPP, the first generative framework that models TPPs via continuous-time edit operations, unifying stochastic set interpolation methods for TPPs with Edit Flows for discrete sequences. • We propose a tractable parameterization of insertion, deletion, and substitution rates for TPPs within the CTMC framework, effectively reducing the number of edit operations for generation. • We demonstrate empirically that E DI TPP achieves state-of-the-art results in both unconditional and conditional tasks across diverse real-world and synthetic datasets. 
+
+## 2 BACKGROUND 
+
+2.1 TEMPORAL POINT PROCESSES 
+
+TPPs (Daley & Vere-Jones, 2006; 2007) are stochastic processes whose realizations are almost surely finite, ordered sets of random events in time. Let t = {t(i)}ni=1 , with t(i) ∈ [0 , T ], denote a realization of n events on a bounded time interval, which can equivalently be represented by the 
+
+counting process N (t) = Pni=1 1{t(i) ≤ t} counting the number of events up to time t. A TPP is uniquely characterized by its conditional intensity function (Rasmussen, 2018): 
+
+λ∗(t) = lim 
+
+> ∆t↓0
+
+E[N (t + ∆ t) − N (t) | H t]∆t , (1) where Ht = {t(i) : t(i) < t } denotes the history up to time t. Intuitively, λ∗(t) represents the instantaneous rate of events given the past. Two important properties of TPPs are superposition and thinning. Superposition, i.e., inserting one sequence into another, t = t1 ∪ t2, where t1 and t2 are realizations from TPPs with intensities λ1 and λ2, results in a sample from a TPP with intensity 
+
+λ = λ1 + λ2. Independent thinning, i.e., randomly deleting any event of a sequence from a TPP with intensity λ with probability p, results in an event sequence from a TPP with intensity (1 − p)λ.The likelihood of observing an event sequence t given the conditional intensity/density is: 
+
+p(t) = 
+
+> n
+
+Y
+
+> i=1
+
+p(t(i) | H t(i) )
+
+!
+
+(1 − F (T | H t(i) )) = 
+
+> n
+
+Y
+
+> i=1
+
+λ∗(t(i))
+
+!
+
+exp −
+
+Z T
+
+> 0
+
+λ∗(s)d s
+
+!
+
+, (2) where F (T | H t) is the CDF of the conditional event density p(t | H t). While this autoregressive formulation of TPPs provides a natural framework for modeling event dependencies, it also poses challenges. Parameterizing the conditional intensity or density is generally nontrivial, and the inherently sequential factorization can lead to inefficient sampling, error accumulation, and limits conditional tasks to forecasting (L¨ udke et al., 2023; 2025). 2.2 MODELING TPP S BY SET INTERPOLATION 
+
+Instead of explicitly modeling the intensity function, L¨ udke et al. (2023; 2025) leverage the thinning and superposition properties of TPPs to derive diffusion-like generative models that interpolate between data event sequences t1 ∼ qtarget (t) and noise t0 ∼ pnoise (t) by inserting and deleting 2Published as a conference paper at ICLR 2026 elements. A DD THIN (L¨ udke et al., 2023) defines the noising Markov chain recursively over a fixed number of steps with size ∆ indexed by s ∈ [0 , 1] as follows: 
+
+λs(t) = αsλs−∆(t)
+
+| {z }
+
+> (i) Thin
+
++ (1 − αs)λ0(t)
+
+| {z }
+
+> (ii) Add
+
+, (3) where λ1(t) is the unknown target intensity of the TPP and αs ∈ (0 , 1) . Intuitively, this noising process increasingly deletes events from the data sequence, while inserting events from a noise TPP 
+
+λ0(t). PSD IFF (L¨ udke et al., 2025) further separates the adding and thinning to yield a Markov chain for the forward process, that stochastically interpolates between t0 and t1 as follows: 
+
+ps(t | t1, t0) = Y
+
+> t∈t
+
+¯αs if t ∈ t1
+
+1 − ¯αs if t ∈ t0
+
+(4) or equivalently λs(t) = ¯ αsλ1(t) + (1 − ¯αs)λ0(t), with ¯αs being the product of αi’s. Eq. (4) defines an element-wise conditional path by independent insert and delete operations on TPPs, assuming 
+
+t0 ∩ t1 = ∅.2.3 FLOW MATCHING WITH EDIT OPERATIONS 
+
+Havasi et al. (2025) introduce Edit Flows, a non-autoregressive generative framework for variable-length token sequences with a fixed, discrete vocabulary (e.g., language). They propose a discrete flow that transports a noisy sequence x0 ∼ pnoise (x) to a data sequence x1 ∼ qdata (x) via elementary 
+
+edit operations : insertions, deletions, and substitutions. This is formalized via the discrete flow matching framework (Gat et al., 2024; Campbell et al., 2024; Shi et al., 2025) in an augmented space, yielding a CTMC Pr( Xs+h = x | Xs = xs) = δxs (x) + hu θs (x | xs) + o(h) with transition rates 
+
+uθs governed by the edit operations. Directly defining a conditional rate us(x|x1, x0) to match uθs to, as in discrete flow matching, is very hard or even intractable, since all possible edits producing x must be considered. Thus, to train this CTMC, they rely on two major insights. First, a CTMC in a data space X can be learned by introducing an augmented space X × Z where the true dynamics are known. Second, designing the auxiliary space Z to follow the element wise mixture probability path ps(z | z0, z1) = Q
+
+> n
+
+(1 − κs)δz(i)0
+
+(z(i)) + κsδz(i)1
+
+(z(i)) with kappa schedule κs ∈ [0 , 1] (Gat et al., 2024) enables training the CTMC directly in the data space X of variable-length sequences. Edit operations are encoded by introducing a blank token ϵ and mapping (x0, x1) into aligned sequences (z0, z1) in Z, where pairs (z(i)0 , z (i)1 ) correspond to insertions (ϵ, x ), deletions (x, ϵ ), or substitutions (x, y ). Crucially, since the discrete flow matching dynamics in Z are known, they can be transferred back to X via ps(x, z | z0, z1) = ps(z | z0, z1)δfrm-blanks (z)(x), by removing ϵ’s with 
+
+frm-blanks . Then, the marginal rates uθ 
+
+> s
+
+are learned in X by marginalizing over z with the Bregman divergence 
+
+L = E
+
+> (z0,z1)∼π(z0,z1)
+> s,p s(zs,xs|z0,z1)
+
+ X
+
+> x̸=xs
+
+uθ 
+
+> s
+
+(x | xs) − X 
+
+> z(i)
+> s̸=z(i)1
+
+˙κs
+
+1 − κs
+
+log uθ
+
+> s
+
+ x(zs, i, z (i)1 ) | xs
+
+
+
+, (5) where x(zs, i, z (i)1 ) = f rm-blanks (( z(1)  
+
+> s
+
+, . . . , z (i−1)  
+
+> s
+
+, z (i)1 , z (i+1)  
+
+> s
+
+, . . . , z (n) 
+
+> s
+
+)) .
+
+## 3 METHOD 
+
+We introduce E DI TPP, an Edit Flow process for TPPs that directly learns the joint distribution of event times. Our process leverages the three elementary edit operations insert , substitute , and delete 
+
+to define a CTMC that continuously interpolates between two event sequences t0 ∼ pnoise (t) and 
+
+t1 ∼ qdata (t).Let T = [0 , T ] denote the support of the TPP. We define the state space as 
+
+XT = S∞
+
+> n=0
+
+(0 , t (1) , . . . , t (n), T ) ∈ T n : 0 < t (1) < · · · < t (n) < T , denoting the set of all pos-sible padded TPP sequences with finitely many events. Note that the padding values are introduced for notational simplicity when defining the edit operations on T .3Published as a conference paper at ICLR 2026 𝑡 𝑡 𝑡 𝑠 (1) 
+
+# 𝒕𝑠  𝑡 𝑠 (4) 
+
+2𝛿 
+
+ins (𝒕𝑠 , 1, j )
+
+sub (𝒕𝑠 , 3, j )
+
+del (𝒕𝑠 , 4 )
+
+𝑡 𝑠 (3) 
+
+𝑡 𝑠 (2) 
+
+Figure 2: Our discrete edit operations transform continuous event sequences through insertions, substitutions and deletion. 3.1 EDIT OPERATIONS 
+
+Our model navigates the state space XT through a set of atomic edit operations. While Edit Flow was originally defined for discrete state spaces, we can generalize the method to continuous state spaces provided that the set of edit operations remains discrete. We achieve this by defining a finite set of edit operations on our continuous state space XT that nonetheless allow us to transition from any sequence t to any other t′ through repeated application. Similar to Havasi et al. (2025), we design our operations to be mutually exclusive: if two sequences differ by exactly one edit, the responsible operation is uniquely determined. This simplifies the parameterization of the model and computation of the Bregman divergence in Eq. (5). 
+
+Insertion : To discretize the event insertion, we quantize the space between any two adjacent events 
+
+t(i) and t(i+1) into bins evenly-spaced bins. Then, we define the insertion operation relative to the ith event as 
+
+ins( t, i, j ) = 
+
+
+
+t(0) , . . . , t (i), t (i) + j − 1 + αbins 
+
+(t(i+1) − t(i)), t (i+1) , . . . , t (n+1) 
+
+(6) for i ∈ { 0, . . . , n }, j ∈ [bins ], where α ∼ U (0 , 1) is a dequantization factor inspired by uniform dequantization in likelihood-based generative models (Theis et al., 2016). The boundary elements 
+
+t(0) = 0 and t(n+1) = T ensure that insertions are possible across the entire support T . Since the bins between different i are non-overlapping, insertions are mutually exclusive. 
+
+Substitution : We implement event substitutions by discretizing the continuous space around each event into bsub bins. In this case, the bins are free to overlap, since a substitution is always uniquely determined by the substituted event. We choose a maximum movement distance δ and define 
+
+sub( t, i, j ) = sort 
+
+
+
+{t(0) , . . . , t (i−1) , t (i+1) , . . . , t (n+1) } ∪ 
+
+n˜t(i)o 
+
+(7) for i ∈ { 1, . . . , n }, j ∈ [bsub ], where ˜t(i) = t(i) − δ + j−1+ αbsub 2δT 
+
+> 0
+
+is the updated event restricted to the support T and, again, α ∼ U (0 , 1) is a uniform dequantization factor within the j-th bin. 
+
+Deletion : Finally, we define removing event i ∈ { 1, . . . , n } straightforwardly as 
+
+del( t, i ) = ( t(0) , . . . , t (i−1) , t (i+1) , . . . , t (n+1) ). (8) In combination, these operations facilitate any possible edit of an event sequence through insertions and deletions with substitutions as a shortcut for local delete-insert pairs. Note that we neither allow inserting after the last boundary event nor substituting or deleting the first or last boundary events, thus guaranteeing operations to stay in the state space XT . We illustrate the edit operations in Fig. 2. Our choice of ins , sub and del ensures three key properties: (i) the resulting event sequences remain valid TPPs, (ii) the number of valid operations, e.g. ins( t, i, j ), is independent of the position i,which is necessary for efficient parameterization, and (iii) at most one unique operation can transition between any two states, which significantly reduces the complexity of the training loss in Section 3.3. While these properties are comparably simple to achieve for token sequences in language modeling (Havasi et al., 2025), where any token can replace any other, they require special care in the case of 4Published as a conference paper at ICLR 2026 TPPs. del and sub are defined to ensure that the resulting event sequence remains in increasing order and that the padding events t(0) and t(n+1) remain in place. del transitions are unique because the removed event determines exactly which deletion occurred. Similarly, sub transitions are unique because the original position of the substituted event disambiguates the operation, even though two distinct sub operations may yield the same substituted event value. To achieve uniqueness for ins , the insertion bins corresponding to ins( t, i, j ) have to be mutually disjoint for any i, j since insertions lack a removed event to disambiguate them. We achieve this by sizing the bins relative to the distance between t(i) and t(i+1) .
+
+Parameterization Generating a new event sequence in the Edit Flow framework then means to emit a continuous stream of edit operations by integrating a rate model uθ 
+
+> s
+
+(· | t) from s = 0 to s = 1 .The emitted operations transform a noise sequence t0 into a data sample t1 by transitioning through a series of intermediate states t. Given a current state ts, we parameterize the transition rates as 
+
+uθ 
+
+> s
+
+(ins( ts, i, j ) | ts) = λins 
+
+> s,i
+
+(ts) Qins 
+
+> s,i
+
+(j | ts), (9) 
+
+uθ 
+
+> s
+
+(sub( ts, i, j ) | ts) = λsub  
+
+> s,i
+
+(ts) Qsub  
+
+> s,i
+
+(j | ts), (10) 
+
+uθ 
+
+> s
+
+(del( ts, i ) | ts) = λdel 
+
+> s,i
+
+(ts), (11) where λdel 
+
+> s,i
+
+, λ ins 
+
+> s,i
+
+, λ sub  
+
+> s,i
+
+denote the total rate of each of the three basic operations at each event t(i). The distributions Qins  
+
+> s,i
+
+and Qsub  
+
+> s,i
+
+are categorical distributions over the discretization bins j ∈ [bins ] and 
+
+j ∈ [bsub ], respectively. They distribute the total insertion and substitution rates between the specific options. 3.2 AUXILIARY ALIGNMENT SPACE 
+
+Training our rate model uθ 
+
+> s
+
+by directly matching a marginalized conditional rate us(t | t1, t0)
+
+generating a ps(t | t1, t0), as is common in discrete flow matching (Campbell et al., 2024; Gat et al., 2024), is challenging or even intractable for Edit Flows, since it would require accounting for all possible edits that could produce t (Havasi et al., 2025). 0.50              
+
+> 𝒕1 0.21 0.55
+> ins sub del
+> 0.0 T
+> 𝒕0 0.11 0.95 0.0 T
+> 0.55 𝜖 𝜖 0.0 T𝒛1 0.21
+> 0.50 0.11 0.95 0.0 T𝒛0 𝜖
+> del
+
+Figure 3: Illustration of the alignment space for t0 and t1.To address this, following Havasi et al. (2025), we introduce an auxiliary alignment space for TPPs, where every possible edit operation is uniquely defined in the element wise mixture path 
+
+zs ∼ ps(zs | z0, z1), making the learning problem tractable. In language modeling, any token can appear in any position, so Havasi et al. (2025) achieve strong results even when training with a simple alignment that juxtaposes two sequences after shifting one of them by a constant number of places. In our case, for the alignments to correspond to possible edit operations, two events can only be matched, i.e., z(i)0̸ = ϵ and z(i)1̸ = ϵ, if |z(i)0 − z(i)1 | < δ since otherwise the resulting sub operation would be invalid. Furthermore, 
+
+zs have to correspond to sequences in XT , so frm-blanks (z) has to be increasing, and in particular any mixing zs between z0 and z1 needs to be valid, i.e., zs ∼ ps(zs | z0, z1) ⇒ frm-blanks (zs) ∈ X T .We find the minimum-cost alignment between the non-boundary events of t0 and t1 with the Needleman-Wunsch algorithm (Needleman & Wunsch, 1970), i.e., 
+
+align( t0, t1) = wrap-boundaries 
+
+
+
+Needleman-Wunsch 
+
+
+
+t(1: n)0 , t(1: m)1 , c ins , c sub , c del 
+
+
+
+(12) and the cost functions 
+
+csub (i, j ) = 
+
+(
+
+|t(i)0 − t(j)1 | if |t(i)0 − t(j)1 | < δ and t(i−1) 0 < t (j)1 < t (i+1) 0
+
+∞ otherwise 
+
+cins (i, j ) = 
+
+( δ 
+
+> 2
+
+if t(i)0 < t (j)1
+
+∞ otherwise cdel (i, j ) = 
+
+( δ 
+
+> 2
+
+if t(i)0 > t (j)1
+
+∞ otherwise (13) where wrap-boundaries wraps the sequences with aligned boundary events 0 and T . The algorithm builds up the aligned sequences pair by pair. The operations corresponds to adding different pairs to the end of (z0, z1), i.e., insertion  ϵ, t (j)1
+
+, deletion  t(i)0 , ϵ  and substitution  t(i)0 , t (j)1
+
+ (see Fig. 3). 5Published as a conference paper at ICLR 2026 We carefully craft the cost functions in Eq. (13), to guarantee that the minimum-cost alignment corresponds to ins , sub and del operations as we define them in Section 3.1. With the |t(i)0 − t(j)1 | < δ 
+
+condition in csub , we ensure that the aligned sequences will never encode a sub operation for two events that are further than δ apart. The costs for insertions and deletions and the additional con-dition on csub ensure that the aligned sequences are jointly sorted, i.e., for any i < j we have 
+
+max  z(i)0 , z (i)1
+
+ < min  z(j)0 , z (j)1
+
+ where min and max ignore ϵ tokens. This means that any in-terpolated zs is sorted by construction. The validity of encoded ins and del operations follows immediately. 3.3 TRAINING 
+
+We train our model uθ 
+
+> s
+
+(· | ts) by optimizing the Bregman divergence in Eq. (5). This amounts to sampling from a coupling π(z0, z1) in the aligned auxiliary space and then matching the ground-truth conditional event rates. Note that the coupling π(z0, z1) is implicitly defined by its sampling procedure: sample t0, t1 ∼ π(t0, t1) from a coupling of the noise and data distribution, e.g., the independent coupling π(t0, t1) = p(t0) q(t1), and then align the sequences z0, z1 = align( t0, t1).For our choice of operations, the divergence is 
+
+L = E
+
+> (z0,z1)∼π(z0,z1)
+> s,p s(zs,ts|z0,z1)
+
+ X
+
+> ω∈Ω( ts)
+
+uθ 
+
+> s
+
+(ω | ts) − X 
+
+> z(i)
+> s̸=z(i)1
+
+˙κs
+
+1 − κs
+
+log uθ
+
+> s
+
+
+
+ω z(i) 
+
+> s
+
+, z (i)1
+
+ | ts
+
+
+
+, (14) where Ω( ts) is the set of all edit operations applicable to ts and ω z(i) 
+
+> s
+
+, z (i)1
+
+ is the edit operation encoded in the i-th position of the aligned sequences zs and z1. To make it precise, we have 
+
+Ω( ts) = [
+
+{ins( ts, i, j ) | i ∈ { 0} ∪ [n], j ∈ [bins ]}{sub( ts, i, j ) | i ∈ [n], j ∈ [bsub ]}{del( ts, i ) | i ∈ [n]}
+
+(15) and 
+
+ω z(i) 
+
+> s
+
+, z (i)1
+
+ =
+
+
+
+ins( ts, i ′, j ′) if z(i) 
+
+> s
+
+= ϵ and z(i)1̸ = ϵ, 
+
+sub( ts, i ′, j ′) if z(i)
+
+> s
+
+̸ = ϵ and z(i)1̸ = ϵ, 
+
+del( ts, i ′) if z(i)
+
+> s
+
+̸ = ϵ and z(i)1 = ϵ. 
+
+(16) 
+
+i′ is the index such that frm-blanks (zs) maps z(i) 
+
+> s
+
+to x(i′) 
+
+> s
+
+with the convention that ϵ is mapped to the same i′ as the last element of zs before i that is not ϵ. j′ is the index of the insertion or substitution bin relative to x(i′) 
+
+> s
+
+that z(i)1 falls into. 3.4 SAMPLING Algorithm 1: Conditional Sampling 
+
+Input: 
+
+condition tc 
+
+> 1
+
+= C(t1), noise t0 ∼ pnoise , h = 1 /n steps 
+
+(zc
+
+> 0
+
+, zc
+
+> 1
+
+) ← align( C(t0), tc
+
+> 1
+
+)
+
+while s < 1 do Euler update 
+
+Sample edits ωs ∼ h u θs (· | ts)
+
+ts+h ← apply ωs to ts
+
+Recondition 
+
+˜zcs+h ∼ ps+h(· | zc
+
+> 0
+
+, zc
+
+> 1
+
+)
+
+tcs+h ← frm-blanks ( ˜ zcs+h)
+
+Merge 
+
+ts+h ← C′(ts+h) ∪ tcs+h
+
+s ← s + h
+
+end Return: forecast trajectory C′(ts=1 )
+
+Sampling from our model is done by for-ward simulation of the CTMC from noise 
+
+t0 ∼ pnoise (t) up to s = 1. We fol-low (Havasi et al., 2025; Gat et al., 2024) and leverage their Euler approximation, since exact simulation is intractable. Even though the rates are parameterized per el-ement, sampling multiple edits within a time horizon can be done in parallel. At each step of length h, insertions at posi-tion i occur with probability h λ ins 
+
+> s,i
+
+(t) and deletions or substitutions occur with proba-bility h(λdel 
+
+> s,i
+
+(t) + λsub  
+
+> s,i
+
+(t)) . Since they are mutually exclusive the probability of sub-stitution vs deletion is λsub  
+
+> s,i
+
+(t)/(λsub  
+
+> s,i
+
+(t) + 
+
+λdel 
+
+> s,i
+
+(t)) . Lastly, the inserted or substituted events are drawn from the respective dis-tributions Q to update ts. For a short sum-mary of the unconditional sampling step refer to the Euler update step depicted in algorithm Algo-rithm 1. 6Published as a conference paper at ICLR 2026 
+
+Conditional sampling. We can extend the unconditional model to conditional generation given a binary mask on time c : T → { 0, 1} (e.g., for forecasting, c(t) = t ≤ thistory ). For a sequence t, we define the conditioned part C(t) = {t ∈ t : c(t) = 1 } and its complement C′(t). Then as depicted in algorithm Algorithm 1, for conditional sampling, we can simply enforce the conditional subsequence to follow a noisy interpolation between tc 
+
+> 0
+
+= C(t0) and tc 
+
+> 1
+
+= C(t1), while the complement evolves freely in the sampling process. 3.5 MODEL ARCHITECTURE 
+
+For our rate model uθ 
+
+> s
+
+(· | xs), we adapt the Llama architecture, a transformer widely ap-plied for variable-length sequences in language modeling (Touvron et al., 2023). We employ 
+
+FlexAttention in the Llama attention blocks, which supports variable-length sequences na-tively without padding (Dong et al., 2024). As a first step, we convert the scalar event sequence xs
+
+into a sequence of token embeddings by applying MLP(SinEmb( x(i) 
+
+> s
+
+/T )) to each to each event, where MLP refers to a small multi-layer perceptron (MLP) and SinEmb is a sinusoidal embedding (Vaswani et al., 2017). We convert s and |xs| into two additional tokens in an equivalent way with separate MLPs and prepend them to the embedding sequence, which we then feed to the Llama. Lastly, we apply one more MLP to map the output embedding h(i) of each event to transition rates. In particular, we parameterize 
+
+λins  
+
+> s,i
+
+= exp( λM tanh( h(i) 
+
+> ins
+
+)) , λsub  
+
+> s,i
+
+= exp( λM tanh( h(i)
+
+> sub
+
+)) , λdel  
+
+> s,i
+
+= exp( λM tanh( h(i) 
+
+> del
+
+)) , (17) 
+
+Qins  
+
+> s,i
+
+= softmax( h(i)
+
+> Q,ins
+
+), Qsub  
+
+> s,i
+
+= softmax( h(i)
+
+> Q,sub
+
+). (18) We list the values of all relevant hyperparameters in Appendix A. 
+
+## 4 EXPERIMENTS 
+
+We evaluate our model on seven real-world and six synthetic benchmark datasets (Omi et al., 2019; Shchur et al., 2020b; L¨ udke et al., 2023; 2025). In our experiments, we compare against IFTPP (Shchur et al., 2020a), an autoregressive baseline which consistently shows state-of-the-art performance (Bosser & Taieb, 2023; L¨ udke et al., 2023; Kerrigan et al., 2025). We further compare to PSD IFF (L¨ udke et al., 2025) and A DD THIN (L¨ udke et al., 2023), given their strong results in both conditional and unconditional settings and their methodological similarity to our approach. All models are trained with five seeds and we select the best checkpoint based on W1-over-dIET against a validation set. E DI TPP, A DD THIN , and PSD IFF are trained unconditionally but can be conditioned at inference time. 1 We list the full results in Appendix E.3. For forecasts, we compare predicted and target sequences by three metrics: dXiao introduced by Xiao et al. (2017), the mean relative error (MRE) of the event counts and dIET , which compares inter-event times to quantify the relation between events such as burstiness. In unconditional generation, we compare our generated sequences to the test set in terms of maximum mean discrepancy (MMD) (Shchur et al., 2020b) and their Wasserstein-1 distance with respect to their counts ( dl) and inter-event times ( dIET ). See Appendix C for details. 4.1 UNCONDITIONAL GENERATION 
+
+To evaluate how well samples from each TPP model follow the data distribution, we compute distance metrics between 4000 sampled sequences and a hold-out test set. We report the unconditional sampling results in Table 1. E DI TPP achieves the best rank in unconditional sampling by strongly matching the test set distribution across all evaluation metrics, outperforming all baselines. The autoregressive baseline IFTPP shows very strong unconditional sampling capability, closely matching and on some dataset and metric combination outperforming the other non-autoregressive baselines ADD THIN and PSD IFF .
+
+> 1To stay comparable, we employ the conditioning algorithm from L¨ udke et al. (2025) for A DD THIN .
+
+7Published as a conference paper at ICLR 2026 Table 1: Unconditional sampling performance. Bold is best, underlined second best. Ranking follows full results in Appendix E.3 and results are grouped if they fall within the std of the best member. H1 H2 NSP NSR SC SR PG R/C R/P Tx Tw Y/A Y/M 
+
+> MMD
+
+IFTPP 1.6 1.2 3.2 3.9 6.7 1.2 16.2 7.5 2.0 5.0 2.6 5.8 2.9 
+
+ADD THIN 2.4 1.8 3.5 15.7 24.6 2.5 4.6 63.0 10.2 4.1 4.4 11.8 3.7 PSD IFF 3.3 1.8 2.0 5.9 19.8 2.4 3.2 6.5 1.0 3.8 3.4 4.1 3.4 EDI TPP 1.1 1.2 1.7 3.5 7.7 1.0 1.4 8.2 2.4 3.1 1.3 3.7 4.0             
+
+> ×10 −2×10 −2×10 −2×10 −2×10 −2×10 −2×10 −2×10 −3×10 −2×10 −2×10 −2×10 −2×10 −2
+> W1,d l
+
+IFTPP 20.5 13.3 11.5 14.1 1.5 23.0 294.6 3.9 3.2 2.9 6.5 3.3 2.5 ADD THIN 33.3 21.8 12.8 49.0 22.7 41.8 24.5 37.0 33.6 2.3 15.5 6.0 1.6 
+
+PSD IFF 26.9 29.6 5.5 13.3 10.6 30.3 16.1 1.3 2.5 2.8 6.3 1.5 1.5 
+
+EDI TPP 7.6 7.0 3.1 1.5 1.3 6.4 6.2 1.9 5.7 2.5 3.4 1.4 1.7             
+
+> ×10 −3×10 −3×10 −3×10 −3×10 −3×10 −3×10 −3×10 −2×10 −2×10 −2×10 −3×10 −2×10 −2
+> W1,d IET
+
+IFTPP 6.3 5.8 3.2 2.3 6.5 7.1 30.3 1.8 7.1 17.4 4.9 3.2 2.8 ADD THIN 6.6 7.0 3.2 3.9 15.1 9.4 8.0 5.3 20.0 8.8 5.5 3.2 2.4 PSD IFF 8.6 9.9 3.0 5.1 32.6 12.8 9.0 1.6 4.3 11.1 6.7 2.4 2.3 
+
+EDI TPP 5.3 5.5 3.1 2.2 6.4 7.0 7.5 1.4 6.0 11.1 4.6 2.5 2.3             
+
+> ×10 −1×10 −1×10 −1×10 −1×10 −2×10 −1×10 −2×10 −1×10 −3×10 −2×10 −1×10 −1×10 −1
+
+4.2 CONDITIONAL GENERATION (F ORECASTING )Predicting the future given some history window is a fundamental TPP task. For each test sequence, we uniformly sample 50 forecasting windows [T0, T ], T 0 ∈ [∆ T, T − ∆T ], with minimal history and forecast time ∆T . While, this set-up is very similar to the one proposed by L¨ udke et al. (2023), there are key differences: we do not fix the forecast window and do not enforce a minimal number of forecast or history events. In fact, even an empty history encodes the information of not having observed an event and a TPP should capture the probability of not observing any event in the future. Table 2: Forecasting accuracy up to T . Bold is best, un-derlined second best. Ranking follows full results in Ap-pendix E.3 and results are grouped if they fall within the std of the best member. PG R/C R/P Tx Tw Y/A Y/M 
+
+> dXiao
+
+IFTPP 6.0 3.9 6.3 4.7 2.6 1.8 3.4 ADD THIN 2.5 8.8 7.3 4.0 2.8 1.5 2.9 
+
+PSD IFF 2.4 3.2 4.8 4.4 2.6 1.5 3.0 EDI TPP 2.5 3.4 4.9 4.5 2.7 1.5 3.0  
+
+> ×10 1×10 1
+> MRE
+
+IFTPP 38.9 7.5 3.5 3.2 2.1 3.7 3.9 ADD THIN 3.7 14.8 4.6 3.0 3.0 3.5 3.7 
+
+PSD IFF 3.4 3.3 3.0 11.4 2.4 3.5 9.2 EDI TPP 3.5 3.6 2.8 12.3 2.3 3.5 9.0     
+
+> ×10 −1×10 −1×10 −1×10 −1×10 −1
+> dIET
+
+IFTPP 4.7 6.8 14.7 1.4 2.2 5.9 3.9 ADD THIN 4.0 6.9 10.3 1.2 1.5 4.9 2.6 
+
+PSD IFF 4.1 6.2 9.5 1.1 1.5 4.9 2.6 
+
+EDI TPP 4.0 6.8 10.1 1.1 1.4 5.0 2.7      
+
+> ×10 −1×10 −1×10 −3×10 −1×10 −1×10 −1
+
+We report the forecasting results in Table 2. E DI TPP shows very strong forecasting capabilities closely match-ing or surpassing the baselines across most dataset and metric combina-tions. Even though IFTPP is explic-itly trained to auto-regressively pre-dict the next event given its history, it shows overall worse forecasting capa-bilities compared to the uncondition-ally trained E DI TPP, A DD THIN and PSD IFF . This again, underlines pre-vious findings (L¨ udke et al., 2023), that autoregressive TPPs can suffer from error accumulation in forecast-ing. Similar to the unconditional set-ting, PSD IFF (transformer) outper-forms A DD THIN (convolution with circular padding), which showcases the improved posterior and modeling of long-range interactions. 4.3 EDIT EFFICIENCY 
+
+The sub operation allows our model to modify sequences in a more targeted way when compared to PSD IFF or ADD THIN , which have to rely on just inserts and deletes. 8Published as a conference paper at ICLR 2026 4 8 16 32 64 128 256                 
+
+> Steps k
+> 0.00.20.4
+> dl
+> 4816 32 64 128 256
+> Steps k
+> 0.00.5
+> dIET
+> 4816 32 64 128 256
+> Steps k
+> 0.00.51.0
+> MMD Reddit Posts Reddit Comments
+
+Figure 4: Changing the number of steps k allows trading off compute and sample quality in terms of 
+
+dl, dIET and MMD at inference time. Table 3: Average number of edit operations in unconditional sampling across datasets. Full re-sult in Table 13. 
+
+Ins Del Sub Total PSD IFF 173.48 61.04 0.00 234.52 EDI TPP 137.42 33.08 29.16 199.65 
+
+Note that one sub operation can replace an insert-delete pair. Table 3 shows this results in E DI TPP using fewer edit operations than PSD IFF on aver-age even if one would count substitutions twice, as an insert and a delete. 2 This is further ampli-fied by the fact, that unlike E DI TPP, PSD IFF and ADD THIN only indirectly parameterizes the tran-sition edit rates by predicting t1 by insertion and deletion at every sampling step. Table 4: Sample run-time (ms) on a H100 GPU. R/P R/C ADD THIN 18,075.62 17,689.36 PSD IFF 7,776.35 3,913.78 EDI TPP 4,120.38 1,505.68 In Table 4, we compare their actual sampling run-time for a batch size of 1024 on the two dataset with the longest sequences. Our implementation beats the reference implementations of A DD THIN 
+
+and PSD IFF by a large margin. Note, that for a fair comparison, we fixed the number of sam-pling steps to 100 in all previous evaluations. As a continuous-time model, E DI TPP can further trade off compute against sample quality at inference time without retraining, in contrast to discrete-time models like A DD THIN and PSD IFF . Fig. 4 shows that sample quality improves as we increase the number of sampling steps and therefore reduce the discretization step size of the CTMC dynamics. At the same time, the figure also shows rapidly diminishing quality improvements, highlighting potential for substantial speedups with only minor quality loss. 
+
+## 5 RELATED WORK 
+
+The statistical modeling of TPPs has a long history (Daley & Vere-Jones, 2007; Hawkes, 1971). Classical approaches such as the Hawkes process define parametric conditional intensities, but their limited flexibility has motivated the development of neurally parameterized TPPs: 
+
+Autoregressive Neural TPP : Most neural TPPs adopt an autoregressive formulation, modeling the distribution of each event conditional on its history. These models consist of two components: a 
+
+history encoder and an event decoder . Encoders are typically implemented using recurrent neural networks (Du et al., 2016; Shchur et al., 2020a) or attention mechanisms (Zhang et al., 2020a; Zuo et al., 2020; Mei et al., 2022), with attention-based models providing longer-range context at the cost of higher complexity (Shchur et al., 2021). Further, some propose to encode the history of a TPP in a continuous latent stochastic processes (Chen et al., 2020; Enguehard et al., 2020; Jia & Benson, 2019; Hasan et al., 2023). For the decoder , a wide variety of parametrizations have been explored. Conditional intensities or related measures (e.g., hazard function or conditional density), can be modeled, parametrically (Mei & Eisner, 2017; Zuo et al., 2020; Zhang et al., 2020a), via neural networks (Omi et al., 2019), mixtures of kernels (Okawa et al., 2019; Soen et al., 2021; Zhang et al., 2020b) and mixture distributions (Shchur et al., 2020a). Generative approaches further enhance flexibility: normalizing flow-based (Shchur et al., 2020b), GAN-based (Xiao et al., 2017), VAE-based (Li et al., 2018), and diffusion-based decoders (Lin et al., 2022; Yuan et al., 2023) have all been 
+
+> 2
+
+Due to its recursive definition, A DD THIN inserts and subsequently deletes some noise events during sampling, which results in additional edit operations compared to PSD IFF .
+
+9Published as a conference paper at ICLR 2026 proposed. While expressive, autoregressive TPPs are inherently sequential, which makes sampling scale at least linearly with sequence length, can lead to error accumulation in multi-step forecasting and limit conditional generation to forecasting. 
+
+Non-autoregressive Neural TPPs : Similar to our method, these approaches model event sequences through a latent variable process that refines the entire sequence jointly. Diffusion-inspired (L¨ udke et al., 2023; 2025) and flow-based generative models (Kerrigan et al., 2025) have recently emerged as promising alternatives to auto-regressive TPP models by directly modelling the joint distribution over event sequences. 
+
+## 6 CONCLUSION 
+
+We have presented E DI TPP, an Edit Flow for TPPs that generalises diffusion-based set interpolation methods (L¨ udke et al., 2023; 2025) with a continuous-time flow model introducing substitution as an additional edit operation. By parameterizing insertions, deletions, and substitutions within a CTMC, our approach enables efficient and flexible sequence modeling for TPPs. Empirical results demonstrate that E DI TPP matches state-of-the-art performance in both unconditional and conditional generation tasks across synthetic and real-world datasets, while reducing the number of edit operations. 
+
+## ACKNOWLEDGMENTS 
+
+We want to thank the Munich Center for Machine Learning for providing compute resources. 10 Published as a conference paper at ICLR 2026 
+
+## REFERENCES 
+
+Tanguy Bosser and Souhaib Ben Taieb. On the predictive accuracy of neural temporal point process models for continuous-time event data. Transactions on Machine Learning Research , 2023. ISSN 2835-8856. URL https://openreview.net/forum?id=3OSISBQPrM . Survey Certification. Andrew Campbell, Jason Yim, Regina Barzilay, Tom Rainforth, and Tommi Jaakkola. Generative flows on discrete state-spaces: Enabling multimodal flows with applications to protein co-design, 2024. URL https://arxiv.org/abs/2402.04997 .Ricky TQ Chen, Brandon Amos, and Maximilian Nickel. Neural spatio-temporal point processes. 
+
+arXiv preprint arXiv:2011.04583 , 2020. Daryl J Daley and David Vere-Jones. An introduction to the theory of point processes: volume II: general theory and structure . Springer Science & Business Media, 2007. D.J. Daley and D. Vere-Jones. An Introduction to the Theory of Point Processes: Volume I: Elementary Theory and Methods . Probability and Its Applications. Springer New York, 2006. Juechu Dong, Boyuan Feng, Driss Guessous, Yanbo Liang, and Horace He. Flex Attention: A Programming Model for Generating Optimized Attention Kernels, December 2024. Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. Recurrent marked temporal point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining , pp. 1555–1564, 2016. Joseph Enguehard, Dan Busbridge, Adam Bozson, Claire Woodcock, and Nils Hammerla. Neural temporal point processes for modelling electronic health records. In Machine Learning for Health ,pp. 85–113. PMLR, 2020. Itai Gat, Tal Remez, Neta Shaul, Felix Kreuk, Ricky T. Q. Chen, Gabriel Synnaeve, Yossi Adi, and Yaron Lipman. Discrete flow matching, 2024. URL https://arxiv.org/abs/2407. 15595 .Ali Hasan, Yu Chen, Yuting Ng, Mohamed Abdelghani, Anderson Schneider, and Vahid Tarokh. Inference and sampling of point processes from diffusion excursions. In The 39th Conference on Uncertainty in Artificial Intelligence , 2023. Marton Havasi, Brian Karrer, Itai Gat, and Ricky T. Q. Chen. Edit flows: Flow matching with edit operations, 2025. URL https://arxiv.org/abs/2506.09018 .Alan G Hawkes. Spectra of some self-exciting and mutually exciting point processes. Biometrika , 58 (1):83–90, 1971. Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium. In 
+
+Neural Information Processing Systems , 2017. Junteng Jia and Austin R Benson. Neural jump stochastic differential equations. Advances in Neural Information Processing Systems , 32, 2019. Gavin Kerrigan, Kai Nelson, and Padhraic Smyth. Eventflow: Forecasting temporal point processes with flow matching, 2025. URL https://arxiv.org/abs/2410.07430 .Diederik P. Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational Diffusion Models, April 2023. Shuang Li, Shuai Xiao, Shixiang Zhu, Nan Du, Yao Xie, and Le Song. Learning temporal point processes via reinforcement learning. Advances in neural information processing systems , 31, 2018. 11 Published as a conference paper at ICLR 2026 Marten Lienen, David L¨ udke, Jan Hansen-Palmus, and Stephan G¨ unnemann. From Zero to Turbu-lence: Generative Modeling for 3D Flow Simulation. In International Conference on Learning Representations , 2024. Marten Lienen, Marcel Kollovieh, and Stephan G¨ unnemann. Generative Modeling with Bayesian Sample Inference, 2025. Haitao Lin, Lirong Wu, Guojiang Zhao, Liu Pai, and Stan Z Li. Exploring generative neural temporal point process. Transactions on Machine Learning Research , 2022. David L¨ udke, Marin Biloˇ s, Oleksandr Shchur, Marten Lienen, and Stephan G¨ unnemann. Add and thin: Diffusion for temporal point processes. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. URL https://openreview.net/forum?id=tn9Dldam9L .David L¨ udke, Enric Rabasseda Ravent´ os, Marcel Kollovieh, and Stephan G¨ unnemann. Unlocking point processes through point set diffusion. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id=4anfpHj0wf .Hongyuan Mei and Jason M Eisner. The neural hawkes process: A neurally self-modulating multivariate point process. In Neural Information Processing Systems (NeurIPS) , 2017. Hongyuan Mei, Chenghao Yang, and Jason Eisner. Transformer embeddings of irregularly spaced events and their participants. In International Conference on Learning Representations , 2022. URL https://openreview.net/forum?id=Rty5g9imm7H .Saul B. Needleman and Christian D. Wunsch. A general method applicable to the search for similarities in the amino acid sequence of two proteins. Journal of Molecular Biology , 48(3): 443–453, March 1970. ISSN 0022-2836. doi: 10.1016/0022-2836(70)90057-4. Alex Nichol and Prafulla Dhariwal. Improved Denoising Diffusion Probabilistic Models. In Interna-tional Conference on Machine Learning , 2021. doi: 10.48550/arXiv.2102.09672. Maya Okawa, Tomoharu Iwata, Takeshi Kurashima, Yusuke Tanaka, Hiroyuki Toda, and Naonori Ueda. Deep mixture point processes: Spatio-temporal event prediction with rich contextual information. In Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , pp. 373–383, 2019. Takahiro Omi, Kazuyuki Aihara, et al. Fully neural network based model for general temporal point processes. Advances in neural information processing systems , 32, 2019. Jakob Gulddahl Rasmussen. Lecture notes: Temporal point processes and the conditional intensity function, 2018. URL https://arxiv.org/abs/1806.00221 .Oleksandr Shchur, Marin Biloˇ s, and Stephan G¨ unnemann. Intensity-free learning of temporal point processes. In International Conference on Learning Representations (ICLR) , 2020a. Oleksandr Shchur, Nicholas Gao, Marin Biloˇ s, and Stephan G¨ unnemann. Fast and flexible temporal point processes with triangular maps. In Advances in Neural Information Processing Systems (NeurIPS) , 2020b. Oleksandr Shchur, Ali Caner T¨ urkmen, Tim Januschowski, and Stephan G¨ unnemann. Neural temporal point processes: A review. arXiv preprint arXiv:2104.03528 , 2021. Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis K. Titsias. Simplified and generalized masked diffusion for discrete data, 2025. URL https://arxiv.org/abs/ 2406.04329 .Alexander Soen, Alexander Mathews, Daniel Grixti-Cheng, and Lexing Xie. Unipoint: Universally approximating point processes intensities. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, pp. 9685–9694, 2021. Lucas Theis, A¨ aron van den Oord, and Matthias Bethge. A note on the evaluation of generative models. In International Conference on Learning Representations . arXiv, 2016. doi: 10.48550/ arXiv.1511.01844. 12 Published as a conference paper at ICLR 2026 Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ ee Lacroix, Baptiste Rozi` ere, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, and Guillaume Lample. LLaMA: Open and Efficient Foundation Language Models, February 2023. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention Is All You Need. In Neural Information Processing Systems ,2017. Shuai Xiao, Mehrdad Farajtabar, Xiaojing Ye, Junchi Yan, Le Song, and Hongyuan Zha. Wasserstein learning of deep generative point process models. Advances in neural information processing systems , 30, 2017. Yuan Yuan, Jingtao Ding, Chenyang Shao, Depeng Jin, and Yong Li. Spatio-temporal Diffusion Point Processes. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pp. 3173–3184, New York, NY, USA, 2023. Association for Computing Machinery. Qiang Zhang, Aldo Lipani, Omer Kirnap, and Emine Yilmaz. Self-attentive hawkes process. In 
+
+International conference on machine learning , pp. 11183–11193. PMLR, 2020a. Wei Zhang, Thomas Panum, Somesh Jha, Prasad Chalasani, and David Page. Cause: Learning granger causality from event sequences using attribution methods. In International Conference on Machine Learning , pp. 11235–11245. PMLR, 2020b. Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, and Hongyuan Zha. Transformer hawkes process. 
+
+arXiv preprint arXiv:2002.09291 , 2020. 13 Published as a conference paper at ICLR 2026 
+
+## A MODEL PARAMETERS 
+
+Table 5: Hyperparameters of our uθ 
+
+> s
+
+(· | xs) model shared across all datasets. Parameter Value Number of ins bins bins 64 Number of sub bins bsub 64 Maximum sub distance δ T/100 
+
+Maximum log-rate λM 32 
+
+κ(s) 1 − cos   π 
+
+> 2
+
+s2
+
+Llama architecture: 
+
+Hidden size H 64 Layers 2Attention heads 4Optimizer Adam Sample steps 100 All MLPs have input and output sizes of H, except for the final MLP whose output size is determined by the number of λ and Q parameters of the rate. The MLPs have a single hidden layer of size 4H.The sinusoidal embeddings map a scalar s ∈ [0 , 1] to a vector of length H. In contrast to Havasi et al. (2025), we choose a cosine κ schedule κ(s) = 1 − cos   π 
+
+> 2
+
+s2 as proposed by Nichol & Dhariwal (2021) for diffusion models as it improved results slightly compared κ(s) = s3.For evaluation, we use an exponential moving average (EMA) of the model weights. We also use low-discrepancy sampling of s in Eq. (14) during training to smooth the loss and thus training signal (Kingma et al., 2023; Lienen et al., 2025). We train all models for 20 000 steps and select the best checkpoint by its W1-over-dIET , which we evaluate on a validation set every 1000 steps. 
+
+## B DATA 
+
+B.1 SYNTHETIC DATASETS 
+
+The six synthetic datasets were generated by Shchur et al. (2020b) following the simulation procedures detailed in Section 4.1 of Omi et al. (2019). Each dataset contains 1,000 sequences supported on the interval T = [0 , 100] . They cover a diverse set of temporal dynamics, defined as follows: 
+
+Hawkes Processes (H1, H2). Hawkes processes capture self-exciting features of temporal point processes. The two Hawkes processes are parameterized as follows: 
+
+λ(t | H t) = μ + X
+
+> ti<t M
+
+X
+
+> j=1
+
+αj βj exp {− βj (t − ti)},
+
+with H1 (M = 1 , μ = 0 .2, α1 = 0 .8, β1 = 1 .0) and H2 (M = 2 , μ = 0 .2, α1 = 0 .4, β1 = 1 .0,
+
+α2 = 0 .4, β2 = 20 .0). 
+
+Non-stationary Poisson Process (NSP). A periodic time-varying intensity: 
+
+λ(t | H t) = 0 .99 sin 
+
+ 2πt 
+
+20000 
+
+
+
++ 1 .
+
+Stationary Renewal Process (SR). Inter-event times τi = ti+1 − ti are i.i.d. from a log-normal distribution (mean 1.0, std. 6.0): this produces bursty patterns with short activity bursts followed by long silent periods. 14 Published as a conference paper at ICLR 2026 Table 6: Summary statistics for all synthetic and real-world datasets. τ is the average inter-event time. 
+
+Full Name Abbrev. # Seq. Mean Len. Support [0, T] τ
+
+Hawkes 1 H1 1000 95.4 100 1.01 ± 2.38 
+
+Hawkes 2 H2 1000 97.2 100 0.98 ± 2.56 
+
+Nonstationary Poisson NSP 1000 100.3 100 0.99 ± 2.22 
+
+Nonstationary Renewal NSR 1000 98.0 100 0.98 ± 1.83 
+
+Self-Correcting SC 1000 100.2 100 0.99 ± 0.71 
+
+Stationary Renewal SR 1000 109.2 100 0.83 ± 2.76 
+
+PUBG PG 3001 76.5 38 minutes 0.41 ± 0.56 
+
+Reddit Comments R/C 1356 295.7 24 hours 0.07 ± 0.28 
+
+Reddit Submissions R/P 1094 1129.0 24 hours 0.02 ± 0.03 
+
+Taxi Pick-ups (Manhattan) Tx 182 98.4 24 hours 0.24 ± 0.40 
+
+Twitter Activity Tw 2019 14.9 24 hours 1.26 ± 2.80 
+
+Yelp Check-ins (Airport) Y/A 319 30.5 24 hours 0.77 ± 1.10 
+
+Yelp Check-ins (Mississauga) Y/M 319 55.2 24 hours 0.43 ± 0.96 
+
+Non-stationary Renewal Process (NSR). A stationary renewal process is first generated using a gamma distribution (mean 1.0, std. 0.5), then timestamps are time-warped by 
+
+t′ 
+
+> i
+
+=
+
+Z ti
+
+> 0
+
+r(s) ds, r(t) = 0 .99 sin 
+
+ 2πt 
+
+20000 
+
+
+
++ 1 .
+
+This induces temporally varying expected inter-event intervals while preserving local correlations. 
+
+Self-correcting Process (SC). The intensity grows with the time elapsed since the last event: 
+
+λ(t | H t) = exp t − X
+
+> ti<t
+
+1
+
+!
+
+.
+
+This discourages extended silent periods and promotes regular spacing. B.2 REAL -W ORLD DATASETS 
+
+We use the seven real-world datasets proposed by (Shchur et al., 2020b): 
+
+PG (PUBG) represents death-event timestamps from matches of PUBG. R/C (Reddit-Comments) 
+
+consists of comment timestamps within the first 24 hours of threads posted on r/askscience ,covering 01.01.2018–31.12.2019. R/P (Reddit-Submissions) captures daily submission timestamps from r/politics , covering 01.01.2017–31.12.2019. Tx (Taxi) are taxi pick-up events in the southern part of Manhattan, New York. Tw (Twitter) covers tweet timestamps of user ID 25073877, collected over multiple years. Y/A (Yelp-Airport) consists of check-in events at McCarran Inter-national Airport (27 users, year 2018). Lastly, Y/M (Yelp-Mississauga) presents check-ins for businesses in the city of Mississauga (27 users, year 2018). 
+
+## C METRICS 
+
+A standard way in generative modeling to compare generated and real data is the Wasserstein distance (Heusel et al., 2017). It is the minimum average distance between elements of the two datasets under the optimal (partial) assignment between them, 
+
+Wp(X , X ′) = 
+
+
+
+min γ∈Γ( X ,X ′) E(x,x′)∼γ
+
+d(x, x′)p1/p
+
+(19) where d is a distance that compares elements from the two sets. In the case of sequences of unequal length, one can choose d itself as a nested Wasserstein distance (Lienen et al., 2024). Xiao et al. (2017) were the first to design such a distance between TPPs. They exploit a special case of W1
+
+15 Published as a conference paper at ICLR 2026 for sorted sequences of equal length and assign the remaining events of the longer sequence to pseudo-events at T to define 
+
+dXiao (x, x′) = X|x| 
+
+> i=1
+
+|t(i) − t′(i)| + X|x′| 
+
+> i=|x|+1
+
+|T − t′(i)| (20) where x′ is assumed to be the longer sequence. dXiao captures a difference in both location and number of events between two sequences through its two terms. (Shchur et al., 2020b) propose to compute the MMD between sets based on a Gaussian kernel and 
+
+dXiao . In addition, we evaluate the event count distributions via a Wasserstein-1 distance with respect to a difference in event counts W1,d l where dl(x, x′) = |x| − | x′| . Finally, we the distributions of inter-event times between our generated sequences and real sequences in W1,d IET , i.e., a Wasserstein-1 distance of dIET . dIET is itself the W2 distance between inter-event times of two sequences and quantifies how adjacent events relate to each other to capture more complex patterns. 
+
+## D ABLATIONS 
+
+We ablate the hyperparameters δ, bins and bsub in Figs. 5 to 8. 0.006 0.007 
+
+> PUBG
+
+dl
+
+> 0.0750 0.0755
+
+dIET 
+
+> 0.014 0.016 0.018
+
+MMD   
+
+> 10 −310 −210 −1
+
+δ  
+
+> 0.002 0.004
+> Twitter
+> 10 −310 −210 −1
+
+δ  
+
+> 0.45 0.46 10 −310 −210 −1
+
+δ
+
+> 0.0125 0.0150 0.0175
+
+Figure 5: Mean and standard error of dl, dIET and MMD on two datasets as we vary the δ parameter for substitutions. 0.004 0.006 0.008 
+
+> PUBG
+
+dl
+
+> 0.07500 0.07525 0.07550
+
+dIET 
+
+> 0.012 0.014 0.016
+
+MMD         
+
+> 212223242526272829
+
+bins         
+
+> 0.004 0.006
+> Twitter
+> 212223242526272829
+
+bins         
+
+> 0.44 0.45 0.46 212223242526272829
+
+bins 
+
+> 0.015 0.020
+
+Figure 6: Mean and standard error of dl, dIET and MMD on two datasets as we vary the number of insertion bins bins .16 Published as a conference paper at ICLR 2026 0.006 0.007 
+
+> PUBG
+
+dl
+
+> 0.0750 0.0755
+
+dIET 
+
+> 0.014 0.016
+
+MMD         
+
+> 212223242526272829
+
+bsub         
+
+> 0.004 0.006
+> Twitter
+> 212223242526272829
+
+bsub         
+
+> 0.45 0.46 0.47 212223242526272829
+
+bsub 
+
+> 0.015 0.020
+
+Figure 7: Mean and standard error of dl, dIET and MMD on two datasets as we vary the number of substitution bins bsub .0.004 0.006 0.008 
+
+> PUBG
+
+dl
+
+> 0.075 0.076
+
+dIET 
+
+> 0.0125 0.0150
+
+MMD         
+
+> 212223242526272829
+
+bins = bsub         
+
+> 0.004 0.006
+> Twitter
+> 212223242526272829
+
+bins = bsub         
+
+> 0.44 0.45 212223242526272829
+
+bins = bsub 
+
+> 0.015 0.020
+
+Figure 8: Mean and standard error of dl, dIET and MMD on two datasets as we vary the number of insertion and substitution bins together. 
+
+## E DETAILED RESULTS 
+
+E.1 INPAINTING VS . F ORECASTING 
+
+To demonstrate the flexibility of E DI TPP for conditional generation, we evaluate its performance when generating events on the interval [T / 3, 2T / 3] . In the forecasting setting, the model is con-ditioned only on events occurring before T / 3, whereas in the inpainting setting, it is conditioned on both the past ( t < T / 3) and the future ( t > 2T / 3). As the results show, providing both past and future context substantially improves the quality of the generated middle segment compared to conditioning on the past alone. PG R/C R/P Tx Tw Y/A Y/M 
+
+dxiao 
+
+Inpainting 2.22 ± 0.04 22.66 ± 0.77 13.13 ± 0.35 3.02 ± 0.20 1.58 ± 0.03 0.59 ± 0.02 1.11 ± 0.04 Forecasting 2.27 ± 0.05 25.53 ± 1.16 18.09 ± 0.81 3.27 ± 0.33 1.65 ± 0.04 0.63 ± 0.03 1.13 ± 0.05 MRE Inpainting 0.29 ± 0.01 5.79 ± 0.96 0.20 ± 0.01 0.60 ± 0.22 1.96 ± 0.09 0.48 ± 0.01 0.74 ± 0.11 Forecasting 0.30 ± 0.01 5.07 ± 1.13 0.33 ± 0.01 0.81 ± 0.13 2.05 ± 0.11 0.52 ± 0.05 0.78 ± 0.08 
+
+dIET 
+
+Inpainting 0.39 ± 0.01 0.40 ± 0.01 0.01 ± 0.00 0.10 ± 0.01 1.13 ± 0.02 0.80 ± 0.05 0.70 ± 0.06 Forecasting 0.41 ± 0.01 0.44 ± 0.03 0.02 ± 0.00 0.10 ± 0.00 1.18 ± 0.01 0.78 ± 0.07 0.72 ± 0.08 17 Published as a conference paper at ICLR 2026 GT Hawkes-1 Hawkes-2 Self-Correcting EDI TPP PSD IFF ADD THIN                
+
+> 020 40 60 80 100
+> Time IFTPP
+> 020 40 60 80 100
+> Time
+> 020 40 60 80 100
+> Time
+
+Figure 9: Event times for 200 samples from ground truth data (GT) and each model. Each event sequence is represented as a separate row. E.2 PARAMETRIC TPP SAMPLES 
+
+To illustrate how well each model captures parametric TPPs, we draw 200 samples for the Hawkes and Self-Correcting processes. In Fig. 10, we plot the cumulative count N (t) for each sample, while Fig. 9 shows each event sequence as a separate row, directly visualizing the events over time. These visualizations further highlight the strong unconditional sampling performance of E DI TPP demonstrated in Table 1. 18 Published as a conference paper at ICLR 2026 0150 300                
+
+> GT Hawkes-1
+> 0150 300
+> Hawkes-2
+> 040 80
+> Self-Correcting
+> 0150 300
+> EDI TPP
+> 0150 300 040 80 0150 300
+> PSD IFF
+> 0150 300 040 80 0150 300
+> ADD THIN
+> 0150 300 040 80 020 40 60 80 100
+> Time
+> 0150 300
+> IFTPP
+> 020 40 60 80 100
+> Time
+> 0150 300 020 40 60 80 100
+> Time
+> 040 80
+
+Figure 10: N (t) for 200 samples from ground truth data (GT) and each model. E.3 FULL RESULTS 
+
+Table 7: Forecasting accuracy up to T measured by dIET .EDI TPP PSD IFF ADD THIN IFTPP PUBG 0.400 ± 0.002 0.413 ± 0.009 0.403 ± 0.010 0.473 ± 0.019 Reddit Comments 0.684 ± 0.005 0.625 ± 0.012 0.693 ± 0.012 0.684 ± 0.012 Reddit Posts 0.010 ± 0.000 0.009 ± 0.000 0.010 ± 0.001 0.015 ± 0.003 Taxi 0.113 ± 0.003 0.113 ± 0.001 0.116 ± 0.001 0.145 ± 0.009 Twitter 1.441 ± 0.020 1.487 ± 0.012 1.493 ± 0.033 2.187 ± 0.029 Yelp Airport 0.497 ± 0.009 0.492 ± 0.005 0.493 ± 0.013 0.587 ± 0.019 Yelp Mississauga 0.272 ± 0.003 0.262 ± 0.003 0.260 ± 0.003 0.388 ± 0.024 19 Published as a conference paper at ICLR 2026 Table 8: Forecasting accuracy up to T measured by mean relative error of event counts. EDI TPP PSD IFF ADD THIN IFTPP PUBG 0.349 ± 0.001 0.339 ± 0.008 0.367 ± 0.005 3.892 ± 0.035 Reddit Comments 3.594 ± 0.118 3.260 ± 0.268 14.777 ± 3.226 7.515 ± 2.112 Reddit Posts 0.281 ± 0.001 0.296 ± 0.006 0.457 ± 0.065 0.352 ± 0.022 Taxi 1.234 ± 0.036 1.140 ± 0.043 0.301 ± 0.014 0.321 ± 0.018 Twitter 2.327 ± 0.042 2.435 ± 0.106 2.984 ± 0.246 2.060 ± 0.027 
+
+Yelp Airport 0.350 ± 0.007 0.346 ± 0.004 0.347 ± 0.014 0.366 ± 0.009 Yelp Mississauga 0.902 ± 0.027 0.920 ± 0.033 0.374 ± 0.012 0.392 ± 0.012 Table 9: Forecasting accuracy up to T measured by dXiao .EDI TPP PSD IFF ADD THIN IFTPP PUBG 2.478 ± 0.007 2.400 ± 0.007 2.466 ± 0.024 5.954 ± 0.195 Reddit Comments 34.135 ± 0.382 32.467 ± 0.534 87.666 ± 20.184 39.010 ± 7.508 Reddit Posts 48.776 ± 0.355 47.829 ± 1.050 72.754 ± 12.134 63.256 ± 9.695 Taxi 4.464 ± 0.088 4.444 ± 0.076 4.032 ± 0.129 4.744 ± 0.125 Twitter 2.669 ± 0.022 2.635 ± 0.078 2.802 ± 0.132 2.557 ± 0.055 
+
+Yelp Airport 1.524 ± 0.013 1.512 ± 0.016 1.548 ± 0.026 1.795 ± 0.015 Yelp Mississauga 3.027 ± 0.046 3.005 ± 0.046 2.895 ± 0.039 3.430 ± 0.047 Table 10: Sample quality as measured by MMD .EDI TPP PSD IFF ADD THIN IFTPP Hawkes-1 0.011 ± 0.002 0.033 ± 0.009 0.024 ± 0.009 0.016 ± 0.002 Hawkes-2 0.012 ± 0.001 0.018 ± 0.006 0.018 ± 0.006 0.012 ± 0.001 
+
+Nonstationary Poisson 0.017 ± 0.003 0.020 ± 0.005 0.035 ± 0.011 0.032 ± 0.008 Nonstationary Renewal 0.035 ± 0.001 0.059 ± 0.006 0.157 ± 0.084 0.039 ± 0.007 PUBG 0.014 ± 0.001 0.032 ± 0.012 0.046 ± 0.025 0.162 ± 0.010 Reddit Comments 0.008 ± 0.001 0.006 ± 0.002 0.063 ± 0.012 0.007 ± 0.003 
+
+Reddit Posts 0.024 ± 0.001 0.010 ± 0.002 0.102 ± 0.004 0.020 ± 0.007 Self-Correcting 0.077 ± 0.004 0.198 ± 0.002 0.246 ± 0.018 0.067 ± 0.011 
+
+Stationary Renewal 0.010 ± 0.002 0.024 ± 0.005 0.025 ± 0.013 0.012 ± 0.002 
+
+Taxi 0.031 ± 0.002 0.038 ± 0.005 0.041 ± 0.004 0.050 ± 0.003 Twitter 0.013 ± 0.002 0.034 ± 0.007 0.044 ± 0.012 0.026 ± 0.005 Yelp Airport 0.037 ± 0.002 0.041 ± 0.004 0.118 ± 0.036 0.058 ± 0.002 Yelp Mississauga 0.040 ± 0.003 0.034 ± 0.007 0.037 ± 0.006 0.029 ± 0.002 
+
+Table 11: Sample quality as measured by W1-over-dIET .EDI TPP PSD IFF ADD THIN IFTPP Hawkes-1 0.526 ± 0.020 0.865 ± 0.035 0.655 ± 0.081 0.628 ± 0.030 Hawkes-2 0.546 ± 0.005 0.991 ± 0.038 0.703 ± 0.049 0.582 ± 0.009 Nonstationary Poisson 0.306 ± 0.005 0.303 ± 0.007 0.318 ± 0.015 0.317 ± 0.006 Nonstationary Renewal 0.224 ± 0.006 0.511 ± 0.016 0.393 ± 0.064 0.229 ± 0.027 
+
+PUBG 0.075 ± 0.000 0.090 ± 0.001 0.080 ± 0.003 0.303 ± 0.039 Reddit Comments 0.144 ± 0.003 0.157 ± 0.006 0.532 ± 0.014 0.176 ± 0.008 Reddit Posts 0.006 ± 0.000 0.004 ± 0.000 0.020 ± 0.001 0.007 ± 0.001 Self-Correcting 0.064 ± 0.000 0.326 ± 0.003 0.151 ± 0.005 0.065 ± 0.001 Stationary Renewal 0.697 ± 0.018 1.281 ± 0.049 0.941 ± 0.145 0.714 ± 0.028 
+
+Taxi 0.111 ± 0.001 0.111 ± 0.001 0.088 ± 0.003 0.174 ± 0.015 Twitter 0.460 ± 0.004 0.672 ± 0.007 0.545 ± 0.024 0.492 ± 0.023 Yelp Airport 0.246 ± 0.002 0.244 ± 0.004 0.316 ± 0.046 0.318 ± 0.017 Yelp Mississauga 0.226 ± 0.003 0.225 ± 0.003 0.236 ± 0.004 0.276 ± 0.017 20 Published as a conference paper at ICLR 2026 Table 12: Sample quality as measured by W1-over-dl.EDI TPP PSD IFF ADD THIN IFTPP Hawkes-1 0.008 ± 0.001 0.027 ± 0.008 0.033 ± 0.015 0.020 ± 0.004 Hawkes-2 0.007 ± 0.001 0.030 ± 0.009 0.022 ± 0.014 0.013 ± 0.003 Nonstationary Poisson 0.003 ± 0.001 0.006 ± 0.001 0.013 ± 0.005 0.012 ± 0.003 Nonstationary Renewal 0.001 ± 0.000 0.013 ± 0.001 0.049 ± 0.022 0.014 ± 0.011 PUBG 0.006 ± 0.000 0.016 ± 0.008 0.024 ± 0.014 0.295 ± 0.007 Reddit Comments 0.019 ± 0.002 0.013 ± 0.003 0.370 ± 0.081 0.039 ± 0.023 Reddit Posts 0.057 ± 0.003 0.025 ± 0.003 0.336 ± 0.045 0.032 ± 0.011 Self-Correcting 0.001 ± 0.000 0.011 ± 0.001 0.023 ± 0.002 0.001 ± 0.001 
+
+Stationary Renewal 0.006 ± 0.002 0.030 ± 0.019 0.042 ± 0.022 0.023 ± 0.005 Taxi 0.025 ± 0.002 0.028 ± 0.004 0.023 ± 0.006 0.029 ± 0.003 Twitter 0.003 ± 0.001 0.006 ± 0.003 0.015 ± 0.008 0.007 ± 0.002 Yelp Airport 0.014 ± 0.002 0.015 ± 0.004 0.060 ± 0.021 0.033 ± 0.003 Yelp Mississauga 0.017 ± 0.003 0.015 ± 0.002 0.016 ± 0.003 0.025 ± 0.006 Table 13: Average number of edit operations during unconditional sampling. EDI TPP PSD IFF 
+
+Ins Del Sub Ins Del H1 55.05 ± 28.6 65.93 ± 10.5 37.74 ± 10.6 92.58 ± 34.3 102.50 ± 10.6 H2 63.69 ± 32.4 71.72 ± 9.6 30.98 ± 8.7 97.57 ± 38.9 101.30 ± 10.2 NSP 49.59 ± 7.3 49.66 ± 7.1 50.56 ± 8.2 100.14 ± 9.7 100.16 ± 9.8 NSR 42.39 ± 5.8 44.23 ± 7.2 55.88 ± 7.8 97.58 ± 7.5 100.51 ± 10.5 PG 56.69 ± 7.2 19.71 ± 4.4 19.96 ± 4.8 76.32 ± 8.7 40.90 ± 6.4 R/C 247.83 ± 251.3 8.69 ± 6.6 15.38 ± 7.4 274.49 ± 254.3 24.45 ± 5.7 R/P 972.89 ± 300.2 0.11 ± 0.3 23.74 ± 5.0 1109.78 ± 307.1 24.56 ± 7.4 SC 34.93 ± 5.7 34.37 ± 6.9 66.18 ± 8.6 98.95 ± 7.8 99.61 ± 10.2 SR 70.67 ± 21.6 64.09 ± 11.3 38.00 ± 11.5 108.85 ± 31.4 101.92 ± 10.9 Tw 11.83 ± 9.4 22.34 ± 4.6 3.04 ± 2.3 14.37 ± 10.3 24.46 ± 5.2 Tx 96.62 ± 14.4 9.35 ± 3.3 17.23 ± 4.8 97.69 ± 17.4 24.37 ± 5.2 Y/A 29.43 ± 6.4 22.64 ± 5.0 9.00 ± 3.4 30.42 ± 6.3 24.30 ± 4.8 Y/M 54.81 ± 13.8 17.14 ± 4.2 11.37 ± 3.8 56.54 ± 15.5 24.45 ± 4.9 Mean 137.42 33.08 29.16 173.48 61.04 Total 199.65 234.52 21

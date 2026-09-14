@@ -1,0 +1,2035 @@
+SCALING-LAW-INFORMED NEURAL POINT PROCESSES FOR
+EARTHQUAKE SEQUENCE FORECASTING ∗
+Tianlu Xiong
+Yunnan Key Laboratory of Complex Systems and Brain-Inspired Intelligence
+Kunming University of Science and Technology
+Faculty of Science, Kunming University of Science and Technology
+Kunming, Yunnan, China
+tianluxiong11@gmial.com
+Zaibo Zhao
+Yunnan Key Laboratory of Complex Systems and Brain-Inspired Intelligence
+Kunming University of Science and Technology
+Faculty of Science, Kunming University of Science and Technology
+Kunming, Yunnan, China
+Yunrui Li
+Yunnan Key Laboratory of Complex Systems and Brain-Inspired Intelligence
+Kunming University of Science and Technology
+Faculty of Science, Kunming University of Science and Technology
+Kunming, Yunnan, China
+Wenqi Liu
+Yunnan Key Laboratory of Complex Systems and Brain-Inspired Intelligence
+Kunming University of Science and Technology
+Faculty of Science, Kunming University of Science and Technology
+Kunming, Yunnan, China
+Yosef Ashkenazy
+Environmental Physics, Ben-Gurion University of the Negev
+Midreshet Ben-Gurion, Israel
+Yongwen Zhang∗
+Yunnan Key Laboratory of Complex Systems and Brain-Inspired Intelligence
+Kunming University of Science and Technology
+Faculty of Science, Kunming University of Science and Technology
+Kunming, Yunnan, China
+zhangyongwen77@gmail.com
+ABSTRACT
+Earthquake sequence forecasting requires models that can learn nonlinear history dependence while
+retaining robust statistical structure. We develop a scaling-law-informed neural marked point process,
+termed Fusion, that combines neural representations of catalog history with temporal features derived
+from the Epidemic-Type Aftershock Sequence model and magnitude information derived from the
+∗Corresponding author: zhangyongwen77@gmail.com
+arXiv:2608.18791v1  [physics.geo-ph]  19 Aug 2026
+
+
+Xiong et al.
+Gutenberg–Richter law. The model separates the magnitude cutoff applied to the input catalog
+from the fixed target-event threshold, allowing lower-magnitude earthquakes to inform forecasts
+without changing the target-event set. For the 2016–2017 Amatrice–Visso–Norcia sequence, Fusion
+achieves the highest target-event temporal likelihood when lower-magnitude events are retained,
+outperforming both ETAS and a purely neural point-process baseline. Event-wise and cumulative
+analyses show sustained timing gains through substantial portions of the Visso and Norcia sequences.
+Across five benchmark catalogs, catalog-specific neural training with a fixed ETAS prior yields the
+highest temporal likelihood at the minimum evaluated magnitude cutoff. Magnitude likelihood shows
+no consistent predictive gain beyond the Gutenberg–Richter-based ETAS reference, indicating that
+the additional information captured by Fusion is primarily temporal. These results show that lower-
+magnitude catalog histories and empirical scaling-law information complement neural sequence
+learning for target-event timing.
+Keywords Earthquake forecasting · Neural point process · ETAS model · Seismic scaling laws
+1
+Introduction
+Earthquake sequence forecasting is inherently history dependent: each event can alter the short-term probability of
+subsequent events, and aftershock triggering can dominate seismicity rates following large earthquakes [1]. Catalogs
+therefore contain clustered and evolving sequences rather than independent stationary samples, as illustrated by the
+well-documented 2016–2017 Amatrice–Norcia sequence [2]. Point-process models provide a natural probabilistic
+framework for this setting [3, 4]. Common likelihood-based evaluation protocols enable comparisons across models
+and sequences in operational forecasting [5, 6]. The central modeling challenge is thus to combine adaptive sequence
+learning with seismological interpretability and reliable out-of-sample performance [7].
+The Epidemic-Type Aftershock Sequence (ETAS) model is the principal statistical reference for this problem because
+it represents seismicity as a self-exciting point process with a background rate and earthquake-triggered aftershock
+contributions [3, 4, 8]. It embeds the Gutenberg–Richter magnitude-frequency law [9] and the Omori–Utsu law for
+temporal aftershock decay [10, 11], providing a clear seismological interpretation and a strong reference for short-term
+forecasts [1]. Forecast performance nevertheless depends on catalog truncation, calibration assumptions, triggering
+cascades and parameter uncertainty [12, 13, 14, 15]. Fixed parametric assumptions can also become restrictive when
+catalogs are incomplete or their completeness changes [16, 17, 18], magnitude-frequency behavior evolves [19, 20], or
+temporal dependencies extend beyond simple kernels [21, 22, 23].
+These catalog effects make the input magnitude cutoff more than a preprocessing choice. Small and moderate
+earthquakes may fall below the forecasting target but can still provide a denser record of evolving aftershock activity and
+useful historical information for forecasting larger target events [1, 24]. Removing them can discard useful historical
+context, whereas retaining them increases sensitivity to completeness limits and catalog truncation [16, 12, 18]. A
+forecasting experiment must therefore distinguish the events available as model history from those scored as targets.
+Following the neural point-process protocol developed for the 2016–2017 Central Apennines sequence [24], we separate
+the magnitude threshold defining the retained input history from the fixed threshold defining the target-event set.
+Neural point processes offer a complementary way to model earthquake sequences. By learning conditional intensities
+and marked-event distributions from event histories, they can represent nonlinear dependencies that are difficult to specify
+with closed-form triggering functions. They have been applied to earthquake sequence and rate forecasting [25, 24, 26],
+while related deep-learning and multimodal approaches show broader potential across regional and induced-seismicity
+settings [27, 28, 29]. Cross-catalog benchmarks now enable direct comparisons between neural point processes and
+ETAS across magnitude thresholds and show that purely neural models do not consistently outperform ETAS [30].
+Existing neural point-process models generally do not explicitly encode ETAS triggering or Gutenberg–Richter scaling
+within their conditional likelihoods [24, 30].
+This tension motivates embedding seismological knowledge within neural forecasting architectures. Scientific machine
+learning shows how domain structure can guide data-driven models [31, 32, 33], while Earth-system AI research
+emphasizes hybrid modeling and explainability for trustworthy geoscience applications [34, 35, 36, 37]. In earthquake
+forecasting, the most direct prior knowledge often comes from empirical seismicity laws and ETAS-type triggering
+rather than governing dynamic equations. ETAS-inspired neural and hybrid models have begun to combine data-driven
+learning with aftershock-triggering structure [38, 39], and recent reviews and seismically informed AI studies further
+highlight the value of incorporating seismological priors [40, 41]. These studies establish the promise of hybrid
+forecasting. Within this emerging literature, however, limited attention has been given to likelihood-based marked point
+processes that jointly use ETAS-derived temporal quantities and Gutenberg–Richter magnitude information as internal
+features.
+2
+
+
+Xiong et al.
+We therefore develop a scaling-law-informed neural marked point process for earthquake sequence forecasting. The
+framework uses ETAS-derived triggering and Gutenberg–Richter magnitude quantities as structured prior inputs
+rather than strict constraints, while retaining the flexibility of neural sequence learning. It explicitly separates the
+retained catalog history from the evaluated target-event set. On the Amatrice–Visso–Norcia sequence, we assess
+how lower-magnitude historical events affect the timing forecasts of a fixed target set; the magnitude likelihood
+provides a corresponding test of whether neural conditioning adds predictive information beyond the Gutenberg–
+Richter distribution. We then evaluate performance consistency across five EarthquakeNPP benchmark catalogs using
+catalog-specific neural training and a fixed ETAS feature source.
+2
+Results
+2.1
+AVN catalog and forecasting task
+Figure 1a shows the 2016–2017 Amatrice–Visso–Norcia (AVN) earthquake sequence in the central Apennines, Italy [24].
+The catalog contains several prominent seismic episodes, including the Amatrice Mw 6.0 event on 24 August 2016,
+the Visso Mw 5.9 event on 26 October 2016, the Norcia Mw 6.5 event on 30 October 2016, and a sequence of
+moderate-to-large Campotosto events in early 2017. These events are followed by dense clusters of smaller earthquakes,
+producing the strong short-term triggering and aftershock relaxation pattern visible in the time–magnitude sequence.
+Figure 1b shows the corresponding epicentral distribution within the central Apennines region, approximately spanning
+12◦–14◦E and 42◦–44◦N. The four major events are marked separately, and gray and blue points distinguish lower-
+magnitude events from the Mw ≥3.0 target-event set. The forecasting experiments are temporal marked point-process
+forecasts and do not use spatial coordinates as model inputs.
+The enhanced catalog contains many lower-magnitude events whose completeness varies during the sequence, par-
+ticularly around major earthquakes. Following the AVN forecasting design of Stockman et al. [24], we therefore
+fix the likelihood-evaluation threshold at Md = 3.0 and vary Mcut only for the retained input history. This design
+tests whether lower-magnitude seismicity improves forecasts of a common target-event set; the preprocessing and
+target-event likelihood are described in Methods 4.1 and Methods 4.5. Supplementary Fig. S1 compares post-event rate
+decay for the full catalog and the Mw ≥3.0 target subset.
+Figure 1c summarizes the Fusion architecture. Its temporal branch combines the recurrent history representation with
+an ETAS-derived triggering feature, whereas its magnitude branch uses a Gutenberg–Richter-informed candidate-
+magnitude feature without direct recurrent-history input. Fusion VP refits the ETAS component at each Mcut, while
+Fusion fixed retains the magnitude-complete Mcut = 3.0 ETAS reference; both variants otherwise use the same neural
+architecture and target-event likelihood (Methods 4.4 and Methods 4.7).
+2.2
+AVN likelihood performance across input cutoffs
+Figure 2 compares ETAS, NPP, Fusion VP and Fusion fixed on the three AVN test splits. Figs. 2a–c report temporal
+log-likelihood relative to a homogeneous Poisson benchmark, whereas Figs. 2d–f report magnitude log-likelihood on
+the original scale. All methods are scored on the same Md = 3.0 target events within each split, so variation with Mcut
+reflects changes in the retained input history.
+At low-to-intermediate Mcut, both Fusion variants generally achieve higher temporal likelihood than ETAS and NPP
+(Figs. 2a–c). Their advantage decreases as the retained catalog becomes sparser, and ETAS is competitive or higher
+in several settings above approximately Mcut = 2.3. The timing advantage is therefore cutoff-dependent and is
+concentrated where lower-magnitude events are available as historical input.
+For magnitude likelihood, Fusion is consistently higher than NPP and approaches the ETAS/Gutenberg–Richter
+reference at the lowest cutoffs, but ETAS remains the strongest or near-strongest model overall (Figs. 2d–f). At
+Mcut = 1.2 in the Visso split, for example, the mean Fusion magnitude likelihood remains approximately 0.05 below
+ETAS. These comparisons provide no evidence that catalog history adds stable predictive information about target-event
+magnitude beyond the Gutenberg–Richter distribution; the difference between Fusion and NPP instead reflects a
+reduction in the purely neural model’s magnitude-density deficit relative to that reference. Consistently, the Fusion-m
+ablation, which also supplies recurrent history to the magnitude branch, gives generally weaker and more variable
+magnitude scores (Supplementary Fig. S4).
+Fusion fixed and Fusion VP have similar mean performance across most cutoffs, and Fusion fixed has narrower
+variability in several settings. Their comparable results support the use of a magnitude-complete reference ETAS
+calibration across input cutoffs. Results for Campotosto are less precise because its test split contains only Ntest = 150
+target events.
+3
+
+
+Xiong et al.
+c
+Embedding
+I. Catalog
+V. Optimization
+Log-likelihood (Mw ≥ 3.0)
+III. NN module
+fusion mag. feature
+fusion temp. feature
+t, m
+LSTM
+CMFN
+...
+......
+......
+CHFN
+...
+......
+......
+II. ETAS module
+Log N
+Mag.
+G-R Law
+time
+Omori Law
+rate
+Maximum Likelihood Estimation
+IV. Non-linear Fusion
+LSTM output feature
+ETAS feature
+Fusion feature
+catalog mag. feature
+m
+catalog temp. feature
+t
+MLP
+Concat.
+t
+t
+fusion temp. feature
+MLP
+Concat.
+fusion mag. feature
+t
+m
+t m
+Date
+2016-09
+2016-11
+2017-01
+2017-03
+0
+2
+4
+6
+Magnitude (Mw)
+Mw < 3.0
+Mw ≥ 3.0
+Amatrice
+Visso Norcia
+Campotosto
+a
+b
+Mw < 3.0
+Mw ≥ 3.0
+Amatrice
+Visso
+Norcia
+Campotosto
+12°E
+13°E
+14°E
+42°N
+43°N
+44°N
+6°E
+8°E
+10°E
+12°E
+14°E
+16°E
+18°E
+20°E
+36°N
+38°N
+40°N
+42°N
+44°N
+46°N
+48°N
+Figure 1: AVN earthquake sequence and scaling-law-informed Fusion framework. a, Time–magnitude distribution
+of the 2016–2017 Amatrice–Visso–Norcia (AVN) earthquake sequence in the central Apennines, Italy. Vertical red
+dashed lines and arrows mark the major seismic episodes near Amatrice, Visso, Norcia and Campotosto. Marker size
+is proportional to moment magnitude Mw. Blue markers denote target events with Mw ≥3.0, whereas gray markers
+denote lower-magnitude events that can still enter the retained history when they satisfy the input cutoff Mcut. b,
+Epicentral distribution and spatial extent of the AVN catalog used in this study. Gray and blue markers distinguish
+lower-magnitude events with Mw < 3.0 from target events with Mw ≥3.0, respectively. The four major events are
+marked by stars. The inset map shows the location of the study region in central Italy. c, Schematic of the proposed
+Fusion framework. Fusion is a neural marked point-process model informed by ETAS-derived scaling-law features:
+the temporal branch combines an LSTM history representation with an ETAS temporal-exposure feature summarizing
+Omori–Utsu triggering, while the magnitude branch uses a Gutenberg–Richter-informed candidate-magnitude feature
+without directly injecting the LSTM hidden state. The neural cumulative functions are differentiated to obtain the
+target-event temporal intensity and magnitude density used in likelihood evaluation.
+4
+
+
+Xiong et al.
+Temp. LL - Poisson
+Mag. LL
+Mcut
+N test = 986
+Visso
+a
+d
+Fusion VP
+Fusion fixed
+NPP
+ETAS
+Mcut
+Norcia
+b
+e
+N test = 859
+Campotosto
+Train events  ×104
+c
+N test = 150
+Train events  ×104
+Mcut
+f
+Figure 2: Target-event likelihood performance across input-history cutoffs on the AVN earthquake catalog. In all
+panels, the target-event threshold is fixed at Md = 3.0, and only the input-history cutoff Mcut is varied. Therefore, the
+same target events are evaluated at every Mcut, while lower-magnitude events affect only the retained conditioning
+history. NPP denotes the neural point-process model of Stockman et al. [24]. a–c, Temporal log-likelihood relative to a
+homogeneous Poisson benchmark for the Visso, Norcia and Campotosto splits, respectively; positive values indicate
+better target-event timing forecasts than a constant-rate model. d–f, Magnitude log-likelihood for the same splits,
+reported on the original likelihood scale. All scores use the fixed target threshold Md = 3.0, while Mcut controls the
+retained input history. Fusion VP refits the ETAS component at each Mcut; Fusion fixed uses the Mcut = 3.0 ETAS
+parameter set and reference feature history with a pre-standardization cutoff-scale mapping. For NPP and Fusion, lines
+and markers show the mean over repeated random initializations and shaded bands show mean ± one standard deviation.
+ETAS is deterministic. Gray bars show the number of training events in units of 104, annotated Ntest values give the
+number of target events, and black dashed lines denote the fixed Mcut = 3.0 ETAS reference.
+2.3
+Temporal gains
+Temporal cumulative information gain (TCIG) tracks the accumulated event-wise temporal log-likelihood difference
+between Fusion and a baseline along each test sequence (Methods 4.6 and Supporting Information Text S6). Positive
+final values indicate a net temporal likelihood gain for Fusion.
+Relative to ETAS, Fusion accumulates positive temporal information gain at several low-to-intermediate Mcut settings,
+most clearly in the Visso and Norcia splits (Figs. 3a–c). The high-cutoff curves are weaker or negative, consistent with
+the cutoff dependence in Fig. 2. Relative to NPP, Fusion also accumulates positive gain over broad portions of the
+Visso and Norcia sequences (Figs. 3d,e). Supplementary Fig. S5 shows the corresponding temporal intensities: Fusion
+maintains elevated intensity across several aftershock-active intervals, whereas NPP exhibits more isolated peaks.
+The Campotosto curves fluctuate more strongly and show positive or near-zero final gains only for some lower-
+cutoff settings (Figs. 3c,f). Its smaller target-event sample makes the cumulative curves more sensitive to individual
+earthquakes. Overall, the TCIG curves show that the mean temporal gains in Fig. 2 often accumulate across successive
+target events rather than arising from a single isolated event.
+Figure 4 decomposes the selected-model comparisons into event-wise temporal information gain (TIG). Fusion and
+NPP use the low-cutoff settings with strong temporal likelihood performance, while ETAS uses the magnitude-complete
+Mcut = 3.0 reference. The distributions therefore describe these selected configurations rather than all cutoff settings.
+A positive TIG means that the first model assigns higher temporal likelihood to that target event (Methods 4.6 and
+Supporting Information Text S6).
+Event-wise gains.
+Figure 4 further decomposes the temporal forecasting differences into event-wise temporal information gain (TIG)
+distributions. The figure is computed at selected input-cutoff settings where the corresponding models show strong
+temporal likelihood performance: Fusion and NPP use the lowest retained-history cutoffs, Mcut = 1.2 for the Visso and
+5
+
+
+Xiong et al.
+TCIG (VS ETAS)
+TCIG (VS NPP)
+Time (Days)
+Time (Days)
+Time (Days)
+Visso
+a
+0
+-600
+0
+60
+120
+d
+0
+60
+120
+0
+400
+-400
+Norcia
+b
+0
+0
+60
+120
+-400
+e
+0
+60
+120
+0
+-400
+Campotosto
+c
+10
+25
+40
+0
+20
+40
+-20
+f
+0
+-40
+-20
+10
+25
+40
+-60
+Figure 3: Temporal cumulative information gain of Fusion on the AVN earthquake sequence. a–c, Temporal
+cumulative information gain (TCIG) of Fusion relative to ETAS for the Visso, Norcia and Campotosto splits, respectively,
+with ETAS shown under the fixed Mcut = 3.0 reference setting. d–f, TCIG of Fusion relative to NPP for the same
+splits, with NPP evaluated at Mcut = 1.2 for Visso and Norcia and Mcut = 1.3 for Campotosto. TCIG accumulates
+the event-wise temporal log-likelihood difference along target-event time, including both target-event log-intensity
+and the cumulative target-event temporal intensity over all retained intervals between successive target events. The
+horizontal axis gives elapsed time in days after the first target event in the test set. Different colors denote Fusion
+models trained with different retained-catalog cutoffs Mcut. The gray dashed line marks TCIG= 0; values above zero
+indicate cumulative temporal likelihood gain of Fusion over the corresponding baseline.
+Norcia splits and Mcut = 1.3 for the Campotosto split, whereas ETAS is evaluated using the conservative high-cutoff
+reference Mcut = 3.0. Thus, Fig. 4 compares the models under their favorable or reference cutoff configurations rather
+than summarizing TIG distributions over all Mcut values. TIG is the per-target-event version of TCIG: a positive value
+means that the first model in the comparison assigns higher temporal likelihood to that target event, after accounting for
+the cumulative target-event temporal intensity over the retained intervals since the previous target event. This analysis
+asks whether Fusion wins broadly across target events, or whether its average advantage is produced by a small number
+of large gains. The TIG definitions are provided in Methods 4.6 and Supporting Information Text S6.
+Fusion assigns higher temporal likelihood than ETAS to 54.9%, 58.4% and 57.3% of the Visso, Norcia and Campotosto
+target events, respectively (Figs. 4a–c). Relative to NPP, the corresponding positive-event fractions are 64.7%, 65.7%
+and 47.3% (Figs. 4d–f). Thus, the Fusion advantage is distributed across a majority of events in Visso and Norcia, while
+the Campotosto Fusion–NPP comparison remains uncertain.
+The nominal two-sided sign-test p values are 0.0025, 8.5 × 10−7 and 0.086 for Fusion–ETAS, and 1.8 × 10−20,
+3.0 × 10−20 and 0.568 for Fusion–NPP, in split order (Fig. 4; Supplementary Table S1). Because earthquake events
+are temporally correlated and the plotted cutoffs were selected for strong likelihood performance, these values are
+descriptive diagnostics rather than formal independent-event significance tests. The Campotosto fractions are especially
+sensitive to sampling variability because this split contains only 150 target events.
+Supplementary Fig. S2 provides the direct NPP–ETAS comparison. Its positive-event fractions are 43.6% for Visso,
+50.8% for Norcia and 59.3% for Campotosto, showing greater split-to-split variation than the Fusion–ETAS comparison.
+Together with Fig. 4, this result is consistent with the ETAS-derived feature contributing to the event-wise temporal
+gains beyond the use of a neural point-process architecture alone.
+2.4
+Performance across benchmark catalogs
+We next evaluated the models on five EarthquakeNPP benchmark catalogs: ComCat, QTM-SaltonSea, QTM-SanJac,
+SCEDC and WHITE [30]. Figure 5 compares their target-event temporal likelihoods with the Campotosto AVN split,
+which is included because it has the longest training history among the three AVN splits. The catalogs span different
+spatial domains, durations, event counts and minimum input cutoffs (Supplementary Fig. S3 and Supplementary Table
+S2).
+6
+
+
+Xiong et al.
+Visso(N test=986)
+a
+Norcia(N test=859)
+b
+Campotosto(N test=150)
+c
+d
+e
+f
+Figure 4: Event-wise temporal information gain distributions on AVN target events. Each histogram shows the
+temporal information gain (TIG) for individual test target events in the Visso, Norcia and Campotosto splits. TIG is
+defined as the event-wise temporal log-likelihood difference between the first and second model in a comparison, after
+accounting for the cumulative target-event temporal intensity over all retained intervals since the previous target event.
+a–c, Fusion–ETAS comparisons for the Visso, Norcia and Campotosto splits, respectively. Fusion is evaluated at the
+low-cutoff settings, Mcut = 1.2 for Visso and Norcia and Mcut = 1.3 for Campotosto, whereas ETAS is evaluated at
+the Mcut = 3.0 reference setting. d–f, Fusion–NPP comparisons for the same splits, with both neural models evaluated
+at the corresponding low-cutoff settings. The dashed vertical line marks zero gain. Positive TIG values indicate target
+events for which the first model assigns higher temporal likelihood than the second model. Red outlines show the
+estimated TIG probability density, and the light blue bars show the corresponding event counts. The annotation in
+each panel reports the percentage of events with TIG > 0, the corresponding 95% confidence interval, and the nominal
+two-sided sign-test p value. The calculation method is given in Supporting Information Text S6.
+7
+
+
+Xiong et al.
+a
+b
+c
+d
+e
+f
+ETAS(3.0)
+Figure 5: Target-event temporal log-likelihood comparison across the EarthquakeNPP benchmark catalogs
+and the Campotosto AVN split. Panels a–f correspond to ComCat, QTM-SaltonSea (QTM-SS), QTM-SanJacinto
+(QTM-SJ), SCEDC, WHITE and Campotosto, respectively. NPP and Fusion use the dataset-specific minimum Mcut
+indicated above each panel. ETAS uses the magnitude-complete Mcut = 3.0 reference configuration, which provides
+its strongest reliable result under the catalog-completeness requirement. Markers show the mean over repeated random
+initializations and error bars show mean ± one standard deviation for NPP and Fusion; ETAS is deterministic. For
+the five California catalogs, Fusion uses the shared fixed ETAS prior estimated from the ComCat training history at
+Mcut = 3.0; Campotosto uses the corresponding AVN fixed-prior configuration. All temporal likelihoods are evaluated
+on target events with m ≥Md = 3.0. Higher temporal log-likelihood (Temp. LL) indicates better target-event timing
+performance.
+The comparison uses model-specific input configurations. NPP and Fusion use the benchmark minimum cutoffs to
+retain lower-magnitude history, whereas ETAS uses Mcut = 3.0, its strongest reliable configuration because ETAS
+calibration depends on magnitude completeness. Fusion uses one ETAS parameter set estimated from the ComCat
+training catalog for all five California datasets; details of the partitions and fixed-prior protocol are given in Methods 4.1
+and Methods 4.7.
+Under these configurations, Fusion has the highest mean temporal log-likelihood in all five benchmark catalogs and in
+Campotosto (Fig. 5). This pattern is observed despite the shared ComCat ETAS parameter set and the heterogeneity
+of the regional catalogs. Together with the cutoff-dependent AVN results, it shows that Fusion’s timing advantage is
+concentrated in configurations that retain lower-magnitude historical events.
+The magnitude comparison shows a different pattern. Fusion has higher magnitude log-likelihood than NPP in all five
+benchmark catalogs and Campotosto, whereas the ETAS/Gutenberg–Richter reference is highest in five of the six panels;
+Fusion is highest only for ComCat (Supplementary Fig. S6 and Supporting Information Text S10). The cross-catalog
+results therefore provide no consistent evidence of predictive information about target-event magnitude beyond the
+Gutenberg–Richter distribution. Fusion’s advantage over NPP primarily narrows the deficit of the purely neural
+magnitude density relative to this reference. Further comparisons related to Fig. 5 are provided in Supplementary Table
+S3, which reports the temporal and magnitude log-likelihoods of Fusion, NPP, and ETAS for the five EarthquakeNPP
+benchmark catalogs and the representative Campotosto AVN split under both the benchmark-specific minimum input
+cutoff and the common maximum cutoff Mcut = 3.0. For Campotosto, the reported temporal and magnitude results
+correspond to Figs. 2c and 2f, respectively.
+3
+Discussion
+The principal result is that empirical seismicity laws and neural sequence learning provide complementary information
+for target-event timing. On the Amatrice–Visso–Norcia sequence, Fusion gives higher temporal likelihood than both
+8
+
+
+Xiong et al.
+ETAS and NPP when low-to-intermediate input cutoffs retain small-to-moderate earthquakes. Its advantage decreases
+as the retained history becomes sparse, and ETAS remains competitive at higher cutoffs. Across the benchmark catalogs,
+Fusion also gives the highest mean temporal likelihood under the model-specific configurations evaluated. By contrast,
+the magnitude comparisons provide no consistent evidence of predictive information beyond the Gutenberg–Richter
+distribution.
+The cutoff dependence clarifies the contribution of lower-magnitude seismicity. Holding Md = 3.0 fixed ensures
+that the same target events are scored as Mcut changes, so the observed temporal differences arise from the historical
+information available to the models rather than from a changing forecast target. Lower-magnitude events provide a
+denser description of sequence evolution between target events and can carry information about aftershock relaxation
+and short-term triggering. The cumulative and event-wise diagnostics show that the Fusion gains are distributed through
+substantial portions of the Visso and Norcia sequences, which is consistent with this historical information contributing
+repeatedly rather than through a few isolated events. These diagnostics do not identify a unique physical mechanism, but
+they support an interpretation in which the recurrent representation extracts additional sequence dependence while the
+ETAS-derived feature supplies an empirical triggering reference. At higher Mcut, the retained history becomes sparser
+and provides less information for estimating such departures, leaving the parametric ETAS model more competitive.
+The contrast between temporal and magnitude likelihoods identifies where the additional forecasting information
+lies. Target-event timing can depend on the recent retained history, making the combination of recurrent history and
+ETAS-derived temporal information useful. Target-event magnitudes remain well described by the Gutenberg–Richter
+form. Although Fusion reduces the magnitude-likelihood deficit of NPP, the ETAS/Gutenberg–Richter reference
+remains the stronger model overall, and the weaker and more variable Fusion-m ablation shows that directly adding
+recurrent history does not yield consistent magnitude gains. The magnitude branch therefore completes the marked
+point-process likelihood and tests for departures from Gutenberg–Richter scaling, but it does not demonstrate additional
+conditional magnitude predictability in these experiments. The comparable temporal performance of Fusion fixed and
+Fusion VP further suggests that a magnitude-complete reference ETAS calibration can serve as a stable temporal-feature
+source across input cutoffs. The use of a shared ComCat ETAS parameter set in the California benchmarks extends this
+observation across heterogeneous catalogs, although it demonstrates consistency under the tested protocol rather than
+complete regional transferability.
+Overall, the results support using empirical seismicity laws as structured inputs to neural point processes for target-
+event timing. The timing advantage depends on an informative lower-magnitude history, whereas the magnitude
+results show no detectable incremental information beyond the Gutenberg–Richter distribution. These conclusions
+are based on retrospective, nonspatial forecasts and model-specific benchmark configurations, and the value of lower-
+magnitude events may depend on catalog completeness. Pseudo-prospective evaluation with explicit treatment of
+catalog uncertainty and spatially marked forecasts is needed to assess the operational value of this scaling-law-informed
+strategy.
+4
+Methods
+4.1
+Catalog datasets and preprocessing
+We use two groups of earthquake catalogs. The primary catalog is the 2016–2017 Amatrice–Visso–Norcia (AVN)
+earthquake sequence in the central Apennines, Italy [24], covering the spatial range 42.1985◦–43.9180◦N and 11.6882◦–
+13.8239◦E. The AVN catalog was originally developed by Tan et al. [42] and was obtained in the processed form
+provided by Stockman et al. [24]. This dataset is used in Figs. 1a,b and 2–4, while Fig. 1c presents only the schematic
+architecture of Fusion. We use the processed time–magnitude event sequence adopted in the neural point-process
+benchmark of Stockman et al. [24], so that ETAS, NPP and Fusion are compared under the same catalog construction.
+The AVN sequence is evaluated using three training–testing splits associated with the Visso, Norcia and Campotosto
+forecasting windows. The corresponding split points are defined by event indices 1200, 1800 and 3600 in the raw
+catalog, respectively. Each index determines a fixed chronological split time that is retained for every Mcut: events
+before that time are used for training and events after it are used for testing. For neural models, the last 20 retained
+training events are appended to the beginning of the corresponding test sequence as burn-in context before the first
+scored test forecast.
+To assess performance across catalogs, we also use the five EarthquakeNPP benchmark catalogs [30]: ComCat, QTM-
+SaltonSea, QTM-SanJac, SCEDC and WHITE. The raw catalogs underlying these benchmarks are ANSS ComCat
+maintained by the USGS [43], SCEDC provided by SCEDC/SCSN [44, 45], the QTM catalog developed by Ross et
+al. [46], and the San Jacinto fault-zone catalog developed by White et al. [47]. These benchmark catalogs mainly cover
+California and Southern California seismic regions. The five benchmark datasets used in Figs.5a–e were obtained from
+the EarthquakeNPP project [30], whereas Fig. 5f uses the Campotosto split of the AVN dataset. The five EarthquakeNPP
+9
+
+
+Xiong et al.
+benchmark catalogs also differ substantially in spatial coverage. ComCat spans the broadest regional domain, whereas
+QTM-SS, QTM-SJ and WHITE are more localized southern California catalogs; the detailed longitude–latitude ranges
+of the benchmark catalogs are provided in Supporting Information Text S7. We follow the official benchmark partition:
+the Auxiliary and Training periods are used as training history, while the validation and testing periods follow the
+official setting. The official minimum input cutoff thresholds are Mcut = 2.5 for ComCat, 1.0 for QTM-SaltonSea, 1.0
+for QTM-SanJac, 2.0 for SCEDC and 0.6 for WHITE. Each benchmark catalog is also evaluated at the common cutoff
+Mcut = 3.0.
+For all catalogs, each earthquake event is represented only by its occurrence time and magnitude, denoted as (ti, mi);
+event locations, including latitude and longitude, are used only to document the catalog spatial extent and are not
+included as model inputs. AVN magnitudes are reported as moment magnitude Mw, whereas mi for the EarthquakeNPP
+datasets denotes the catalog-reported magnitude supplied by the benchmark rather than a uniformly converted magnitude
+type. For a given input magnitude threshold Mcut, events satisfying mi ≥Mcut are retained to construct the input
+catalog,
+S = {(ti, mi)}N
+i=1,
+0 < t1 < · · · < tN.
+(1)
+Throughout the formulation, i indexes the current retained event or retained-event interval, j indexes previous retained
+events inside histories or triggering sums, and n indexes the target-event subsequence. The retained history before a
+candidate time t is
+Ht = {(tj, mj) : tj < t, mj ≥Mcut}.
+Thus, when the candidate time is the retained event time ti, we write the available history as Hi = Hti = {(tj, mj) :
+j < i}. The observed elapsed time between two consecutive retained events is
+∆i = ti −ti−1,
+(2)
+with t0 denoting the start of the evaluated sequence. For a candidate time t after ti−1, we use the candidate elapsed time
+δ = t −ti−1 > 0; setting t = ti gives δ = ∆i. This retained sequence, rather than the target-event subsequence alone,
+is used as the conditioning history for ETAS, NPP and Fusion.
+The forecasting target threshold is fixed at Md = 3.0 and is introduced in the likelihood and evaluation protocol below.
+All cutoff settings considered in this study satisfy Mcut ≤Md, ensuring that every target event remains in the retained
+catalog. When Mcut < Md, lower-magnitude retained events can still enter the model history and temporal exposure,
+but they are not treated as event-occurrence targets in the likelihood.
+4.2
+ETAS baseline
+The ETAS model is used as the statistical seismicity baseline. ETAS represents earthquake occurrence as a self-exciting
+point process, in which the conditional occurrence rate is decomposed into a background seismicity component and a
+triggering component induced by previous events. For a given history Ht, the fitted ETAS temporal intensity is written
+as
+λETAS
+0
+(t | Ht) = µ +
+X
+tj<t
+k(mj) g(t −tj),
+(3)
+where µ is the background rate, k(mj) is the productivity function of the previous event with magnitude mj, and g(·) is
+the temporal triggering kernel.
+Here k(mj) = k0 exp[a(mj −Mcut)] is the productivity term for an ETAS fit estimated at input cutoff Mcut, and g(·)
+follows the Omori–Utsu aftershock-decay kernel. The standard ETAS formulation is used as the statistical reference
+because it provides an interpretable and reproducible baseline based on established empirical seismicity laws, without
+introducing additional assumptions from ETAS variants. The magnitude component follows the Gutenberg–Richter
+law with a finite upper bound Mmax = 8.0, which is used for analytical normalization in ETAS and as the effective
+evaluation range for the neural models. The closed-form cumulative temporal intensity, the truncated Gutenberg–Richter
+density and the target-conditioned ETAS quantities are listed in Supporting Information Text S4.
+The ETAS parameters are estimated by maximum likelihood on the retained catalog specified by the corresponding
+experimental setting. Because the fitted ETAS process describes the retained catalog above the input cutoff Mcut,
+whereas the likelihood evaluation is performed only on target events with m ≥Md = 3.0, we convert the ETAS
+temporal intensity and magnitude distribution to their corresponding target-threshold forms before likelihood evaluation.
+10
+
+
+Xiong et al.
+This conditioning is part of the common likelihood protocol described below, and its derivation is given in Supporting
+Information Text S4.
+4.3
+Neural point-process baseline
+The Neural Point Process (NPP) baseline is the temporal–magnitude neural point-process model introduced by Stockman
+et al. [24], rather than a generic NPP implementation. Unlike ETAS, NPP does not impose an Omori–Utsu decay kernel
+or Gutenberg–Richter magnitude law; it learns cumulative temporal and magnitude functions directly from earthquake
+sequences. NPP and Fusion use the same likelihood protocol introduced below, but NPP constructs its representation
+only from the LSTM-based history representation.
+For each retained event, we construct a normalized input vector from the retained-event inter-event time and magnitude.
+The normalized input vector is defined as
+xi =
+
+(log ∆i −µt)/σt
+(log mi −µm)/σm
+
+,
+(4)
+where εt = 10−10 is added for numerical stability, and (µt, σt) and (µm, σm) are the mean and standard deviation
+of log(∆+ εt) and log m, respectively, computed from the training data. The candidate elapsed time supplied to the
+temporal and magnitude networks of both NPP and Fusion is transformed in the same way, as [log(δ + εt) −µt]/σt;
+ϕ∆(δ) denotes its embedding in the Fusion equations. No additional clipping or special treatment of candidate elapsed
+times is applied. The logarithmic transformation is used as a neural-network input preprocessing step rather than as a
+physical redefinition of magnitude. For the inter-event time ∆i, this transformation is important because earthquake
+waiting times are highly uneven and can span several orders of magnitude: events are densely clustered after major
+earthquakes, whereas inter-event times can become much longer during quieter periods. Directly using raw ∆i would
+make large waiting times dominate the input scale and could weaken the LSTM’s ability to learn short-time triggering
+structure. Using log(∆i +εt) compresses this dynamic range and allows the recurrent encoder to learn relative temporal
+variations more stably. Although earthquake magnitude is itself a logarithmic measure of seismic moment, the use of
+log mi here serves a different purpose. The magnitude input to the LSTM is a numerical covariate whose empirical
+distribution is strongly imbalanced, with many more small-to-moderate events than large events. Applying log mi,
+followed by standardization, slightly compresses the magnitude range and reduces scale imbalance between the time
+and magnitude inputs. This preprocessing improves the numerical stability of recurrent-history learning. In sensitivity
+experiments, replacing log mi with the raw magnitude mi led to worse predictive performance, so we retain the
+logarithmic magnitude input for the NPP and Fusion history encoders.
+To avoid instability caused by extremely long recurrent histories, we use a fixed history window of length L = 20. The
+history representation before the current event is obtained by an LSTM:
+hi = LSTM(xi−L, . . . , xi−1) ,
+(5)
+where hi encodes the recent time–magnitude history before the current event. The fixed event-count window provides
+a stable recurrent input length. It is applied in a sliding manner along the retained sequence, so the model is trained
+and evaluated over all retained events, while the recurrent representation for each forecast conditions only on the most
+recent L retained events; events preceding this window do not enter hi directly. We use an event-based window instead
+of a fixed-duration time window because seismicity rates vary strongly across the sequence: a fixed time window could
+contain very many events immediately after a major earthquake but few or no events during quieter periods, leading
+to highly variable input sizes. In contrast, an event-count window keeps the neural input dimension fixed, while the
+inter-event times ∆i still encode the actual temporal spacing between events. The choice L = 20 follows the window
+size used in previous neural point-process earthquake forecasting studies and reflects a practical balance: shorter
+windows may miss dependencies among recent events, whereas substantially longer windows increase recurrent-history
+instability and computational cost without clear performance gains in our experiments.
+Given the neural history representation hi, NPP parameterizes two cumulative functions over candidate arguments:
+the temporal cumulative hazard function ΛNPP
+i
+(δ | hi) for candidate elapsed time δ, and the cumulative magnitude
+distribution F NPP
+i
+(m | δ, hi) for a candidate magnitude m. Following Stockman et al. [24], trainable weights along
+the CHFN paths that depend on δ and the CMFN paths that depend on m are constrained to be non-negative, and
+these paths use non-decreasing activations. The CHFN output uses a softplus activation, whereas the CMFN output
+uses a sigmoid activation. Together these choices make the cumulative outputs non-decreasing in the corresponding
+candidate variable and yield non-negative derivatives. The LSTM history encoder is built from the retained catalog; the
+11
+
+
+Xiong et al.
+target-event mask is applied later in the likelihood rather than during construction of the recurrent input sequence. The
+observed values ∆i and mi are substituted only when evaluating the likelihood.
+4.4
+Scaling-law-informed Fusion model
+The proposed Fusion model (Fig. 1c) embeds ETAS-derived scaling-law prior information into the neural marked
+point-process architecture. Unlike NPP, which uses the LSTM history embedding in both components, Fusion uses a
+branch-specific design: the temporal branch incorporates the LSTM history representation, whereas the magnitude
+branch does not directly use the LSTM hidden state.
+For each retained interval i, the temporal branch uses the LSTM history representation hi and the ETAS-derived
+temporal feature Ii(δ). Here ETAS is used not as a final predictor but as a source of scaling-law-informed prior features.
+The scalar Ii(δ) is the standardized ETAS temporal integral from ti−1 to ti−1 + δ, computed from the ETAS feature
+history specified by the Fusion variant. The magnitude scalar Gi(m) is the standardized ETAS/Gutenberg–Richter
+cumulative magnitude quantity at candidate magnitude m: Fusion VP uses the current-cutoff Gutenberg–Richter
+distribution estimated at that Mcut, whereas Fusion fixed uses the current-cutoff distribution computed with fixed
+β3.0. The standardized scalars are mapped by one-layer embeddings ϕt(Ii(δ)) and ϕm(Gi(m)) before entering the
+non-linear fusion module; the detailed VP and fixed feature constructions are given in Supporting Information Text S2.
+Observed ∆i and mi are substituted only when the target-event likelihood terms are evaluated.
+The Fusion model contains two non-linear branches: a temporal branch and a magnitude branch. In the temporal branch,
+the LSTM representation, the ETAS temporal feature and the candidate elapsed time are embedded and concatenated:
+zFusion
+i
+(δ | Hi) = Concat [ϕh(hi), ϕt(Ii(δ)), ϕ∆(δ)] ,
+(6)
+where ϕh, ϕt and ϕ∆denote embedding mappings. The concatenated temporal representation is then passed through
+the cumulative hazard function network (CHFN) to obtain the temporal cumulative hazard:
+ΛFusion
+i
+(δ | Hi) = CHFN
+ zFusion
+i
+(δ | Hi)
+
+,
+δ > 0.
+(7)
+This temporal branch allows Fusion to combine recent seismic history with ETAS-derived triggering information when
+modeling the temporal component of the forecasting process.
+In the magnitude branch, Fusion does not directly introduce the LSTM hidden representation. Instead, the ETAS-derived
+magnitude feature, the candidate elapsed time and the candidate magnitude define the magnitude representation. The
+candidate magnitude is represented by its target-threshold exceedance ˜m = m −Md and is then introduced as a
+differentiable input to the cumulative magnitude function network (CMFN). The magnitude representation is then
+constructed as
+zFusion
+m,i
+(δ, m | Hi) = Concat [ϕm(Gi(m)) , ϕ∆(δ), ϕM( ˜m)] .
+(8)
+The corresponding cumulative magnitude distribution is
+F Fusion
+i
+(m | δ, Hi) = CMFN
+ zFusion
+m,i
+(δ, m | Hi)
+
+.
+(9)
+The notation conditions both branches on the same forecasting history Hi, but the magnitude branch is architecturally
+constrained not to use the LSTM hidden state directly. This avoids transferring short-term sequential fluctuations into
+magnitude-density estimation, while still allowing non-linear correction of the Gutenberg–Richter prior.
+Thus Fusion remains comparable with NPP while changing the information used to construct the cumulative func-
+tions: ETAS-derived triggering information augments the temporal branch, and Gutenberg–Richter-derived candidate-
+magnitude information informs the magnitude branch. The conversion from cumulative neural outputs to intensities,
+densities and likelihood scores is specified next.
+4.5
+Target-event likelihood and evaluation metrics
+The model architectures described above are constructed from the retained catalog determined by Mcut. Following
+the retained-history and target-event forecasting protocol of Stockman et al. [24], the target-event definition is not
+used to remove lower-magnitude retained events from the conditioning history. Instead, it specifies the point process
+whose likelihood is scored: lower-magnitude retained events remain in Hi, while only events above the forecasting
+12
+
+
+Xiong et al.
+threshold activate the event log-density terms. The forecasting target threshold is fixed at Md = 3.0 for all models and
+evaluations. Target events are identified by
+maski = I(mi ≥Md),
+(10)
+where I(·) is the indicator function. Thus, Mcut determines the retained input history, whereas Md determines which
+retained events activate the event-occurrence and magnitude-density terms of the likelihood.
+The target-event likelihood is the marked point-process likelihood of the process restricted to events with m ≥Md. For
+a target event, the target-event marked conditional intensity is factorized into a temporal target-event intensity and a
+conditional target-event magnitude density:
+λM
+d (t, m | Ht) = λM
+t,d(t | Ht) f M
+d (m | t, Ht),
+m ∈[Md, Mmax],
+(11)
+where M denotes ETAS, NPP or Fusion, and Ht denotes the retained history available before the candidate event time
+t. The magnitude density is normalized over the target-event magnitude range:
+Z Mmax
+Md
+f M
+d (u | t, Ht) du = 1.
+(12)
+The restriction from a retained-catalog marked process to Eq. 11, including the equivalent retained-interval likelihood
+form, is derived in Supporting Information Text S3. For ETAS, this restriction is closed form: the fitted temporal
+intensity is scaled by the Gutenberg–Richter probability mass above Md, and the magnitude density is renormalized over
+[Md, Mmax] (Supporting Information Text S4). For NPP and Fusion, the target-event temporal hazard and magnitude
+distribution are learned directly through the likelihood below; the subscript d denotes this target-restricted process.
+For each retained interval i, the target-event cumulative temporal intensity over a candidate elapsed time δ is
+ΛM
+d,i(δ | Hi) =
+Z ti−1+δ
+ti−1
+λM
+t,d(s | Hs) ds.
+ETAS evaluates this quantity analytically, whereas the neural models use interval-indexed cumulative functions. From
+this subsection onward, the subscript d denotes the fixed target threshold Md. We write the target-event cumulative
+functions generically as ΛM
+d,i(δ | Hi) and F M
+d,i (m | δ, Hi), using the NPP and Fusion representations defined above.
+The temporal intensity and conditional magnitude density are obtained by differentiating with respect to candidate
+elapsed time and candidate magnitude, with observed values substituted only after differentiation:
+λM
+t,d(ti | Hi)
+=
+∂
+∂δ ΛM
+d,i(δ | Hi)
+
+δ=∆i
+,
+f M
+d (mi | ∆i, Hi)
+=
+∂
+∂mF M
+d,i (m | ∆i, Hi)
+
+m=mi
+.
+(13)
+Using the retained-interval form of the target-event likelihood, the unified objective is
+log LM
+=
+N
+X
+i=1
+"
+maski
+ log λM
+t,d(ti | Hi) + log f M
+d (mi | ∆i, Hi)
+
+−ΛM
+d,i(∆i | Hi)
+#
+.
+(14)
+Here tN, the occurrence time of the final retained event in the test sequence, is also the endpoint of the evaluation
+window. The event log-intensity and magnitude log-density terms are included only for target events, whereas the
+cumulative temporal hazard is accumulated over all retained-event intervals through tN and is not multiplied by the
+target-event mask. Because the evaluation window ends at tN, no additional post-event survival term is required. For
+reporting, we decompose Eq. 14 into temporal and magnitude components.
+The mean temporal log-likelihood over target events is defined as
+13
+
+
+Xiong et al.
+LLM
+temp = 1
+Nd
+N
+X
+i=1
+
+maski log λM
+t,d(ti | Hi) −ΛM
+d,i(∆i | Hi)
+
+,
+(15)
+where Nd = PN
+i=1 maski is the number of target events in the test set. This metric rewards the model for assigning
+high temporal intensity to target events and penalizes excessive cumulative temporal intensity over the evaluated time
+intervals.
+The mean magnitude log-likelihood is defined as
+LLM
+mag = 1
+Nd
+N
+X
+i=1
+maski log f M
+d (mi | ∆i, Hi).
+(16)
+This metric evaluates how well the model represents the conditional magnitude distribution of target events. In ETAS, the
+magnitude density is determined by the Gutenberg–Richter law after target-event conditioning. In NPP and Fusion, the
+magnitude density is obtained by differentiating the neural cumulative magnitude function. The magnitude component
+is reported on the original likelihood scale, and higher values indicate a better conditional magnitude-density fit.
+For the AVN temporal log-likelihood comparison, we also use a homogeneous Poisson benchmark with a constant
+target-event rate over the test period. Let LLPoi
+temp denote its mean temporal log-likelihood. The Poisson-relative
+temporal log-likelihood is
+∆LLM
+temp = LLM
+temp −LLPoi
+temp.
+(17)
+A positive value indicates temporal forecasting skill beyond a constant-rate process. This relative score is used for
+Fig. 2; Fig. 5 reports the original mean temporal log-likelihood LLM
+temp for direct benchmark comparison.
+4.6
+Temporal information gain analysis
+To further examine temporal forecasting differences between models, we use temporal information gain (TIG) and
+temporal cumulative information gain (TCIG). TIG compares the temporal log-likelihood contribution of two models
+at each target event, including the target-event log-intensity and the cumulative hazard over all retained intervals
+since the previous target event. TCIG accumulates these event-wise gains along the test sequence. The event-wise
+TIG distribution and the positive-event fraction are used to distinguish persistent cumulative improvement from gains
+concentrated in a small number of events. Full definitions are provided in Supporting Information Text S6.
+4.7
+Experimental settings
+All experiments use the target-event likelihood defined in Sec. 4.5, with the forecasting threshold fixed at Md = 3.0.
+The input catalog cutoff Mcut is varied to change the retained historical sequence while keeping the target-event set
+unchanged. The compared models are ETAS, NPP and the proposed Fusion model. For a controlled comparison, NPP
+and Fusion use the same catalog partitions, retained input histories, fixed Md = 3.0 target-event sets, preprocessing
+procedure, target-event likelihood and evaluation metrics. The AVN experiments follow the forecasting protocol of
+Stockman et al. [24], while the cross-catalog experiments follow the official EarthquakeNPP partitions [30]. ETAS
+parameter estimation, neural-input standardization and ETAS-feature standardization are performed using only the
+training portion of each catalog. During validation and testing, ETAS-derived features are evaluated causally from the
+ETAS feature history specified by the corresponding Fusion variant; the observed event time and magnitude enter only
+as likelihood-evaluation arguments.
+For the AVN catalog, we evaluate two Fusion variants with the same neural architecture and likelihood. Fusion VP refits
+the ETAS parameters separately for each Mcut setting and computes ETAS-derived features from the corresponding
+current-cutoff history. Fusion fixed keeps the ETAS parameter set estimated at the reference threshold Mcut = 3.0 and
+computes ETAS-derived temporal features from the m ≥3.0 reference history, with a Gutenberg–Richter scale mapping
+to the current cutoff before standardization. This mapping expresses the raw ETAS feature on the current-cutoff scale;
+because it is a positive cutoff-specific constant and the normalization statistics are recomputed for each experiment, it
+does not change the standardized feature supplied to Fusion. Changing Mcut nevertheless changes the retained neural
+input catalog and the intervals on which the fixed ETAS feature is evaluated, while the ETAS parameters and feature
+history remain those of the reference Mcut = 3.0 setting. For the EarthquakeNPP benchmark datasets, we follow the
+14
+
+
+Xiong et al.
+official data partition: the Auxiliary and Training periods are used as training history, and the validation and testing
+periods follow the benchmark setting. Each dataset is evaluated at the official minimum cutoff, denoted min Mcut, and
+at Mcut = 3.0. For each benchmark dataset and cutoff, neural models are trained on the retained catalog defined by
+that cutoff and evaluated on target events above Md = 3.0. In these benchmark experiments, a single ETAS parameter
+set estimated from the ComCat Auxiliary and Training periods at Mcut = 3.0 is used to generate the fixed ETAS
+prior features for all datasets and cutoff settings; the fixed temporal-feature history is also constructed at the m ≥3.0
+reference cutoff for the catalog being evaluated.
+For NPP and Fusion, results are reported as the mean and standard deviation over repeated random initializations unless
+otherwise specified. ETAS is deterministic after parameter estimation and is therefore reported without seed averaging.
+AVN temporal log-likelihoods are reported relative to the homogeneous Poisson benchmark, whereas EarthquakeNPP
+benchmark scores are reported on the original likelihood scale.
+Data and code availability
+The AVN dataset used in Figs.1a,b, 2–4 and 5f was originally developed by Tan et al. [42] and is publicly
+available at https://doi.org/10.5281/zenodo.4662870. The processed version used in this study is avail-
+able in the Neural Point Process repository at https://github.com/ss15859/Neural-Point-Process [24].
+The five EarthquakeNPP benchmark datasets used in Figs.5a–e are publicly available at https://github.com/
+ss15859/EarthquakeNPP [30]. We gratefully acknowledge the original catalog developers, the USGS, SCEDC
+and SCSN for producing and maintaining these earthquake data resources.
+The source code is available at
+https://github.com/XiongTLu/FusionEarthquake.
+Acknowledgements
+The authors gratefully acknowledge Tan et al. for developing and publicly releasing the Amatrice–Visso–Norcia
+earthquake dataset. We also thank the original catalog developers, the U.S. Geological Survey (USGS), the Southern
+California Earthquake Data Center (SCEDC), and the Southern California Seismic Network (SCSN) for producing and
+maintaining the earthquake data resources used in this study.
+References
+[1] J. L. Hardebeck, A. L. Llenos, A. J. Michael, et al. Aftershock Forecasting. Annual Review of Earth and Planetary
+Sciences, 52(1):61–84, 2024.
+[2] W. Marzocchi, M. Taroni, and G. Falcone. Earthquake forecasting during the complex amatrice-norcia seismic
+sequence. Science Advances, 3(9):e1701239, 2017.
+[3] Y. Ogata. Statistical models for earthquake occurrences and residual analysis for point processes. Journal of the
+American Statistical Association, 83(401):9–27, 1988.
+[4] Y. Ogata. Space-time point-process models for earthquake occurrences. Annals of the Institute of Statistical
+Mathematics, 50(2):379–402, 1998.
+[5] T. Jordan, Y. Chen, P. Gasparini, et al. Operational earthquake forecasting: State of knowledge and guidelines for
+utilization. Annals of Geophysics, 54(4):315–391, 2011.
+[6] L. Mizrahi, I. Dallo, N. J. Van Der Elst, et al. Developing, Testing, and Communicating Earthquake Forecasts:
+Current Practices and Future Directions. Reviews of Geophysics, 62(3):e2023RG000823, 2024.
+[7] S. M. Mousavi, C. Cattania, and G. C. Beroza. The pursuit of reliable earthquake forecasting. Physics Today,
+78(8):42–50, 2025.
+[8] Y. Ogata. Significant improvements of the space-time ETAS model for forecasting of accurate baseline seismicity.
+Earth, Planets and Space, 63(3):217–229, 2011.
+[9] B. Gutenberg and C. F. Richter. Frequency of earthquakes in California. Bulletin of the Seismological Society of
+America, 34:185–188, 1944.
+[10] T. Utsu. A statistical study on the occurrence of aftershocks. Geophysical Magazine, 30:521–605, 1961.
+[11] T. Utsu, Y. Ogata, and Ritsuko S. Matsu’ura. The centenary of the Omori formula for a decay law of aftershock
+activity. Journal of Physics of the Earth, 43(1):1–33, 1995.
+15
+
+
+Xiong et al.
+[12] S. Seif, A. Mignan, J. D. Zechar, et al. Estimating ETAS: The effects of truncation, missing data, and model
+assumptions. Journal of Geophysical Research: Solid Earth, 122(1):449–469, 2017.
+[13] Jiawei Li, Didier Sornette, Zhongliang Wu, Jiancang Zhuang, and Changsheng Jiang. Revisiting seismicity criti-
+cality: A new framework for bias correction of statistical seismology model calibrations. Journal of Geophysical
+Research: Solid Earth, 130(6):e2024JB029337, 2025.
+[14] Shyam Nandan, Guy Ouillon, Didier Sornette, and Stefan Wiemer. Forecasting the Rates of Future Aftershocks of
+All Generations Is Essential to Develop Better Earthquake Forecast Models. Journal of Geophysical Research:
+Solid Earth, 124(8):8404–8425, 2019.
+[15] Hossein Ebrahimian and Fatemeh Jalayer. Robust seismicity forecasting based on Bayesian parameter estimation
+for epidemiological spatio-temporal aftershock clustering models. Scientific Reports, 7:9803, 2017.
+[16] L. Mizrahi, S. Nandan, and S. Wiemer. Embracing Data Incompleteness for Better Earthquake Forecasting.
+Journal of Geophysical Research: Solid Earth, 126(12):e2021JB022379, 2021.
+[17] Z. E. Ross, D. T. Trugman, E. Hauksson, et al. Searching for hidden earthquakes in Southern California. Science,
+364(6442):767–771, 2019.
+[18] Xinyi Wang, Jiawei Li, Ao Feng, and Didier Sornette. Estimating Magnitude Completeness in Earthquake
+Catalogs: A Comparative Study of Catalog-Based Methods. Journal of Geophysical Research: Solid Earth,
+130(9):e2025JB031441, 2025.
+[19] L. Gulia and S. Wiemer.
+Real-time discrimination of earthquake foreshocks and aftershocks.
+Nature,
+574(7777):193–199, 2019.
+[20] D. Iwata and K. Z. Nanjo. Adaptive estimation of the Gutenberg–Richter b value using a state space model and
+particle filtering. Scientific Reports, 14(1):4630, 2024.
+[21] Yongwen Zhang, Jingfang Fan, Warner Marzocchi, et al. Scaling laws in earthquake memory for interevent times
+and distances. Physical Review Research, 2(1):013264, 2020.
+[22] Yongwen Zhang, Dong Zhou, Jingfang Fan, et al. Improved earthquake aftershocks forecasting model based on
+long-term memory. New Journal of Physics, 23(4):042001, 2021.
+[23] Yongwen Zhang, Yosef Ashkenazy, and Shlomo Havlin. Asymmetry in Earthquake Interevent Time Intervals.
+Journal of Geophysical Research: Solid Earth, 126(9):e2021JB022454, 2021.
+[24] S. Stockman, D. J. Lawson, and M. J. Werner. Forecasting the 2016–2017 Central Apennines Earthquake Sequence
+With a Neural Point Process. Earth’s Future, 11(9):e2023EF003777, 2023.
+[25] K. Dascher-Cousineau, O. Shchur, E. E. Brodsky, et al. Using Deep Learning for Flexible and Scalable Earthquake
+Forecasting. Geophysical Research Letters, 50(17):e2023GL103909, 2023.
+[26] O. Zlydenko, G. Elidan, A. Hassidim, et al. A neural encoder for earthquake rate forecasting. Scientific Reports,
+13(1):12350, 2023.
+[27] Y. Hu, Q. Zhang, H. Zhu, et al. Scalable intermediate-term earthquake forecasting with multimodal fusion neural
+networks. Scientific Reports, 15(1):9748, 2025.
+[28] R. Schultz and S. Wiemer. Forecasting the rate of induced seismicity as a neural temporal point process. Journal
+of Geophysical Research: Machine Learning and Computation, 3(1):e2025JH001052, 2026.
+[29] Ying Zhang, Chengxiang Zhan, Qinghua Huang, and Didier Sornette. Forecasting future earthquakes with deep
+neural networks: Application to California. Geophysical Journal International, 240(1):81–95, 2025.
+[30] Samuel Stockman, Daniel John Lawson, and Maximilian J. Werner. EarthquakeNPP: A Benchmark for Earthquake
+Forecasting with Neural Point Processes. Transactions on Machine Learning Research, 2026.
+[31] M. Gelbrecht, A. White, S. Bathiany, et al. Differentiable programming for Earth system modeling. Geoscientific
+Model Development, 16(11):3123–3135, 2023.
+[32] G. E. Karniadakis, I. G. Kevrekidis, L. Lu, et al. Physics-informed machine learning. Nature Reviews Physics,
+3(6):422–440, 2021.
+[33] H. Wang, T. Fu, Y. Du, et al. Scientific discovery in the age of artificial intelligence. Nature, 620(7972):47–60,
+2023.
+[34] M. Chen, Z. Qian, N. Boers, et al. Collaboration between artificial intelligence and Earth science communities for
+mutual benefit. Nature Geoscience, 17(10):949–952, 2024.
+[35] M. Chen, Z. Qian, N. Boers, et al. Iterative integration of deep learning in hybrid Earth surface system modelling.
+Nature Reviews Earth and Environment, 4(8):568–581, 2023.
+16
+
+
+Xiong et al.
+[36] J. S. Dramsch, M. M. Kuglitsch, M.-Á. Fernández-Torres, et al. Explainability can foster trust in artificial
+intelligence in geoscience. Nature Geoscience, 18(2):112–114, 2025.
+[37] C. Irrgang, N. Boers, M. Sonnewald, et al. Towards neural Earth system modelling by integrating artificial
+intelligence in Earth system science. Nature Machine Intelligence, 3(8):667–674, 2021.
+[38] C. Zhan, S. Gao, Y. Zhang, et al. ETAS-Inspired Spatio-Temporal Convolutional (STC) Model for Next-Day
+Earthquake Forecasting. IEEE Transactions on Geoscience and Remote Sensing, 62:1–14, 2024.
+[39] Haoyuan Zhang, Shuya Ke, Wenqi Liu, and Yongwen Zhang. A combining earthquake forecasting model
+between deep learning and epidemic-type aftershock sequence (ETAS) model. Geophysical Journal International,
+239(3):1545–1556, 2024.
+[40] Ying Zhang, Congcong Wen, Chengxiang Zhan, and Didier Sornette. Integrating artificial intelligence and
+geophysical insights for earthquake forecasting: A cross-disciplinary review. Earth-Science Reviews, 270:105232,
+2025.
+[41] Ying Zhang, Chengxiang Zhan, Qinghua Huang, and Didier Sornette.
+Seismically Informed Reference
+Models Enhance AI-Based Earthquake Prediction Systems. Journal of Geophysical Research: Solid Earth,
+129(3):e2023JB028037, 2024.
+[42] Yen Joe Tan, Felix Waldhauser, William L Ellsworth, Miao Zhang, Weiqiang Zhu, Maddalena Michele, Lauro
+Chiaraluce, Gregory C Beroza, and Margarita Segou. Machine-learning-based high-resolution earthquake catalog
+reveals how complex fault structures were activated during the 2016–2017 central italy sequence. The Seismic
+Record, 1(1):11–19, 2021.
+[43] U.S. Geological Survey. Advanced National Seismic System Comprehensive Earthquake Catalog (ANSS ComCat).
+U.S. Geological Survey, Earthquake Hazards Program. Dataset.
+[44] Southern California Earthquake Data Center. Southern California Earthquake Center, 2013. Dataset.
+[45] California Institute of Technology. Southern California Seismic Network, 1926. Seismic network.
+[46] Zachary E. Ross, Daniel T. Trugman, Egill Hauksson, and Peter M. Shearer. Searching for hidden earthquakes in
+southern california. Science, 364(6442):767–771, 2019.
+[47] Michael C. A. White, Yehuda Ben-Zion, and Frank L. Vernon. A detailed earthquake catalog for the san jacinto
+fault-zone region in southern california. Journal of Geophysical Research: Solid Earth, 124(7):6908–6930, 2019.
+17
+
+
+Xiong et al.
+Supporting Information for “Scaling-law-informed neural point processes for earthquake
+sequence forecasting”
+S1 Mainshock-Referenced Omori-Type Rate Decay in the AVN Sequence
+To further characterize the temporal structure of the AVN catalog shown in main text Fig. 1a,b, we examine the
+seismicity-rate decay following the major AVN seismic episodes. Figure S1 shows log–log plots of event rate as a
+function of elapsed time from each corresponding major event, measured in hours. Panels a–d follow the chronological
+order of the four major episodes: Amatrice, Visso, Norcia and Campotosto. For each panel, the analysis window starts
+from the corresponding major event and extends to the next major event, except for Campotosto, which extends to the
+end of the catalog.
+For each time bin, the seismicity rate is calculated as the number of events within the bin divided by the bin duration in
+hours and is therefore reported in events per hour. Rates are calculated separately for all retained catalog events and
+for target events satisfying Mw ≥3.0. The corresponding event counts are reported in each panel as Nall and N3.0,
+respectively. These counts illustrate the substantial difference in sample size between the full retained catalog and the
+target-event subset.
+The decay exponent (DE) is estimated from the linear relation between the logarithm of the seismicity rate and the
+logarithm of elapsed time. Under the adopted sign convention, a larger positive DE indicates a stronger decrease in
+seismicity rate with time. For the Mw ≥3.0 target events, the estimated DE values are 0.86, 0.72, 1.03, and 1.08 for
+the Amatrice, Visso, Norcia, and Campotosto windows, respectively. The consistently positive values indicate a clearer
+Omori-type rate decay in the target-event sequence.
+By contrast, the DE values obtained from all retained events are close to zero and range from slightly negative to
+slightly positive, indicating a substantially flatter rate–time relation. This contrast may partly reflect the dominance of
+lower-magnitude events in the enhanced catalog and the greater sensitivity of these events to short-term variations in
+catalog completeness following large earthquakes.
+This analysis provides additional support for using Md = 3.0 as a conservative target-event threshold in the likelihood
+evaluation. Events with Mw ≥3.0 exhibit a more clearly resolved aftershock-rate decay, whereas lower-magnitude
+events remain available as additional historical information in the retained input sequence.
+S2 ETAS feature construction for Fusion VP and Fusion fixed
+This note defines the ETAS-derived scalar features used by the Fusion architecture in the “Scaling-law-informed Fusion
+model” subsection of Methods. The construction follows the model-building order in the main text. The current input
+cutoff Mcut defines the retained catalog used by the neural history encoder. The ETAS feature history depends on the
+Fusion variant:
+Hcut
+t
+= {(tj, mj) : tj < t, mj ≥Mcut},
+H3.0
+t
+= {(tj, mj) : tj < t, mj ≥3.0}.
+Fusion VP uses the current-cutoff ETAS feature history Hcut
+t
+, whereas Fusion fixed uses the reference ETAS feature
+history H3.0
+t
+. When the current cutoff is lower than 3.0, events with Mcut ≤mj < 3.0 remain part of the retained
+catalog used by the LSTM history representation. The temporal ETAS feature in Fusion fixed is built from H3.0
+t
+. Before
+standardization, Eq. 24 expresses the reference intensity on the current-cutoff scale while preserving the temporal
+pattern implied by the m ≥3.0 ETAS form. The target-event threshold Md is introduced later in the “Target-event
+likelihood and evaluation metrics” subsection of Methods and Supporting Information Text S3; it is not needed to define
+the retained-catalog ETAS features themselves.
+For a candidate time t = ti−1 + δ in retained interval i, let λ⋆
+0(t | H⋆
+t ) denote the ETAS temporal intensity used to
+build the Fusion feature, where ⋆∈{VP, fixed}, HVP
+t
+= Hcut
+t
+and Hfixed
+t
+= H3.0
+t
+. The subscript 0 indicates that this
+quantity is on the retained-catalog scale before target-event scoring. The corresponding candidate-interval temporal
+integral is
+Λ⋆
+i (δ | H⋆
+i ) =
+Z ti−1+δ
+ti−1
+λ⋆
+0(s | H⋆
+s ) ds.
+(18)
+This integral is defined for an arbitrary candidate elapsed time δ, conditional on the history available before the candidate
+time. During likelihood evaluation, the observed elapsed time ∆i is substituted only as the candidate argument. The
+scalar temporal feature supplied to the Fusion temporal branch is standardized as
+18
+
+
+Xiong et al.
+a
+b
+c
+d
+Figure S1: Mainshock-referenced Omori-type rate decay in the AVN sequence. Log–log plots of seismicity rate as
+a function of elapsed time from each major AVN event, with time measured in hours. a–d, Results for the Amatrice,
+Visso, Norcia, and Campotosto episodes, respectively. Filled circles show rates calculated from all retained catalog
+events, whereas open squares show rates calculated from target events with Mw ≥3.0. The rate in each time bin is
+defined as the number of events within the bin divided by the bin duration in hours. Nall and N3.0 denote the numbers
+of all retained events and Mw ≥3.0 target events included in each analysis window, respectively. DE denotes the fitted
+decay exponent obtained from the log–log rate–time relation.
+I⋆
+i (δ | H⋆
+i ) = Λ⋆
+i (δ | H⋆
+i ) −µ⋆
+et
+σ⋆
+et
+, ϕt [I⋆
+i (δ | H⋆
+i )] ∈R64.
+(19)
+where µ⋆
+et and σ⋆
+et are computed from the training portion of the corresponding experiment.
+The magnitude feature is constructed from a Gutenberg–Richter cumulative quantity on the current input-cutoff scale:
+G⋆
+i (m) = F ⋆
+i (m) −µ⋆
+em
+σ⋆em
+,
+ϕm(G⋆
+i (m)) ∈R64,
+(20)
+where m is a candidate magnitude and µ⋆
+em and σ⋆
+em are training-set normalization constants.
+In Fusion VP, the ETAS parameter set is refitted for each current input cutoff and is denoted by θMcut. The temporal
+intensity used for the feature is therefore
+λVP
+0 (t | Hcut
+t
+) = λETAS
+0
+ t | Hcut
+t
+; θMcut
+
+,
+(21)
+and the temporal scalar in Eq. 19 is obtained by substituting Eq. 21 into Eq. 18. The VP magnitude quantity uses the
+Gutenberg–Richter parameter estimated at the same current cutoff:
+F VP
+i
+(m) =
+1 −exp[−βMcut(m −Mcut)]
+1 −exp[−βMcut(Mmax −Mcut)],
+Mcut ≤m ≤Mmax.
+(22)
+19
+
+
+Xiong et al.
+In Fusion fixed, the ETAS parameter set is estimated once at the reference cutoff Mcut = 3.0 and is kept fixed as θ3.0.
+The ETAS feature history is also formed at the reference cutoff, H3.0
+t
+. The fixed-parameter temporal intensity
+λETAS
+3.0
+(t | H3.0
+t
+; θ3.0)
+is on the m ≥3.0 reference scale. When the current input cutoff is lower than 3.0, the corresponding current-cutoff
+intensity implied by the same Gutenberg–Richter scaling is obtained using
+q3.0(Mcut; β3.0) = Pr(M ≥3.0 | M ≥Mcut) = exp[−β3.0(3.0 −Mcut)] −exp[−β3.0(Mmax −Mcut)]
+1 −exp[−β3.0(Mmax −Mcut)]
+.
+(23)
+The cutoff-aligned fixed temporal intensity is then
+λfixed
+0
+(t | H3.0
+t
+) = λETAS
+3.0
+(t | H3.0
+t
+; θ3.0)
+q3.0(Mcut; β3.0)
+.
+(24)
+The factor q3.0 is a pre-standardization cutoff-scale mapping for the Fusion fixed prior feature. Although it has the same
+Gutenberg–Richter threshold-mass form as the target-conditioning probability pd in Eq. 39 when Md = 3.0, its role is
+different: q3.0 expresses the reference m ≥3.0 ETAS temporal feature on the current input-cutoff scale, whereas pd
+restricts the likelihood to the fixed target-event process.
+Because q3.0 is a positive constant within each cutoff experiment, it cancels when the mapped temporal integrals are
+standardized using statistics from that experiment. Writing Λ3.0,i for the unmapped reference integral and ¯µ3.0 and ¯σ3.0
+for its mean and standard deviation over the same training intervals gives
+Λ3.0,i/q3.0 −¯µ3.0/q3.0
+¯σ3.0/q3.0
+= Λ3.0,i −¯µ3.0
+¯σ3.0
+.
+Thus q3.0 does not alter the standardized scalar supplied to Fusion. It is retained to make the theoretical cutoff mapping
+of the unstandardized ETAS intensity explicit. Substituting Eq. 24 into Eq. 18 gives the unstandardized fixed temporal
+integral used in Eq. 19; Fusion fixed and Fusion VP then enter the same temporal Fusion representation in Eq.6 of the
+main text.
+The fixed magnitude branch uses the fixed Gutenberg–Richter parameter β3.0 while retaining the current input-cutoff
+scale:
+F fixed
+i
+(m) =
+1 −exp[−β3.0(m −Mcut)]
+1 −exp[−β3.0(Mmax −Mcut)],
+Mcut ≤m ≤Mmax.
+(25)
+The standardized temporal and magnitude scalars in Eqs. 19 and 20 are the ETAS-derived prior features supplied to
+the non-linear Fusion module. The target-event likelihood later determines which retained events contribute event
+log-density terms, without redefining the retained-catalog feature construction above.
+S3 Target-event likelihood derivation
+This note gives the algebra behind the target-event likelihood used in the “Target-event likelihood and evaluation metrics”
+subsection of Methods. The retained catalog is determined by Mcut and provides the conditioning history Ht, whereas
+the forecasting target is the process restricted to events with m ≥Md. For a model M, a retained-catalog marked
+intensity can be factorized as
+λM(t, m | Ht) = λM
+t (t | Ht)f M(m | t, Ht),
+(26)
+where f M is normalized on the retained magnitude range. The probability mass assigned to target magnitudes is
+pM
+d (t | Ht) =
+Z Mmax
+Md
+f M(u | t, Ht) du.
+(27)
+Restricting the marked process to the target-event magnitude range gives the temporal target-event intensity
+λM
+t,d(t | Ht) =
+Z Mmax
+Md
+λM(t, u | Ht) du = λM
+t (t | Ht)pM
+d (t | Ht),
+(28)
+and the conditional target-event magnitude density
+f M
+d (m | t, Ht) = f M(m | t, Ht)
+pM
+d (t | Ht)
+,
+m ∈[Md, Mmax].
+(29)
+20
+
+
+Xiong et al.
+Equations 28 and 29 lead to the target-event marked intensity factorization in Eq.11 of the main text. ETAS uses
+this restriction explicitly through the Gutenberg–Richter probability mass. NPP and Fusion are trained and evaluated
+directly with target-restricted cumulative temporal hazards and target-event magnitude distributions, so pM
+d
+provides
+the probabilistic interpretation rather than an additional neural-network output.
+Let in be the retained-event index of the n-th target event. Written over target-event indices, the marked target-event
+likelihood is
+log LM =
+X
+n
+"
+log λM
+t,d(tin | Hin) + log f M
+d (min | ∆in, Hin) −
+Z tin
+tin−1
+λM
+t,d(s | Hs) ds
+#
+.
+(30)
+The cumulative temporal intensity between two consecutive target events can be decomposed into disjoint retained-event
+intervals:
+Z tin
+tin−1
+λM
+t,d(s | Hs) ds =
+in
+X
+r=in−1+1
+ΛM
+d,r(∆r | Hr).
+(31)
+Substituting Eq. 31 into Eq. 30 gives the retained-interval objective in Eq.14 of the main text. In this form, the event
+log-intensity and magnitude log-density terms are multiplied by maski, whereas the cumulative temporal intensity is
+accumulated across every retained interval. This is the survival contribution of the target-event process: it accounts for
+how much target-event intensity the model assigns before the next retained event, regardless of whether that retained
+event is itself a target event. The evaluation window terminates at tN, the occurrence time of the final retained test
+event. The retained-interval objective therefore includes the survival contribution through the final interval ending at tN,
+with no additional interval or terminal survival contribution after that event.
+S4 Target-conditioned ETAS formulation
+The fitted ETAS process is defined on the retained catalog determined by Mcut, whereas the forecasting target is fixed
+at Md = 3.0. For threshold-specific ETAS fits and Fusion VP, the ETAS productivity term is written relative to the
+input cutoff:
+k(mj) = k0 exp[a(mj −Mcut)] ,
+(32)
+where k0 controls the productivity scale and a controls the magnitude dependence of triggering productivity. In Fusion
+fixed, the ETAS parameter set θ3.0 is estimated at Mcut = 3.0; therefore the productivity component inside λETAS
+3.0
+uses
+the same expression with 3.0 in place of Mcut. The temporal triggering kernel follows the normalized Omori–Utsu
+form
+g(τ) = (ω −1)cω−1
+(τ + c)ω
+,
+τ > 0,
+(33)
+where c is the short-time offset parameter and ω > 1 controls the aftershock decay rate. The cumulative Omori–Utsu
+kernel AOU(τ) satisfies A′
+OU(τ) = g(τ) and is
+AOU(τ) =
+Z τ
+0
+g(u) du = 1 −
+
+c
+τ + c
+ω−1
+.
+(34)
+For the retained-event interval (ti−1, ti], the fitted ETAS cumulative temporal intensity before target conditioning is
+ΛETAS
+0,i
+=
+Z ti
+ti−1
+λETAS
+0
+(s | Hs) ds
+= µ∆i +
+X
+j<i
+k(mj) [AOU(ti −tj) −AOU(ti−1 −tj)] .
+(35)
+Here Hs follows the same definition as Ht, namely the retained history before the integration time s. This quantity is
+accumulated over retained-event intervals. Non-target retained events do not activate event likelihood terms, but they
+remain in the conditioning history and can affect subsequent triggering calculations.
+The ETAS magnitude component follows the truncated Gutenberg–Richter density over [Mcut, Mmax]:
+fETAS(m) =
+β exp[−β(m −Mcut)]
+1 −exp[−β(Mmax −Mcut)],
+Mcut ≤m ≤Mmax,
+(36)
+with cumulative distribution
+FETAS(m) =
+1 −exp[−β(m −Mcut)]
+1 −exp[−β(Mmax −Mcut)].
+(37)
+21
+
+
+Xiong et al.
+Let
+G(m) =
+Z m
+Mcut
+fETAS(u) du.
+(38)
+The ETAS probability mass assigned to the target-event magnitude range is
+pd = Pr(Md ≤M ≤Mmax | Mcut ≤M ≤Mmax)
+= G(Mmax) −G(Md)
+G(Mmax)
+.
+(39)
+This probability mass is used for target conditioning: it converts the retained-catalog ETAS process into the target-
+event process scored at the fixed threshold Md. It is evaluated within the likelihood protocol and is distinct from the
+cutoff-alignment factor used to construct the Fusion fixed temporal feature in Supporting Information Text S2. The
+target-conditioned ETAS magnitude density is
+f ETAS
+d
+(m) =
+fETAS(m)
+G(Mmax) −G(Md),
+Md ≤m ≤Mmax.
+(40)
+The corresponding target-event temporal intensity and retained-interval cumulative temporal intensity are
+λETAS
+t,d
+(t | Ht) = pd λETAS
+0
+(t | Ht),
+(41)
+and
+ΛETAS
+d,i
+= pd ΛETAS
+0,i
+.
+(42)
+S5 Neural architecture and automatic differentiation
+For NPP and Fusion, the recurrent history representation is built from normalized retained-event intervals and magni-
+tudes. The input uses log(∆i + εt) and log mi standardized by training-set statistics, where εt = 10−10 is added to
+every elapsed-time value for numerical stability. The recurrent history window length is fixed at L = 20. The same
+log-standardization, [log(δ + εt) −µt]/σt, is applied to the candidate elapsed time δ supplied to both the temporal
+and magnitude branches; no additional clipping or special treatment is used. The cumulative hazard function network
+(CHFN) outputs the cumulative temporal intensity ΛM
+d,i(δ | Hi) as a function of δ, and the cumulative magnitude func-
+tion network (CMFN) outputs the cumulative magnitude distribution F M
+d,i (m | δ, Hi) over the target-event magnitude
+range.
+The monotone-network construction follows the NPP implementation of Stockman et al. All trainable kernels on CHFN
+paths carrying candidate-time dependence, including the direct δ path and the ETAS temporal-feature path in Fusion,
+are constrained to be non-negative. Likewise, all kernels on CMFN paths carrying candidate-magnitude dependence,
+including the direct m path and the Gutenberg–Richter feature path in Fusion, are constrained to be non-negative. The
+transformations on these paths use non-decreasing activations; conditioning terms that do not depend on the variable
+being differentiated can shift the network state without changing the derivative sign. CHFN uses a softplus output
+activation, which makes the cumulative temporal output non-negative, and CMFN uses a sigmoid output activation,
+which bounds the cumulative magnitude output between zero and one. Because the full paths from δ to ΛM
+d,i and from m
+to F M
+d,i are non-decreasing, automatic differentiation yields non-negative temporal intensities and magnitude densities.
+The observed event time and magnitude enter only when evaluating the likelihood at δ = ∆i and m = mi. The
+candidate magnitude input to CMFN is target-centered, ˜m = m −Md; since ∂˜m/∂m = 1, automatic differentiation
+with respect to m gives the same conditional density.
+In the Fusion temporal branch, the LSTM history representation, ETAS temporal feature and candidate elapsed time are
+embedded before concatenation. In the magnitude branch, the main Fusion model excludes the LSTM hidden state and
+uses the ETAS/Gutenberg–Richter magnitude feature, candidate elapsed time and candidate magnitude input. This
+branch-specific design is used to preserve the history sensitivity of temporal triggering while avoiding unnecessary
+sequence-dependent noise in magnitude-density estimation.
+S6 Temporal information-gain definitions
+Let in denote the retained-event index of the n-th target event. We set i0 to the retained-event index at the start of the
+evaluation window, after the conditioning history has been initialized. Thus, for the first target event, the cumulative
+hazard term includes all retained-event intervals from the evaluation-window start to that target event. The interval
+22
+
+
+Xiong et al.
+between two consecutive target events is
+τn = tin −tin−1 =
+in
+X
+r=in−1+1
+∆r.
+(43)
+For two models A and B, the event-wise temporal information gain for the target event at time tin is
+TIGA|B
+n
+= ℓA
+temp,n −ℓB
+temp,n,
+(44)
+where
+ℓM
+temp,n = log λM
+t,d(tin | Hin) −
+in
+X
+r=in−1+1
+ΛM
+d,r(∆r | Hr).
+(45)
+Thus, the event-wise contribution contains the target-event log-intensity at tin and the cumulative target-event hazard
+over all retained intervals since the previous target event. The temporal cumulative information gain of Fusion relative
+to a benchmark model B is
+TCIGFusion|B(t) =
+X
+n:tin≤t
+TIGFusion|B
+n
+.
+(46)
+The positive-event fraction is
+P A|B
++
+= 1
+Nd
+Nd
+X
+n=1
+I
+
+TIGA|B
+n
+> 0
+
+× 100%.
+(47)
+As a descriptive significance diagnostic for the positive-event fractions reported in main text Fig. 4 and Fig. S2, we
+also use a nominal two-sided sign test against a 50% event-wise win rate. The test treats the signs of event-wise TIG
+values as Bernoulli outcomes and evaluates whether the event-wise win rate differs from 50% under equal event-wise
+performance. Because target events in earthquake sequences can be temporally correlated, these p values are interpreted
+as descriptive diagnostics rather than formal independent-event tests. Detailed information is specified in Table S1.
+Table S1: Event-wise temporal information-gain sign-test statistics. The table reports the number of positive TIG values
+N+, the total number of target events Nd, the positive-event fraction, the Wilson 95% confidence interval, and the
+two-sided sign-test p value for the comparisons shown in main text Fig. 4 and Supplementary Fig. S2.
+Comparison
+Split
+N+/Nd
+Positive-event
+fraction
+95% CI
+p value
+Fusion–ETAS
+Visso
+541/986
+54.9%
+51.7–57.9%
+0.0025
+Fusion–ETAS
+Norcia
+502/859
+58.4%
+55.1–61.7%
+8.5 × 10−7
+Fusion–ETAS
+Campotosto
+86/150
+57.3%
+49.3–65.0%
+0.086
+Fusion–NPP
+Visso
+638/986
+64.7%
+61.7–67.6%
+1.8 × 10−20
+Fusion–NPP
+Norcia
+564/859
+65.7%
+62.4–68.8%
+3.0 × 10−20
+Fusion–NPP
+Campotosto
+71/150
+47.3%
+39.5–55.3%
+0.568
+NPP–ETAS
+Visso
+430/986
+43.6%
+40.5–46.7%
+6.7 × 10−5
+NPP–ETAS
+Norcia
+436/859
+50.8%
+47.4–54.1%
+0.682
+NPP–ETAS
+Campotosto
+89/150
+59.3%
+51.3–66.9%
+0.027
+To further contextualize the Fusion-based event-wise information-gain results in main text Fig. 4, we also compare the
+purely neural NPP baseline directly against the ETAS reference. Fig. S2 shows the event-wise temporal information
+gain distributions for NPP–ETAS on the same AVN target-event sequences used in the Fusion comparisons. NPP is
+evaluated at the low-cutoff settings, Mcut = 1.2 for the Visso and Norcia splits and Mcut = 1.3 for the Campotosto
+split, whereas ETAS is evaluated at the Mcut = 3.0 reference setting.
+The NPP–ETAS distributions show that the purely neural baseline does not consistently outperform the ETAS reference
+at the event level. In the Visso split, only 43.6% of target events have positive TIG, meaning that NPP assigns higher
+temporal likelihood than ETAS to fewer than half of the target events. In the Norcia split, the positive fraction is 50.8%,
+close to random balance. The Campotosto split shows a higher positive fraction of 59.3%, but this result is based
+on a much smaller target-event set (Ntest = 150) and should therefore be interpreted cautiously. Compared with the
+Fusion–ETAS results in main text Fig. 4a–c, these diagnostics are consistent with the ETAS-derived temporal feature
+contributing to Fusion’s event-wise gains beyond the use of a neural point-process architecture alone.
+23
+
+
+Xiong et al.
+a
+b
+c
+Visso(N test=986)
+Norcia(N test=859)
+Campotosto(N test=150)
+Figure S2: Supplementary event-wise temporal information gain distributions for NPP relative to ETAS on
+AVN target events. Each histogram shows the temporal information gain (TIG) for individual test target events in the
+Visso, Norcia and Campotosto splits. TIG is defined as the event-wise temporal log-likelihood difference between
+NPP and ETAS, after accounting for the cumulative target-event temporal intensity over all retained intervals since the
+previous target event. a–c, NPP–ETAS comparisons for the Visso, Norcia and Campotosto splits, respectively. NPP
+is evaluated at the low-cutoff settings, Mcut = 1.2 for Visso and Norcia and Mcut = 1.3 for Campotosto, whereas
+ETAS is evaluated at the Mcut = 3.0 reference setting. The dashed vertical line marks zero gain. Positive TIG values
+indicate target events for which NPP assigns higher temporal likelihood than ETAS. Red outlines show the estimated
+TIG probability density, and the light blue bars show the corresponding event counts. The annotation in each panel
+reports the percentage of events with TIG > 0, the corresponding 95% confidence interval and the nominal two-sided
+sign-test p value.
+S7 Spatial distributions of benchmark earthquake catalogs in California
+Supplementary Fig. S3 and Supplementary Table S2 summarize the spatial domains and catalog metadata of the five
+EarthquakeNPP benchmark catalogs. They differ in spatial coverage, duration, event count and benchmark-specified
+minimum input cutoff. ComCat spans California broadly, whereas SCEDC, QTM-SS, QTM-SJ and WHITE cover more
+localized southern California regions.
+Table S2: Catalog metadata and spatial domains of the EarthquakeNPP benchmark datasets. The table summarizes
+the benchmark-specified minimum input cutoff, catalog period, event count and longitude–latitude range for each
+benchmark catalog.
+Dataset
+Period
+Min. Mcut
+N
+Spatial domain
+ComCat
+1971–2020
+2.5
+92,102
+125.899◦W–112.705◦W, 31.067◦N–43.363◦N
+QTM-SS
+2008–2017
+1.0
+45,570
+116.000◦W–115.004◦W, 32.500◦N–33.302◦N
+QTM-SJ
+2008–2017
+1.0
+21,291
+117.000◦W–115.999◦W, 33.000◦N–34.001◦N
+SCEDC
+1981–2020
+2.0
+130,357
+122.002◦W–114.000◦W, 32.000◦N–37.002◦N
+WHITE
+2008–2021
+0.6
+58,636
+117.124◦W–116.153◦W, 33.183◦N–33.965◦N
+All benchmark likelihoods use the common target threshold Md = 3.0. NPP and Fusion use each dataset’s minimum
+Mcut in the reported model-specific comparison, while ETAS uses the magnitude-complete Mcut = 3.0 reference. For
+the five California catalogs, Fusion uses one ETAS parameter set estimated from the ComCat Auxiliary and Training
+periods at Mcut = 3.0, applied to the m ≥3.0 ETAS feature history of the catalog being evaluated. This shared feature
+source tests performance consistency across heterogeneous catalogs under the specified protocol rather than complete
+regional transferability.
+S8 Fusion-m configuration and AVN log-likelihood results
+In addition to the main Fusion framework described in main text Fig. 1c, we also evaluated an alternative configuration,
+denoted as Fusion-m. Fusion-m follows the same catalog preprocessing, target-event definition and likelihood-based
+24
+
+
+Xiong et al.
+f
+125°W
+120°W
+115°W
+30°N
+36°N
+42°N
+b
+116.1°W
+115.6°W
+115.1°W
+32.7°N
+33.0°N
+33.3°N
+QTM-SS
+Mw ≥ 3.0
+117.1°W
+116.6°W
+116.2°W
+33.3°N
+33.6°N
+33.9°N
+WHITE
+Mw ≥ 3.0
+e
+a
+126.0°W
+120.0°W
+114.0°W
+32.0°N
+38.0°N
+44.0°N
+ComCat
+Mw < 3.0
+Mw ≥ 3.0
+116.9°W 116.5°W 116.1°W
+33.0°N
+33.5°N
+33.9°N
+QTM-SJ
+d
+Mw ≥ 3.0
+121.5°W
+118.5°W
+115.5°W
+32.0°N
+34.0°N
+36.0°N
+SCEDC
+c
+Mw ≥ 3.0
+Figure S3: Spatial distributions of the EarthquakeNPP benchmark catalogs. a–e, Epicentral distributions of
+ComCat, QTM-SaltonSea (QTM-SS), SCEDC, QTM-SanJacinto (QTM-SJ), and WHITE, respectively. Gray markers
+denote events with catalog-reported magnitude m < 3.0, whereas colored markers denote target events with m ≥3.0.
+Marker size is scaled by catalog-reported magnitude. f, Combined spatial overview of the five catalogs, with the inset
+enlarging the localized WHITE, QTM-SS, and QTM-SJ regions. All likelihood evaluations use Md = 3.0, while the
+catalog-specific Mcut determines the retained input history. Catalog periods, event counts, and minimum input cutoffs
+are summarized in Table S2.
+evaluation protocol as the main Fusion model. The main difference lies in the construction of the magnitude branch.
+In the main Fusion framework, the magnitude branch does not directly use the LSTM hidden representation; instead,
+it combines the candidate elapsed time, the candidate magnitude input and the ETAS/Gutenberg–Richter-derived
+magnitude feature. By contrast, Fusion-m additionally introduces the LSTM-based history representation into the
+magnitude branch. Thus, the magnitude feature in Fusion-m is constructed from the LSTM output, the ETAS-derived
+magnitude feature, the candidate elapsed time and the candidate magnitude input. This configuration is used as an
+ablation to examine the effect of adding recurrent-history information directly to the magnitude branch.
+Fig. S4 reports the log-likelihood results of Fusion-m on the AVN catalog across different input cutoff thresholds Mcut.
+The presentation follows the same format as main text Fig. 2: panels a–c show temporal log-likelihood relative to the
+homogeneous Poisson benchmark, whereas panels d–f show magnitude log-likelihood on the original scale. Fusion-m
+has higher temporal likelihood than NPP in several cutoff settings. Its magnitude likelihood is generally lower and more
+variable than that of the main Fusion model in main text Fig. 2, showing that direct recurrent-history input does not
+consistently improve the magnitude branch in these experiments.
+The comparison between Fig. S4 and main text Fig. 2 is consistent with the branch-specific design used in the main
+Fusion framework. The recurrent representation remains available to the temporal branch, where recent retained history
+can inform timing, while the magnitude branch is informed by the Gutenberg–Richter-derived feature without direct
+LSTM input. The ablation therefore supports the more limited conclusion in the main text: recurrent history does not
+provide a consistent additional benefit for target-event magnitude-density estimation.
+S9 Supplementary temporal-intensity comparison
+To complement the log-likelihood, TCIG and event-wise TIG analyses in the main text, we compare the estimated
+temporal intensities of ETAS, NPP and the main Fusion model. This analysis corresponds to the Fusion architecture
+shown in main text Fig. 1c, whose temporal branch combines the LSTM history representation with the ETAS-derived
+temporal feature. Fig. S5 is a descriptive visualization of selected model configurations rather than an independent
+model-comparison experiment.
+25
+
+
+Xiong et al.
+Mag. LL
+Visso
+Norcia
+Campotosto
+Temp. LL - Poisson
+Mcut
+Mcut
+Mcut
+Train events  ×104
+Train events  ×104
+Fusion-m VP
+Fusion-m fixed
+NPP
+ETAS
+b
+a
+d
+c
+e
+f
+N test = 986
+N test = 859
+N test = 150
+Figure S4: Fusion-m log-likelihood comparison across input catalog cutoffs on the AVN earthquake catalog. a–c,
+Temporal log-likelihood relative to the Poisson benchmark for the Visso, Norcia and Campotosto splits, respectively.
+d–f, Magnitude log-likelihood for the same splits, reported on the original likelihood scale. Fusion-m is an ablation in
+which the magnitude branch additionally receives the LSTM hidden representation, unlike the main Fusion model. The
+compared models are ETAS, NPP, Fusion-m VP and Fusion-m fixed across different retained-catalog cutoffs Mcut,
+with all likelihoods evaluated on target events above Md = 3.0. Shaded bands indicate variability across repeated
+random initializations for neural-network-based models; ETAS is fitted deterministically and is shown without an
+initialization-dependent band. Gray bars show the number of training events under each Mcut, scaled by the right-hand
+axis in units of 104. The annotated Ntest values give the number of target events in each test split. Black dashed lines
+show the ETAS reference obtained from the fixed Mcut = 3.0 parameter setting.
+Figure S5 visualizes the model-estimated temporal intensity on the AVN test sequences. The displayed configurations
+are selected from representative settings with strong temporal log-likelihood performance: ETAS uses the fixed
+Mcut = 3.0 setting, whereas NPP and Fusion use the lower-cutoff settings that provide richer historical information,
+namely Mcut = 1.2 for the Visso and Norcia splits and Mcut = 1.3 for the Campotosto split. This setting allows the
+temporal-rate structures of the three models to be compared under representative configurations used in the main AVN
+analysis.
+ETAS displays the smooth parametric response implied by its Omori–Utsu kernel, while NPP produces several sharper
+local peaks. Fusion maintains elevated intensity across multiple aftershock-active intervals and is less dominated by
+isolated peaks in the displayed configurations. These qualitative patterns are consistent with the TCIG and event-wise
+TIG results in main text Figs. 3 and 4, where gains accumulate through substantial portions of the Visso and Norcia
+sequences. The intensity plots do not identify a unique mechanism, but show how the likelihood differences are
+distributed in time for the selected configurations.
+S10 Magnitude log-likelihood of benchmark earthquake catalogs in California
+To evaluate the scaling-law-informed magnitude branch across additional catalogs, Fig. S6 presents target-event
+magnitude log-likelihood for the five EarthquakeNPP benchmark catalogs and the Campotosto AVN split. The
+magnitude evaluation uses the same catalog partitions, target threshold and model-specific input configurations as the
+temporal comparison.
+For NPP and Fusion, the results use the dataset-specific minimum Mcut shown above each panel; ETAS uses the
+Mcut = 3.0 reference. Neural-model markers show the mean over repeated random initializations, with error bars
+indicating one standard deviation, whereas ETAS is deterministic. All magnitude likelihoods are evaluated on the same
+target events satisfying m ≥Md = 3.0, where m denotes catalog-reported magnitude.
+Fusion has higher magnitude log-likelihood than NPP in all five benchmark catalogs and the Campotosto split. ComCat
+is the only panel in which Fusion also exceeds the Gutenberg–Richter-based ETAS reference. This catalog-specific
+26
+
+
+Xiong et al.
+Norcia
+Time(Days)
+b
+Temporal Intensity
+Visso
+Time(Days)
+a
+ETAS (3.0)
+Max Mw = 6.1
+0
+500
+75
+26
+27
+75
+26
+27
+NPP (1.2)
+0
+60
+120
+75
+26
+27
+0
+500
+Fusion (1.2)
+0
+500
+200
+0
+500
+1.0
+1.4
+ETAS (3.0)
+Max Mw = 6.1
+1.0
+1.4
+NPP (1.2)
+0
+500
+200
+200
+1.0
+1.4
+0
+500
+Fusion (1.2)
+0
+60
+120
+Time(Days)
+Campotosto
+c
+Temporal Intensity
+200
+400
+0
+50
+5.9
+Max Mw = 5.3
+ETAS (3.0)
+5.7
+400
+200
+0
+50
+5.9
+5.7
+NPP (1.3)
+20
+40
+0
+50
+5.9
+200
+400
+0
+Fusion (1.3)
+5.7
+Figure S5: Supplementary temporal-intensity comparison among ETAS, NPP and Fusion on the AVN earthquake
+sequence. a–c, Model-estimated target-event temporal intensities for the Visso, Norcia and Campotosto splits,
+respectively, with ETAS, NPP and Fusion shown from top to bottom. Insets enlarge the gray-shaded intervals, and stars
+mark the largest-magnitude test event. ETAS uses Mcut = 3.0; NPP and Fusion use Mcut = 1.2 for Visso and Norcia
+and Mcut = 1.3 for Campotosto. All intensities refer to target events with m ≥Md = 3.0.
+result does not extend to the other benchmarks and is therefore not interpreted as a general advantage over the parametric
+magnitude model.
+ETAS achieves the highest magnitude log-likelihood for QTM-SS, QTM-SJ, SCEDC, WHITE and Campotosto, whereas
+Fusion is highest for ComCat. This pattern is consistent with main text Figs. 2d–f: the scaling-law-informed magnitude
+branch narrows the gap between NPP and the Gutenberg–Richter-based ETAS reference but does not systematically
+exceed that reference.
+The cross-catalog conclusion therefore matches the main text: the Gutenberg–Richter-derived feature improves the
+neural magnitude branch relative to NPP under the evaluated configurations, while the ETAS/Gutenberg–Richter
+distribution remains the stronger overall magnitude reference.
+27
+
+
+Xiong et al.
+a
+b
+c
+d
+e
+f
+ETAS(3.0)
+Figure S6: Target-event magnitude log-likelihood comparison across the EarthquakeNPP benchmark catalogs
+and the Campotosto AVN split. Panels a–f correspond to ComCat, QTM-SaltonSea (QTM-SS), QTM-SanJacinto
+(QTM-SJ), SCEDC, WHITE and Campotosto, respectively. NPP and Fusion use the dataset-specific minimum Mcut,
+whereas ETAS uses the Mcut = 3.0 reference. Markers and error bars show the mean ± one standard deviation
+over repeated random initializations for NPP and Fusion; ETAS is deterministic. The California Fusion experiments
+share ETAS parameters estimated from the ComCat training history at Mcut = 3.0, while Campotosto uses the AVN
+fixed-parameter configuration. All likelihoods use the common target threshold Md = 3.0; higher values indicate better
+target-event magnitude-density estimation.
+28
+
+
+Xiong et al.
+Table S3: temporal and magnitude log-likelihood results for the EarthquakeNPP benchmark catalogs and the
+Campotosto AVN split. Results for the five EarthquakeNPP benchmark catalogs correspond to Figure 5 of the main
+text and Figure S6, whereas the Campotosto results correspond to Figures 2c and 2f of the main text. Results are
+reported under the dataset-specific minimum Mcut and Mcut = 3.0; ETAS is shown only for Mcut = 3.0. Temp. LL
+and Mag. LL denote target-event temporal and magnitude log-likelihood, respectively. Bold values indicate the best
+result within each dataset and likelihood component.
+Dataset
+Model
+Minimum Mcut
+Mcut = 3.0
+Temp. LL
+Mag. LL
+Temp. LL
+Mag. LL
+ComCat
+(2.5)
+ETAS
+–
+–
+−2.4091
+−0.1844
+NPP
+−2.3815 ± 0.0039
+−1.1579 ± 0.0073
+−2.3977 ± 0.0133
+−1.1533 ± 0.0032
+Fusion −2.3538 ± 0.0118 −0.1171 ± 0.0110
+−2.4385 ± 0.0642
+−0.0597 ± 0.0464
+QTM-SS
+(1.0)
+ETAS
+–
+–
+−6.7590
+0.0429
+NPP
+−4.5061 ± 0.1071
+−0.0822 ± 0.0221
+−5.1582 ± 0.0642
+−0.3916 ± 0.0490
+Fusion −4.3013 ± 0.0364 −0.0721 ± 0.0133
+−5.1867 ± 0.1451
+−0.1873 ± 0.0225
+QTM-SJ
+(1.0)
+ETAS
+–
+–
+−9.3168
+0.0782
+NPP
+−6.0370 ± 0.1597
+−0.8397 ± 0.0084
+−6.5164 ± 0.2002
+−2.2434 ± 0.4829
+Fusion −5.8521 ± 0.1100 −0.1644 ± 0.0099
+−6.4848 ± 0.2625
+−0.3709 ± 0.0649
+SCEDC
+(2.0)
+ETAS
+–
+–
+−1.3314
+−0.1907
+NPP
+−1.3902 ± 0.0119
+−0.6906 ± 0.0136
+−1.3110 ± 0.0233
+−0.6661 ± 0.0125
+Fusion −1.1627 ± 0.0086 −0.2218 ± 0.0045
+−1.3838 ± 0.0928
+−0.1955 ± 0.0009
+WHITE
+(0.6)
+ETAS
+–
+–
+−7.8313
+−0.0686
+NPP
+−6.2545 ± 0.0498
+−1.4502 ± 0.1714
+−6.3803 ± 0.0513
+−1.8911 ± 0.1372
+Fusion
+−6.1629 ± 0.0492
+−0.4868 ± 0.0045 −6.1441 ± 0.0584
+−0.4272 ± 0.0848
+Campotosto
+(1.3)
+ETAS
+–
+–
+−0.3643
+−0.0844
+NPP
+−0.2779 ± 0.1667
+−0.2892 ± 0.0361
+−0.6503 ± 0.0524
+−0.3065 ± 0.0368
+Fusion −0.2088 ± 0.0376 −0.1393 ± 0.0016
+−0.4724 ± 0.0103
+−0.3254 ± 0.0135
+29
