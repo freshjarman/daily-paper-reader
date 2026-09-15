@@ -1,0 +1,648 @@
+Title: 2026.acl-long.1567.pdf
+
+URL Source: https://aclanthology.org/2026.acl-long.1567.pdf
+
+Published Time: Thu, 11 Jun 2026 01:28:56 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 34000–34018 July 2-7, 2026 ©2026 Association for Computational Linguistics CURA: Clinical Uncertainty Risk Alignment for Language Model–Based Risk Prediction 
+
+Sizhe Wang 1 Ziqi Xu 1 Claire Najjuuko 1
+
+Charles Alba 1 Chenyang Lu 1
+
+> 1
+
+Washington University in St. Louis 
+
+{sizhew, ziqixu, c.najjuuko, alba, lu}@wustl.edu 
+
+Abstract 
+
+Clinical language models (LMs) are increas-ingly applied to support clinical risk predic-tion from free-text notes, yet their uncertainty estimates often remain poorly calibrated and clinically unreliable. In this work, we propose 
+
+Clinical Uncertainty Risk Alignment ( CURA ), a framework that aligns clinical LM-based risk estimates and uncertainty with both individual error likelihoods and cohort-level ambiguities. CURA first fine-tunes domain-specific clinical LMs to obtain task-adapted patient embeddings, and then performs uncertainty fine-tuning of a multi-head classifier using a bi-level uncer-tainty objective. Specifically, an individual-level calibration term aligns predictive uncer-tainty with each patient’s likelihood of error, while a cohort-aware regularizer pulls risk es-timates toward event rates in their local neigh-borhoods in the embedding space and places extra weight on ambiguous cohorts near the decision boundary. We further show that this cohort-aware term can be interpreted as a cross-entropy loss with neighborhood-informed soft labels, providing a label-smoothing view of our method. Extensive experiments on MIMIC-IV clinical risk prediction tasks across various clinical LMs show that CURA consistently im-proves calibration metrics without substantially compromising discrimination. Further analy-sis illustrates that CURA reduces overconfi-dent false reassurance and yields more trust-worthy uncertainty estimates for downstream clinical decision support. Our code is available at: https://github.com/sizhe04/CURA .
+
+1 Introduction 
+
+Clinical language models (LMs) (Alsentzer et al., 2019; Huang et al., 2019; Luo et al., 2022b) have demonstrated remarkable capabilities in process-ing unstructured electronic health records (EHRs) to support clinical decision-making (Jiang et al., 2023; Yang et al., 2022). By fine-tuning on free-text clinical notes, these models can effectively Con fi dence 
+
+> Allergies: Percocet / Vicodin Chief Complaint: altered mental status Major Surgical or Invasive Procedure: none History of Present Illness: ....... Past Medical History: .......
+> Prediction:
+> Negative
+> Standard Fine-Tuning
+> Prediction:
+> Positive
+> Prediction:
+> Negative
+> Con fi dence
+> LM LM + Calibration
+> CURA
+
+Figure 1: Comparison between standard fine-tuning and our proposed CURA framework in clinical risk predic-tion. A vanilla fine-tuned clinical LM (left) may produce overconfident wrong predictions, while CURA (right) encourages high confidence only for correct decisions and assigns higher uncertainty to potentially erroneous predictions. 
+
+extract patient representations to predict outcomes such as mortality risk and length of stay (Harutyun-yan et al., 2019; Johnson et al., 2023b). However, a key barrier to deploying such models in safety-critical settings is the reliability of their uncertainty estimates. While recent advancements have pushed the boundaries of discriminative performance (Nori et al., 2023; Singhal et al., 2025), overconfident yet incorrect predictions still pose a direct danger to patient safety. In clinical scenarios, reliable uncertainty quan-tification is crucial alongside prediction accuracy. A well-calibrated model should act as a transpar-ent partner, signaling high uncertainty for ambigu-ous or out-of-distribution cases to trigger expert re-view, while automating low-risk, high-confidence predictions. However, although fine-tuning typ-
+
+34000 ically improves predictive performance, it often exacerbates the model’s tendency toward overconfi-dence (Guo et al., 2017), leading to cases where the model is highly confident yet wrong on high-risk patients as shown in Figure 1 (left). To mitigate this issue, various calibration techniques have been proposed. General uncertainty estimation meth-ods, such as Monte Carlo (MC) Dropout (Gal and Ghahramani, 2016) and Deep Ensembles (Laksh-minarayanan et al., 2017) estimate uncertainty by aggregating predictions from multiple stochastic or independently trained models. In parallel, recent works have explored calibration strategies tailored for generative LLMs, often leveraging verbalized probabilities or prompting techniques (Wang et al., 2024a; Leng et al., 2024; Huang et al., 2025a,b). Nevertheless, directly applying these approaches in clinical settings remains challenging. First, gen-eral ensemble-based methods typically aggregate multiple predictions without leveraging the seman-tic structure in the representation space, adjust con-fidence scores only at the level of isolated sam-ples, and may remain miscalibrated on border-line cohorts. Second, many LLM-specific cali-bration methods rely on expert-written rationales, high-quality chain-of-thought (CoT) annotations, or strong teacher models to refine verbalized un-certainty (Yang et al., 2024). However, in rou-tine clinical workflows, downstream tasks are typi-cally framed as binary risk stratification with only outcome labels available, and ground-truth expla-nations are rarely recorded at scale. Moreover, for complex patient profiles, even state-of-the-art LLMs may produce clinical reasoning that is diffi-cult to trust, especially if such explanations are used as supervision targets (Nori et al., 2023). These constraints highlight the need for uncertainty cal-ibration methods that operate directly on learned representations and binary labels, without relying on explicit textual rationales. To address these limitations, we propose CURA 
+
+(Clinical Uncertainty Risk Alignment), a bi-level (individual- and cohort-level) uncertainty calibra-tion framework built on top of fine-tuned clini-cal LMs for risk prediction. As shown in Fig-ure 1 (right), CURA aims to reserve high con-fidence for correct predictions while assigning higher uncertainty to potentially erroneous deci-sions. Specifically, our approach first fine-tunes a domain-specific clinical LM on free-text notes using standard cross-entropy to obtain task-adapted patient embeddings. On top of these frozen rep-resentations, we then train a multi-head classifier with a bi-level uncertainty objective that simultane-ously aligns uncertainty at the individual and cohort levels. Additionally, this objective can be imple-mented as a lightweight plug-in loss on top of stan-dard clinical LM fine-tuning, without relying on external explanations or multiple inference passes. Extensive experiments on MIMIC-IV clinical risk prediction tasks show that CURA consistently im-proves calibration metrics while maintaining—or slightly improving—discriminative performance, and further analysis demonstrates that CURA re-shapes the uncertainty distribution, reduces false reassurance for high-risk patients, and provides greater practical utility for real-world clinical de-ployment. To summarize, our contribution in this work is threefold: • We propose CURA, a bi-level uncertainty cali-bration framework that calibrates clinical LMs by jointly aligning individual predictive uncer-tainty with cohort-level risk via neighbors in the embedding space. • We formulate CURA as a lightweight plug-in objective that requires no architectural changes and admits an interpretation as cross-entropy with neighborhood-informed soft la-bels. • Extensive experiments and analysis show that CURA not only improves calibration metrics but also yields trustworthy uncertainty esti-mates for safe clinical triage. 
+
+2 Related Work 
+
+Clinical LMs for Risk Prediction Recent work has shown that domain-specific clinical LMs, from BERT-style encoders (Alsentzer et al., 2019; Huang et al., 2019; Lee et al., 2020) to generative LLMs such as BioGPT (Luo et al., 2022b), can sub-stantially improve risk prediction from free-text notes and other electronic health record (EHR) data (Singhal et al., 2022; Yang et al., 2022; Jiang et al., 2023; Alba et al., 2025). However, the vast majority of these studies are primarily optimized and evaluated on discrimina-tive metrics, with little attention to the calibration of the resulting risk estimates (Harutyunyan et al., 2019; Zhu et al., 2024; Chen et al., 2025a). Our work distinguishes itself by proposing a framework 34001 that is designed to substantially improve the cali-bration of clinical LM–based risk prediction while maintaining, and in many cases slightly improving, discriminative performance. 
+
+Uncertainty Calibration for LLMs Uncertainty quantification is fundamental for reliable AI de-ployment in safety-critical domains such as health-care (Kendall and Gal, 2017; Abdar et al., 2021; Gawlikowski et al., 2023; Xu et al., 2025). Clas-sic approaches approximate Bayesian inference through techniques such as MC dropout and deep ensembles, while post-hoc calibration methods ad-just confidence scores using temperature scaling or related transformations (Guo et al., 2017; Kull et al., 2019). In the era of LLMs, research has shifted toward eliciting uncertainty via verbalized confidence, self-evaluation, or semantic consis-tency (Lin et al., 2022; Tian et al., 2023; Kadavath et al., 2022; Melo et al., 2024; Kapoor et al., 2024). Beyond these generation-centric approaches, LLM-based reward models adopt multi-head ensembles on a shared backbone to obtain diverse uncertainty estimates at low computational cost (Liang et al., 2022; Duan et al., 2025). While promising for open-ended question answering and reasoning bench-marks, these generation-centric methods’ calibra-tion behavior in classification tasks remains largely unexplored (Liu et al., 2025) and is susceptible to overconfidence on distribution-shifted inputs (Zhou et al., 2023; Zulfiqar et al., 2025). Crucially, most prior uncertainty quantification techniques operate on individual samples in isolation, neglecting the structural information carried by similar examples. Our work bridges this gap by explicitly aligning predictive uncertainty with both individual error rates and cohort neighborhood risks in the embed-ding space, in a white-box setting where the clini-cal LM and prediction heads are fully accessible, rather than via prompt-based black-box access. 
+
+3 Methodology 
+
+In this section, we elaborate on the Clinical Un-certainty Risk Alignment (CURA) framework, de-picted in Figure 2, which consists of two primary components: Section 3.1 describes fine-tuning domain-specific clinical LMs, and Section 3.2 presents the uncertainty fine-tuning. 
+
+3.1 Clinical LM Fine-Tuning 
+
+We address clinical risk prediction tasks using a dataset D = {(xi, y i)}, where each input xi con-sists of a de-identified clinical note, and the tar-get yi ∈ { 0, 1} serves as a binary indicator for the downstream task. We initialize our framework with a domain-specific clinical LM π0 and attach a linear classifier on top. Let πθ denote the LM parameterized by θ, and let pθ(x) be the predicted positive-class probabil-ity produced by the linear classifier on top of πθ.We jointly optimize the parameters of the language model πθ and the linear classifier by minimizing a class-weighted binary cross-entropy (Xie and Man-ski, 1989) loss CE( pθ(x), y ) over D. After fine-tuning, we freeze the updated LM πθ and use it as a feature extractor to obtain fixed-dimensional em-beddings ei = πθ(xi) for all samples. These frozen embeddings serve as the input for the subsequent uncertainty fine-tuning step. 
+
+3.2 Uncertainty Fine-Tuning 
+
+Our proposed objective aligns three complemen-tary aspects: (1) Lbase ensures predictive accuracy against ground-truth labels (Section 3.2.1); (2) Lind 
+
+aligns the model’s internal uncertainty with its own estimated error proxy (Section 3.2.2); and (3) Lcoh 
+
+regularizes predictions via local consistency with cohort risks (Section 3.2.3). Throughout, we use the term bi-level to refer to these individual- and cohort-level components of uncertainty alignment, rather than a nested bilevel optimization problem. 
+
+3.2.1 Classifier and Base Risk Loss 
+
+We construct a multi-head framework with an en-semble of M independent, randomly initialized lightweight MLP heads on top of the frozen embed-dings {ei}. At inference, we average predictions across all M heads. This architecture encourages diverse risk prediction and stabilizes calibration while sharing a single backbone for minimal infer-ence cost (Duan et al., 2025). Given a patient note 
+
+xi with embedding ei = πθ(xi), the ensemble av-erage prediction is ¯p(xi) = 1
+
+> M
+
+∑Mm=1 pm(ei), and the base objective optimizes the expected cross-entropy between this mean prediction and the target 
+
+y:
+
+Lbase = E(xi,y i)
+
+[CE(¯ p(xi), y i)], (1) where CE( ·, ·) is the same class-weighted loss used in the clinical LM fine-tuning step. This base loss provides the discriminative backbone for our un-certainty fine-tuning. 34002 MIMIC-IV 
+
+> Fine-Tuned Clinical LM
+> Allergies: Percocet Chief Complaint: abdominal fullness and discomfort Service: MEDICINE Allergies: No Known Allergies / Adverse Drug Reactions
+> Predict Heads
+> Cohort-Aware Risk Alignment
+> Bi-Level Calibration
+> Ambiguous cohort
+> Individual Uncertainty Calibration
+
+❄
+
+> Uncertain Certain
+
+Figure 2: Overview of the CURA pipeline. The clinical LM is fine-tuned on MIMIC-IV notes to produce task-adapted embeddings for a multi-head classifier, trained with a base loss Lbase plus a bi-level uncertainty calibration: the individual term Lind calibrates patient-level uncertainty, and the cohort-aware term Lcoh aligns predictions with neighborhood risks in the embedding space, emphasizing ambiguous cohorts. 
+
+3.2.2 Individual Uncertainty Calibration 
+
+While Lbase ensures accurate risk estimation, it does not explicitly constrain how the model’s con-fidence relates to its errors, so its predicted prob-ability can still be poorly calibrated. Motivated by prior work on uncertainty-aware fine-tuning for LLMs (Krishnan et al., 2024), which is grounded in decision theory (Murphy, 2012) and couples token-level predictive entropy with correctness in infer-ence, we introduce an analogous individual-level calibration term for binary risk prediction. For a pa-tient note x, we define the correctness probability 
+
+a(x) = y ¯p(x) + (1 − y)(1 − ¯p(x)) , representing the confidence assigned to the ground-truth label. Based on information-theoretic views of predictive uncertainty, where entropy is used as a measure of distributional uncertainty (Shannon, 1948; Houlsby et al., 2011), we quantify the model’s uncertainty via the entropy of the ensemble-averaged predic-tion: 
+
+H(x) = −
+
+[
+
+¯p(x) log ¯ p(x)+ (1 − ¯p(x)) log (1 − ¯p(x))]
+
+.
+
+(2) We normalize this entropy by its maximum possible value and obtain a scalar uncertainty score u(x) = 
+
+H(x)/H max ∈ [0 , 1] , and align it with the error proxy (1 − a(x)) by minimizing the individual-level calibration loss: 
+
+Lind = λind E(x,y )
+
+[
+
+− (1 − a(x)) log u(x)
+
+− a(x) log (1 − u(x))]
+
+,
+
+(3) where λind is a scaling hyperparameter. Minimiz-ing Lind aligns the model’s uncertainty with its er-ror rate at the individual patient level: confident and correct predictions are rewarded with small loss, whereas confident mistakes incur a large penalty. Notably, the Lbase in Equation 1 acts as an anchor for discrimination, preventing the degenerate solu-tion where the model outputs uniform probabilities to minimize Lind trivially. Furthermore, minimiz-ing Lind effectively reshapes the probability dis-tribution, penalizing high confidence specifically on samples where the model is prone to error. In all subsequent analyses, we use the same normal-ized entropy u(x) computed from each method’s final predicted probability as the scalar uncertainty score, so that all uncertainty-based comparisons are made under a common definition. 
+
+3.2.3 Cohort-Aware Risk Alignment 
+
+To extend risk alignment from the individual to the group level, we propose a cohort-aware term that ensures clinically similar patients receive consis-tent risk estimates. For each patient note xi with embedding ei, we retrieve its K nearest neighbors, denoted as NK (ei), among all labeled training sam-34003 ples and compute the event rate in this local cohort: 
+
+q(xi) = 1
+
+K
+
+∑ 
+
+> j∈N K(ei)
+
+yj . (4) We interpret q(xi) as the neighborhood risk , repre-senting the inherent risk for patients with similar clinical presentations. To quantify cohort ambigu-ity, we compute the normalized entropy ˆH(q(xi)) ,which increases when the cohort exhibits a mixed outcome distribution—a characteristic of border-line cases. We leverage this cohort information to regularize the model via a cohort-aware loss: 
+
+Lcoh = Exi
+
+[w(xi) CE (¯p(xi), q (xi))] , (5) where the adaptive weight w(xi) = λcoh ˆH(q(xi))
+
+is controlled by the hyperparameter λcoh . This objective aligns ¯p(xi) with the neighborhood risk 
+
+q(xi) and assigns larger training weights to cohorts with high neighborhood entropy. Overall, our uncertainty fine-tuning objective is: 
+
+Ltotal = Lbase + Lind + Lcoh . (6) Here Lbase provides standard risk supervision for the multi-head classifier, while Lind and Lcoh to-gether form the bi-level uncertainty regularizer il-lustrated in Figure 2. In Appendix F, we further show that minimizing Lbase + Lcoh is equivalent to optimizing a single cross-entropy loss with a cohort-aware soft label, which can be viewed as a data-dependent label-smoothing scheme whose target interpolates between the ground-truth label and the neighborhood risk. This soft-label view highlights that cohorts with high neighborhood en-tropy pull the target toward their local event rate and thus receive stronger regularization, while in practice Ltotal can be used as a drop-in training objective on top of existing clinical LMs without modifying their inference pipeline. Because Lind 
+
+and Lcoh are computed from model probabilities and pre-computed neighborhoods, CURA does not introduce additional backbone parameters or ex-tra forward passes beyond the shared single-model pipeline. An empirical runtime comparison is pro-vided in Appendix I. 
+
+4 Experiment 
+
+4.1 MIMIC-IV Dataset 
+
+We utilize de-identified clinical notes from the MIMIC-IV database (Johnson et al., 2023b) to predict five distinct risk stratification tasks. For each task, the input x is a single free-text note and the output y ∈ { 0, 1} indicates a pre-defined adverse outcome within a fixed horizon. These tasks align with benchmarks in prior clinical LM research (Xue et al., 2022; Luo et al., 2022a; Alba et al., 2025) and cover diverse clinical scenarios, ranging from short-term to medium-term prognosis. Specifically, we evaluate on: (1) 7-day mortality, (2) 30-day mortality, (3) early discharge within 12 hours, (4) in-hospital mortality, and (5) ICU stay longer than one day. Further details regarding the task definitions are provided in Appendix A. 
+
+4.2 Experiment Settings Clinical Language Models We utilize three domain-specific language model backbones: BioGPT (Luo et al., 2022b), BioClinicalBERT (Alsentzer et al., 2019), and ClinicalBERT (Huang et al., 2019). For brevity, we present results for BioGPT in the main experiment, and defer the BioClinicalBERT and ClinicalBERT results to Appendix B. 
+
+Baselines Following prior work on uncertainty quantification for clinical outcome prediction (Chen et al., 2025b), we include two widely used architecture-agnostic white-box baselines: Deep Ensembles and MC dropout. In addition, we also consider an internal baseline that uses the same multi-head architecture as CURA but optimizes only the class-weighted cross-entropy in the uncer-tainty fine-tuning step. All baselines employ the same fine-tuned backbone models as our approach, so that any performance differences stem only from the choice of uncertainty mechanism. We also re-port a runtime comparison under identical hard-ware and early-stopping settings in Appendix I to evaluate the practical overhead of each uncertainty method. Further implementation details are pro-vided in Appendix C. 
+
+Evaluation Metrics We evaluate model perfor-mance using two categories of metrics: (1) Discrim-ination: Area Under the ROC Curve (AUROC) and Area Under the Precision-Recall Curve (AUPRC); and (2) Calibration & Uncertainty: Brier score, Negative Log-Likelihood (NLL), and Area Under the Risk-Coverage curve (AURC). All reported re-sults represent the mean and standard deviation across five cross-validation folds. 34004 Task Method AUROC ↑ AUPRC ↑ Brier ↓ NLL ↓ AURC ↓
+
+7-day Mortality 
+
+Baseline 0.852 (0.025) 0.127 (0.015) 0.032 (0.005) 0.120 (0.015) 0.008 (0.001) Deep Ensemble 0.856 (0.022) 0.125 (0.010) 0.029 (0.004) 0.110 (0.009) 0.007 (0.000) MC Dropout 0.862 (0.019) 0.130 (0.008) 0.034 (0.006) 0.127 (0.017) 0.009 (0.002) 
+
+CURA (Ours) 0.892 (0.010) 0.160 (0.010) 0.015 (0.003) 0.075 (0.010) 0.002 (0.000) 
+
+30-day Mortality 
+
+Baseline 0.881 (0.009) 0.270 (0.009) 0.064 (0.003) 0.231 (0.004) 0.024 (0.003) Deep Ensemble 0.869 (0.008) 0.256 (0.011) 0.060 (0.001) 0.215 (0.004) 0.020 (0.002) MC Dropout 0.880 (0.014) 0.268 (0.014) 0.063 (0.002) 0.230 (0.007) 0.024 (0.003) 
+
+CURA (Ours) 0.890 (0.004) 0.280 (0.012) 0.038 (0.001) 0.146 (0.003) 0.009 (0.001) 
+
+In-hospital Mortality 
+
+Baseline 0.621 (0.011) 0.027 (0.002) 0.044 (0.004) 0.175 (0.013) 0.015 (0.001) Deep Ensemble 0.632 (0.010) 0.028 (0.002) 0.044 (0.004) 0.171 (0.010) 0.015 (0.001) MC Dropout 0.629 (0.013) 0.028 (0.002) 0.046 (0.005) 0.174 (0.013) 0.015 (0.001) 
+
+CURA (Ours) 0.641 (0.009) 0.029 (0.002) 0.029 (0.004) 0.124 (0.010) 0.011 (0.000) 
+
+ICU Stay - 1 
+
+Baseline 0.579 (0.026) 0.035 (0.003) 0.105 (0.042) 0.350 (0.108) 0.064 (0.053) Deep Ensemble 0.579 (0.024) 0.035 (0.002) 0.104 (0.043) 0.345 (0.110) 0.062 (0.052) MC Dropout 0.580 (0.027) 0.035 (0.003) 0.106 (0.043) 0.350 (0.113) 0.066 (0.056) 
+
+CURA (Ours) 0.584 (0.029) 0.035 (0.003) 0.085 (0.044) 0.288 (0.104) 0.040 (0.030) 
+
+Early Discharge - 12 
+
+Baseline 0.587 (0.011) 0.027 (0.012) 0.018 (0.002) 0.085 (0.006) 0.007 (0.001) Deep Ensemble 0.586 (0.012) 0.028 (0.012) 0.017 (0.001) 0.085 (0.005) 0.007 (0.000) MC Dropout 0.588 (0.013) 0.028 (0.012) 0.018 (0.002) 0.083 (0.008) 0.007 (0.000) 
+
+CURA (Ours) 0.594 (0.017) 0.031 (0.014) 0.010 (0.001) 0.056 (0.003) 0.006 (0.000) 
+
+Table 1: Performance of BioGPT on five clinical risk prediction tasks. Results are reported as mean (standard deviation) across five-fold cross-validation. “ICU Stay - 1” refers to ICU stays longer than one day, and “Early Discharge - 12” refers to early discharge within 12 hours. 
+
+4.3 Experimental Results 
+
+In this section, we compare our overall CURA method with the baseline and the two aforemen-tioned uncertainty quantification strategies. As shown in Table 1, CURA achieves modest but sta-ble improvements in discrimination performance (AUROC and AUPRC) relative to the baseline, indi-cating that our method does not sacrifice predictive accuracy. While Deep Ensembles and MC Dropout remain competitive in discriminative tasks, their contribution to calibration appears less pronounced in this setting. These methods yield only marginal reductions in Brier score, NLL, and AURC, and in some instances even slightly degrade these met-rics. Comparatively, CURA exhibits stronger cali-bration capabilities, yielding consistent reductions across all three calibration metrics on all five tasks. We attribute this effectiveness to the synergistic ef-fect of our individual and cohort-level alignment, which allows the model to better distinguish be-tween reliable and ambiguous predictions. Overall, these results suggest that our bi-level uncertainty fine-tuning objective is particularly effective at re-shaping the probability outputs of clinical LMs into reliable risk estimates, while retaining competitive 
+
+Method AUROC AUPRC Brier NLL AURC 
+
+7-day Mortality 
+
+Baseline 0.852 0.127 0.032 0.120 0.008 w/ Lind 0.892 0.160 0.019 0.077 0.003 w/ Lcoh 0.851 0.124 0.023 0.118 0.007 
+
+CURA 0.892 0.160 0.015 0.075 0.002 
+
+In-hospital Mortality 
+
+Baseline 0.621 0.027 0.044 0.175 0.015 w/ Lind 0.641 0.029 0.035 0.128 0.012 w/ Lcoh 0.625 0.028 0.040 0.166 0.014 
+
+CURA 0.641 0.029 0.029 0.124 0.011 
+
+Table 2: Ablation study on BioGPT for high-stakes mor-tality tasks. We isolate the contributions of individual calibration Lind and cohort alignment Lcoh . Standard deviations are omitted for brevity. 
+
+discriminative performance. Similar robust trends are observed for BioClinicalBERT and Clinical-BERT, as detailed in Appendix B. 
+
+4.4 Ablation Study 
+
+We perform ablation studies on BioGPT to isolate the contributions of the two proposed uncertainty components in our objective. Starting from an in-ternal baseline that uses only class-weighted cross-34005 0.0 0.2 0.4 0.6 0.8 1.0                          
+
+> Uncertainty (Normalized)
+> 0510 15 20 25
+> Density
+> Uncertainty Distribution
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> Uncertainty Bin (low high)
+> 0.6 0.7 0.8 0.9 1.0
+> Accuracy
+> Accuracy vs. Uncertainty Bin
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> Uncertainty Bin (low high)
+> 0.00 0.02 0.04 0.06 0.08 0.10
+> Positive Rate
+> Positive Rate vs. Uncertainty Bin
+> Baseline Deep Ensemble MC Dropout CURA
+
+Figure 3: Left: Distribution of normalized uncertainty estimates, Middle: prediction accuracy within each uncertainty bin at a fixed decision threshold ( 0.5) on predicted risk, and Right: positive rate within each uncertainty bin for the 7-day mortality task with BioGPT. 
+
+entropy, we incrementally add (i) the individual calibration term Lind , (ii) the cohort-aware risk alignment term Lcoh , and (iii) both terms, which together yield the full CURA objective. In the main text we report ablations on two clinically high-stakes tasks, 7-day mortality and in-hospital mortality, and defer the remaining three tasks to Ap-pendix D. As shown in Table 2, across both tasks, adding either Lind or Lcoh consistently improves calibration metrics such as Brier score, NLL, and AURC, while leaving AUROC and AUPRC essen-tially unchanged or slightly improved. Combining both terms yields the best overall calibration per-formance without sacrificing discriminative accu-racy. Additionally, we evaluate the sensitivity of CURA to the loss weights λind and λcoh on two high-stakes mortality tasks, with detailed results provided in Appendix E. 
+
+5 Uncertainty Analysis for Clinical Triage 
+
+In this section, we analyze how CURA reshapes uncertainty in deployment-relevant clinical triage, focusing on the BioGPT backbone and the 7-day mortality task where calibration gains are most pronounced. Unless otherwise noted, per-patient uncertainty is measured by the normalized entropy score u(x) from Section 3.2.2, and all results are averaged over five cross-validation folds. 
+
+5.1 Uncertainty-driven Risk Stratification 
+
+Figure 3 illustrates the interplay between predic-tive uncertainty, accuracy, and clinical risk. The left panel displays the distribution of uncertainty 
+
+u(x), showing that the baseline, deep ensembles, and MC dropout all exhibit severe overconfidence, with probability mass heavily concentrated near zero uncertainty. In contrast, CURA produces a dispersed uncertainty distribution, effectively shift-ing probability mass from the overconfident spike to moderate-to-high uncertainty regions. The middle panel reports classification accu-racy within each uncertainty bin. CURA gener-ally achieves higher bin-wise accuracy than other methods, particularly in the moderate-to-high un-certainty range. Combined with the distribution shift, this indicates that CURA both reduces the number of predictions that the model considers nearly certain and makes each uncertainty level more trustworthy. Furthermore, the right panel plots the positive rate within each uncertainty bin. All methods show a correlation between uncertainty and risk, but CURA demonstrates the strongest alignment: low-uncertainty bins are dominated by negative cases, whereas high-uncertainty bins are substantially en-riched with positive cases. Clinically, this pattern is desirable, since low-uncertainty predictions form a safer pool of patients for automatic triage, whereas high-uncertainty predictions correspond to high-risk, ambiguous cases that should be escalated for doctor review. Overall, our method mitigates overconfidence and concentrates clinical risk in the high-uncertainty region, yielding uncertainty estimates that are better aligned with risk stratification. 
+
+5.2 Selective Deployment and Triage Workload 
+
+We evaluate the utility of calibrated uncertainties in supporting selective deployment, a paradigm where the model automates predictions for high-confidence patients while deferring uncertain cases to clinicians. Figure 5 illustrates the AUPRC on the 34006 30-day Mortality 7-day Mortality In-hospital Mortality ICU Stay - 1 Early Discharge - 12    
+
+> Prediction Task
+> 0.0 0.2 0.4 0.6
+> False Reassurance Rate
+> Baseline Deep Ensemble MC Dropout CURA
+> False Reassurance at Low Uncertainty
+
+Figure 4: False reassurance rates at low uncertainty across five prediction tasks with BioGPT. Lower values indicate fewer high-risk patients being confidently misclassified as safe. 0.2 0.8 1.0 0.4 0.6    
+
+> 0.2 0.4 0.6 0.8
+> AUPRC
+> AUPRC vs. Retained Cohort
+> Baseline Deep Ensemble MC Dropout CURA
+> Retained cohort
+
+Figure 5: AUPRC on the retained cohort as a function of the retained fraction. Patients are sorted by uncertainty, and only the lowest-uncertainty fraction is retained for prediction. 
+
+retained cohort, constructed by preserving only the patients with the lowest uncertainty and progres-sively increasing the retention fraction. CURA con-sistently outperforms the baselines across the ma-jority of retention levels, indicating better discrimi-native performance when employed as a decision-support tool for its most confident predictions. To quantify the clinical implications, Figure 6 depicts the triage workload–safety trade-off. In this analysis, patients are prioritized by uncertainty, with the lowest-uncertainty fraction automatically managed by the model (x-axis); the y-axis reports the expected number of missed positive events per 1,000 patients within this automated group. Across most of the operating range, our method yields fewer missed events than comparison methods for the same level of workload reduction. Equivalently, for a fixed safety threshold, CURA allows a larger proportion of patients to be screened automatically. These results suggest that CURA effectively en-hances automation efficiency in high-stakes mortal-ity prediction without compromising patient safety. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8    
+
+> Managed Patients
+> 0123
+> Missed Events
+> Triage Workload Safety
+> Baseline Deep Ensemble MC Dropout CURA
+
+Figure 6: Triage workload–safety trade-off. The curves plot the expected number of missed positive events per 1,000 patients against the fraction of patients automati-cally managed by the model. 
+
+5.3 Reducing False Reassurance 
+
+We consider a safety metric termed the false reas-surance rate . Specifically, we define a safe region in which both model uncertainty u(x) < τ and predicted risk ¯p(x) < τ , with τ = 0 .1. Addi-tional results using τ = 0 .05 and τ = 0 .15 are provided in Appendix H, demonstrating consistent trends. The false reassurance rate is the fraction of truly positive patients whose predictions fall into this safe region, capturing a critical clinical fail-ure mode: high-risk patients who are confidently misclassified as low-risk. A detailed definition is provided in Appendix G. Figure 4 shows the false reassurance rate across all five clinical tasks. CURA generally achieves the lowest rate in four out of five tasks, with substantial reductions in 7-day and 30-day mortality predic-tion. It remains competitive on in-hospital mortal-ity, where MC Dropout achieves a marginally lower value. These results indicate that our method re-duces the fraction of high-risk patients who might 34007 be given misleadingly reassuring predictions. 
+
+6 Conclusion 
+
+In this work, we propose CURA, a bi-level uncer-tainty calibration framework that calibrates clini-cal LMs by jointly optimizing individual predic-tive uncertainty and cohort-level local consistency. By grounding risk estimates in patient-embedding neighborhoods, CURA mitigates overconfidence, especially on ambiguous cases. Extensive experi-ments on MIMIC-IV demonstrate that our method consistently improves calibration metrics while largely maintaining competitive discriminative per-formance. Moreover, our method substantially low-ers false reassurance rates and yields uncertainty estimates that better support clinical triage. 
+
+Limitations 
+
+Despite the promising results of our approach, it has several limitations. Our current framework re-lies on discriminative LMs providing scalar risk scores without textual explanations, and we do not evaluate closed-source API models, largely because the MIMIC-IV data use agreement pro-hibits sharing patient data with third-party plat-forms. Our experiments are restricted to the ret-rospective analysis of single-center clinical notes. Future work will explore integrating CURA with generative models to offer interpretable reasoning and extending the framework to multi-modal, lon-gitudinal settings and broader patient populations. 
+
+Ethical Considerations 
+
+Digital health datasets such as MIMIC reflect sys-temic health disparities experienced by minority populations, which can be inadvertently propagated by AI models. Prior work has documented such dis-parities in MIMIC-III and other electronic health record datasets in the United States (Röösli et al., 2022; Tripathi et al., 2020; Wang et al., 2024b). Because we build on clinical language models pre-trained on MIMIC-III and evaluate on MIMIC-IV, our findings should be interpreted in light of these fairness concerns, and our framework does not di-rectly mitigate underlying structural biases in the data. 
+
+Acknowledgments 
+
+This work was supported in part by the Fullgraf Foundation and the AI for Health Institute at Wash-ington University in St. Louis. Charles Alba was partially supported by the National Univer-sity of Singapore Development Grant and the Dan-forth Scholarship at Washington University in St. Louis. Claire Najjuuko was partially supported by the NIH Researcher Resilience Training Grant (R25MH118935-01). The content is solely the re-sponsibility of the authors and does not necessarily represent the official views of the funding agencies. 
+
+References                        
+
+> Moloud Abdar, Farhad Pourpanah, Sadiq Hussain, Dana Rezazadegan, Li Liu, Mohammad Ghavamzadeh, Paul Fieguth, Xiaochun Cao, Abbas Khosravi, U Ra-jendra Acharya, and 1 others. 2021. A review of uncertainty quantification in deep learning: Tech-niques, applications and challenges. Information fusion , 76:243–297. Charles Alba, Bing Xue, Joanna Abraham, Thomas Kan-nampallil, and Chenyang Lu. 2025. The foundational capabilities of large language models in predicting postoperative risks using clinical notes. npj Digital Medicine , 8(1):95. Emily Alsentzer, John Murphy, William Boag, Wei-Hung Weng, Di Jindi, Tristan Naumann, and Matthew McDermott. 2019. Publicly available clini-cal bert embeddings. In Proceedings of the 2nd clin-ical natural language processing workshop , pages 72–78. Ziyi Chen, Mengyuan Zhang, Mustafa Mohammed Ahmed, Yi Guo, Thomas J George, Jiang Bian, and Yonghui Wu. 2025a. Narrative feature or structured feature? a study of large language models to iden-tify cancer patients at risk of heart failure. In AMIA Annual Symposium Proceedings , volume 2024, page 242. Zizhang Chen, Peizhao Li, Xiaomeng Dong, and Pengyu Hong. 2025b. Uncertainty quantification for clinical outcome predictions with (large) language models. In Findings of the Association for Computa-tional Linguistics: NAACL 2025 , pages 7512–7523. Keyu Duan, Zichen Liu, Xin Mao, Tianyu Pang, Changyu Chen, Qiguang Chen, Michael Qizhe Shieh, and Longxu Dou. 2025. Efficient process reward model training via active learning. arXiv preprint arXiv:2504.10559 .Yarin Gal and Zoubin Ghahramani. 2016. Dropout as a bayesian approximation: Representing model uncer-tainty in deep learning. In international conference on machine learning , pages 1050–1059. PMLR. Jakob Gawlikowski, Cedrique Rovile Njieutcheu Tassi, Mohsin Ali, Jongseok Lee, Matthias Humt, Jianxi-ang Feng, Anna Kruspe, Rudolph Triebel, Peter Jung, Ribana Roscher, and 1 others. 2023. A survey of uncertainty in deep neural networks. Artificial Intel-ligence Review , 56(Suppl 1):1513–1589.
+
+34008 Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q Wein-berger. 2017. On calibration of modern neural net-works. In International conference on machine learn-ing , pages 1321–1330. PMLR. Hrayr Harutyunyan, Hrant Khachatrian, David C Kale, Greg Ver Steeg, and Aram Galstyan. 2019. Multitask learning and benchmarking with clinical time series data. Scientific data , 6(1):96. Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, and Máté Lengyel. 2011. Bayesian active learning for classification and preference learning. arXiv preprint arXiv:1112.5745 .Chengsong Huang, Langlin Huang, Jixuan Leng, Ji-acheng Liu, and Jiaxin Huang. 2025a. Efficient test-time scaling via self-calibration. arXiv preprint arXiv:2503.00031 .Kexin Huang, Jaan Altosaar, and Rajesh Ranganath. 2019. Clinicalbert: Modeling clinical notes and predicting hospital readmission. arXiv preprint arXiv:1904.05342 .Liangjie Huang, Dawei Li, Huan Liu, and Lu Cheng. 2025b. Beyond accuracy: The role of calibration in self-improving large language models. arXiv preprint arXiv:2504.02902 .Lavender Yao Jiang, Xujin Chris Liu, Nima Pour Neja-tian, Mustafa Nasir-Moin, Duo Wang, Anas Abidin, Kevin Eaton, Howard Antony Riina, Ilya Laufer, Paawan Punjabi, and 1 others. 2023. Health system-scale language models are all-purpose prediction en-gines. Nature , 619(7969):357–362. Alistair Johnson, Lucas Bulgarelli, Tom Pollard, Steven Horng, Leo Anthony Celi, and Roger Mark. 2023a. Mimic-iv (version 2.2). Alistair EW Johnson, Lucas Bulgarelli, Lu Shen, Alvin Gayles, Ayad Shammout, Steven Horng, Tom J Pol-lard, Sicheng Hao, Benjamin Moody, Brian Gow, and 1 others. 2023b. Mimic-iv, a freely accessible elec-tronic health record dataset. Scientific data , 10(1):1. Saurav Kadavath, Tom Conerly, Amanda Askell, Tom Henighan, Dawn Drain, Ethan Perez, Nicholas Schiefer, Zac Hatfield-Dodds, Nova DasSarma, Eli Tran-Johnson, and 1 others. 2022. Language mod-els (mostly) know what they know. arXiv preprint arXiv:2207.05221 .Sanyam Kapoor, Nate Gruver, Manley Roberts, Katie Collins, Arka Pal, Umang Bhatt, Adrian Weller, Samuel Dooley, Micah Goldblum, and Andrew G Wilson. 2024. Large language models must be taught to know what they don’t know. Advances in Neural Information Processing Systems , 37:85932–85972. Alex Kendall and Yarin Gal. 2017. What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems , 30. Ranganath Krishnan, Piyush Khanna, and Omesh Tickoo. 2024. Enhancing trust in large language models with uncertainty-aware fine-tuning. arXiv preprint arXiv:2412.02904 .Meelis Kull, Miquel Perello Nieto, Markus Kängsepp, Telmo Silva Filho, Hao Song, and Peter Flach. 2019. Beyond temperature scaling: Obtaining well-calibrated multi-class probabilities with dirichlet cal-ibration. Advances in neural information processing systems , 32. Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. 2017. Simple and scalable pre-dictive uncertainty estimation using deep ensembles. 
+
+Advances in neural information processing systems ,30. Jinhyuk Lee, Wonjin Yoon, Sungdong Kim, Donghyeon Kim, Sunkyu Kim, Chan Ho So, and Jaewoo Kang. 2020. Biobert: a pre-trained biomedical language representation model for biomedical text mining. 
+
+Bioinformatics , 36(4):1234–1240. Jixuan Leng, Chengsong Huang, Banghua Zhu, and Jiaxin Huang. 2024. Taming overconfidence in llms: Reward calibration in rlhf. arXiv preprint arXiv:2410.09724 .Xinran Liang, Katherine Shu, Kimin Lee, and Pieter Abbeel. 2022. Reward uncertainty for exploration in preference-based reinforcement learning. arXiv preprint arXiv:2205.12401 .Stephanie Lin, Jacob Hilton, and Owain Evans. 2022. Teaching models to express their uncertainty in words. arXiv preprint arXiv:2205.14334 .Xiaoou Liu, Tiejin Chen, Longchao Da, Chacha Chen, Zhen Lin, and Hua Wei. 2025. Uncertainty quantifi-cation and confidence calibration in large language models: A survey. arXiv preprint arXiv:2503.15850 .Mengdi Luo, Yang Chen, Yuan Cheng, Na Li, and He Qing. 2022a. Association between hematocrit and the 30-day mortality of patients with sepsis: a retrospective analysis based on the large-scale clini-cal database mimic-iv. PLoS one , 17(3):e0265758. Renqian Luo, Liai Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon, and Tie-Yan Liu. 2022b. Biogpt: generative pre-trained transformer for biomedical text generation and mining. Briefings in bioinformatics , 23(6):bbac409. Luckeciano C Melo, Panagiotis Tigas, Alessandro Abate, and Yarin Gal. 2024. Deep bayesian active learning for preference modeling in large language models. Advances in Neural Information Processing Systems , 37:118052–118085. Mark L Mitchell. 2005. Frozen section diagnosis for axillary sentinel lymph nodes: the first six years. 
+
+Modern pathology , 18(1):58–61. Kevin P Murphy. 2012. Machine learning: a probabilis-tic perspective . MIT press. 34009 Harsha Nori, Nicholas King, Scott Mayer McKinney, Dean Carignan, and Eric Horvitz. 2023. Capabili-ties of gpt-4 on medical challenge problems. arXiv preprint arXiv:2303.13375 .Eliane Röösli, Selen Bozkurt, and Tina Hernandez-Boussard. 2022. Peeking into a black box, the fair-ness and generalizability of a mimic-iii benchmark-ing model. Scientific Data , 9(1):24. Claude E Shannon. 1948. A mathematical theory of communication. The Bell system technical journal ,27(3):379–423. Karan Singhal, Shekoofeh Azizi, Tao Tu, S Sara Mahdavi, Jason Wei, Hyung Won Chung, Nathan Scales, Ajay Tanwani, Heather Cole-Lewis, Stephen Pfohl, and 1 others. 2022. Large language mod-els encode clinical knowledge. arXiv preprint arXiv:2212.13138 .Karan Singhal, Tao Tu, Juraj Gottweis, Rory Sayres, Ellery Wulczyn, Mohamed Amin, Le Hou, Kevin Clark, Stephen R Pfohl, Heather Cole-Lewis, and 1 others. 2025. Toward expert-level medical ques-tion answering with large language models. Nature Medicine , 31(3):943–950. Katherine Tian, Eric Mitchell, Allan Zhou, Archit Sharma, Rafael Rafailov, Huaxiu Yao, Chelsea Finn, and Christopher D Manning. 2023. Just ask for cali-bration: Strategies for eliciting calibrated confidence scores from language models fine-tuned with human feedback. arXiv preprint arXiv:2305.14975 .Yongqi Tong, Sizhe Wang, Dawei Li, Yifan Wang, Simeng Han, Zi Lin, Chengsong Huang, Jiaxin Huang, and Jingbo Shang. 2024. Optimizing lan-guage model’s reasoning abilities with weak supervi-sion. arXiv preprint arXiv:2405.04086 .Sandhya Tripathi, Bradley A Fritz, Mohamed Abdel-hack, Michael S Avidan, Yixin Chen, and Christo-pher R King. 2020. (un) fairness in post-operative complication prediction models. arXiv preprint arXiv:2011.02036 .Cheng Wang, Gyuri Szarvas, Georges Balazs, Pavel Danchenko, and Patrick Ernst. 2024a. Calibrating verbalized probabilities for large language models. 
+
+arXiv preprint arXiv:2410.06707 .Sizhe Wang, Yongqi Tong, Hengyuan Zhang, Dawei Li, Xin Zhang, and Tianlong Chen. 2025. Bpo: Towards balanced preference optimization between knowl-edge breadth and depth in alignment. In Proceedings of the 2025 Conference of the Nations of the Amer-icas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) , pages 8811–8826. Yifei Wang, Liqin Wang, Zhengyang Zhou, John Lau-rentiev, Joshua R Lakin, Li Zhou, and Pengyu Hong. 2024b. Assessing fairness in machine learning mod-els: A study of racial bias using matched coun-terparts in mortality prediction for patients with chronic diseases. Journal of biomedical informat-ics , 156:104677. Yu Xie and Charles F Manski. 1989. The logit model and response-based samples. Sociological Methods & Research , 17(3):283–302. Ziqi Xu, Jingwen Zhang, Simon Haroutounian, Hanyang Liu, Zihan Cao, Gabrielle Rose Messner, Harutyun B Alaverdyan, Saivee Ahuja, Rahul Koshy, Joel Hanns, and 1 others. 2025. Incorporating uncer-tainty in predictive models using mobile sensing and clinical data: A case study on persistent post-surgical pain. Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies , 9(2):1–33. Bing Xue, York Jiao, Thomas Kannampallil, Bradley Fritz, Christopher King, Joanna Abraham, Michael Avidan, and Chenyang Lu. 2022. Perioperative pre-dictions with interpretable latent representation. In 
+
+Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 4268–4278. Daniel Yang, Yao-Hung Hubert Tsai, and Makoto Ya-mada. 2024. On verbalized confidence scores for llms. arXiv preprint arXiv:2412.14737 .Xi Yang, Aokun Chen, Nima PourNejatian, Hoo Chang Shin, Kaleb E Smith, Christopher Parisien, Colin Compas, Cheryl Martin, Anthony B Costa, Mona G Flores, and 1 others. 2022. A large language model for electronic health records. NPJ digital medicine ,5(1):194. Kaitlyn Zhou, Dan Jurafsky, and Tatsunori B Hashimoto. 2023. Navigating the grey area: How expressions of uncertainty and overconfidence affect language models. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing ,pages 5506–5524. Yinghao Zhu, Zixiang Wang, Junyi Gao, Yuning Tong, Jingkun An, Weibin Liao, Ewen M Harrison, Liantao Ma, and Chengwei Pan. 2024. Prompting large lan-guage models for zero-shot clinical prediction with structured longitudinal electronic health record data. 
+
+arXiv preprint arXiv:2402.01713 .Muhammad Imran Zulfiqar, Ayesha Khalid, Liming Chen, and Sahraoui Dhelim. 2025. Uncertainty-aware neighbor calibration for positive and unlabeled learning in large machine learning models. IEEE Transactions on Emerging Topics in Computational Intelligence .
+
+A MIMIC-IV Dataset and Task Definitions 
+
+In this section, we describe the MIMIC-IV dataset used in our experiments and provide detailed defi-nitions of the five clinical risk prediction tasks. 34010 A.1 Task Definitions 7-day mortality We consider the cohort of adult inpatients with at least one discharge summary. This task targets imminent post-discharge deteriora-tion. The label is assigned as positive if the patient dies within 7 days after hospital discharge, with a positive rate of 0.88%. 
+
+30-day mortality This task utilizes the same co-hort as the 7-day mortality task but extends the prediction window to assess medium-term progno-sis. The label is positive if the patient dies within 30 days after hospital discharge, and negative oth-erwise. The positive rate is 2.87%. 
+
+Early discharge within 12 hours This task iden-tifies admissions suitable for rapid triage or those with short, uncomplicated stays. The cohort is re-stricted to patients who were discharged alive (ex-cluding in-hospital mortality). The label is positive if the discharge occurs within 12 hours of admis-sion, and negative if the stay exceeds 12 hours. The positive rate is 0.74%. 
+
+In-hospital mortality For this task, the label is positive if the patient dies before hospital discharge and negative otherwise. It corresponds to the stan-dard in-hospital mortality flag in MIMIC and is widely used as a benchmark for clinical risk predic-tion models. The positive rate is 1.71%. 
+
+ICU stay longer than one day We consider en-counters that include an ICU admission record. The label is positive if the patient spends more than 24 hours in the ICU during the index stay (summed across all ICU transfers within the same admission), and negative otherwise. This task reflects early critical-care resource utilization and is relevant for planning ICU staffing and bed management. The positive rate is 2.50%. After preprocessing, the two post-discharge mor-tality tasks (7-day and 30-day) contain approxi-mately 323K encounters. For the remaining three tasks (early discharge within 12 hours, in-hospital mortality, and ICU stay longer than one day), the processed cohort consists of approximately 142K encounters. Note that for the early discharge task, we exclude encounters resulting in in-hospital death to decouple mortality outcomes from re-source utilization metrics. 
+
+A.2 Data Governance and De-identification 
+
+All experiments use the MIMIC-IV database of electronic health records and clinical notes (John-son et al., 2023b), which is released under the PhysioNet Credentialed Health Data License 1.5.0 (Johnson et al., 2023a). Access to the dataset requires completion of human-subjects protection training and acceptance of the MIMIC data use agreement. A credentialed author on our team ful-filled these requirements and accessed the data on behalf of the project, and all analyses complied with the data use agreement. The MIMIC-IV notes were de-identified by the dataset curators in accordance with the HIPAA Safe Harbor provision. In particular, multiple cat-egories of protected health information (e.g., per-sonal names, locations, serial numbers, and ages) were removed or replaced with surrogate identi-fiers, and calendar dates were systematically per-turbed to reduce the risk of re-identification (John-son et al., 2023b). We treat the resulting corpus as de-identified and did not attempt to recover any original identifiers. 
+
+A.3 Clinical Notes and Preprocessing 
+
+We focus on discharge summaries from MIMIC-IV, which are written by clinicians after hospital dis-charge to summarize the patient’s hospital course, treatments, procedures, and follow-up plans. Be-cause these notes were heavily de-identified to meet HIPAA’s Safe Harbor standard, many entities iden-tified as protected health information were removed and replaced with placeholder tokens such as “___”. As a result, the raw text often contains long se-quences of underscores and other artifacts. To obtain a cleaner corpus for modeling, we adapt preprocessing pipelines from prior work on clinical language models (Huang et al., 2019; Alsentzer et al., 2019; Alba et al., 2025). Specifi-cally, we remove excessive placeholder tokens (e.g., long runs of underscores), normalize whitespace, and discard non-printable or unrecognized charac-ters. We do not attempt to reconstruct protected health information or to enrich the notes with ex-ternal structured data. 
+
+A.4 Exclusion Criteria 
+
+We include adult inpatient encounters with at least one discharge summary and with sufficient follow-up information to define the outcome labels de-scribed below. Patients without any recorded dis-34011 charge note are excluded. We further remove en-counters whose discharge note is timestamped after or during the recorded time of in-hospital death. Manual inspection of a small sample of such cases indicates that these notes primarily document the death itself rather than the clinical course preceding it. Excluding these encounters avoids potential la-bel leakage from the text into the prediction target and yields a more realistic evaluation setting. 
+
+B Additional Experimental Results on Different Models 
+
+In this section, we provide a detailed performance analysis using two additional clinical language model backbones: BioClinicalBERT and Clinical-BERT. These experiments aim to verify the gener-alizability of the CURA framework across different architectures. For BioClinicalBERT, the results in Table 3 ex-hibit trends that are highly consistent with our main findings on BioGPT. CURA maintains competitive discriminative performance across all five tasks, often matching or slightly surpassing the baseline. More importantly, our method demonstrates sub-stantial advantages in calibration. While Deep Ensembles and MC Dropout struggle to improve calibration metrics over the baseline on the 7-day mortality task (with Brier scores remaining around 0.070), CURA significantly reduces the Brier score to 0.056 and the NLL from 0.246 to 0.187. This indicates that our method effectively handles un-certainty even in architectures different from that used in our primary analysis. The results for ClinicalBERT, shown in Table 4, further reinforce these observations. In the 30-day mortality prediction task, while existing uncertainty quantification methods provide marginal gains in discrimination, their impact on calibration is lim-ited. In contrast, our method reduces the NLL from 0.334 (Baseline) to 0.289, achieving the best cali-bration performance among all compared methods. Furthermore, in the Early Discharge task, CURA achieves by far the largest reduction in AURC (from 0.082 to 0.025), whereas the other meth-ods provide only modest improvements or even degrade performance. Collectively, these additional experiments con-firm that the benefits of our bi-level uncertainty fine-tuning objective are model-agnostic. The frame-work consistently reshapes the probability distribu-tions to align with risks, delivering reliable uncer-tainty estimates without compromising the discrim-inative power of the underlying clinical language models. 
+
+C Implementation Details 
+
+C.1 Clinical LM Fine-Tuning 
+
+For all experiments, we train a separate task-specific model for each outcome and adopt a five-fold cross-validation scheme. We train on the training split for 5 epochs with a learning rate of 
+
+1 × 10 −5, for all models and all tasks without early stopping. 
+
+C.2 Uncertainty Fine-Tuning and Baselines 
+
+For all methods, we adopt the same multi-head classifier architecture described in Section 3.2.1 on top of the frozen embeddings, and use the same hyperparameters during training. We train for up to 50 epochs with a learning rate of 1 × 10 −4, ap-plying early stopping based on validation negative log-likelihood (NLL). The methods differ only in the training objective and in how uncertainty scores are derived from the heads, so that performance dif-ferences primarily reflect the uncertainty objective rather than model capacity. 
+
+Uncertainty Fine-Tuning In Section 3.2, we at-tach a 32-head classifier on top of the frozen em-beddings and optimize it with the full uncertainty-aware objective Ltotal in Section 3.2.3. Each head is implemented as a lightweight MLP that shares the same input features but maintains independent parameters. We set the individual calibration weight to 
+
+λind = 0 .5 and the cohort-alignment weight to 
+
+λcoh = 0 .01 for all experiments. When computing the neighborhood risk q(x) in Equation 4, we re-trieve K nearest neighbors using cosine distance. Specifically, we use K = 200 nearest neighbors for the 7-day and 30-day mortality tasks, and K = 100 
+
+neighbors for the remaining three tasks, reflecting their smaller cohort sizes. Neighborhoods NK (ei)
+
+are pre-computed once using frozen embeddings to avoid computational overhead during uncertainty training. To prevent information leakage, the query sample itself is excluded from its neighbor set 
+
+NK (ei).
+
+MC Dropout We train a single multi-head pre-diction network per task on top of the frozen embed-dings. At inference time, we keep dropout active with a probability of p = 0 .5 and perform T = 10 34012 stochastic forward passes. The final prediction is obtained by averaging the predictive probabilities across these passes for each example. 
+
+Deep Ensembles We train an ensemble of M =5 independently initialized classifier heads for each task, each using the same multi-head architecture as in Section 3.2.1. At test time, we average the output probabilities from all ensemble members. 
+
+C.3 Uncertainty in Analyses 
+
+Across all methods, we compute a scalar uncer-tainty u(x) as the normalized binary entropy of the final predicted positive-class probability. In prac-tice, the binary entropy is computed using the natu-ral logarithm, so the normalization constant Hmax 
+
+in Section 3.2.2 corresponds to the maximum en-tropy log 2 for a Bernoulli distribution. Using this unified definition allows us to compare triage be-havior and risk–coverage curves under a common uncertainty scale, rather than confounding the re-sults with method-specific uncertainty proxies. 
+
+D Additional Ablation Results 
+
+In Section 4.4, we analyzed the contributions of our uncertainty-aware components on two high-stakes tasks. Here, we extend this analysis to the remain-ing three outcomes on BioGPT: 30-day mortality, ICU stay longer than one day, and early discharge within 12 hours. The detailed results are reported in Table 5. These results corroborate the findings presented in the main text. We observe that introducing either the individual calibration term Lind or the cohort-aware alignment term Lcoh consistently reduces calibration error (Brier score, NLL, and AURC) compared to the baseline. Notably, for the 30-day mortality task, Lind alone drives substantial gains in calibration while simultaneously boost-ing discriminative performance. Across all three tasks, the full CURA objective—combining both terms—achieves the best overall calibration perfor-mance. Furthermore, this improvement in reliabil-ity does not come at the cost of accuracy; CURA maintains, and in most cases slightly improves, the AUROC and AUPRC scores relative to the base-line. 
+
+E Sensitivity to Loss Weights 
+
+The relative strengths of the individual- and cohort-level regularizers are controlled by λind in Equa-tion 3 and λcoh through w(xi) in Equation 5. To evaluate the robustness of these choices, we con-duct a sensitivity analysis on BioGPT for the two high-stakes mortality tasks: 7-day mortality and in-hospital mortality. We first vary λind while fix-ing λcoh = 0 .01 , and then vary λcoh while fixing 
+
+λind = 0 .5. All other training and evaluation set-tings are identical to the main experiments. Tables 6 and 7 show that λind around 0.5 gives a strong balance between discrimination and cali-bration on both tasks. Increasing λind beyond 0.5 yields only modest additional calibration gains and can slightly hurt AUROC/AUPRC. For λcoh , small positive values in the range 0.01–0.05 consistently improve calibration metrics, whereas larger val-ues offer no clear further benefit. Overall, these results indicate that our default setting (λind =0.5, λ coh = 0 .01) lies in a stable region rather than being finely tuned to a single coefficient choice. 
+
+F Cohort-Aware Loss as Soft-Label Cross-Entropy 
+
+For completeness, we show that the combination of the base risk loss Lbase and the cohort-aware loss Lcoh can be equivalently written as a single cross-entropy with a cohort-informed soft label. Consider a single example x with binary label 
+
+y ∈ { 0, 1}, cohort risk q(x) ∈ [0 , 1] , and ensemble-averaged prediction ¯p(x) ∈ (0 , 1) . Denote the binary cross-entropy between a prediction p and target r by 
+
+CE( p, r ) = −[r log p + (1 − r) log(1 − p)].
+
+(7) The per-example contributions of the base loss and the cohort-aware loss are 
+
+ℓbase (x) = CE (¯p(x), y ),ℓcoh (x) = w(x) CE (¯p(x), q (x)), (8) where w(x) = λcoh ˆH(q(x)) ≥ 0. Their sum can be written as 
+
+ℓbase (x) + ℓcoh (x) = 
+
+−
+
+[
+
+y log ¯ p(x) + (1 − y) log (1 − ¯p(x))]
+
+− w(x)
+
+[
+
+q(x) log ¯ p(x)+ (1 − q(x)) log (1 − ¯p(x))]
+
+.
+
+(9) Grouping the coefficients of log ¯ p(x) and 34013 Task Method AUROC ↑ AUPRC ↑ Brier ↓ NLL ↓ AURC ↓
+
+7-day Mortality 
+
+Baseline 0.863 (0.011) 0.080 (0.011) 0.068 (0.009) 0.246 (0.029) 0.030 (0.023) Deep Ensemble 0.863 (0.009) 0.081 (0.007) 0.070 (0.010) 0.242 (0.027) 0.025 (0.004) MC Dropout 0.864 (0.009) 0.081 (0.008) 0.070 (0.010) 0.250 (0.024) 0.025 (0.009) 
+
+CURA (Ours) 0.863 (0.011) 0.082 (0.008) 0.056 (0.011) 0.187 (0.023) 0.010 (0.003) 
+
+30-day Mortality 
+
+Baseline 0.876 (0.005) 0.228 (0.009) 0.101 (0.003) 0.316 (0.006) 0.033 (0.002) Deep Ensemble 0.874 (0.005) 0.226 (0.011) 0.097 (0.002) 0.304 (0.003) 0.031 (0.001) MC Dropout 0.876 (0.005) 0.228 (0.009) 0.101 (0.003) 0.315 (0.007) 0.033 (0.002) 
+
+CURA (Ours) 0.876 (0.005) 0.226 (0.007) 0.088 (0.003) 0.267 (0.005) 0.021 (0.001) 
+
+In-hospital Mortality 
+
+Baseline 0.675 (0.015) 0.033 (0.004) 0.138 (0.005) 0.422 (0.011) 0.076 (0.005) Deep Ensemble 0.671 (0.016) 0.033 (0.004) 0.131 (0.006) 0.404 (0.015) 0.070 (0.006) MC Dropout 0.676 (0.015) 0.033 (0.004) 0.139 (0.006) 0.426 (0.014) 0.077 (0.006) 
+
+CURA (Ours) 0.678 (0.013) 0.033 (0.003) 0.116 (0.007) 0.348 (0.017) 0.046 (0.005) 
+
+ICU Stay - 1 
+
+Baseline 0.624 (0.006) 0.044 (0.003) 0.150 (0.008) 0.470 (0.017) 0.128 (0.009) Deep Ensemble 0.621 (0.007) 0.043 (0.004) 0.140 (0.009) 0.445 (0.020) 0.109 (0.006) MC Dropout 0.626 (0.008) 0.045 (0.004) 0.151 (0.009) 0.473 (0.018) 0.129 (0.006) 
+
+CURA (Ours) 0.630 (0.006) 0.044 (0.003) 0.123 (0.009) 0.375 (0.019) 0.057 (0.006) 
+
+Early Discharge - 12 
+
+Baseline 0.655 (0.014) 0.066 (0.019) 0.120 (0.020) 0.406 (0.053) 0.095 (0.021) Deep Ensemble 0.654 (0.014) 0.066 (0.014) 0.111 (0.023) 0.381 (0.063) 0.082 (0.023) MC Dropout 0.655 (0.015) 0.063 (0.016) 0.130 (0.022) 0.431 (0.056) 0.112 (0.027) 
+
+CURA (Ours) 0.656 (0.016) 0.068 (0.013) 0.100 (0.024) 0.317 (0.064) 0.042 (0.017) 
+
+Table 3: Performance of BioClinicalBERT on five clinical risk prediction tasks. Results are reported as mean (standard deviation) across five-fold cross-validation. “ICU Stay - 1” refers to ICU stays longer than one day, and “Early Discharge - 12” refers to early discharge within 12 hours. 
+
+Task Method AUROC ↑ AUPRC ↑ Brier ↓ NLL ↓ AURC ↓
+
+30-day Mortality 
+
+Baseline 0.876 (0.003) 0.228 (0.013) 0.111 (0.001) 0.334 (0.004) 0.034 (0.001) Deep Ensemble 0.876 (0.003) 0.230 (0.012) 0.109 (0.001) 0.327 (0.003) 0.034 (0.001) MC Dropout 0.876 (0.003) 0.229 (0.012) 0.111 (0.001) 0.333 (0.003) 0.035 (0.001) 
+
+CURA (Ours) 0.876 (0.003) 0.228 (0.013) 0.098 (0.002) 0.289 (0.002) 0.024 (0.001) 
+
+7-day Mortality 
+
+Baseline 0.859 (0.010) 0.080 (0.007) 0.073 (0.005) 0.241 (0.016) 0.018 (0.003) Deep Ensemble 0.859 (0.008) 0.083 (0.009) 0.071 (0.004) 0.234 (0.010) 0.017 (0.002) MC Dropout 0.859 (0.008) 0.082 (0.009) 0.073 (0.005) 0.241 (0.015) 0.019 (0.003) 
+
+CURA (Ours) 0.860 (0.008) 0.077 (0.006) 0.064 (0.003) 0.196 (0.007) 0.010 (0.001) 
+
+In-hospital Mortality 
+
+Baseline 0.685 (0.012) 0.034 (0.002) 0.169 (0.005) 0.478 (0.010) 0.097 (0.005) Deep Ensemble 0.684 (0.012) 0.034 (0.002) 0.165 (0.007) 0.466 (0.016) 0.093 (0.008) MC Dropout 0.685 (0.012) 0.034 (0.002) 0.170 (0.005) 0.480 (0.010) 0.098 (0.005) 
+
+CURA (Ours) 0.684 (0.012) 0.034 (0.002) 0.150 (0.006) 0.419 (0.013) 0.071 (0.006) 
+
+ICU Stay - 1 
+
+Baseline 0.645 (0.013) 0.045 (0.004) 0.188 (0.006) 0.551 (0.013) 0.157 (0.013) Deep Ensemble 0.643 (0.011) 0.046 (0.004) 0.182 (0.004) 0.535 (0.012) 0.144 (0.011) MC Dropout 0.645 (0.013) 0.045 (0.003) 0.190 (0.006) 0.558 (0.015) 0.162 (0.016) 
+
+CURA (Ours) 0.647 (0.013) 0.046 (0.004) 0.170 (0.010) 0.483 (0.023) 0.109 (0.013) 
+
+Early Discharge - 12 
+
+Baseline 0.668 (0.014) 0.067 (0.017) 0.103 (0.007) 0.353 (0.018) 0.082 (0.015) Deep Ensemble 0.666 (0.014) 0.071 (0.016) 0.092 (0.006) 0.320 (0.015) 0.062 (0.006) MC Dropout 0.667 (0.015) 0.068 (0.016) 0.107 (0.007) 0.364 (0.018) 0.085 (0.013) 
+
+CURA (Ours) 0.670 (0.014) 0.056 (0.012) 0.082 (0.005) 0.262 (0.017) 0.025 (0.004) 
+
+Table 4: Performance of ClinicalBERT on five clinical risk prediction tasks. Results are reported as mean (standard deviation) across five-fold cross-validation. “ICU Stay - 1” refers to ICU stays longer than one day, and “Early Discharge - 12” refers to early discharge within 12 hours. 34014 Method AUROC AUPRC Brier NLL AURC                                                                   
+
+> 30-day Mortality
+> Baseline 0.881 0.270 0.064 0.231 0.024 w/ Lind 0.890 0.280 0.045 0.148 0.012 w/ Lcoh 0.881 0.268 0.053 0.212 0.023
+> CURA 0.890 0.280 0.038 0.146 0.009
+> ICU Stay - 1
+> Baseline 0.579 0.035 0.105 0.350 0.064 w/ Lind 0.584 0.035 0.086 0.295 0.049 w/ Lcoh 0.579 0.035 0.094 0.330 0.063
+> CURA 0.584 0.035 0.085 0.288 0.040
+> Early Discharge - 12
+> Baseline 0.587 0.027 0.018 0.085 0.007 w/ Lind 0.594 0.031 0.013 0.067 0.006
+> w/ Lcoh 0.587 0.028 0.016 0.076 0.006 CURA 0.594 0.031 0.010 0.056 0.006
+
+Table 5: Full ablation study results on BioGPT for the remaining clinical tasks. We isolate the contributions of individual calibration Lind and cohort alignment Lcoh .Standard deviations are omitted for brevity. 
+
+log (1 − ¯p(x)) yields 
+
+ℓbase (x) + ℓcoh (x) = 
+
+−
+
+[(y + w(x)q(x)) log ¯ p(x)+ (1 − y + w(x)(1 − q(x)) ) log (1 − ¯p(x))]
+
+.
+
+(10) Define the mixing weight 
+
+γ(x) = w(x)1 + w(x) ∈ [0 , 1) , (11) and the cohort-aware soft label 
+
+t(x) = (1 − γ(x)) y + γ(x) q(x)= y + w(x)q(x)1 + w(x) . (12) Using 1 − t(x) = 1−y+w(x)(1 −q(x)) 1+ w(x) , we can rewrite the sum as 
+
+ℓbase (x)+ ℓcoh (x) = (1 + w(x)) CE (¯p(x), t (x)).
+
+(13) Taking expectations over (x, y ) gives 
+
+Lbase + Lcoh = E(x,y )
+
+[(1 + w(x)) CE (¯p(x), t (x))] ,
+
+(14) showing that our objective is equivalent to optimiz-ing a cross-entropy loss with a cohort-informed soft label t(x) and a sample-dependent weight 1+ w(x).This interpretation highlights Lcoh as a form of neighborhood-informed label smoothing that fo-cuses more strongly on ambiguous patient cohorts. 
+
+G Definition of False Reassurance Rate 
+
+In the diagnostic testing literature, the false reas-surance rate is commonly used to quantify the risk of missed disease among patients who receive a negative test result. Classical definitions take the false reassurance rate to be the complement of the negative predictive value, that is FRR = 1 −NPV = false negatives false negatives + true negatives ,
+
+representing the proportion of diseased individuals among all test-negative patients (Mitchell, 2005). This notion captures an important failure mode in screening programmes: patients who are incor-rectly reassured by a negative result. In our setting, models output both a predicted risk score p(x) and an uncertainty score u(x) for each patient x. We are specifically concerned with the subset of high-risk patients who are assigned to a region that appears both low-risk and highly certain. To formalize this, we define a safe region using thresholds τ :
+
+S = {x : u(x) < τ, p (x) < τ }.
+
+We then define the task-specific False Reassurance Rate (FRR) as FRR =
+
+∣∣{x : y = 1 , x ∈ S} ∣∣∣∣{x : y = 1 }∣∣ , (15) where y = 1 denotes that the patient experiences the adverse outcome, and | · | denotes set cardi-nality. Intuitively, FRR measures the fraction of truly positive patients whose predictions fall into the low-uncertainty, low-risk region S, i.e., high-risk patients who are confidently misclassified as safe. Our definition is conceptually related to the clas-sical false reassurance rate, but differs in two as-pects. First, the denominator conditions on all posi-tive cases rather than all test-negative cases, reflect-ing the perspective of “among high-risk patients, how many are given misleading reassurance?”. Sec-ond, by restricting to the safe region S, we only count those false negatives for which the model is simultaneously low-risk and low-uncertainty, which are the most concerning from a triage stand-point. In the experiments reported in Section 5.3, we set τ = 0 .1 for all tasks. 34015 Method / Setting AUROC ↑ AUPRC ↑ Brier ↓ NLL ↓ AURC ↓
+
+Baseline 0.852 0.127 0.032 0.120 0.008 
+
+Vary λind (λcoh = 0 .01 )
+
+λind = 0 .05 0.859 0.127 0.032 0.121 0.007 
+
+λind = 0 .10 0.887 0.150 0.030 0.127 0.006 
+
+λind = 0 .20 0.891 0.157 0.025 0.110 0.004 
+
+λind = 0 .50 0.892 0.160 0.015 0.075 0.002 
+
+λind = 1 .00 0.890 0.159 0.012 0.075 0.002 
+
+Vary λcoh (λind = 0 .5)
+
+λcoh = 0 .005 0.892 0.160 0.016 0.081 0.003 
+
+λcoh = 0 .010 0.892 0.160 0.015 0.075 0.002 
+
+λcoh = 0 .050 0.893 0.161 0.013 0.072 0.001 
+
+λcoh = 0 .100 0.892 0.160 0.015 0.076 0.002 
+
+λcoh = 0 .500 0.892 0.161 0.016 0.078 0.003 
+
+Table 6: Sensitivity of CURA to λind and λcoh on BioGPT for 7-day mortality. All other training and evaluation settings are identical to the main experiment. Standard deviations are omitted for brevity. 
+
+Method / Setting AUROC ↑ AUPRC ↑ Brier ↓ NLL ↓ AURC ↓
+
+Baseline 0.621 0.027 0.044 0.175 0.015 
+
+Vary λind (λcoh = 0 .01 )
+
+λind = 0 .05 0.630 0.028 0.042 0.169 0.014 
+
+λind = 0 .10 0.638 0.029 0.042 0.164 0.013 
+
+λind = 0 .20 0.642 0.029 0.038 0.150 0.012 
+
+λind = 0 .50 0.641 0.029 0.029 0.124 0.011 
+
+λind = 1 .00 0.639 0.028 0.023 0.113 0.010 
+
+Vary λcoh (λind = 0 .5)
+
+λcoh = 0 .005 0.642 0.029 0.031 0.129 0.011 
+
+λcoh = 0 .010 0.641 0.029 0.029 0.124 0.011 
+
+λcoh = 0 .050 0.642 0.029 0.026 0.116 0.009 
+
+λcoh = 0 .100 0.641 0.029 0.031 0.125 0.012 
+
+λcoh = 0 .500 0.641 0.029 0.033 0.128 0.013 
+
+Table 7: Sensitivity of CURA to λind and λcoh on BioGPT for in-hospital mortality. All other training and evaluation settings are identical to the main experiment. Standard deviations are omitted for brevity. 
+
+H Sensitivity Analysis of False Reassurance Thresholds 
+
+In Section 5.3, we presented False Reassurance Rates (FRR) using a fixed safety threshold of 
+
+τ = 0 .1 for both uncertainty and predicted risk. To evaluate the robustness of CURA against this hy-perparameter choice, we report FRR results using stricter ( τ = 0 .05 ) and looser ( τ = 0 .15 ) thresh-olds in Figure 7 and Figure 8, respectively. Results across both alternative thresholds exhibit patterns consistent with the main-text findings at τ = 0 .1.Tightening the threshold to τ = 0 .05 constrains the safe region and lowers FRR for all methods; however, CURA generally maintains the lowest or near-lowest false reassurance rates on the acute mortality and early-discharge tasks, while remain-ing competitive with top baselines on in-hospital mortality and ICU stay prediction. Conversely, relaxing the threshold to τ = 0 .15 universally in-creases FRR, yet CURA continues to yield fewer confidently misclassified high-risk patients than al-ternative approaches, demonstrating particularly distinct gains on the 7-day mortality, 30-day mor-tality, and early-discharge tasks. Taken together with Figure 4, these sensitivity analyses indicate that CURA’s reduction in false reassurance is not dependent on a finely tuned choice of τ , and its safety benefits persist under both stricter and more permissive operating points of the BioGPT back-bone. 34016 30-day Mortality 7-day Mortality In-hospital Mortality ICU Stay - 1 Early Discharge - 12    
+
+> Prediction Task
+> 0.0 0.2 0.4 0.6
+> False Reassurance Rate
+> Baseline Deep Ensemble MC Dropout CURA
+> False Reassurance at Low Uncertainty
+
+Figure 7: False reassurance rates ( τ = 0 .05 ) at low uncertainty across five prediction tasks with BioGPT. Lower values indicate fewer high-risk patients being confidently misclassified as safe. 30-day Mortality 7-day Mortality In-hospital Mortality ICU Stay - 1 Early Discharge - 12    
+
+> Prediction Task
+> 0.0 0.2 0.4 0.6 0.8
+> False Reassurance Rate
+> Baseline Deep Ensemble MC Dropout CURA
+> False Reassurance at Low Uncertainty
+
+Figure 8: False reassurance rates ( τ = 0 .15 ) at low uncertainty across five prediction tasks with BioGPT. Lower values indicate fewer high-risk patients being confidently misclassified as safe. 
+
+I Runtime Comparison 
+
+To assess the practical overhead of CURA, we com-pare the total uncertainty fine-tuning runtime of different methods under identical hardware, clas-sifier architecture, and early-stopping settings on the 7-day mortality task with the BioGPT back-bone. All methods use the same extracted embed-dings and the same multi-head classifier, so the comparison isolates the overhead introduced by the uncertainty mechanism itself. For CURA, the K-nearest-neighbor cohorts are pre-computed once at the beginning of each run, and this pre-computation time is included in the reported GPU hours. As shown in Table 8, CURA has runtime com-parable to, and in our setting slightly shorter than, the single-model baseline, while remaining sub-stantially more efficient than Deep Ensembles. This result supports our claim that CURA func-tions as a lightweight plug-in objective: it adds two loss terms computed from existing proba-bilities and pre-computed neighborhoods, with-out requiring multiple independently trained back-bones or repeated stochastic inference, resonat-ing with broader trends toward lightweight or 
+
+Method Time / GPU hours 
+
+Baseline 1.03 Deep Ensemble 4.43 MC Dropout 1.08 CURA (Ours) 0.94 
+
+Table 8: Runtime comparison of uncertainty fine-tuning methods on the 7-day mortality task with the BioGPT backbone. Values denote total GPU hours on a single NVIDIA A40 GPU under identical hardware, classifier architecture, and early-stopping settings, aggregated over five-fold cross-validation. For CURA, the one-time pre-computation of K-nearest-neighbor cohorts is included in the reported runtime. 
+
+data-efficient post-training objectives, including uncertainty-aware fine-tuning, weak supervision, active-learning-based reward modeling, and bal-anced preference optimization (Krishnan et al., 2024; Tong et al., 2024; Wang et al., 2025; Duan et al., 2025). 34017 J Computing Infrastructure and Resources 
+
+J.1 Model Sizes 
+
+We experiment with three backbone language mod-els. BERT-based models such as ClinicalBERT and BioClinicalBERT contain approximately 110 million parameters, while the GPT-style BioGPT backbone contains about 347 million parameters. 
+
+J.2 Hardware and Compute Environment 
+
+Most experiments were conducted on A40 GPUs with 48 GB of VRAM provided by Research In-frastructure Services compute1 cluster, which is a secure service approved for ePHI, protected, or confidential data. 
+
+K Use of AI Assistants 
+
+AI assistants were used only for grammar and syn-tax revision of the manuscript. All experiments, analyses, and substantive writing were conceived and produced by the authors without AI-generated content. 34018

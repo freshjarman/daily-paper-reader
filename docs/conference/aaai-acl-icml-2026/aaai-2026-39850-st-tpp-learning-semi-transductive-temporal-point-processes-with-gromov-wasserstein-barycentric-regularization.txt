@@ -1,0 +1,675 @@
+Title: ST-TPP: Learning Semi-Transductive Temporal Point Processes with Gromov-Wasserstein Barycentric Regularization
+
+URL Source: https://ojs.aaai.org/index.php/AAAI/article/download/39850/43811
+
+Number of Pages: 9
+
+Markdown Content:
+# ST-TPP: Learning Semi-Transductive Temporal Point Processes with Gromov-Wasserstein Barycentric Regularization 
+
+## Qingmei Wang 1, Tianyu Huang 2, Yujie Long 3, Yuxin Wu 1,Fanmeng Wang 1, Xi Sun 4, Junchi Yan 2, Hongteng Xu 1* 
+
+> 1
+
+Gaoling School of Artificial Intelligence, Renmin University of China 
+
+> 2
+
+School of Artificial Intelligence, Shanghai Jiao Tong University 
+
+> 3
+
+School of Computing and Artificial Intelligence, Fudan University 
+
+> 4
+
+AI Platform Department, MetaLight HK Limited 
+
+Abstract 
+
+The generative mechanisms behind real-world event se-quences are often heterogeneous, leading to data that pos-sesses inherent clustering structures. However, most exist-ing temporal point processes (TPPs) treat different event sequences independently, without leveraging the clustering structures when predicting events. In this study, we design and learn a novel semi-transductive temporal point process (ST-TPP), which explicitly improves prediction performance by co-training sequence clusters. In particular, given a set of event sequences, our method learns a neural TPP together with cluster centers of the sequences. Besides maximizing the likelihood of the event sequences, we leverage a data-based kernel matrix and prior knowledge to regularize the sequence embeddings, leading to a Gromov-Wasserstein barycentric (GWB) regularizer. Based on the optimal transport plans as-sociated with the GWB regularizer, we derive the cluster cen-ters by the push-forward of the sequence embeddings. When a new sequence comes, the learned model first assigns a clus-ter center to the sequence and then jointly encodes the se-quence and the cluster center to predict future events, lead-ing to a semi-transductive prediction scheme. Experiments demonstrate that ST-TPP achieves competitive sequence clus-tering results and strong prediction performance. 
+
+## Introduction 
+
+As a powerful statistical tool, temporal point process (TPP) is commonly used to model and predict event sequences in the continuous-time domain. In the past decades, many TPPs have been proposed, e.g., Hawkes process (Hawkes 1971; Liniger 2009), self-correcting process (Isham and Westcott 1979; Xu et al. 2016), and those neural TPPs (Du et al. 2016; Mei and Eisner 2017; Zuo et al. 2020; Wang et al. 2025; Gong et al. 2025). These models have achieved encourag-ing performance in various sequence modeling tasks, e.g., health data management (Enguehard et al. 2020), network analysis (Zhao et al. 2015; Kong et al. 2023), and financial engineering (Bacry, Mastromatteo, and Muzy 2015). Despite their usefulness, the above TPPs seldom con-sider the clustering structures of event sequences. Real-
+
+> *
+
+Corresponding author: hongtengxu@ruc.edu.cn Copyright © 2026, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+world event sequences often yield various generative mech-anisms and thus have clustering structures naturally, e.g., the admission behaviors of patients with different diseases, the job-hopping behaviors of employees in different industries, and so on. Ignoring such clustering information may lead to model misspecification and suboptimal model performance. Typically, we can define various distance metrics for event sequences (Iwayama, Hirata, and Aihara 2017; Xiao et al. 2017; Xu, Luo, and Zha 2021) and then cluster event se-quences by spectral clustering (Ng, Jordan, and Weiss 2001). Unfortunately, this transductive strategy does not model the generative mechanisms of event sequences and thus can-not apply to event prediction. Recently, mixture models of TPPs (Luo et al. 2015; Xu and Zha 2017a; Zhang et al. 2022) are applied to learn multiple TPPs for the event se-quences with clustering structures. However, the complexity of these mixture models is linear with the number of clusters, and they suffer a high risk of over-fitting because of learn-ing multiple TPPs. To our knowledge, how to incorporate sequence clusters with event prediction is still a significant open problem in the community of TPP modeling. In this study, we propose a novel semi-transductive tem-poral point process (ST-TPP) and corresponding learning method with the help of optimal transport (OT) (M´ emoli 2011a), leading to a learning paradigm of TPP enhancing event prediction with proper clustering information. As il-lustrated in Figure 1, ST-TPP consists of a sequence encoder and a neural intensity predictor, working for sequence em-bedding and event prediction, respectively. The sequence en-coder is associated with the cluster centers of the training sequences’ embeddings. In both training and testing phases, given a sequence, the sequence encoder obtains the event-and sequence-level embeddings and assigns a cluster center to the sequence. The predictor leverages the three kinds of information to predict future events for the sequence. This prediction paradigm leads to the so-called semi-transductive learning strategy (Alzubaidi et al. 2012; Ge et al. 2023), which combines the inductive embeddings of the target se-quence with the transductive clustering information learned from the whole training set. We learn the ST-TPP model in a regularized maximum likelihood estimation (MLE) framework. As shown in Fig-The Fortieth AAAI Conference on Artificial Intelligence (AAAI-26) 
+
+26435 Sequence Encoder & Cluster Centers A Semi-Transductive TPP MLE ::Sequence Embeddings Cluster Centers  
+
+> by Pushforward Operation
+> Sequence Distances Gromov-Wasserstein Barycentric Regularization GW Distance GW Distance Clustering Prior Knowledge Sequence Similarities Embedding Similarities Neural Intensity Predictor Training Sequences with Clustering Structures
+
+(a) Training New Sequence Sequence Encoder & Clusters Neural Intensity Predictor Assigned Cluster Sequence Embedding Event Embedding Predicted Events 
+
+(b) Testing 
+
+Figure 1: The training and testing schemes of ST-TPP. ure 1(a), the embeddings of training sequences are reg-ularized to minimize the Gromov-Wasserstein barycenter (GWB) (Peyr´ e, Cuturi, and Solomon 2016) of the kernel matrices deriving from the data and prior knowledge, re-spectively. Based on the OT plans associated with the GWB regularizer, the cluster centers can be obtained by the push-forward operation of the sequence embeddings (Peyr´ e, Cu-turi et al. 2019). Note that the proposed learning method is compatible with stochastic gradient descent, with low com-putational complexity. ST-TPP provides a new solution to enhance event predic-tion with sequence clusters. Its semi-transductive prediction paradigm is applicable to most existing TPP models that in-volve event and sequence embedding, which may inspire new TPP modeling strategies. Experiments on both synthetic and real-world datasets demonstrate the effectiveness of ST-TPP. Compared with state-of-the-art TPP models, ST-TPP achieves competitive prediction accuracy and derive clus-tered sequence embeddings, whose model performance and interpretability are improved significantly. 
+
+## Preliminaries and Related Work 
+
+TPP and Its MLE Framework Denote an event sequence with N events as s = {(tn, c n)}Nn=1 , where (tn, c n) is the 
+
+n-th event, tn ∈ [0 , T ] is its timestamp, and cn ∈ C =
+
+{1, ..., C } is its event type. A multivariate TPP is denoted as 
+
+N (θ) = {Nc(t; θ)}c∈C ,t ∈[0 ,T ], where θ denotes the model parameters and Nc(t; θ) is a stochastic process counting the number of the type-c events till time t. The TPP is char-acterized by a multivariate intensity function, denoted as 
+
+λ(t) = {λc(t)}c∈C ,t ∈[0 ,T ], where 
+
+λc(t)d t = d E[Nc(t; θ)|H C 
+
+> t
+
+], ∀c ∈ C . (1) Here, λc(t) represents the expected instantaneous rate of the type-c event happening at time t given the historical events 
+
+HC 
+
+> t
+
+= {(tn, c n) ∈ s|tn < t }.Given M observed event sequences, i.e., S = {sm}Mm=1 ,we can learn the TPP in the following maximum likelihood estimation (MLE) framework (Liniger 2009): 
+
+min θ − XMm=1 log L(sm; θ). (2) Here, L(sm; θ) is the likelihood of the m-th sequence sm =
+
+{(tn,m , c n,m )}Nm
+
+> n=1
+
+, i.e., 
+
+L(sm; θ) = 
+
+> Nm
+
+Y
+
+> n=1
+
+λcn,m (tn,m ) exp 
+
+
+
+− X
+
+> c∈C
+
+Z T
+
+> 0
+
+λc(s)d s
+
+
+
+. (3) 
+
+TPPs Considering Sequence-level Clusters For model-ing event sequences with underlying clustering structures, a straightforward solution is learning a mixture model of multiple TPPs (Xu and Zha 2017a; Zhang et al. 2022), i.e., {wk, N (θk)}Kk=1 , where K is the number of clusters, 
+
+N (θk) is the TPP generating the k-th cluster’s event se-quences, and wk is the probability of the k-th cluster. The 
+
+{N (θk)}Kk=1 can be classic TPPs (like Hawkes processes) or neural ones. The MLE of this mixture model, i.e., 
+
+min {wk ,θ k }Kk=1 − XMm=1 log 
+
+ X Kk=1 wkL(sm; θk)
+
+
+
+, (4) can be solved by the expectation-maximization (EM) algo-rithm (Xu and Zha 2017a). Given a new sequence, the mix-ture model selects the TPP with the highest likelihood to pre-dict its future events, in which the model essentially degrades to a single TPP and fails to fully leverage the learned clus-tering information. 
+
+Optimal Transport-Based Sequence Clustering Given 
+
+M event sequences with K clusters, the key step to cluster them is defining a distance metric for the event sequences. To achieve this aim, many valid distances have been pro-posed, including the counting-based distance in (Iwayama, Hirata, and Aihara 2017), the Wasserstein distance in (Xiao et al. 2017), and the hierarchical optimal transport (HOT) distance in (Xu, Luo, and Zha 2021). Denote the distance matrix of the sequences as D = [ d(sm, sm′ )] ∈ RM ×M .We can further define a kernel function based on the distance (e.g., a Gaussian kernel with a bandwidth σ), resulting in a kernel matrix fK = [exp( −d2(sm, sm′ )/(2 h2))] ∈ RM ×M
+
+to capture the pairwise similarities of the sequences. As shown in (Xu and Zha 2017b), this kernel matrix reflects the clustering structure of the event sequences. Recently, the work in (Xu, Luo, and Carin 2019; Chowd-hury and Needham 2021) demonstrates that computing the Gromov-Wasserstein (GW) distance (M´ emoli 2011b) be-tween fK and an identity matrix with size K × K (denoted as IK ) leads to a generalized spectral clustering method. 
+
+Definition 1 (Gromov-Wasserstein distance) . Denote Xμ,κ 1
+
+and Yν,κ 2 as two metric-measure spaces, respectively, where 26436 μ, and ν are probability measures, and κ1 : X 2 7 → R+
+
+and κ2 : Y2 7 → R+ are two kernel functions. The p-order GW distance between the two spaces, denoted as 
+
+GW p(Xμ,κ 1 , Yν,κ 2 ), is defined as 
+
+inf π∈Πμ,ν 
+
+Z 
+
+> X2×Y 2
+
+rp(x, x ′, y, y ′)d π(x, y )d π(x′, y ′)
+
+ 1
+
+> p
+
+,
+
+where π ∈ Πμ,ν = {π ≥ 0| R 
+
+> X
+
+dπ(x, y ) =
+
+ν(y), R 
+
+> Y
+
+dπ(x, y ) = μ(x)} is called transport plan between 
+
+μ and ν. r(x, x ′, y, y ′) = |κ1(x, x ′) − κ2(y, y ′)| is the dis-tance between the kernel functions’ values. 
+
+According to the definition and Proposition 1 in (Peyr´ e, Cuturi, and Solomon 2016), the discrete 2-order GW dis-tance between two kernel matrices (i.e., GW 2(K1, K2),where K1 ∈ RM ×M and K2 ∈ RL×L) is 
+
+min  
+
+> T∈ΠM,L
+
+ X  
+
+> m,m ′,l,l ′
+
+[|K1(m, m ′) − K2(l, l ′)|2]
+
+1/2
+
+= min T ∈ΠM,L ⟨C(K1, K2, T ), T ⟩1/2.
+
+(5) 
+
+C(K1, K2, T ) = 1 
+
+> M
+
+(K1 ⊙ K1)1M ×L + 1 
+
+> L
+
+1M ×L(K2 ⊙
+
+K2)−2K1T K ⊤ 
+
+> 2
+
+, ⊙ is the Hadamard product, and ΠM,L =
+
+{T ∈ RM ×L 
+
+> +
+
+|T 1L = 1 
+
+> M
+
+1M , T ⊤1M = 1 
+
+> L
+
+1L} is the feasi-ble domain of the OT plan matrix T .Based on the work in (Xu, Luo, and Carin 2019; Chowd-hury and Needham 2021), we can cluster event sequences by computing GW 2(fK, IK ). The optimal transport plan, de-noted as T ∗ ∈ ΠM,K , corresponds to the joint distribution of the M sequences and K clusters and thus indicates the clustering results. 1 However, as aforementioned, how to ap-ply the clustering results in event prediction is still an open problem for TPP models. 
+
+## Proposed Method 
+
+Semi-Transductive Paradigm for Event Prediction 
+
+Different from existing TPPs, our ST-TPP model applies a semi-transductive paradigm for event prediction. As shown in Figure 1, ST-TPP consists of a sequence encoder and a neural intensity predictor, working for embedding event se-quences and predicting events, respectively. In addition, K
+
+cluster centers of sequence-level embeddings are learned as-sociated with the encoder, which stores the clustering infor-mation of training data. Specifically, the key modules of ST-TPP are shown below. 
+
+Sequence Encoder As shown in (Wang et al. 2023), most existing TPPs embed event sequences when calculating their intensity functions. Typically, given an event sequence s
+
+with N events, we obtain its event-level embeddings as 
+
+{hn}Nn=1 = g(s), (6) where hn ∈ RD is the D-dimensional embedding of the 
+
+n-th event. g denotes the sequence encoder, which can be implemented as a continuous-time recurrent neural net-work (Du et al. 2016; Mei and Eisner 2017), a Transformer 
+
+> 1The details of GW distance and generalized spectral clustering are shown in supplementary file.
+
+encoder (Zhang et al. 2020; Zuo et al. 2020), or any other sequential neural networks. Given event-level embeddings, we can obtain a sequence-level embedding by mean-pooling, i.e., 
+
+h(t) = MeanPooling ({hn}tn≤t) ∈ RD , (7) where h(t) denotes the sequence embedding till time t. Ac-cordingly, h(tN ) is the embedding of the whole sequence. In addition, the ST-TPP model contains K learnable clus-ter centers associated with the sequence encoder, denoted as 
+
+A = [ a1, ..., aK ]⊤ ∈ RK×D . Given an arbitrary sequence-level embedding h(t), we can assign the closest cluster cen-ter to it, i.e., 
+
+a(t) = arg min a∈{ ak }Kk=1 ∥h(t) − ak∥2. (8) The selected cluster center, denoted as a(t), works as the 
+
+cluster-level embedding , which contains the structural infor-mation of the whole training dataset rather than the temporal information of an individual sequence. 
+
+Neural Intensity Predictor Suppose that we observe N
+
+events happening till time t, i.e., s = {(tn, c n)}Nn=1 , and would like to predict a possible event happening at time t′
+
+(t′ > t ). The proposed neural intensity predictor leverages the embeddings at event, sequence, and cluster levels jointly to model the multivariate intensity function at time t′, i.e., 
+
+λ(t′) = f (Concat (hN , h(t′)
+
+| {z }
+
+> inductive
+
+, a(t′)
+
+| {z } 
+
+> transductive
+
+), t ′ − tN
+
+| {z } 
+
+> time interval
+
+), (9) where Concat (· · · ) denotes the concatenation operation of vectors. f is a neural network modeling the intensity func-tion, which is implemented as a multi-layer perceptron (MLP). hN is the embedding of the last event, whose times-tamp tN is the closest timestamp to the target time t′. The time interval t′ −t captures the decay of the observed events’ influence on the future event at time t′. Given λ(t′), we pre-dict event at time t′ by c∗ = arg max c∈C λc(t′).As shown in (9), our model combines the embedding in-formation of the target sequence with the clustering informa-tion from other sequences. The former is inductive because the event- and sequence-level embeddings are derived di-rectly from the parametric sequence encoder, which is inde-pendent with other sequences. In contrast, the latter is trans-ductive — the cluster-level embedding is selected from the cluster centers learned from the sequence-level embeddings of training sequences in a nonparametric way. Our model is motivated by the following facts: • The event-level embedding mainly captures the short-range event dependency. Especially when f is imple-mented by recurrent neural networks, the early events are likely to be forgotten with the increase of time, and they will contribute little to the event-level embedding hN .• The sequence-level embedding aggregates event-level embeddings evenly, without considering the decay of early events’ impacts. As a result, h(t′) can capture long-range event dependency better than hN .• The cluster-level embedding a(t′) allows the target se-quence to leverage the information of the similar se-quences used in the training phase, it helps enhance the robustness of event prediction. 26437 Our model leverages the three kinds of embeddings jointly, which is expected to achieve better prediction accuracy. 
+
+Gromov-Wasserstein Barycentric Regularization 
+
+In the training phase, we learn ST-TPP (including the se-quence encoder, the neural intensity predictor, and the clus-ter centers) in a regularized MLE framework, in which a GWB regularizer is applied to obtain the cluster centers. 
+
+Joint utilization of data and prior knowledge Specifi-cally, given M training sequences {sm}Mm=1 , we can ob-tain their sequence-level embeddings, denoted as H =[h(1) (tN1 ), ..., h(M )(tNM )] ⊤ ∈ RM ×D . The sequence-level embeddings can be used to measure the similarity among the event sequences. Given arbitrary two sequence-level em-beddings, we can apply a Gaussian kernel to measure their similarity, leading to the following kernel matrix, denoted as 
+
+K = [exp( −∥ h(m) − h(m′)∥22/(2 σ2))] ∈ RM ×M .Inspired by the GW-based generalized spectral clustering methods (Xu, Luo, and Carin 2019; Chowdhury and Need-ham 2021), we regularize the kernel matrix K by 
+
+min K
+
+> GWB (K)
+
+z }| {
+
+GW 22 (K, fK)
+
+| {z }
+
+> data-centric
+
++ GW 22 (K, IK )
+
+| {z }
+
+> prior knowledge
+
+. (10) Here, the first term is data-centric, corresponding to the GW distance between the embedding-based kernel K and the se-quence distance-based kernel fK. Penalizing this term en-courages K to inherit the similarities obtained from the pairwise distances of the event sequences. The second term in (10) computes the GW distance between K and IK ,which follows the principle of the GW-based generalized spectral clustering. By penalizing this term, we impose the prior knowledge of clustering structure on K, encourag-ing the sequence-level embeddings to be clustered into K
+
+classes. Minimizing these two GW distances jointly leads to the proposed GWB regularizer of K, denoted as GWB (K).The optimal K is the GW barycenter of fK and IK (Peyr´ e, Cuturi, and Solomon 2016). • Remark 1. In the first term of (10), we apply GW dis-tance rather than the mean-square-error (i.e., ∥K− fK∥2 
+
+> F
+
+)to make the regularizer applicable in practice, especially in those large-scale applications. On one hand, given M
+
+sequences, we can select a subset of sequences and com-pute a small-sized fK in advance. 2 Without computing a kernel matrix with size M × M , we can reduce the com-putational complexity significantly when M is large. On the other hand, when M is large, we need to train the ST-TPP model by stochastic gradient descent, and ac-cordingly, compute a small-sized K for each batch of sequences. As a result, the rows and columns of fK are not aligned to those of K, and the mean-square-error be-comes inapplicable in such a situation.          
+
+> 2In this work, we apply the counting-based distance in (Iwayama, Hirata, and Aihara 2017) to compute the pairwise distance matrix of sequence and derive fKaccordingly.
+
+Algorithm 1: The computation of GW 2(K1, K2)
+
+Require: Kernel matrices K1 ∈ RM ×M , K2 ∈ RL×L, the weight of the proximal term λ. 
+
+> 1:
+
+Initialize b = 1 
+
+> L
+
+1L and T = 1 
+
+> M L
+
+1M ×L 
+
+> 2:
+
+While Not converge Do  
+
+> 3:
+
+G = exp ( − C(K1,K2,T ) 
+
+> λ
+
+) ⊙ T 
+
+> 4:
+
+While Not converge Do  
+
+> 5:
+
+a = 1M /(M Gb ), and then b = 1L/(LG⊤a) 
+
+> 6:
+
+T = ( ab ⊤) ⊙ G 
+
+> 7:
+
+return The OT plan T ∗ ← T , and GW 2(K1, K2)GW Distance GW Distance <latexit sha1_base64="FFRwTNd8H5ncy2U12dcZJgMVEu8=">AAACA3icbVDLSsNAFJ3UV62vqDvdDBbBVUlEqsuiG8FNBfuAJpTJ5LYdOnkwM1FKCLjxV9y4UMStP+HOv3HSZqGtB4Y5nHMv997jxZxJZVnfRmlpeWV1rbxe2djc2t4xd/faMkoEhRaNeCS6HpHAWQgtxRSHbiyABB6Hjje+yv3OPQjJovBOTWJwAzIM2YBRorTUNw+cB+aDYtyH1PEi7stJoL/0Jsv6ZtWqWVPgRWIXpIoKNPvml+NHNAkgVJQTKXu2FSs3JUIxyiGrOImEmNAxGUJP05AEIN10ekOGj7Xi40Ek9AsVnqq/O1ISyHw3XRkQNZLzXi7+5/USNbhwUxbGiYKQzgYNEo5VhPNAsM8EUMUnmhAqmN4V0xERhCodW0WHYM+fvEjapzW7XqvfnlUbl0UcZXSIjtAJstE5aqBr1EQtRNEjekav6M14Ml6Md+NjVloyip599AfG5w9UK5if</latexit> 
+
+˜K <latexit sha1_base64="s7hOLFIqOyyk5+MSzVjMv4EcIGc=">AAAB+XicbVBPS8MwHP11/pvzX9Wjl+AQPI1WZHocehG8THBusJWRpukWlqYlSQej9Jt48aCIV7+JN7+N6daDbj4Iebz3+5GX5yecKe0431ZlbX1jc6u6XdvZ3ds/sA+PnlScSkI7JOax7PlYUc4E7WimOe0lkuLI57TrT24LvzulUrFYPOpZQr0IjwQLGcHaSEPbzgZ+zAM1i8yV3ef50K47DWcOtErcktShRHtofw2CmKQRFZpwrFTfdRLtZVhqRjjNa4NU0QSTCR7RvqECR1R52Tx5js6MEqAwluYIjebq740MR6rIZiYjrMdq2SvE/7x+qsNrL2MiSTUVZPFQmHKkY1TUgAImKdF8ZggmkpmsiIyxxESbsmqmBHf5y6vk6aLhNhvNh8t666asowoncArn4MIVtOAO2tABAlN4hld4szLrxXq3PhajFavcOYY/sD5/AFlYlCQ=</latexit> 
+
+## K <latexit sha1_base64="hb97de8A5TD3AdhXU8HDYSVHE8s=">AAAB+3icbVDNS8MwHE3n15xfdR69BIfgabQi0+PQi+JlgvuArZQ0TbewNClJKo7Sf8WLB0W8+o94878x3XrQ6YOQx3u/H3l5QcKo0o7zZVVWVtfWN6qbta3tnd09e7/eUyKVmHSxYEIOAqQIo5x0NdWMDBJJUBww0g+mV4XffyBSUcHv9SwhXozGnEYUI20k365no0CwUM1ic2U3uX+b+3bDaTpzwL/ELUkDlOj49ucoFDiNCdeYIaWGrpNoL0NSU8xIXhuliiQIT9GYDA3lKCbKy+bZc3hslBBGQprDNZyrPzcyFKsinZmMkZ6oZa8Q//OGqY4uvIzyJNWE48VDUcqgFrAoAoZUEqzZzBCEJTVZIZ4gibA2ddVMCe7yl/+S3mnTbTVbd2eN9mVZRxUcgiNwAlxwDtrgGnRAF2DwCJ7AC3i1cuvZerPeF6MVq9w5AL9gfXwDr+6U4A==</latexit> 
+
+# I K <latexit sha1_base64="+Nw0yUtJKaD7c9ZBV5BQo65KpBs=">AAAB+3icbVDNS8MwHE3n15xfdR69BIcgHkYrMj0OvXicsC/YaknTbAtLk5Kk4ij9V7x4UMSr/4g3/xvTrQfdfBDyeO/3Iy8viBlV2nG+rdLa+sbmVnm7srO7t39gH1a7SiQSkw4WTMh+gBRhlJOOppqRfiwJigJGesH0Nvd7j0QqKnhbz2LiRWjM6YhipI3k29VhIFioZpG50nbmuw/nvl1z6s4ccJW4BamBAi3f/hqGAicR4RozpNTAdWLtpUhqihnJKsNEkRjhKRqTgaEcRUR56Tx7Bk+NEsKRkOZwDefq740URSqPZyYjpCdq2cvF/7xBokfXXkp5nGjC8eKhUcKgFjAvAoZUEqzZzBCEJTVZIZ4gibA2dVVMCe7yl1dJ96LuNuqN+8ta86aoowyOwQk4Ay64Ak1wB1qgAzB4As/gFbxZmfVivVsfi9GSVewcgT+wPn8A7heUYQ==</latexit> 
+
+T → <latexit sha1_base64="a61gRfXIgdWmp1nP3V0ZqDXVHn4=">AAAB+3icbVDNS8MwHE39nPOrzqOX4BDEw2iHTI9DLx4n7Au2WtI03cLSpCSpOMr+FS8eFPHqP+LN/8Z060E3H4Q83vv9yMsLEkaVdpxva219Y3Nru7RT3t3bPzi0jypdJVKJSQcLJmQ/QIowyklHU81IP5EExQEjvWBym/u9RyIVFbytpwnxYjTiNKIYaSP5dmUYCBaqaWyurD3z6w8Xvl11as4ccJW4BamCAi3f/hqGAqcx4RozpNTAdRLtZUhqihmZlYepIgnCEzQiA0M5ionysnn2GTwzSggjIc3hGs7V3xsZilUez0zGSI/VspeL/3mDVEfXXkZ5kmrC8eKhKGVQC5gXAUMqCdZsagjCkpqsEI+RRFibusqmBHf5y6ukW6+5jVrj/rLavCnqKIETcArOgQuuQBPcgRboAAyewDN4BW/WzHqx3q2PxeiaVewcgz+wPn8A752UYg==</latexit> 
+
+> 1
+
+T → <latexit sha1_base64="EwM1DJXaP+c9exlInHkHo2Ae9tc=">AAAB9XicbVDLSgMxFL1TX7W+qi7dBIvgqsyIVJdFN11WsA9ox5LJpG1oJhmSjFKG/ocbF4q49V/c+Tdm2llo64GQwzn3kpMTxJxp47rfTmFtfWNzq7hd2tnd2z8oHx61tUwUoS0iuVTdAGvKmaAtwwyn3VhRHAWcdoLJbeZ3HqnSTIp7M42pH+GRYENGsLHSQz+QPNTTyF5pYzYoV9yqOwdaJV5OKpCjOSh/9UNJkogKQzjWuue5sfFTrAwjnM5K/UTTGJMJHtGepQJHVPvpPPUMnVklREOp7BEGzdXfGymOdBbNTkbYjPWyl4n/eb3EDK/9lIk4MVSQxUPDhCMjUVYBCpmixPCpJZgoZrMiMsYKE2OLKtkSvOUvr5L2RdWrVWt3l5X6TV5HEU7gFM7BgyuoQwOa0AICCp7hFd6cJ+fFeXc+FqMFJ985hj9wPn8ADe6S5A==</latexit> 
+
+> 2
+> Sequence Embeddings
+
+## H Push-forward Cluster Centers 
+
+Figure 2: An illustration of the push-forward operation de-riving cluster centers. 
+
+Deriving Cluster Centers via Push-forward We com-pute the GW distances in (10) by the proximal gradient algo-rithm (Peyr´ e, Cuturi, and Solomon 2016; Xu, Luo, and Carin 2019), whose algorithmic scheme is shown in Algorithm 1. We denote the optimal transport matrices corresponding to 
+
+GW 2(K, fK) and GW 2(K, IK ) as T ∗ 
+
+> 1
+
+and T ∗ 
+
+> 2
+
+. As illus-trated in Figure 2, T ∗ 
+
+> 1
+
+and T ∗ 
+
+> 2
+
+align K to fK and IK , re-spectively. For the sequences constructing K and those con-structing fK, the high-valued elements in T ∗ 
+
+> 2
+
+indicate the correspondence between them. Similarly, for the sequences constructing K, the high-valued elements in T ∗ 
+
+> 1
+
+indicate the clustering results of the sequences. As a result, we can derive cluster centers of sequence-level embeddings by the follow-ing push-forward operation (Courty et al. 2016): 
+
+A = ( M T ∗ 
+
+> 2
+
+)⊤H, (11) in which each cluster center is achieved by the weighted av-erage of the sequence-level embeddings. The weight matrix 
+
+(M T ∗ 
+
+> 2
+
+)⊤ = [ p(h(m)(T )|ak)] is a nonnegative and colum-nwisely normalized matrix. Its element p(h(m)(T )|ak) can be explained as the conditional probability of the m-th se-quence given the k-th cluster. • Remark 2: Given M sequences, applying the push-forward operation to the whole sequence-level embed-ding matrix is time-consuming because it involves com-puting the GW distance with complexity O(M 2K). To achieve a trade-off between computational efficiency and model performance, we call the push-forward operation in (11) for each batch. Given the i-th batch of event se-quences, whose batch size is B, we obtain the sequence-level embedding matrix H(i) and the corresponding ker-26438 Algorithm 2: The learning algorithm solving (13) 
+
+Require: Event sequences S = {sm}Mm=1 in [0 , T ], the hy-perparameter τ , the predefined number of clusters K,the batch size B, the number of epochs J. 
+
+> 1:
+
+Initialize model parameters {g, f, A} randomly.  
+
+> 2:
+
+Sample L sequences randomly and compute fK based on the distance matrix of the sequences. O(L2) 
+
+> 3:
+
+for j = 1 , · · · , J do  
+
+> 4:
+
+– Update {g, f }: 
+
+> 5:
+
+for each batch B do  
+
+> 6:
+
+for each sequence s ∈ B do  
+
+> 7:
+
+Get event embeddings for each event via (6).  
+
+> 8:
+
+Get sequence embeddings {h(tn)}Nn=1 via (7).  
+
+> 9:
+
+Get cluster embeddings {a(tn)}Nn=1 via (8).  
+
+> 10:
+
+Get the intensity of each event by (9).  
+
+> 11:
+
+end for  
+
+> 12:
+
+Get − P 
+
+> s∈B
+
+log L(s) based on (3). O(BN 2) 
+
+> 13:
+
+Get K based on H = [ h(b)(tNb )] . O(B2D) 
+
+> 14:
+
+Get GW distances and OT plans {T ∗ 
+
+> 1
+
+, T ∗ 
+
+> 2
+
+} via Al-gorithm 1. O(BL 2 + B2L + BK 2 + B2K) 
+
+> 15:
+
+Get the loss − log L(s) + τ GWB (K) and update 
+
+{g, f } by Adam (Kingma and Ba 2014).  
+
+> 16:
+
+end for  
+
+> 17:
+
+– Update A: 
+
+> 18:
+
+Initialize A = 0K×D . 
+
+> 19:
+
+for each batch B do  
+
+> 20:
+
+Get K based on H = [ h(b)(tNb )] . O(B2D) 
+
+> 21:
+
+Compute T ∗ 
+
+> 2
+
+via Algorithm 1. O(BK 2 + B2K) 
+
+> 22:
+
+A ← A + ( BI T ∗ 
+
+> 2
+
+)⊤H. O(KBD ) 
+
+> 23:
+
+end for  
+
+> 24:
+
+end for  
+
+> 25:
+
+return The ST-TPP Model {g, f, A}.nel matrix K(i). By computing GW 2(K(i), IK ) and ap-plying the push-forward operation, we derive the i-th OT plan, denoted as T ∗(i)2 , and the corresponding cluster centers A(i). As a result, the average of all batch-based cluster centers leads to the learning result, i.e., 
+
+A(i) = ( BT ∗(i)2 )⊤H(i), A ≈ 1/I XIi=1 A(i), (12) where I = M/B is the number of batches. 
+
+Learning Algorithm of ST-TPP 
+
+Combining the GWB regularizer in (10) with the MLE loss in (2), we obtain the learning problem of ST-TPP, i.e., 
+
+min 
+
+> θ={g,f, A}
+
+
+
+−
+
+> M
+
+X
+
+> m=1
+
+log L(sm; θ) + τ GWB( K; θ)
+
+
+
+, (13) where the model parameters include {g, f, A}. The hyper-parameter τ > 0 controls the significance of the GWB regu-larizer. This problem can be solved efficiently by iterative al-ternating optimization. Algorithm 2 shows the training pro-cess of ST-TPP, together with the computational complexity                       
+
+> Dataset #Event types C#Sequences MMax. #Events N
+> Syn. ( K= 2 )58,000 50 Taobao 17 2000 64 SO 22 2200 100 Taxi 10 2000 38 Amazon 16 8300 94
+
+Table 1: The basic of datasets of key steps. In each epoch, we update {g, f } and A by alter-nating optimization, and the updating of {g, f } is achieved by stochastic gradient descent. In practice, the number of clusters (i.e., K) is unknown in general. Therefore, given a set of real-world event se-quences, we set it empirically in the range [5 , 10] , which is significantly smaller than the batch size. In addition, to achieve a trade-off between efficiency and performance, we set the batch size B and the subset size L are significantly smaller than the dataset size M . In such a situation, we can find that the computational cost introduced by the GW dis-tances is mild, which is about O(BL 2 + B2L).
+
+## Experiments 
+
+We evaluate our method on several synthetic and real-world datasets, demonstrating its superiority compared to base-lines. In addition, analytic studies are conducted to demon-strate the interpretability, robustness, and scalability of our method. All experiments are run on a server with two 3090 GPUs, and for each method we record its averaged perfor-mance and standard deviation in three trials. 
+
+Implementation Details 
+
+Datasets We conducted experiments using both synthetic and real-world data. In particular, the work in (Zhang et al. 2022) generates a set of event sequences by two TPPs (i.e., Hawkes process and In&Ex Process in which the event re-lation is either inhibition or excitation). Accordingly, we construct a synthetic dataset with two sequence clusters, in which each cluster corresponds to the sequences generated by a specific TPP model. For the real-world data, we con-sider four representative datasets, including Taobao (Xue et al. 2022), StackOverflow (SO) (Linderman and Adams 2014), Taxi (Whong 2014), and Amazon (Ni 2018). The statistics of the datasets can be found in Table 1. 
+
+Baselines and Implementation Details We consider rep-resentative methods as baselines, including i) learning a sin-gle TPP by MLE and ii ) learning the state-of-the-art mixture model of TPPs (Zhang et al. 2022). To demonstrate the uni-versality of our method, we consider various TPP models as backbones, including i) the ordinary differential equation-based ODETPP (Chen, Amos, and Nickel 2020), ii ) the recurrent neural network-based RMTPP (Du et al. 2016), and iii ) the Transformer-based models ( SAHP (Zhang et al. 2020), THP (Zuo et al. 2020), and AttNHP (Yang, Mei, and Eisner 2021)). Applying our semi-tranductive (ST) paradigm to the TPPs leads to a series of ST-TPP models. 26439 Method Taobao StackOverflow Amazon Taxi Synthetic ( K = 2 )ELL ↑ ACC ↑ ELL ↑ ACC ↑ ELL ↑ ACC ↑ ELL ↑ ACC ↑ ELL ↑ ACC ↑ NMI ↑ ARI ↑
+
+RMTPP -0.718 0.043 0.436 0.000 -2.756 0.009 0.425 0.003 -2.196 0.002 0.259 0.009 0.276 0.004 0.846 0.002 -0.529 0.000 0.282 0.003 0.689 0.021 0.776 0.026 
+
+ST-RMTPP -0.514 0.006 0.436 0.000 -1.597 0.015 0.437 0.010 1.531 0.138 0.311 0.006 0.457 0.005 0.913 0.001 -0.517 0.009 0.313 0.007 0.730 0.008 0.823 0.006 
+
+SAHP -0.734 0.116 0.408 0.224 -11.956 0.547 0.021 0.003 -2.521 0.234 0.204 0.040 -0.415 0.146 0.606 0.013 -0.547 0.014 0.268 0.002 0.651 0.024 0.755 0.022 
+
+ST-SAHP -0.650 0.004 0.437 0.007 -5.386 0.322 0.046 0.002 -1.872 0.024 0.260 0.013 -0.047 0.041 0.877 0.012 -0.503 0.018 0.298 0.007 0.738 0.021 0.830 0.018 
+
+THP -0.238 0.035 0.477 0.001 -5.543 0.017 0.380 0.002 -2.450 0.014 0.336 0.001 0.055 0.017 0.869 0.001 -0.519 0.003 0.290 0.003 0.643 0.014 0.777 0.023 
+
+ST-THP 0.234 0.001 0.596 0.002 -2.343 0.011 0.460 0.004 -2.109 0.010 0.383 0.002 0.324 0.003 0.921 0.002 -0.483 0.012 0.316 0.008 0.716 0.014 0.810 0.012 
+
+ODETPP -0.448 0.015 0.436 0.000 -4.754 0.258 0.323 0.025 -2.341 0.243 0.339 0.006 0.931 0.161 0.866 0.003 0.036 0.012 0.248 0.001 0.633 0.011 0.716 0.022 
+
+ST-ODETPP 0.795 0.017 0.507 0.002 0.466 0.161 0.371 0.007 -1.102 0.083 0.348 0.006 1.901 0.063 0.909 0.003 0.082 0.021 0.330 0.003 0.700 0.009 0.792 0.018 
+
+AttNHP -0.723 0.003 0.436 0.001 -6.292 0.008 0.365 0.001 -2.584 0.001 0.299 0.001 -0.066 0.033 0.684 0.028 -0.508 0.002 0.247 0.008 0.658 0.016 0.749 0.022 
+
+ST-AttNHP -0.327 0.006 0.501 0.005 -2.466 0.013 0.444 0.001 -0.489 0.014 0.341 0.013 0.155 0.014 0.886 0.014 -0.507 0.001 0.286 0.001 0.665 0.012 0.767 0.011 
+
+Table 2: Comparison experiments. The standard deviation is shown as the subscript of each result. For each ST-TPP model, it considers sequence- and cluster-level embeddings when predicting events. For our method, the bandwidth σ of kernel is a key hyper-parameter. We apply an adaptive method to determine the bandwidth: Given the distances among the event sequences, we empirically set σ based on the median of the distances. For the remaining hyperparameters, e.g., learning rate, batch size, epochs, and so on, we configure them based on the de-fault settings in (Xue et al. 2024) for a fair comparison. 
+
+Evaluation Measurements Given a learned model, we use i) the log-likelihood per event ( ELL ) and ii ) the pre-diction accuracy of event types ( ACC ) to evaluate its data fi-delity and prediction power, respectively. The visualization of the sequence-level embeddings derived by the model is used to qualitatively evaluate its clustering capability. When the model is learned on synthetic datasets, whose cluster la-bels are known, we employ i) Adjusted Rand Index ( ARI )and ii ) Normalized Mutual Information ( NMI ) to evaluate the model’s clustering performance quantitatively. 
+
+Event Prediction and Sequence Clustering 
+
+Numerical Comparisons Table 2 shows the superior per-formance of our method across different datasets and eval-uation metrics. In particular, for each TPP model, learning it by our regularized MLE method and leveraging our semi-tranductive prediction paradigm always improve the event prediction accuracy. These results demonstrate the useful-ness of sequence- and cluster-level information for event prediction. Besides the event prediction power, our method also improves the sequence clustering performance of the models, as shown in the results achieved on the synthetic data. It means that the proposed GWB regularizer helps learn structured sequence-level embeddings, which enhances the model interpretability. 
+
+Visualization Results To further demonstrate the ratio-nality of our method, we show the t-SNE plots (Maaten and Hinton 2008) of the sequence-level embeddings learned by different methods in Figure 3. According to the visual effects, we can find that the embeddings learned by our method have more distinguishable clustering structures, i.e., 
+
+(a) THP v.s. ST-THP 
+
+(b) RMTPP v.s. ST-RMTPP 
+
+Figure 3: The t-SNE plots of sequence-level embeddings achieved by different methods. In each subfigure, we visual-ize 256 sequence-level embeddings per cluster. the sequence-level embeddings corresponding to different clusters are separated while those within the same cluster are concentrated. 
+
+Analytic Experiments 
+
+The Impact of GWB Regularization The weight τ
+
+in (13) controls the significance of our GWB regularizer. In Figure 4, we set τ ∈ [1 e − 4, 1e − 2] and show the evalu-ation measurements of our method under different settings. With the increase of τ , the GWB regularizer provides use-ful information to enhance the clustering structure of the sequence-level embeddings, leading to good NMI and RI results. At the same time, the model can maintain promis-ing ELL and ACC. It means that the GWB regularizer helps improve model interpretability without doing harm to the model prediction power. However, ELL and ACC may drop 26440 (a) ELL  (b) ACC  (c) NMI  (d) RI 
+
+Figure 4: The impact of τ when learning ST-THP on the synthetic dataset. 
+
+Loss function ELL ↑ ACC ↑ NMI ↑ RI ↑
+
+MLE+GWB+CE -0.483 0.012 0.316 0.008 0.716 0.014 0.810 0.012 
+
+MLE+GWB -0.504 0.001 0.298 0.004 0.689 0.012 0.788 0.012 
+
+MLE+CE -0.496 0.003 0.306 0.004 0.675 0.014 0.771 0.009 
+
+MLE -0.516 0.004 0.296 0.003 0.673 0.016 0.772 0.023 
+
+Table 3: The impacts of different regularizers on learning THP (Zuo et al. 2020) when setting τ > 5e − 3. In such a situation, the MLE term is overlooked, and the training data is not well-fitted. Ac-cording to the results, our method performs robustly when setting τ in a reasonable range. Note that, our GWB regularizer is compatible with other regularizers. Take THP (Zuo et al. 2020) as an example. Besides MLE, THP enhances its event prediction power by considering a cross-entropy (CE) loss between the normal-ized intensity functions and the event types in one-hot for-mats. When implementing our ST-THP, we add this CE-based regularizer into our learning problem as well. Table 3 shows that our GWB regularizer is compatible with the CE-based regularizer. In particular, the MLE in Table 3 means learning ST-TPP by the classic MLE, without the help of the regularizer, and the cluster centers are learned by the spec-tral clustering of sequence-level embeddings. Both GWB and CE-base regularizers benefit the model performance, and applying them jointly leads to the best learning result. In addition, the results in Table 3 imply that compared to the CE-based regularizer, our GWB regularizer focuses more on enhancing the clustering structure of sequence-level embed-dings — the improvements on clustering metrics achieved by GWB regularizer are more significant than those on data fitting and event prediction. 
+
+The Impacts of The Embeddings at Different Levels 
+
+As one of our main contributions, ST-TPP leverages the sequence- and cluster-level embeddings to enhance event prediction. Take The impacts of the embeddings at different levels are shown in Table 4. Both sequence- and cluster-level embeddings help improve model performance, and apply-ing them jointly leads to the best result. These phenomena demonstrate the effectiveness of our semi-transductive pre-diction paradigm. On the one hand, the sequence-level em-bedding aggregates the historical event embeddings evenly. Ignoring the decay of events’ influences over time, it helps capture the long-range dependency among events within the target sequence. On the other hand, the cluster-level embed-
+
+Levels ELL ↑ ACC ↑ NMI ↑ RI ↑
+
+Event+Seq.+Cluster -0.483 0.012 0.316 0.008 0.716 0.014 0.810 0.012 
+
+Event+Cluster -0.520 0.003 0.293 0.004 0.642 0.055 0.743 0.05 
+
+Event+Seq. -0.488 0.005 0.309 0.002 0.646 0.046 0.750 0.042 
+
+Event -0.511 0.005 0.291 0.002 0.642 0.048 0.742 0.032 
+
+Table 4: The impacts of different embeddings on learning ST-THP on synthetic data. 10 -3 10 -2 10 -1 10 00510 15 Run_Time Sampling Rate 
+
+(a) Runtime 10 -3 10 -2 10 -1 10 0 10 1-0.534215 -0.534210 -0.534205 -0.534200 -0.534195 -0.534190 -0.534185 ELL Sampling Rate  (b) ELL 10 -3 10 -2 10 -1 10 0 10 10.27785 0.27790 0.27795 0.27800 0.27805 ACC Sampling Rate  (c) ACC 10 -3 10 -2 10 -1 10 0 10 10.7120 0.7125 0.7130 0.7135 0.7140 0.7145 NMI Sampling Rate  (d) NMI 
+
+Figure 5: The training time and final model performance with respect to the sampling rate of fK when learning ST-THP on synthetic data. ding allows the target sequence to leverage the information of training sequences, achieving a new information sharing mechanism based on sequence clustering. 
+
+The Impact of Kernel Approximation Sampling fK
+
+helps achieve a trade-off between the scalability and per-formance of our method. Take ST-THP as an example, we apply our method using different sampling rates. Given 
+
+M training sequences, we set the sampled kernel size as 
+
+L = round (M r ), where r ∈ {0.005 , 0.01 , 0.05 , 0.1} is the sampling rate of the kernel matrix. Figure 5 visualizes the evaluation metrics under different settings. As shown in Figure 5(a), the runtime per epoch of our method quadrat-ically increases with the kernel size due to the complex-ity of the GW distance. This result matches well with the computational complexity shown in Algorithm 2. Moreover, the learned model obtains promising and stable performance (i.e., ELL, ACC and NMI) even when a small kernel size is applied, demonstrating the rationality of using a small sam-pling rate in large-scale applications. 
+
+## Conclusion 
+
+We introduced a novel ST-TPP model for event sequence modeling, which enhances event prediction with the help of the clustering information of training data. An MLE method with Gromov-Wasserstein barycentric regularization is pro-posed to learn the model, which is compatible with stochas-tic gradient descent and thus applicable to large-scale learn-ing problems. Through extensive evaluations of synthetic and real-world datasets, our method exhibited superior per-formance compared to state-of-the-art methods. Overall, our work presents a new approach to improving TPPs, which may inspire new learning and prediction paradigms. In the future, we plan to apply our work in practical applications and develop more efficient algorithms to compute GW dis-tance and accelerate the training of the model. 26441 Acknowledgements 
+
+This work was supported by NSFC 92270110 and the Fun-damental Research Funds for the Central Universities. We also acknowledge the support provided by the fund for build-ing world-class universities (disciplines) of Renmin Univer-sity of China and by the funds from Beijing Key Laboratory of Research on Large Models and Intelligent Governance, Engineering Research Center of Next-Generation Intelligent Search and Recommendation, Ministry of Education, and from Intelligent Social Governance Interdisciplinary Plat-form, Major Innovation & Planning Interdisciplinary Plat-form for the “Double-First Class” Initiative, Renmin Uni-versity of China. 
+
+## References 
+
+Alzubaidi, M.; Balasubramanian, V.; Patel, A.; Pan-chanathan, S.; and Black Jr, J. A. 2012. A novel semi-transductive learning framework for efficient atypicality de-tection in chest radiographs. In Medical Imaging 2012: Computer-Aided Diagnosis , volume 8315, 947–955. SPIE. Bacry, E.; Mastromatteo, I.; and Muzy, J.-F. 2015. Hawkes processes in finance. Market Microstructure and Liquidity ,1(01): 1550005. Chen, R. T.; Amos, B.; and Nickel, M. 2020. Neural spatio-temporal point processes. arXiv preprint arXiv:2011.04583 .Chowdhury, S.; and Needham, T. 2021. Generalized spec-tral clustering via Gromov-Wasserstein learning. In Inter-national Conference on Artificial Intelligence and Statistics ,712–720. PMLR. Courty, N.; Flamary, R.; Tuia, D.; and Rakotomamonjy, A. 2016. Optimal transport for domain adaptation. IEEE trans-actions on pattern analysis and machine intelligence , 39(9): 1853–1865. Du, N.; Dai, H.; Trivedi, R.; Upadhyay, U.; Gomez-Rodriguez, M.; and Song, L. 2016. Recurrent marked tem-poral point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining , 1555– 1564. Enguehard, J.; Busbridge, D.; Bozson, A.; Woodcock, C.; and Hammerla, N. 2020. Neural temporal point processes for modelling electronic health records. In Machine Learn-ing for Health , 85–113. PMLR. Ge, C.; Wang, J.; Qi, Q.; Sun, H.; Xu, T.; and Liao, J. 2023. Semi-transductive learning for generalized zero-shot sketch-based image retrieval. In Proceedings of the AAAI confer-ence on artificial intelligence , volume 37, 7678–7686. Gong, S.; Fu, Y.; Ran, F.; Kong, Q.; and Zhou, F. 2025. TPP-SD: Accelerating Transformer Point Process Sampling with Speculative Decoding. arXiv preprint arXiv:2507.09252 .Hawkes, A. G. 1971. Spectra of some self-exciting and mu-tually exciting point processes. Biometrika , 58(1): 83–90. Isham, V.; and Westcott, M. 1979. A self-correcting point process. Stochastic processes and their applications , 8(3): 335–347. Iwayama, K.; Hirata, Y.; and Aihara, K. 2017. Definition of distance for nonlinear time series analysis of marked point process data. Physics Letters A , 381(4): 257–262. Kingma, D. P.; and Ba, J. 2014. Adam: a method for stochas-tic optimization. In International Conference on Learning Representations .Kong, Q.; Calderon, P.; Ram, R.; Boichak, O.; and Rizoiu, M.-A. 2023. Interval-censored transformer hawkes: Detect-ing information operations using the reaction of social sys-tems. In Proceedings of the ACM Web Conference 2023 ,1813–1821. Linderman, S.; and Adams, R. 2014. Discovering latent net-work structure in point process data. In International con-ference on machine learning , 1413–1421. PMLR. Liniger, T. J. 2009. Multivariate hawkes processes . Ph.D. thesis, ETH Zurich. Luo, D.; Xu, H.; Zhen, Y.; Ning, X.; Zha, H.; Yang, X.; and Zhang, W. 2015. Multi-task multi-dimensional hawkes processes for modeling event sequences. In Proceedings of the 24th International Conference on Artificial Intelligence ,3685–3691. Maaten, L. v. d.; and Hinton, G. 2008. Visualizing data us-ing t-SNE. Journal of machine learning research , 9(Nov): 2579–2605. Mei, H.; and Eisner, J. M. 2017. The neural hawkes pro-cess: A neurally self-modulating multivariate point process. 
+
+Advances in neural information processing systems , 30. M´ emoli, F. 2011a. Gromov–Wasserstein distances and the metric approach to object matching. Foundations of compu-tational mathematics , 11: 417–487. M´ emoli, F. 2011b. A spectral notion of Gromov– Wasserstein distance and related methods. Applied and Computational Harmonic Analysis , 30(3): 363–401. Ng, A.; Jordan, M.; and Weiss, Y. 2001. On spectral cluster-ing: Analysis and an algorithm. Advances in neural infor-mation processing systems , 14. Ni, J. 2018. Amazon review data. Online abrufbar unter: https://nijianmo. github. io/amazon/index. html .Peyr´ e, G.; Cuturi, M.; and Solomon, J. 2016. Gromov-wasserstein averaging of kernel and distance matrices. In 
+
+International conference on machine learning , 2664–2672. PMLR. Peyr´ e, G.; Cuturi, M.; et al. 2019. Computational optimal transport: With applications to data science. Foundations and Trends® in Machine Learning , 11(5-6): 355–607. Wang, Q.; Cheng, M.; Yuan, S.; and Xu, H. 2023. Hierar-chical Contrastive Learning for Temporal Point Processes. In Proceedings of the AAAI Conference on Artificial Intelli-gence .Wang, Q.; Wu, Y.; Long, Y.; Huang, J.; Ran, F.; Su, B.; and Xu, H. 2025. A Plug-and-Play Bregman ADMM Module for Inferring Event Branches in Temporal Point Processes. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 39, 21216–21224. Whong, C. 2014. FOILing NYC’s taxi trip data. FOILing NYCs Taxi Trip Data. Np , 18: 14. 26442 Xiao, S.; Farajtabar, M.; Ye, X.; Yan, J.; Song, L.; and Zha, H. 2017. Wasserstein learning of deep generative point pro-cess models. Advances in neural information processing systems , 30. Xu, H.; Luo, D.; and Carin, L. 2019. Scalable gromov-wasserstein learning for graph partitioning and matching. In 
+
+Proceedings of the 33rd International Conference on Neural Information Processing Systems , 3052–3062. Xu, H.; Luo, D.; and Zha, H. 2021. Hawkes processes on graphons. arXiv preprint arXiv:2102.02741 .Xu, H.; Wu, W.; Nemati, S.; and Zha, H. 2016. Pa-tient flow prediction via discriminative learning of mutually-correcting processes. IEEE transactions on Knowledge and Data Engineering , 29(1): 157–171. Xu, H.; and Zha, H. 2017a. A dirichlet mixture model of hawkes processes for event sequence clustering. Advances in neural information processing systems , 30. Xu, H.; and Zha, H. 2017b. THAP: A matlab toolkit for learning with Hawkes processes. arXiv preprint arXiv:1708.09252 .Xue, S.; Shi, X.; Chu, Z.; Wang, Y.; Hao, H.; Zhou, F.; Jiang, C.; Pan, C.; Zhang, J. Y.; Wen, Q.; Zhou, J.; and Mei, H. 2024. EasyTPP: Towards Open Benchmarking Temporal Point Processes. In International Conference on Learning Representations (ICLR) .Xue, S.; Shi, X.; Zhang, J.; and Mei, H. 2022. Hypro: A hy-bridly normalized probabilistic model for long-horizon pre-diction of event sequences. Advances in Neural Information Processing Systems , 35: 34641–34650. Yang, C.; Mei, H.; and Eisner, J. 2021. Transformer em-beddings of irregularly spaced events and their participants. 
+
+arXiv preprint arXiv:2201.00044 .Zhang, Q.; Lipani, A.; Kirnap, O.; and Yilmaz, E. 2020. Self-attentive Hawkes process. In International conference on machine learning , 11183–11193. PMLR. Zhang, Y.; Yan, J.; Zhang, X.; Zhou, J.; and Yang, X. 2022. Learning mixture of neural temporal point processes for multi-dimensional event sequence clustering. In Proceed-ings of the Thirty-First International Joint Conference on Artificial Intelligence, Vienna, Austria , 23–29. Zhao, Q.; Erdogdu, M. A.; He, H. Y.; Rajaraman, A.; and Leskovec, J. 2015. Seismic: A self-exciting point process model for predicting tweet popularity. In Proceedings of the 21th ACM SIGKDD international conference on knowledge discovery and data mining , 1513–1522. Zuo, S.; Jiang, H.; Li, Z.; Zhao, T.; and Zha, H. 2020. Trans-former hawkes process. In International conference on ma-chine learning , 11692–11702. PMLR. 26443

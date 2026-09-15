@@ -1,0 +1,989 @@
+Title: 2026.findings-acl.258.pdf
+
+URL Source: https://aclanthology.org/2026.findings-acl.258.pdf
+
+Published Time: Thu, 11 Jun 2026 02:31:13 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+Findings of the Association for Computational Linguistics: ACL 2026 , pages 5233–5248 July 2-7, 2026 ©2026 Association for Computational Linguistics Conformal Event Prediction with Temporal Knowledge Graph 
+
+Cheng Hu 1,2 , Cong Cao 1,2, * , Fangfang Yuan 1,2 , Diandian Guo 1,2 ,Pin Xu 1,2 , Yu Liu 1,2 , Yanbing Liu 1,2, *
+
+> 1
+
+Institute of Information Engineering, Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+School of Cyber Security, University of Chinese Academy of Sciences, Beijing, China 
+
+{hucheng, caocong}@iie.ac.cn 
+
+Abstract 
+
+Event prediction plays a critical role in high-stakes applications such as military operations, public safety, and healthcare. Current meth-ods learn temporal knowledge graphs to pre-dict events at future timestamps, and the pre-dictions directly influence decision-making and resource allocation. However, these methods lack rigorous uncertainty quantification, which limits their reliability for decision-making, es-pecially in high-stakes scenarios where the cost of errors is high. In this paper, we propose CFEP, a conformal prediction framework tai-lored for event prediction to address this chal-lenge. This is achieved through end-to-end optimization that ensures coverage while im-proving efficiency. Specifically, we first intro-duce non-conformity score diffusion, which captures both topological and temporal uncer-tainty in temporal knowledge graphs. Addi-tionally, we propose an efficiency-aware opti-mization algorithm to reduce the coverage gap and improve computational efficiency. Experi-mental results on three public datasets demon-strate that our approach consistently guaran-tees statistical coverage while improving effi-ciency. The code and datasets are available at 
+
+https://github.com/hucheng-IIE/CFEP .
+
+1 Introduction 
+
+Event prediction determines which event types will occur at a future time by learning from historical events, which are extracted from past news arti-cles (Han and Ning, 2022). Event prediction has broad applications in criminal activities (Jhee et al., 2023), political (Deng et al., 2024a), and economic domains (Liu et al., 2024). Current event predic-tion methods learn temporal knowledge graphs to generate point predictions of future events (Deng et al., 2019; Ma et al., 2023; Deng et al., 2020; Han and Ning, 2022), as illustrated in Fig. 1a. As event prediction is increasingly deployed in high-stakes 
+
+> *
+
+Corresponding authors Criticize Criticize 2025/02/05 Event Text: February 2025 saw nationwide U.S. protests against Trump     
+
+> administration policies on immigration,
+> gender rights, and democracy. 2025/02/05 Farmer Citizen Government Class1 Class2 Class3
+> 0.0
+> 1.0
+> 0.5
+> Class4
+> Point Prediction Class1 Class2 Class3 0.0 1.0 Class4 Prediction Set Non-conformity scores diffusion Optimized weighted quantiles ˆqˆ1q−
+> (b) Our method
+> (a) Current event prediction methods
+
+Figure 1: Comparison of our method with current event prediction methods. 
+
+domains, understanding the uncertainty associated with its predictions becomes crucial. To achieve robust uncertainty quantification, re-searchers have proposed a variety of approaches, including Bayesian-based (Wu et al., 2021), Frequentist-based (Kan et al., 2022), and conformal prediction methods (Vovk et al., 2005a). Among these approaches, conformal prediction stands out due to its distribution-free nature and its ability to provide rigorous statistical guarantees on predic-tion confidence. The fundamental assumption of conformal prediction is the exchangeability condi-tion 1. This assumption holds broadly in domains such as computer vision and natural language pro-cessing due to the independent nature of data sam-ples. The inherent interdependence of nodes and edges induces structural dependencies that violate the assumption of independent and identically dis-tributed observations, complicating the application of conformal prediction to graph data. Recent work (Huang et al., 2023) addresses this issue by lever-aging the permutation equivariant nature of graph 
+
+> 1
+
+Exchangeability definition: For any z1, . . . , z n+1 
+
+and any permutation π of {1, . . . , n + 1 }, it holds that P((Zπ(1) , . . . , Z π(n+1) ) = (z1, . . . , z n+1 )) =
+
+P((Z1, . . . , Z n+1 ) = ( z1, . . . , z n+1 ))
+
+5233 neural network architectures. However, event pre-diction based on temporal knowledge graphs vi-olates exchangeability. This violation arises be-cause each event in a temporal knowledge graph may follow a distinct distribution, influenced by the temporal dependencies in the event’s structure, the attributes of its participants, and the prediction labels. Consequently, the probability of selecting different calibration sets becomes unequal, break-ing the exchangeability condition. As shown in Fig. 1b, we propose CFEP, a novel conformal event prediction framework de-signed to address this issue. This is achieved by generating prediction sets that are both coverage-guaranteed and highly efficient. We first prove that the exchangeability condition is violated in event prediction, then develop a theory to quan-tify the coverage gap between exchangeable and non-exchangeable settings. Our analysis indicates that the weighted quantile and the non-conformity score are the primary factors contributing to this dis-crepancy. Building on these insights, we introduce CFEP, a conformal prediction algorithm for event prediction that calibrates event prediction models by minimizing the deviation from a predefined cov-erage level. CFEP consists of two modules: non-conformity score diffusion and efficiency-aware op-timization. Non-conformity score diffusion lever-ages both temporal ordering and topological struc-ture to enhance uncertainty quantification in tempo-ral knowledge graphs. Efficiency-aware optimiza-tion reduces the coverage gap while improving effi-ciency. Our main contributions can be summarized as follows: 
+
+• We identify the non-exchangeability chal-lenges that arise when applying conformal predic-tion to event prediction and formally define the conformal prediction problem in this setting. 
+
+• We theoretically analyze the impact of weighted quantiles and non-conformity scores on the coverage gap and introduce CFEP to enhance efficiency while maintaining coverage. 
+
+• Experimental results on three public datasets demonstrate that our approach consistently guaran-tees statistical coverage while improving efficiency. 
+
+2 Preliminary 
+
+In this section, we first provide an overview of event prediction and conformal prediction and then formulate the problem we aim to address. The notations are summarized in Table 5. 
+
+Event Prediction. We model historical events to predict co-occurring future events along with their event types (e.g., consult, civil unrest, appeal). 
+
+P(yt+∆ t|G t−h+1: t), (1) where yt+∆ t ∈ R|R| denotes the probability of co-occurring event types at future timestamp t + ∆ t.
+
+Gt−h+1: t denotes the temporal knowledge graph within the time window from t − h + 1 to t.
+
+Definition 1 Temporal Knowledge Graph . A tem-poral knowledge graph G is a directed graph with multiple relations between graph nodes, each re-lation with a timestamp. For an event occurring at time t, it is depicted as a timestamped edge in the temporal event graph, formalized as a quintu-ple (s, r, o, t, c ), where s ∈ E and o ∈ E are the head and tail entities, r ∈ R is the event type, and 
+
+c ∈ C denotes an event text, with E, R, and C being finite sets of entities, event types, and event texts, respectively. 
+
+Conformal Prediction. Given a set of data points 
+
+(X1, y1), . . . , (Xn, yn), (Xn+1 , yn+1 ) and a de-sired coverage level 1 − α ∈ (0 , 1) , consider a score function s : X × Y → R. The prediction set for Xn+1 is C(Xn+1 ) = {y : s(Xn+1 , y) ≤ q},where q is the n−1 
+
+> n
+
+(1 − α)-th smallest value in the set { s(Xi, yi) : i = 1 , . . . , n }. Under this scor-ing rule, the resulting prediction set satisfies (Vovk et al., 2005b) 
+
+P(yn+1 ∈ C(Xn+1 )) ≥ 1 − α. (2) Conformal prediction relies on the assumption of exchangeability to guarantee that the prediction set achieves a coverage level of at least 1 − α.Recent studies (Huang et al., 2023; Zargarbashi et al., 2023) show that this assumption holds in static graphs. However, event prediction based on temporal knowledge graphs typically violates the exchangeability condition. Here, let Xt denote the learned representations of each event type at time t, produced by the event prediction model 
+
+f (Gt−h+1: t), and F (Xt) denote the corresponding predicted labels. y represent the corresponding ground-truth labels. The detailed proof is provided in Appendix A.1. 
+
+Problem Definition. With the aforementioned no-tations, we formally define the problem of confor-mal prediction for event prediction. Given: (i) The temporal knowledge graph Gt−h+1: t and the ground-truth yt; (ii) An event prediction model 5234 f (Gt−h+1: t) = Xt and the transformation function 
+
+F (Xt) = ˆ y; (iii) A predefined miscoverage level 
+
+α ∈ (0 , 1) . Find: A prediction set that ensures the ground-truth value falls within the set with a con-fidence level of at least 1 − α, while maintaining high efficiency. 
+
+3 Theoretical analysis 
+
+To address the non-exchangeability issue in event prediction, we introduce an additional compensa-tion term to quantify the coverage gap between exchangeability and non-exchangeability. The cov-erage gap refers to the discrepancy between ex-changeable and non-exchangeable settings given the calibration and test sets, and is defined as fol-lows: 
+
+Definition 2 Coverage Gap in Event Prediction. 
+
+Assume djtest = ( Xjt , yjt ) is a randomly selected data point from the test set Dt, and the calibration set Dc contains nc data points. Together, the data points in Dc and the single test point from Dt form a set of nc + 1 data points. Let Cjt denote the prediction set for the randomly selected test point. The coverage gap is defined as: 
+
+δgap = (1 − α) − P{yjt ⊆ Cjt }. (3) Using the calibration set, test set, and the definition of the coverage gap, we derive an upper bound on this gap (Barber et al., 2023). This bound highlights that the weight quantiles and the non-conformity score calculation methods are the key factors influ-encing the theoretical coverage in event prediction. It also guides our method to reduce the coverage gap in order to maintain coverage while improving efficiency. 
+
+Definition 3 Upper Bound for the Coverage Gap .The coverage gap for a test data point djt =(Xjt , yjt ) ∈ Dt is bounded by 
+
+δgap ≤
+
+∑nc 
+
+> k=1
+
+ωk dTV (ϕ, ϕ k)1 + ∑nc 
+
+> k=1
+
+ωk
+
+, (4) 
+
+where dTV denotes the total variation distance (Clarkson and Adams, 1933), and ωi are user-defined weights chosen to make the upper bound small. Let ϕ denote the set containing all non-conformity scores from the calibration set Dc to-gether with the score of the selected test point djt :
+
+ϕ = ( st1 
+
+> i
+
+, . . . , s tnc  
+
+> i
+
+, s jt 
+
+> i
+
+). (5) 
+
+For each k, let ϕk be the permutation obtained by swapping the test score sjt 
+
+> i
+
+with the k-th calibration score stk 
+
+> i
+
+:
+
+ϕk = ( st1 
+
+> i
+
+, . . . , s tk−1 
+
+> i
+
+, s jt 
+
+> i
+
+, s tk+1  
+
+> i
+
+, . . . , s tnc  
+
+> i
+
+, s tk 
+
+> i
+
+).
+
+(6) We provide a detailed proof of Eq.4 in Appendix A.2. Eq.4 provides a unified framework that encompasses both the exchangeable and non-exchangeable settings in conformal prediction, making it particularly suitable for real-world event prediction tasks. 
+
+4 Methodology 
+
+We propose CFEP, an end-to-end optimization pro-cedure that reduces the upper bound of the coverage gap between the calibration and test sets, thereby improving efficiency while maintaining guaranteed coverage. Fig. 2 illustrates our proposed CFEP framework, which consists of two modules: non-conformity score diffusion and efficiency-aware op-timization. The non-conformity score diffusion is designed to produce stable non-conformity scores by integrating both the temporal dynamics and the topological structure of the temporal knowledge graph. After obtaining the diffused non-conformity scores, the efficiency-aware optimization assigns differentiated weights to them in order to improve the efficiency of the prediction sets. 
+
+4.1 Non-conformity score diffusion 
+
+The associations among events are captured by both the temporal dynamics and the topological structure of the temporal knowledge graph. By in-corporating these temporal and topological cues into the computation of non-conformity scores, we encourage similar events to exhibit similar non-conformity scores, thereby enhancing the general-ization capability of the scores. This section first explains how to select neighboring events that cap-ture both topological and temporal characteristics, and then describes how the non-conformity scores are diffused through these neighboring events. 
+
+Neighbor Events . Neighbor events of an event include both temporal neighbors and topological neighbors. Formally, given an event et1 
+
+> i
+
+occurring at timestamp t1 with event type i, its temporal neighbors are defined as follows: 
+
+N tpr i,t 1 =
+
+{
+
+etj
+
+> j
+
+∣∣∣ f (et1 
+
+> i
+
+, e tj 
+
+> j
+
+) = 1 , |t1 − tj | ≤ tst 
+
+}
+
+,
+
+(7) 5235 Policy Change         
+
+> Criticize Criticize Accuse
+> tt-h+1 t-h+2
+> Negotiation Accuse
+> Criticize Policy Change
+> Non-conformity score diffusion
+> :Topological neighbors :Temporal neighbors
+> Efficiency-Aware Optimization
+> Permutation Cumsum
+> Target
+> Quantile
+> Temporal knowledge graph 1()()
+
+, , ntt
+
+> 
+
+s s1 , , ntt
+
+ | ( ) | t t ti i is y F= − X1: i( )t h t t
+
+f − + = Xeff 1
+
+−1
+
+2
+
+2
+
+ˆqFigure 2: Overview of CFEP. The non-conformity score diffusion incorporates both the temporal information and the topological structure of the temporal knowledge graph to obtain scores with strong generalization. The efficiency-aware optimization is to maintain high efficiency while ensuring the required coverage. 
+
+where the function f (·, ·) indicates whether two events share a common entity. tst is the prede-fined temporal range threshold. Topological neigh-bors N tpo i,t 1 refer to events that occur at the same timestamp and share common nodes, which corre-sponds to tst = 0 in Eq.7. Temporal neighbors and topological neighbors, respectively, represent the temporal information and structural information of events in a temporal knowledge graph. By incorpo-rating these two types of information, robust non-conformity scores can be obtained (Zargarbashi et al., 2023). 
+
+Topological and temporal non-conformity scores . The influence of each neighboring event varies; for example, the announcement of a policy may trigger a sequence of subsequent events. To obtain non-conformity scores with strong general-ization, we introduce the topological and temporal non-conformity scores defined as follows: 
+
+sti = λ0sti + λ1
+
+|N tpo i |
+
+∑ 
+
+> j∈Ntpo i
+
+stj + λ2
+
+|N tpr i |
+
+∑ 
+
+> k∈Ntpr i
+
+stk,
+
+(8) where λ1 and λ2 denote how the non-conformity score is influenced by temporal neighbors and struc-tural neighbors, respectively. λ0 = (1 − λ1 − λ2).
+
+sti denotes the non-conformity score of the i-th event type at timestamp t. We initialize the diffu-sion process using the non-conformity score sti =
+
+|yti − F (Xti)|, where F is the transformation func-tion. Note that each event type i at time t consists of the events occurring within a historical time win-dow, denoted as Eti = {et−h+1  
+
+> i
+
+, e t−h+2  
+
+> i
+
+, . . . , e ti}.The temporal and topological neighbors of event type i as N tpr  
+
+> i
+
+= ⋃tτ =t−h+1 N tpr  
+
+> i,τ
+
+and N tpo  
+
+> i
+
+=
+
+⋃tτ =t−h+1 N tpo  
+
+> i,τ
+
+.
+
+4.2 Efficiency-aware optimization 
+
+The nonconformity scores are used to construct the prediction set, and different scores lead to differ-ent levels of efficiency. If the prediction set is too inefficient, its applicability in real-world scenarios becomes limited. To reduce the coverage gap be-tween the calibration and test sets, we optimize the parameters ωi to obtain a highly efficient predic-tion set while still ensuring the required coverage. To obtain a more precise quantile, we introduce a soft selection mechanism to determine the target quantile, defined as follows: 
+
+Γ = ∣∣cumsum (Ω) − (1 − α)∣∣
+
+B =
+
+{
+
+βi
+
+∣∣∣∣∣ βi = e−ωi/T 
+
+∑nj=1 e−ωj /T 
+
+}
+
+ˆq = SπB, 
+
+(9) where T is a hyperparameter controlling the softness of the prediction set assignment, 
+
+Sπ = {sπ(t1), . . . , sπ(tn)} denotes the sorted non-conformity scores, and Ω = {ωt1 , . . . , ω tn }
+
+represents the set of weight parameters. The computed quantile serves as the threshold for constructing the prediction set. To improve the efficiency of the prediction set while maintaining the required coverage, we design a loss function to optimize the weighting parameters: 
+
+Lef f =
+
+> T
+
+∑ |R| 
+
+∑ σ
+
+( s(Xti, yt) − ˆqτ
+
+)
+
+, (10) where s(Xti, yt) denotes the nonconformity score for event type i, σ is the sigmoid function, ˆq is the differentiable quantile obtained from Eq. 9 and τ
+
+is a hyperparameter that controls the sharpness of the assignment. 5236 5 Experiments 
+
+In this section, we analyze several key aspects to demonstrate the effectiveness of CFEP: (i) we eval-uate CFEP on three benchmark real-world datasets, where CFEP achieves the best overall performance (Section 5.5); (ii) we conduct ablation studies to examine the necessity of each module in CFEP (Section 5.6); (iii) we perform parameter analysis on the nonconformity score diffusion module to justify our parameter choices (Section 5.7); (iv) we carry out robustness analysis to investigate whether CFEP can produce robust nonconformity scores un-der noisy conditions (Section 5.8); (v) we present a case study to illustrate the superiority of CFEP over existing event prediction models (Section 5.9). 
+
+5.1 Dataset 
+
+To evaluate the effectiveness of our approach in real-world scenarios, we conduct experiments on the Global Database of Events, Language, and Tone (GDELT) (Leetaru and Schrodt, 2013), a public dataset that offers comprehensive cover-age of worldwide information. GDELT extracts events from daily news articles and categorizes them into 20 main categories and multiple subcate-gories based on the Conflict and Mediation Event Observations (CAMEO) guidelines (Boschee et al., 2015). The dataset records the entities, event type, timestamp, geolocation, and source news text for each event. We select three locations with a high frequency of conflict-related events from the GDELT dataset: Egypt, Iran, and Israel. The time period spans from February 2015 to March 2022, and the temporal granularity is one day. The specific dataset statistics are presented in Table 1. We split the data into train, validation, calibration train, calibration validation, and test datasets in a 5:1:1:1:2 ratio.                     
+
+> Table 1: Dataset Statistics.
+> Dataset #urls |R| #Events #Entities #Days Egypt 96,081 225 96,081 2,594 2,584 Iran 223,616 236 223,616 2,988 2,584 Israel 345,611 236 345,611 3,456 2,584
+
+5.2 Evaluation Metrics 
+
+To rigorously evaluate the performance of CFEP, we adopt two widely used metrics: coverage and efficiency. Coverage measures the reliability of un-certainty estimation by quantifying the proportion of instances in which the prediction set contains the true labels. Efficiency evaluates the precision of the prediction set. The metrics are defined as follows: efficiency := 1
+
+|Dt|
+
+∑
+
+> i∈Dt
+
+|Ci||Yi| , (11) coverage := 1
+
+|Dt|
+
+∑
+
+> i∈Dt
+
+I(yi ∈ Ci). (12) where Ci is the prediction set and yi is the corre-sponding ground-truth label. We further normalize efficiency by dividing it by the size of the predic-tion set |Yi|. Larger prediction sets can increase coverage, but they also reduce predictive precision. Striking an appropriate balance between these two metrics is essential for reliable uncertainty quan-tification. We set the target coverage to 0.95 , i.e., 
+
+α = 0 .05 .
+
+5.3 Baselines 
+
+We compare CFEP against several baseline meth-ods. (1) non-conformity score based methods. 
+
+They construct prediction sets by computing dif-ferent forms of non-conformity scores. We se-lect representative methods: TPS (Sadinle et al., 2019), APS (Romano et al., 2020), RAPS (An-gelopoulos et al., 2020) and DAPS (Zargarbashi et al., 2023). (2) GNN based methods. We select CF-GNN (Huang et al., 2023), which uses a GNN to calibrate the non-conformity scores. (3) non-exchangeable based methods. They address the non-exchangeability problem that arises in graph-structured data. Representative approaches include: NEX (Barber et al., 2023) and NAPS (Clarkson, 2023). (4) stochastic block model based methods. 
+
+UGNN (Davis et al., 2024) samples and aggregates predictions from randomly partitioned graph struc-tures to model uncertainty. To evaluate the effec-tiveness of these conformal prediction methods, we select four widely used event prediction models: Glean (Deng et al., 2020), MTG (Han and Ning, 2022), TGN (Rossi et al., 2020), and tCompGCN (Vashishth et al., 2020). 
+
+5.4 Main Results 
+
+The experimental results are summarized in Table 2. CFEP consistently achieves the predefined cov-erage while maintaining high efficiency across all backbone event prediction models and three public datasets. This demonstrates that the nonconformity score diffusion module effectively generates robust 5237 Table 2: Performance of comparison methods (%). The best results are highlighted in bold, and the second-best results are underlined. ✓ indicates that the method reaches the target coverage (95%) while ✗ indicates the opposite. 
+
+Model Egypt Glean MTG TGN tCompGCN Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓
+
+TPS 0.87 ± 0.02 ✗ 4.57 ± 0.11 0.79 ± 0.00 ✗ 5.69 ± 0.01 0.81 ± 0.01 ✗ 4.65 ± 0.03 0.99 ± 0.00 ✓ 7.30 ± 0.02 APS 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 7.33 ± 0.00 RAPS 1.00 ± 0.00 ✓ 8.37 ± 0.00 0.68 ± 0.03 ✗ 5.12 ± 0.01 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 8.37 ± 0.00 DAPS 0.99 ± 0.01 ✓ 4.28 ± 0.22 0.84 ± 0.01 ✗ 5.40 ± 0.02 1.00 ± 0.00 ✓ 8.37 ± 0.00 0.92 ± 0.00 ✗ 5.60 ± 0.00 CF-GNN 0.85 ± 0.06 ✗ 4.35 ± 0.01 0.76 ± 0.01 ✗ 4.99 ± 0.03 0.66 ± 0.01 ✗ 4.92 ± 0.05 0.71 ± 0.00 ✗ 5.19 ± 0.05 NEX 0.99 ± 0.01 ✓ 4.65 ± 0.04 0.99 ± 0.00 ✓ 4.71 ± 0.01 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 7.30 ± 0.02 NAPS 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 8.37 ± 0.00 1.00 ± 0.00 ✓ 7.30 ± 0.05 UGNN 0.90 ± 0.00 ✗ 5.17 ± 0.16 0.99 ± 0.00 ✓ 5.48 ± 0.09 0.97 ± 0.00 ✓ 4.26 ± 0.00 0.98 ± 0.00 ✓ 3.68 ± 0.01 CFEP 0.97 ± 0.01 ✓ 3.30 ± 0.03 0.98 ± 0.00 ✓ 3.31 ± 0.00 0.97 ± 0.01 ✓ 3.13 ± 0.06 0.96 ± 0.01 ✓ 2.97 ± 0.06 
+
+Model Iran Glean MTG TGN tCompGCN Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓
+
+TPS 0.84 ± 0.01 ✗ 5.01 ± 0.01 0.89 ± 0.00 ✗ 3.69 ± 0.00 1.00 ± 0.00 ✓ 5.37 ± 0.00 0.94 ± 0.00 ✗ 3.88 ± 0.01 APS 0.92 ± 0.00 ✗ 4.56 ± 0.00 1.00 ± 0.01 ✓ 3.06 ± 0.02 1.00 ± 0.00 ✓ 5.37 ± 0.00 1.00 ± 0.00 ✓ 3.51 ± 0.00 RAPS 1.00 ± 0.00 ✓ 5.37 ± 0.00 1.00 ± 0.00 ✓ 5.37 ± 0.00 1.00 ± 0.00 ✓ 5.37 ± 0.00 1.00 ± 0.00 ✓ 5.37 ± 0.00 DAPS 1.00 ± 0.00 ✓ 3.80 ± 0.00 1.00 ± 0.00 ✓ 3.78 ± 0.01 1.00 ± 0.00 ✓ 5.37 ± 0.00 1.00 ± 0.00 ✓ 4.75 ± 0.00 CF-GNN 0.79 ± 0.00 ✗ 4.16 ± 0.00 0.80 ± 0.00 ✗ 4.20 ± 0.00 0.59 ± 0.01 ✗ 4.80 ± 0.04 0.79 ± 0.00 ✗ 3.16 ± 0.00 NEX 1.00 ± 0.00 ✓ 4.02 ± 0.01 1.00 ± 0.00 ✓ 4.07 ± 0.04 1.00 ± 0.00 ✓ 5.37 ± 0.04 1.00 ± 0.00 ✓ 4.00 ± 0.01 NAPS 1.00 ± 0.00 ✓ 4.01 ± 0.01 1.00 ± 0.00 ✓ 3.07 ± 0.01 1.00 ± 0.00 ✓ 4.05 ± 0.01 1.00 ± 0.00 ✓ 3.01 ± 0.01 UGNN 1.00 ± 0.00 ✓ 5.37 ± 0.01 1.00 ± 0.00 ✓ 3.37 ± 0.01 1.00 ± 0.00 ✓ 4.23 ± 0.01 0.91 ± 0.00 ✗ 5.37 ± 0.00 CFEP 0.98 ± 0.00 ✓ 2.39 ± 0.00 0.98 ± 0.00 ✓ 2.41 ± 0.00 0.97 ± 0.00 ✓ 2.48 ± 0.00 0.98 ± 0.00 ✓ 2.40 ± 0.00 
+
+Model Israel Glean MTG TGN tCompGCN Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓ Coverage ↑ Efficiency ↓
+
+TPS 0.81 ± 0.00 ✗ 4.11 ± 0.01 0.85 ± 0.00 ✗ 4.19 ± 0.00 0.84 ± 0.00 ✗ 3.65 ± 0.20 0.82 ± 0.00 ✗ 3.19 ± 0.01 APS 1.00 ± 0.00 ✓ 2.19 ± 0.01 1.00 ± 0.00 ✓ 2.19 ± 0.01 1.00 ± 0.00 ✓ 3.85 ± 0.01 1.00 ± 0.00 ✓ 2.19 ± 0.01 RAPS 1.00 ± 0.00 ✓ 3.85 ± 0.00 1.00 ± 0.00 ✓ 3.85 ± 0.00 1.00 ± 0.00 ✓ 3.85 ± 0.00 1.00 ± 0.00 ✓ 3.85 ± 0.00 DAPS 0.92 ± 0.00 ✗ 3.14 ± 0.00 1.00 ± 0.00 ✓ 2.14 ± 0.00 1.00 ± 0.00 ✓ 2.31 ± 0.00 1.00 ± 0.00 ✓ 2.14 ± 0.00 CF-GNN 0.84 ± 0.00 ✗ 3.17 ± 0.00 0.84 ± 0.00 ✗ 3.16 ± 0.00 0.59 ± 0.01 ✗ 3.65 ± 0.01 0.84 ± 0.01 ✗ 3.17 ± 0.01 NEX 1.00 ± 0.00 ✓ 2.14 ± 0.00 1.00 ± 0.00 ✓ 2.19 ± 0.01 1.00 ± 0.00 ✓ 3.78 ± 0.01 1.00 ± 0.00 ✓ 2.19 ± 0.01 NAPS 1.00 ± 0.00 ✓ 2.19 ± 0.01 1.00 ± 0.00 ✓ 2.19 ± 0.01 1.00 ± 0.00 ✓ 3.85 ± 0.01 1.00 ± 0.00 ✓ 2.19 ± 0.01 UGNN 1.00 ± 0.00 ✓ 3.85 ± 0.01 1.00 ± 0.00 ✓ 2.30 ± 0.01 1.00 ± 0.00 ✓ 3.85 ± 0.01 1.00 ± 0.00 ✓ 3.85 ± 0.01 CFEP 0.97 ± 0.00 ✓ 1.75 ± 0.01 0.98 ± 0.00 ✓ 1.80 ± 0.00 0.98 ± 0.00 ✓ 1.86 ± 0.01 0.98 ± 0.00 ✓ 1.80 ± 0.00 nonconformity scores, and the efficiency-aware optimization module reduces the upper bound of the coverage gap by adjusting weighted quantiles, resulting in more compact prediction sets. No-tably, nonconformity score-based, GNN-based, and stochastic block model-based methods fail to meet the target coverage across all datasets, reflecting the strong temporal dynamics in event data. Mod-els that perform well under the exchangeability assumption do not generalize effectively to event prediction tasks. While NEX and NAPS attempt to address nonconformity, CFEP achieves signifi-cantly higher efficiency. For instance, on the Egypt dataset, CFEP improves efficiency over NEX by 41%, 42%, 167%, and 145% across the four back-bone models, highlighting the effectiveness of the efficiency-aware optimization. 
+
+5.5 Ablation Study 
+
+To verify the effectiveness of the components in CFEP, we conduct an ablation study: (1) Remov-
+
+Table 3: Ablation Study (%).                                                          
+
+> Model Egypt Glean MTG Coverage ↑Efficiency ↓Coverage ↑Efficiency ↓
+> w/o tpo 0.96 ±0.01 3.68 ±0.00 0.96 ±0.00 3.56 ±0.00 w/o tpr 0.95 ±0.00 3.54 ±0.00 0.97 ±0.00 3.49 ±0.00 w/o Leff 0.96 ±0.01 3.70 ±0.00 0.97 ±0.00 3.75 ±0.00 CFEP 0.97 ±0.01 3.30 ±0.03 0.98 ±0.00 3.31 ±0.00
+
+ing temporal neighbors and topological neighbors, denoted as w/o tpr and w/o tpo, respectively. (2) Removing the efficiency-aware loss Leff , denoted as w/o Leff . We select the Egypt dataset and use Glean and MTG as the backbone event prediction models. The results are reported in Table 3. In the non-conformity score diffusion module, removing either temporal neighbors or topological neighbors leads to a clear performance degradation, indicat-ing that both temporal and topological uncertainty propagation in temporal knowledge graphs are es-sential for learning robust nonconformity scores. 5238 Government   
+
+> Environmental
+> Agency Public Company Media
+> 2025/01/10 Make public statement 2025/01/13
+> Express intent to cooperate 2025/01/10
+> Disseminate
+> information
+> (a) Temporal knowledge graph (b) Prediction results
+> Glean: Consult CFEP: {Consult, protest}
+
+Figure 3: A real sample selected from the test set. 
+
+Notably, removing Leff leads to a degradation in efficiency, demonstrating that the efficiency-aware optimization module effectively reduces the size of the prediction sets. 
+
+Table 4: Parameter Analysis for Non-conformity Score Diffusion.                                                                                                                                                                               
+
+> λ1λ2
+> Glean MTG Coverage Efficiency Coverage Efficiency 0.00 0.00 0.95 ±0.01 1.92 ±0.01 0.94 ±0.00 1.87 ±0.00 0.01 0.01 0.97 ±0.01 1.75 ±0.01 0.98 ±0.00 1.80 ±0.00
+> 0.02 0.01 0.96 ±0.00 1.85 ±0.00 0.96 ±0.00 1.95 ±0.00 0.03 0.01 0.94 ±0.01 1.58 ±0.01 0.94 ±0.00 1.97 ±0.00 0.04 0.01 0.94 ±0.00 1.52 ±0.00 0.94 ±0.00 1.82 ±0.00 0.02 0.02 0.93 ±0.01 1.46 ±0.01 0.94 ±0.00 2.13 ±0.00 0.03 0.02 0.93 ±0.01 1.50 ±0.00 0.93 ±0.00 1.92 ±0.00 0.05 0.01 0.93 ±0.01 1.64 ±0.01 0.92 ±0.01 1.53 ±0.01 0.01 0.05 0.93 ±0.01 1.61 ±0.01 0.91 ±0.01 1.27 ±0.01 0.1 0.5 0.92 ±0.01 1.52 ±0.01 0.91 ±0.00 1.23 ±0.00 0.5 0.1 0.91 ±0.00 1.26 ±0.00 0.90 ±0.00 1.16 ±0.00 1.0 0.0 0.87 ±0.00 1.16 ±0.00 0.90 ±0.00 1.13 ±0.00 0.0 1.0 0.91 ±0.00 1.25 ±0.00 0.90 ±0.00 1.10 ±0.00
+
+5.6 Parameter Sensitivity Analysis 
+
+We empirically investigate the impact of λ1 and λ2
+
+in Eq. 8 on the performance of CFEP. The parame-ter analysis is conducted on the Israel dataset using Glean as the backbone event prediction model. We choose this dataset because events evolve rapidly over time, making it a representative benchmark for examining the sensitivity of CFEP to parame-ter variations. The results are reported in Table 4. Specifically, λ1 controls the contribution of topo-logical neighbors to the nonconformity score, while 
+
+λ2 governs the contribution of temporal neighbors. The experimental results indicate that increasing the parameters generally reduces the size of the pre-diction set, thereby sacrificing coverage. Setting both λ1 and λ2 to small values ( λ1 = λ2 = 0 .01 )mitigates the influence of topological and temporal neighbors, achieving the optimal balance between coverage and efficiency. 1 5 10 15 20     
+
+> Training noise level
+> 0.870 0.885 0.900 0.915 0.930 0.945 0.960 0.975 0.990
+> Coverage
+> Coverage on Israel Dataset
+> CFEP DAPS NEX 1510 15 20
+> Training noise level
+> 12
+> Efficiency
+> Efficiency on Israel Dataset
+> CFEP DAPS NEX
+
+Figure 4: Efficiency and Coverage vs Training noise level in Israel. 
+
+5.7 Robustness Analysis 
+
+In real-world applications, data inevitably contain noise, and the conformal prediction methods are required to maintain reliable predictions even un-der extreme conditions. We conduct experiments on the Israel dataset using MTG as the backbone event prediction model and select DAPS and NEX as baseline methods, as they achieve strong per-formance in the Israel dataset. Poisson noise is injected into the training and calibration data to analyze how coverage and efficiency vary with in-creasing noise levels. As shown in Fig. 4, CFEP demonstrates substantially stronger robustness than DAPS and NEX. By incorporating both temporal and topological neighbors, CFEP learns robust non-conformity scores that preserve the target coverage while maintaining high efficiency even in noisy scenarios. DAPS exhibits greater robustness than NEX, which can be attributed to its ability to in-tegrate structural information and global relation-ships. NEX primarily emphasizes explicit reduc-tion of prediction set size, leading to nonconformity scores that are more sensitive to noise. 
+
+5.8 Case Study 
+
+We select a real test sample to illustrate the differ-ence between CFEP and existing event prediction models. We use Glean, a representative method that performs point predictions by learning tempo-ral knowledge graphs, to represent current event prediction approaches. As shown in Fig. 3 (a), a temporal knowledge graph is constructed from the selected test sample, with the ground truth event at the future timestamp being a protest. Fig. 3 (b) 5239 shows that Glean predicts the event with the high-est probability, which is a Consult event. CFEP produces a prediction set {Consult, Protest } that includes the true label. The point predictions pro-duced by Glean do not provide information about prediction confidence, and errors can result in sig-nificant losses, making them difficult to use in prac-tical decision-making. CFEP generates prediction sets with guaranteed coverage while maintaining high efficiency, thereby providing substantial sup-port for informed decision-making. 
+
+6 Related Work 
+
+6.1 Event Prediction 
+
+Research on event prediction spans a wide range of domains, including criminal activities (Sun et al., 2023; Jhee et al., 2023; Hu et al., 2024; Qin et al., 2025; LIN et al., 2024), political events (Deng et al., 2024a; Thida, 2026; Gwak et al., 2024; Shahi et al., 2024; von der Maase, 2025), and stock markets (Liu et al., 2024; Koa et al., 2024; Saberironaghi et al., 2025; Chiu et al., 2025). Early approaches to event prediction employ machine learning tech-niques (Kallus, 2014), which rely on statistical fea-tures to predict events. Recently, researchers have used deep learning methods to automatically ex-tract event features (Deng et al., 2024b; Wu et al., 2020). To represent event structures, some re-searchers model events as graphs and leverage se-mantic information from event texts to derive rich representations, such as topic-related keywords, document embeddings, causal effects, knowledge graphs (Deng et al., 2021, 2020, 2022b,a), and con-textual information (Ma et al., 2023; Han and Ning, 2022). However, none of these methods consider uncertainty quantification for event prediction. 
+
+6.2 Conformal Prediction 
+
+Vovk (Vovk et al., 2005b, 2017) first offers predic-tion sets with guaranteed confidence levels based on a predefined coverage rate. Since its inception, numerous studies have focused on both advancing its theoretical foundations (Tibshirani et al., 2019; Xu and Xie, 2021; Campos et al., 2024; Gibbs et al., 2025) and improving practical applications (Fannjiang et al., 2022; Lu et al., 2022; Quach et al., 2023; Mossina et al., 2024; Ernez et al., 2023; Pantelidis et al., 2025; Silva-Rodríguez et al., 2025; Everink et al., 2025). Given its inherent ro-bustness, a key challenge in applying conformal prediction across different domains is enhancing efficiency (Ndiaye, 2022; Straitouri et al., 2023). The design of an effective non-conformity score plays a critical role in improving the efficiency of prediction sets while maintaining exchange-ability guarantees. Several notable approaches, including TPS (Sadinle et al., 2019), APS (Ro-mano et al., 2020), and RAPS (Angelopoulos et al., 2020), achieve higher efficiency by employing distinct strategies for computing non-conformity scores. More recently, several studies have ex-tended conformal prediction to graph-structured domains (Huang et al., 2023; Zhao et al., 2024; Zargarbashi and Bojchevski, 2024; Zhang et al., 2025; Song et al., 2024). (Zargarbashi et al., 2023) proposed a diffusion-based non-conformity score that incorporates topological information for graph-based conformal prediction. In contrast to these studies, our work targets the domain of event pre-diction over temporal knowledge graphs, where the standard exchangeability assumption breaks down. 
+
+7 Conclusion 
+
+In this paper, we introduce CFEP, a framework that applies conformal prediction to event prediction. Our primary objective is to integrate nonconfor-mity theory into the event prediction framework and demonstrate that the exchangeability assump-tion is violated in this domain due to the temporal dependencies of events. Through theoretical analy-sis, we propose an upper bound to effectively ad-dress the coverage gap. CFEP incorporates the non-conformity score diffusion module, which simul-taneously considers both topological and temporal neighbors to generate robust nonconformity scores, while the efficiency-aware optimization module ad-justs the quantile weights to produce prediction sets that achieve high efficiency without compro-mising coverage. Experiments on three real-world datasets show that CFEP outperforms existing base-line methods in terms of both efficiency and cover-age. 
+
+Limitations 
+
+CFEP inherits the representational limitations of the underlying event prediction model. When the backbone model produces poorly calibrated or noisy outputs, CFEP may yield conservative predic-tion sets with reduced efficiency. Moreover, CFEP currently assumes a predefined event type space during calibration, which limits its direct applica-bility to entirely unseen event types. In future work, 5240 we plan to further enhance the representational ro-bustness of CFEP so that it remains effective even when the backbone model provides suboptimal pre-dictions. 
+
+Ethics Statement 
+
+Regarding the potential risks associated with our work, we provide the following clarifications. This work focuses on developing an uncertainty quan-tification framework for event prediction and is intended solely for research purposes. It should not be directly used for policy-making or operational decision-making. In the case of processing event text with pre-trained language models, we freeze the model parameters and employ the model in an offline setting to effectively mitigate the risk of data leakage. No AI assistance was applied in any of the experiments. AI was only used to assist in refining the language of the paper to enhance clarity. The novel contributions, motivations, and figures in this work were developed without the aid of AI. 
+
+Acknowledgments 
+
+This research was supported by the National Key R&D Program of China (No. 2023YFC3303800). 
+
+References 
+
+Anastasios Angelopoulos, Stephen Bates, Jitendra Ma-lik, and Michael I Jordan. 2020. Uncertainty sets for image classifiers using conformal prediction. arXiv preprint arXiv:2009.14193 .Rina Foygel Barber, Emmanuel J Candes, Aaditya Ram-das, and Ryan J Tibshirani. 2023. Conformal predic-tion beyond exchangeability. The Annals of Statistics ,pages 816–845. Elizabeth Boschee, Jennifer Lautenschlager, Sean O’Brien, Steve Shellman, James Starz, and Michael Ward. 2015. ICEWS Coded Event Data. Margarida Campos, António Farinhas, Chrysoula Zerva, Mário AT Figueiredo, and André FT Martins. 2024. Conformal prediction for natural language process-ing: A survey. Transactions of the Association for Computational Linguistics , 12:1497–1516. Cheng-Chih Chiu, Chung-Chi Chen, Hen-Hsen Huang, and Hsin-Hsi Chen. 2025. Pre-finetuning with im-pact duration awareness for stock movement predic-tion. In Companion Proceedings of the ACM on Web Conference 2025 , pages 929–933. James A Clarkson and C Raymond Adams. 1933. On definitions of bounded variation for functions of two variables. Transactions of the American Mathemati-cal Society , pages 824–854. Jase Clarkson. 2023. Distribution free prediction sets for node classification. In International conference on machine learning , pages 6268–6278. PMLR. Ed Davis, Ian Gallagher, Daniel John Lawson, and Patrick Rubin-Delanchy. 2024. Valid conformal prediction for dynamic gnns. arXiv preprint arXiv:2405.19230 .Songgaojun Deng, Maarten de Rijke, and Yue Ning. 2024a. Advances in human event modeling: From graph neural networks to language models. In Pro-ceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, KDD 2024, Barcelona, Spain, August 25-29, 2024 , pages 6459– 6469. ACM. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2019. Learning dynamic context graphs for predict-ing social events. In KDD , pages 1007–1016. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2020. Dynamic knowledge graph based multi-event forecasting. In KDD , pages 1585–1595. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2021. Understanding event predictions via contextu-alized multilevel feature learning. In CIKM , pages 342–351. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2022a. Causality enhanced societal event forecasting with heterogeneous graph learning. In IEEE Inter-national Conference on Data Mining, ICDM 2022, Orlando, FL, USA, November 28 - Dec. 1, 2022 ,pages 91–100. IEEE. Songgaojun Deng, Huzefa Rangwala, and Yue Ning. 2022b. Robust event forecasting with spatiotemporal confounder learning. In KDD ’22: The 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, Washington, DC, USA, August 14 - 18, 2022 , pages 294–304. ACM. Songgaojun Deng, Olivier Sprangers, Ming Li, Sebas-tian Schelter, and Maarten de Rijke. 2024b. Domain generalization in time series forecasting. TKDD ,18(5):1–24. Fares Ernez, Alexandre Arnold, Audrey Galametz, Catherine Kobus, and Nawal Ould-Amer. 2023. Ap-plying the conformal prediction paradigm for the uncertainty quantification of an end-to-end automatic speech recognition model (wav2vec 2.0). In Confor-mal and Probabilistic Prediction with Applications ,pages 16–35. PMLR. Jasper Marijn Everink, Bernardin Tamo Amougou, and Marcelo Pereyra. 2025. Self-supervised conformal prediction for uncertainty quantification in imaging problems. In International Conference on Scale Space and Variational Methods in Computer Vision ,pages 108–118. Springer. 5241 Clara Fannjiang, Stephen Bates, Anastasios N An-gelopoulos, Jennifer Listgarten, and Michael I Jordan. 2022. Conformal prediction under feedback covari-ate shift for biomolecular design. Proceedings of the National Academy of Sciences , page e2204569119. Isaac Gibbs, John J Cherian, and Emmanuel J Candès. 2025. Conformal prediction with conditional guaran-tees. Journal of the Royal Statistical Society Series B: Statistical Methodology , page qkaf008. Daehoon Gwak, Junwoo Park, Minho Park, Chaehun Park, Hyunchan Lee, Edward Choi, and Jaegul Choo. 2024. Forecasting future international events: A reliable dataset for text-based event modeling. arXiv preprint arXiv:2411.14042 .Xiaoxue Han and Yue Ning. 2022. Text-enhanced multi-granularity temporal graph learning for event predic-tion. In IEEE International Conference on Data Mining, ICDM 2022, Orlando, FL, USA, November 28 - Dec. 1, 2022 , pages 171–180. IEEE. Zhen Han, Peng Chen, Yunpu Ma, and Volker Tresp. 2021. Explainable subgraph reasoning for forecasting on temporal knowledge graphs. In-ternational Conference on Learning Representa-tions,International Conference on Learning Repre-sentations .Kaixi Hu, Lin Li, Qing Xie, Xiaohui Tao, and Guan-dong Xu. 2024. Crimealarm: Towards intensive in-tent dynamics in fine-grained crime prediction. In 
+
+International Conference on Database Systems for Advanced Applications , pages 104–120. Springer. Kexin Huang, Ying Jin, Emmanuel Candes, and Jure Leskovec. 2023. Uncertainty quantification over graph with conformalized graph neural networks. Ad-vances in Neural Information Processing Systems ,pages 699–721. Jong Ho Jhee, Myung Jun Kim, Myeonggeon Park, Jeongheun Yeon, and Hyunjung Shin. 2023. Fast prediction for criminal suspects through neighbor mutual information-based latent network. IJIS , pages 1–12. Nathan Kallus. 2014. Predicting crowd behavior with big public data. In WWW , pages 625–630. Kelvin Kan, François-Xavier Aubet, Tim Januschowski, Youngsuk Park, Konstantinos Benidis, Lars Ruthotto, and Jan Gasthaus. 2022. Multivariate quantile func-tion forecaster. In International Conference on Artifi-cial Intelligence and Statistics , pages 10603–10621. PMLR. Kelvin JL Koa, Yunshan Ma, Ritchie Ng, and Tat-Seng Chua. 2024. Learning to generate explainable stock predictions using self-reflective large language mod-els. In Proceedings of the ACM on Web Conference 2024 , pages 4304–4315. Kalev Leetaru and Philip A Schrodt. 2013. Gdelt: Global data on events, location, and tone. In ISA annual convention , pages 1–49. Citeseer. Yihang LIN, Kun ZHENG, Shuhao XIA, Li QI, Jie DAI, Xuan CAI, and Qinggang ZHU. 2024. A crime pre-diction model incorporating regional spatial similar-ity characteristics and spatio temporal characteristics of events. Geomatics and Information Science of Wuhan University .Mengpu Liu, Mengying Zhu, Xiuyuan Wang, Guofang Ma, Jianwei Yin, and Xiaolin Zheng. 2024. Echo-gl: Earnings calls-driven heterogeneous graph learning for stock movement prediction. In AAAI , 12, pages 13972–13980. Charles Lu, Andréanne Lemay, Ken Chang, Katha-rina Höbel, and Jayashree Kalpathy-Cramer. 2022. Fair conformal predictors for applications in medical imaging. In Proceedings of the AAAI conference on artificial intelligence , pages 12008–12016. Yunshan Ma, Chenchen Ye, Zijian Wu, Xiang Wang, Yixin Cao, and Tat-Seng Chua. 2023. Context-aware event forecasting via graph disentanglement. In 
+
+KDD , pages 1643–1652. Luca Mossina, Joseba Dalmau, and Léo Andéol. 2024. Conformal semantic image segmentation: Post-hoc quantification of predictive uncertainty. In Proceed-ings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 3574–3584. Eugene Ndiaye. 2022. Stable conformal prediction sets. In International Conference on Machine Learning ,pages 16462–16479. PMLR. Ippokratis Pantelidis, Korbinian Randl, and Aron Hen-riksson. 2025. Efficient text classification with conformal in-context learning. arXiv preprint arXiv:2512.05732 .Zhenkai Qin, BaoZhong Wei, and Caifeng Gao. 2025. Innovative lsgtime model for crime spatiotemporal prediction based on mindspore framework. arXiv preprint arXiv:2503.20136 .Victor Quach, Adam Fisch, Tal Schuster, Adam Yala, Jae Ho Sohn, Tommi S Jaakkola, and Regina Barzilay. 2023. Conformal language modeling. arXiv preprint arXiv:2306.10193 .Yaniv Romano, Matteo Sesia, and Emmanuel Candes. 2020. Classification with valid and adaptive coverage. 
+
+Advances in neural information processing systems ,pages 3581–3591. Emanuele Rossi, Ben Chamberlain, Fabrizio Frasca, Da-vide Eynard, Federico Monti, and Michael Bronstein. 2020. Temporal graph networks for deep learning on dynamic graphs. In ICML , pages 1–16. Mohammadreza Saberironaghi, Jing Ren, and Alireza Saberironaghi. 2025. Stock market prediction using machine learning and deep learning techniques: A review. AppliedMath , 5(3). 5242 Mauricio Sadinle, Jing Lei, and Larry Wasserman. 2019. Least ambiguous set-valued classifiers with bounded error levels. Journal of the American Statistical As-sociation , pages 223–234. Gautam Kishore Shahi, Ali Sercan Basyurt, Stefan Stieglitz, and Christoph Neuberger. 2024. Agenda formation and prediction of voting tendencies for european parliament election using textual, social and network features. Information Systems Frontiers ,pages 1–19. Julio Silva-Rodríguez, Ismail Ben Ayed, and Jose Dolz. 2025. Conformal prediction for zero-shot models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 19931–19941. Jianqing Song, Jianguo Huang, Wenyu Jiang, Baom-ing Zhang, Shuangjie Li, and Chongjun Wang. 2024. Similarity-navigated conformal prediction for graph neural networks. Advances in Neural Information Processing Systems , 37:48541–48567. Eleni Straitouri, Lequn Wang, Nastaran Okati, and Manuel Gomez Rodriguez. 2023. Improving ex-pert predictions with conformal prediction. In In-ternational Conference on Machine Learning , pages 32633–32653. PMLR. Yuting Sun, Tong Chen, and Hongzhi Yin. 2023. Spatial-temporal meta-path guided explainable crime prediction. World Wide Web , 26(4):2237—-2263. Myo Thida. 2026. Time-series forecasting for political violence targeting women. International Journal of Data Science and Analytics , 21(1):64. Ryan J Tibshirani, Rina Foygel Barber, Emmanuel Can-des, and Aaditya Ramdas. 2019. Conformal pre-diction under covariate shift. Advances in neural information processing systems .Shikhar Vashishth, Soumya Sanyal, Vikram Nitin, and Partha Talukdar. 2020. Composition-based multi-relational graph convolutional networks. In ICLR ,pages 1–16. Simon P von der Maase. 2025. Next-generation con-flict forecasting: Unleashing predictive patterns through spatiotemporal learning. arXiv preprint arXiv:2506.14817 .Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. 2005a. Algorithmic learning in a random world . Springer. Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. 2005b. Algorithmic learning in a random world. Springer , pages 1–9. Vladimir Vovk, Jieli Shen, Valery Manokhin, and Min-ge Xie. 2017. Nonparametric predictive distributions based on conformal prediction. In Conformal and probabilistic prediction and applications , pages 82– 102. PMLR. Dongxia Wu, Liyao Gao, Matteo Chinazzi, Xinyue Xiong, Alessandro Vespignani, Yi-An Ma, and Rose Yu. 2021. Quantifying uncertainty in deep spatiotem-poral forecasting. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining , pages 1841–1851. Xian Wu, Chao Huang, Chuxu Zhang, and Nitesh V Chawla. 2020. Hierarchically structured transformer networks for fine-grained spatial event forecasting. In WWW , pages 2320–2330. Chen Xu and Yao Xie. 2021. Conformal prediction in-terval for dynamic time-series. In International Con-ference on Machine Learning , pages 11559–11569. PMLR. Soroush H Zargarbashi, Simone Antonelli, and Aleksan-dar Bojchevski. 2023. Conformal prediction sets for graph neural networks. In International Conference on Machine Learning , pages 12292–12318. PMLR. Soroush H Zargarbashi and Aleksandar Bojchevski. 2024. Conformal inductive graph neural networks. 
+
+arXiv preprint arXiv:2407.09173 .Zheng Zhang, Jie Bao, Zhixin Zhou, Nicolo Colombo, Lixin Cheng, and Rui Luo. 2025. Residual reweighted conformal prediction for graph neural networks. arXiv preprint arXiv:2506.07854 .Tianyi Zhao, Jian Kang, and Lu Cheng. 2024. Confor-malized link prediction on graph neural networks. In 
+
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 4490–4499. Table 5: Important notations and descriptions.                   
+
+> Notation Description
+> s, r, o, c head entity, event type, tail entity and event text
+> E,R,Csets of entities, event types and event texts
+> F(·)the transformation function
+> f(·)event prediciton model
+> Ethe set of events
+> etithe event of type ioccurring at timestamp t
+> Xti
+> the representation of the event type i
+> at timestamp tsti
+> the nonconformity score of the event type i
+> at timestamp t
+
+A Theory Analysis 
+
+A.1 Analysis of Non-Exchangeability in Event Prediction 
+
+Table 5 summarizes the important notations and their corresponding descriptions used in this paper. We theoretically analyze the violation of exchange-ability in event prediction. Before presenting the 5243 theoretical framework, we define the calibration and test sets in event prediction. 
+
+Definition 4 Calibration Set and Test Set. Given the set of events of type i extracted from the temporal knowledge graph, denoted as E≤ti =
+
+{et1 
+
+> i
+
+, e t2 
+
+> i
+
+, . . . , e ti} ⊆ E with timestamps satisfying 
+
+t1 ≤ · · · ≤ t. The nonconformity scores for each event type i are sti. The sets of events in the cali-bration set and the test set are defined as Ec and 
+
+Et, respectively: 
+
+Dc = ( E≤tc , Xti, yti , s ti), E ≤tc = et−h+1: ti (13) 
+
+Dt = ( E≤tt , Xtj , ytj , s tj ), E ≤tt = et−h+1: tj , (14) 
+
+where Dc ∩ Dt = ∅ and Ec ∩ Et = ∅. Xti, yti ,and sti denote the feature representation, ground-truth label, and nonconformity score of event type 
+
+i at timestamp t, respectively. E≤tc denotes the set of events extracted from the temporal knowledge graph Gt−h+1: t.
+
+We begin by establishing that exchangeability holds for event prediction on static graphs, followed by an analysis showing that it is violated in temporal knowledge graphs. In a static graph G = ( V, E ),given a training dataset Dt, a validation dataset Dv,a calibration dataset Dc and a test dataset Dt, if a model mapping data points X to Y and a function mapping X × Y satisfy the assumption in Eq. (15), then the exchangeability condition can be main-tained: 
+
+S
+
+(
+
+x, y ; {xi, y i}i∈Dt∪Dv , {xj }j∈Dc∪Dt
+
+)
+
+= S
+
+(
+
+x, y ; {xi, y i}i∈Dt∪Dv , {xπ(j)}j∈Dc∪Dt
+
+)
+
+,
+
+(15) where π denotes a permutation over the events in the calibration and test sets. S is the non-conformity score function. In general, event predic-tion models satisfy Eq. (15) because they depend solely on the graph structure and event attributes and do not take the temporal order into account. In a temporal knowledge graph, the graph topology, the labels of event types, and the features of events all evolve. The violation of exchangeability arises for two reasons. First, the nonconformity scores of the calibration and test sets inherently depend on time, causing them to follow different distributions. Second, training an event prediction model requires temporal information, meaning that the ordering of nodes and edges in the temporal graph influences the model’s predictions. Both factors result in a violation of Eq. (15). 
+
+Proposition 1 Non-Exchangeability in Event Prediction. Suppose there exists an event type i such that (st1 
+
+> i
+
+, . . . , s tk 
+
+> i
+
+) ∼ Pt and 
+
+(stk+1  
+
+> i
+
+, . . . , s tn 
+
+> i
+
+) ∼ Pt+∆ t. Then, the probability of selecting nc nonconformity scores to form the calibration set can be written as 
+
+P (Ec | Ect ) = 
+
+> k
+
+∏
+
+> j=1
+
+Pt(stj 
+
+> i
+
+)
+
+> n
+
+∏
+
+> j=k+1
+
+Pt+∆ t(stj 
+
+> i
+
+),
+
+and for any permutation π of the indices, it holds that 
+
+P (Ec | Ect )̸ = P (Eπ(c) | Ect ).
+
+Despite this, existing studies have not examined conformal prediction in the context of event predic-tion. 
+
+A.2 Proof for the Upper Bound on Coverage under Non-Exchangeability 
+
+Given a calibration set Dc and a randomly se-lected test instance from Dt, we compute the non-conformity scores for all samples in the calibra-tion set as well as for the test instance. Let ϕc =(st1 , . . . , s tnc ) denote the set of non-conformity scores obtained from the calibration set Dc. Each 
+
+st is computed as the average of non-conformity scores across all event types at time t:
+
+st = 1
+
+|R| 
+
+∑
+
+> i∈R
+
+sti, (16) where R represents the set of event types, and sti is the non-conformity score of event type i at time t. When incorporating the 
+
+j-th test sample from Dt, we define ϕj =(st1 , . . . , s tnc , s jt ) as the augmented set of non-conformity scores. Furthermore, we use ϕkj =(st1 , . . . , s tk−1 , s jt , s tk+1 , . . . , s tnc , s tk ) to repre-sent a permutation in which the test score stk is swapped with the k-th calibration score. According to conformal prediction theory, when the non-conformity scores fail to satisfy the ex-changeability assumption, the prediction event can be characterized as: 
+
+yjt /∈ Cjt ⇐⇒ sjt > Q 1−α
+
+(nc+1 ∑
+
+> i=1
+
+˜ωi · δΦj
+
+)
+
+,
+
+(17) where δ(·) denotes sorting the non-conformity scores in ascending order. Here, ˜ωi are predefined weights satisfying ∑nc+1  
+
+> i=1
+
+˜ωi = 1 . Under the ex-changeability assumption, these weights reduce to uniform values, i.e., ˜ωi = 1 /(nc + 1) .5244 Eq. 17 illustrates the effect of violating ex-changeability. To preserve coverage guarantees, it is therefore sufficient to show that the quantile computed from any permuted set Φ(k) 
+
+> j
+
+does not ex-ceed that derived from Φj . Formally, we aim to establish 
+
+Q1−α
+
+( nc∑
+
+> i=1
+
+˜ωi · δΦj + ˜ ωnc+1 δnc+1 
+
+)
+
+≥ Q1−α
+
+(nc+1 ∑
+
+> i=1
+
+˜ωi · δΦ(k)
+
+> j
+
+)
+
+.
+
+(18) From this, it is evident that the inequality holds when the test instance has the largest non-conformity score. Thus, it remains to verify the condition when the test score is not the maximum. Consider a specific permutation Φ(k) 
+
+> j
+
+. The corre-sponding weighted quantile can be expressed as: 
+
+> k−1
+
+∑
+
+> i=1
+
+˜ωisti + ˜ ωkstnc +1 +
+
+> nc
+
+∑
+
+> i=k+1
+
+˜ωisti + ˜ ωnc+1 stk .
+
+(19) Meanwhile, the quantile computed from Φj can be rewritten as 
+
+> k−1
+
+∑
+
+> i=1
+
+˜ωisti + ˜ ωkstk +
+
+> nc
+
+∑
+
+> i=k+1
+
+˜ωisti + ˜ ωnc+1 stnc +1 .
+
+(20) To ensure that the inequality holds for any permuta-tion Φ(k) 
+
+> j
+
+, it suffices to show that the quantile from 
+
+Φj is no smaller than that from Φ(k) 
+
+> j
+
+. Subtracting the two expressions yields (˜ ωnc+1 − ˜ωk)( stnc +1 −
+
+stk ). For this to be non-negative, it is necessary that 
+
+˜ωnc+1 ≥ ˜ωk, given that exchangeability violation implies stnc +1 > s tk , where stk corresponds to the score responsible for the violation. Consequently, 
+
+yjt /∈ Cjt ⇒ stk ∈ Φ(k) 
+
+> j
+
+. This leads to 
+
+P(yjt /∈ Cjt ) = P(stk ∈ Φ(k) 
+
+> j
+
+) = 
+
+> nc+1
+
+∑
+
+> i=1
+
+˜ωi · P(i ∈ Φ(k) 
+
+> j
+
+). (21) By applying the total variation distance, we further obtain 
+
+P(yjt /∈ Cjt ) ≤
+
+> nc+1
+
+∑
+
+> i=1
+
+˜ωi
+
+(
+
+P(i ∈ Φj )+ dTV (Φ j , Φ(k) 
+
+> j
+
+)
+
+)
+
+,
+
+(22) which can be rewritten as 
+
+E
+
+ ∑
+
+> i∈Φj
+
+˜ωi
+
+ +
+
+> nc
+
+∑
+
+> i=1
+
+˜ωi · dTV (Φ j , Φ(k) 
+
+> j
+
+)
+
+≤ α +
+
+> nc
+
+∑
+
+> i=1
+
+˜ωi · dTV (Φ j , Φ(k) 
+
+> j
+
+).
+
+(23) 
+
+B Methodology 
+
+B.1 Algorithm of CFEP 
+
+The overall procedure of the proposed method is summarized in Algorithm 1. We first train the event prediction model on the training and validation sets. The trained model is then used to obtain event rep-resentations as well as the corresponding logits, which serve as the basis for computing the base non-conformity scores. Next, CFEP is trained on the calibration set. During the Non-Conformity Score Diffusion stage, we aggregate both topolog-ical neighbors and temporal neighbors for each event category, resulting in temporally and topo-logically diffused non-conformity scores for each event. After obtaining the diffused non-conformity scores across the entire calibration set, we estimate the quantile threshold ˆq through a differentiable procedure proposed in this work and further opti-mize a weighted quantile in the Efficiency-aware Optimization stage. During inference on the test set, we construct the prediction set by comparing the non-conformity scores with the weighted quan-tile obtained by CFEP, thereby producing predic-tion sets that guarantee coverage while achieving high efficiency. 
+
+B.2 Time Complexity 
+
+The time complexity of the CFEP method can be analyzed by considering the key steps involved in both the training and inference phases. First, the event prediction model is trained on the temporal knowledge graph. This step typically in-volves learning a model that captures the temporal and relational dependencies between events. The training time for this model depends on the specific architecture used (e.g., Graph Neural Networks, LSTM, or Transformer models) and is denoted as 
+
+O(Ttrain ), where Ttrain is the time complexity of the prediction model training process. Depending on the model complexity, this can vary, but it is gen-erally proportional to the size of the graph and the number of training epochs. 5245 1.0 0.9 0.8 0.7 0.6 
+
+> Training data size
+> 0.90 0.91 0.92 0.93 0.94 0.95 0.96 0.97 0.98 0.99
+> Coverage
+> Coverage on Egypt Dataset
+> CFEP DAPS NEX 1.0 0.9 0.8 0.7 0.6
+> Training data size
+> 34
+> Efficiency
+> Efficiency on Egypt Dataset
+> CFEP DAPS NEX 1.0 0.9 0.8 0.7 0.6
+> Training data size
+> 0.900 0.915 0.930 0.945 0.960 0.975 0.990
+> Coverage
+> Coverage on Iran Dataset
+> CFEP DAPS NEX 1.0 0.9 0.8 0.7 0.6
+> Training data size
+> 1234
+> Efficiency
+> Efficiency on Iran Dataset
+> CFEP DAPS NEX
+
+Figure 5: Efficiency and Coverage vs Training Data Size on Egypt and Iran. 0.05 0.10 0.15 0.20 0.25             
+
+> Pre-defined mis-coverage level
+> 0.72 0.76 0.80 0.84 0.88 0.92 0.96 1.00
+> Coverage
+> Coverage on Egypt Dataset
+> CFEP DAPS NEX 0.05 0.10 0.15 0.20 0.25
+> Pre-defined mis-coverage level
+> 1234
+> Efficiency
+> Efficiency on Egypt Dataset
+> CFEP DAPS NEX 0.05 0.10 0.15 0.20 0.25
+> Pre-defined mis-coverage level
+> 0.72 0.76 0.80 0.84 0.88 0.92 0.96 1.00
+> Coverage
+> Coverage on Iran Dataset
+> CFEP DAPS NEX 0.05 0.10 0.15 0.20 0.25
+> Pre-defined mis-coverage level
+> 01234
+> Efficiency
+> Efficiency on Iran Dataset
+> CFEP DAPS NEX
+
+Figure 6: Efficiency and Coverage vs Pre-defined mis-coverage level on Egypt and Iran. 
+
+Second, for each event type i ∈ R , the non-conformity score sti is calculated. This process involves comparing the predicted event labels with the true labels, which can be done in O(n) time, where n is the number of event types. Each non-conformity score captures how "unexpected" or "non-conforming" a given prediction is, and this calculation is done individually for each event type in the dataset. Once the non-conformity scores are computed, the next step is to diffuse these scores across the temporal and topological neighbors of each event. The diffusion process involves propagating the non-conformity scores through the graph, taking into account both temporal relationships (i.e., events occurring within a certain time window) and topo-logical relationships (i.e., events that are connected through shared entities or relationships). The time complexity of this operation is proportional to the number of edges in the graph, O(|E|), where |E|
+
+is the number of edges in the temporal knowledge graph. This step typically involves a message-passing or graph traversal mechanism, which en-sures that each event’s score is updated based on its neighbors. Finally, the quantile threshold for conformal pre-diction is computed by sorting the non-conformity scores. This sorting step ensures that the prediction set can be constructed according to the desired cov-erage level 1 − α. Sorting n non-conformity scores requires O(n log n) time, which is the dominant complexity in the quantile computation. Therefore, combining all the steps, the overall time complexity of CFEP is given by the following expression: 
+
+TCFEP = O(Ttrain )+ O(n·k)+ O(|E|)+ O(n log n)
+
+(24) where Ttrain is the training time of the event pre-diction model, n is the number of event types, k
+
+represents the average number of neighbors per event, |E| is the number of edges in the tempo-ral knowledge graph, and n log n accounts for the sorting of non-conformity scores. 
+
+C Experiments 
+
+C.1 Dataset 
+
+The majority of existing benchmark datasets are constructed from different curated subsets of GDELT and ICEWS. For instance, the commonly used ICEWS14 and ICEWS18 datasets represent event records extracted from the ICEWS corpus (Han et al., 2021) for the years 2014 and 2018, respectively. Nevertheless, these datasets do not preserve the original news articles from which the events are derived. Instead, they only retain struc-tured event attributes, including the head entity, tail entity, event type, and timestamp. The omis-sion of raw news text substantially limits semantic analysis, as textual context plays a critical role in capturing event semantics and interpreting the un-derlying meanings of events. Building upon the SeCoGD (Ma et al., 2023), we further perform ad-ditional data cleaning to remove noisy records from the dataset. 5246 Algorithm 1 CFEP: Conformal Event Prediction with Temporal Knowledge Graph 
+
+Require: Temporal knowledge graph Gt−h+1: t;event prediction model f (·); transformation function F (·); train set Dtrain , valid set Dvalid ,calibration set Dcalib ; miscoverage level α; dif-fusion weights λ0, λ 1, λ 2 
+
+> 1:
+
+Stage 1: Event Prediction Model Training  
+
+> 2:
+
+Train f (·) on historical temporal graphs  
+
+> 3:
+
+Obtain event representations Xt =
+
+f (Gt−h+1: t) 
+
+> 4:
+
+Compute logits ˆyt = F (Xt) 
+
+> 5:
+
+Stage 2: Non-Conformity Score Diffusion  
+
+> 6:
+
+for all (Xt, yt) ∈ D calib do  
+
+> 7:
+
+for all i ∈ R do  
+
+> 8:
+
+Compute base score sti ← | yti − ˆyti | 
+
+> 9:
+
+Identify topological neighbors N tpo  
+
+> i
+> 10:
+
+Identify temporal neighbors N tpr  
+
+> i
+> 11:
+
+Compute non-conformity scores  
+
+> 12:
+
+end for  
+
+> 13:
+
+end for  
+
+> 14:
+
+Collect diffused scores S = {sti} 
+
+> 15:
+
+Stage 3: Quantile Estimation  
+
+> 16:
+
+Sort S in ascending order  
+
+> 17:
+
+Compute quantile threshold ˆq 
+
+> 18:
+
+Stage 4: Efficiency-aware Optimization  
+
+> 19:
+
+Optimize prediction set size by minimizing efficiency loss Leff 
+
+C.2 Implementation 
+
+We reproduce the event prediction models using publicly available implementations whenever the original authors have provided code. In cases where code is not available, we implement the models from scratch based on the methodologi-cal descriptions provided in the corresponding pa-pers. During reproduction, we carefully follow the hyperparameter settings, training procedures, and evaluation protocols specified in the original works to ensure faithful replication of the reported per-formance. Additionally, any necessary adaptations to accommodate dataset differences or framework updates are explicitly documented to maintain re-producibility. During training, we set the node and edge embedding dimensions to 32 for all event pre-diction models. Each method is trained for five runs, each consisting of 20 epochs, with a batch size of 2. The reported results are averaged over the five runs. When training the conformal pre-diction models, we freeze the parameters of the event prediction model. The conformal prediction methods are reproduced based on the implemen-tations provided in the original papers, and their training procedures follow those used for the event prediction models. The transformation function F
+
+is defined as a linear function. We perform exper-iments on Ubuntu 22.04.3 LTS with an NVIDIA A100 and utilize PyTorch to implement all meth-ods. 
+
+C.3 Baselines Introduction 
+
+We elaborate on the baseline methods considered in our experimental evaluation, with a particular focus on conformal prediction based approaches. Specifically, TPS (Sadinle et al., 2019), APS (Ro-mano et al., 2020), and RAPS (Angelopoulos et al., 2020) represent fundamental conformal prediction techniques, differing primarily in how the target quantile is computed and subsequently used to form the prediction set. These methods serve as canonical references for evaluating coverage guar-antees and efficiency trade-offs in conformal infer-ence. DAPS (Zargarbashi et al., 2023) introduces a graph-aware non-conformity score tailored for static graph settings, making it a strong baseline for assessing whether explicitly modeling structural information can improve conformal prediction per-formance. When applied to event prediction, we extend DAPS to incorporate both topological neigh-bors and temporal neighbors. CF-GNN (Huang et al., 2023) further advances this line of work by adopting a model-based framework that integrates APS-style non-conformity scores with graph neu-ral networks. Through end-to-end optimization, CF-GNN incorporates topological dependencies directly into the learning process, thereby enhanc-ing the expressiveness of the conformal scoring mechanism under structured data scenarios. Be-yond exchangeable settings, NEX (Barber et al., 2023) explicitly targets the violation of the ex-changeability assumption in time series data. It addresses temporal distribution shifts by design-ing non-exchangeable conformal scores, making it particularly relevant for sequential prediction tasks. Similarly, NAPS (Clarkson, 2023) relaxes the ex-changeability assumption in graph domains by in-troducing structure-aware weighting schemes for conformal scores, enabling the method to better reflect relational dependencies in static networks. UGNN (Davis et al., 2024) extends conformal pre-diction to temporal graphs under the assumption of exchangeability. However, UGNN was origi-5247 nally designed for static GNN backbones such as GCN, GAT, and GraphSAGE, which restricts its direct compatibility with temporal GNN architec-tures. To ensure a fair and meaningful comparison, we adapt UGNN by first extracting node represen-tations from the temporal GNN and then applying an additional projection layer to obtain the final predictive outputs. 
+
+C.4 Parameter Analysis 
+
+To further investigate the impact of different param-eters on CFEP, we vary the predefined miscoverage level α and the size of the training data. Experi-ments are conducted on the Egypt and Iran datasets, and NAPS and NEX are chosen as baseline meth-ods as they exhibit strong performance in the main results. Fig. 5 illustrates that, as the amount of training data decreases, CFEP consistently pre-serves the predefined coverage while achieving superior efficiency, yielding the best overall per-formance among all methods. This observation suggests that CFEP can learn stable and robust non-conformity scores even under limited-data regimes by effectively exploiting both temporal and topo-logical neighborhood information. In comparison, DAPS demonstrates better performance than NEX, which is likely attributable to its joint modeling of temporal and topological neighbors, allowing it to remain more resilient to reductions in training data. Fig. 6 shows that, despite the increase in the predefined mis-coverage level, CFEP consis-tently maintains strong coverage while achieving relatively high efficiency compared with the base-line methods. NEX outperforms DAPS, indicating that jointly incorporating structural and temporal features in DAPS under varying mis-coverage lev-els may introduce additional noise, which in turn leads to an expansion of the prediction sets. 5248

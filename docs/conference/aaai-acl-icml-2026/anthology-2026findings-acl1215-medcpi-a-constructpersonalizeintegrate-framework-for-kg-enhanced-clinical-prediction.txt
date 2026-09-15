@@ -1,0 +1,851 @@
+Title: 2026.findings-acl.1215.pdf
+
+URL Source: https://aclanthology.org/2026.findings-acl.1215.pdf
+
+Published Time: Thu, 11 Jun 2026 02:31:34 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+> Findings of the Association for Computational Linguistics: ACL 2026 , pages 24266–24282 July 2-7, 2026 ©2026 Association for Computational Linguistics
+
+# MedCPI: A Construct–Personalize–Integrate Framework for KG-enhanced Clinical Prediction 
+
+Hang Wang Hang Dong Lu Liu *
+
+Department of Computer Science, University of Exeter, Exeter, UK 
+
+{hw876, H.Dong2, L.Liu3}@exeter.ac.uk 
+
+Abstract 
+
+Electronic health records (EHRs) provide lon-gitudinal evidence for clinical prediction, but EHR data are sparse, incomplete, and hetero-geneous, which can limit robustness. Medical knowledge graphs (MKGs) have therefore been incorporated to support KG-enhanced clini-cal prediction by linking heterogeneous EHR codes to shared medical concepts via structured relations. However, existing KG-enhanced ap-proaches remain limited in two aspects: (i) task-specific knowledge selection when extracting knowledge from a large multi-source MKG; and (ii) patient-level personalization and knowl-edge integration, where personalization is of-ten weakly controlled and knowledge integra-tion is not sufficiently aligned with longitu-dinal patient trajectories. To address these issues, we propose MedCPI, a unified Con-struct–Personalize–Integrate framework. Med-CPI first performs task-guided schema induc-tion and KG normalization to build a task-specific Concept MKG as a denoised knowl-edge pool, then constructs controlled patient-level PKGs via local expansion and short path search, and finally integrates PKG representa-tions with time-aware EHR representations via cross-attention for prediction. Experiments on MIMIC-III and MIMIC-IV across four clinical prediction tasks show consistent improvements over strong EHR-only and KG-enhanced base-lines. Ablations and additional analyses further validate the contribution of each stage and illus-trate how MedCPI utilizes structured medical knowledge. 
+
+1 Introduction 
+
+Electronic health records (EHRs) capture longitu-dinal patient trajectories through diagnoses, pro-cedures, medications, and other clinical events, providing rich, fine-grained evidence for clinical prediction (Rajkomar et al., 2018; Tomašev et al., 
+
+> *Corresponding author.
+
+2019; Landi et al., 2020; Li et al., 2022; Kraljevic et al., 2024). Building on this foundation, recent deep learning models have leveraged EHR data to learn patient representations and demonstrate promising performance across a variety of predic-tive tasks (Choi et al., 2016; Ma et al., 2017; Choi et al., 2018, 2020; Ma et al., 2020; Luo et al., 2020). However, EHR data are inherently sparse, incom-plete, and heterogeneous, leading to challenges in model robustness and reliability (Xiao et al., 2018; Amirahmadi et al., 2023; Li et al., 2023; Yu et al., 2024). To mitigate these issues, Medical Knowl-edge Graphs (MKGs) have been incorporated into clinical prediction models. By organizing medical entities and their relations into a structured graph, MKGs link heterogeneous EHR codes to shared medical concepts and provide prior knowledge that complements patient representations and smooths over data sparsity, thereby enabling KG-enhanced clinical prediction (Shang et al., 2019a; Mao et al., 2022; Xu et al., 2023). Building on MKGs, KG-enhanced clinical pre-diction has evolved through several stages. Early work exploits hierarchical structures in medical ontologies, using parent-child or ancestor rela-tions to enrich the representations of sparse med-ical codes (Choi et al., 2017; Ma et al., 2018; Zhang et al., 2020). More recent approaches move beyond pure hierarchies by leveraging multi-relational MKGs that integrate diverse biomedical sources and are encoded with graph neural net-works to provide global relational context for clini-cal prediction tasks (Shang et al., 2019b; Ge et al., 2024). The latest line of research constructs person-alized knowledge graphs (PKGs) for each patient by expanding from their EHR codes into the MKG and performing graph reasoning over the resulting PKGs, thereby yielding representations that explic-itly capture individual clinical histories and their associated medical context (Yang et al., 2023b,a; Jiang et al., 2024). 
+
+24266 Figure 1: MedCPI : a Construct–Personalize–Integrate framework for KG-enhanced clinical prediction. Construct (§4.1) performs task-guided schema induction and KG normalization on the unified MKG, followed by global 1-hop extraction from EHR concepts to obtain a task-specific Concept MKG. Personalize (§4.2) constructs a patient-level PKG by augmenting the EHR subgraph with task-relevant knowledge and short paths in the task-normalized MKG, and encodes it with a task-aware R-GCN. Integrate (§4.3) encodes longitudinal EHRs and fuses them with PKG node representations via cross-attention for final prediction. 
+
+Despite this progress, existing KG-enhanced approaches for clinical prediction still face two key limitations in how medical knowledge is con-structed and used: (a) Knowledge extraction from a large, multi-source MKG . First, the large, multi-source MKG integrates heterogeneous resources with varying relation granularity, so its schema often contains redundancy and semantic overlap, introducing substantial schema-level noise. Sec-ond, existing methods typically lack explicit task-specific knowledge selection and thus retain many task-irrelevant relations when extracting knowl-edge for prediction. Here, a task refers to a con-crete clinical prediction problem (e.g., short-term outcomes such as in-hospital mortality and 30-day readmission, or disease onset prediction). For ex-ample, for type 2 diabetes mellitus (T2DM) onset prediction, risk-factor and diagnostic relations (e.g., 
+
+has_risk_factor , diagnosed_by ) are often the most informative. Without task-specific selection, neighborhood expansion can over-retrieve hetero-geneous, weakly related nodes and relations, dilut-ing task-relevant evidence and impairing predictive performance. (b) Patient-level personalization and knowledge integration . Existing approaches often construct PKGs through unconstrained neigh-borhood expansion or retrieval-based assembly, so the resulting graph structure depends heavily on the patient’s observed concepts and retrieved neigh-borhoods or paths, which may introduce weakly related nodes and relations. In addition, knowl-edge integration is often weakly aligned with the patient’s longitudinal clinical context, making it dif-ficult to incorporate structured knowledge in a way that reflects the evolving patient trajectory across visits. To address these limitations, we propose Med-CPI , a unified Construct–Personalize–Integrate framework for KG-enhanced clinical prediction (Figure 1). In response to limitation (a), Con-struct performs task-guided schema induction and KG normalization to produce a task-specific Con-cept MKG. In contrast to prior methods that di-rectly extract or encode knowledge from a large multi-source MKG with heterogeneous relation se-mantics, this stage yields a compact and denoised knowledge pool with explicitly task-relevant re-lations. In response to limitation (b), Personal-ize constructs patient-level PKGs from the task-specific Concept MKG and the patient’s EHR via 24267 constrained local expansion and short path instanti-ation, then Integrate performs cross-attention over PKG nodes using time-aware EHR representations. The main contributions are summarized as fol-lows: • We propose MedCPI, a unified Con-struct–Personalize–Integrate framework that organizes task-guided knowledge con-struction, patient-level personalization, and EHR–PKG integration within a structured pipeline, thereby providing a systematic paradigm for knowledge construction and utilization in KG-enhanced clinical prediction. • We introduce a task-guided knowledge selec-tion mechanism that derives a task-specific Concept MKG from large multi-source MKGs through schema induction and KG normaliza-tion, which reduces schema noise caused by heterogeneous relations and provides a seman-tically consistent and task-specific knowledge pool for clinical prediction. • Experiments on MIMIC-III and MIMIC-IV across multiple clinical prediction tasks demonstrate the effectiveness of MedCPI, while ablations and analyses validate the roles of Construct, Personalize, and Integrate. 
+
+2 Related Work 
+
+In this section, we introduce related work on clin-ical prediction and group existing methods into two families: EHR-only models and KG-enhanced prediction models. 
+
+2.1 EHR-only models 
+
+EHR-only models rely solely on structured EHR data without external medical knowl-edge. Some adopt general sequence models such as GRU (Chung et al., 2014) and Trans-former (Vaswani et al., 2017), while others de-sign architectures tailored to EHR structure. Rep-resentative works include RETAIN (Choi et al., 2016), which uses reverse-time and dual-level at-tention for interpretability; Dipole (Ma et al., 2017), which combines bidirectional RNNs with attention for inter-visit dependencies; MiME (Choi et al., 2018), which models the multi-layer patient-visit-diagnosis-treatment structure to alleviate sparsity; and HiTANet (Luo et al., 2020), which introduces hierarchical time-aware attention for irregular in-tervals. 
+
+2.2 KG-enhanced models 
+
+KG-enhanced models incorporate MKGs to com-plement EHR-based representations, including static KG-enhanced models and PKG reason-ing models. Static KG-enhanced models in-tegrate external knowledge during EHR encod-ing without constructing patient-specific PKGs. GRAM (Choi et al., 2017) propagates ontology hierarchies to smooth sparse diagnosis represen-tations, and KAME (Ma et al., 2018) uses ances-tor information with knowledge-level attention to support prediction. Moving beyond pure hierar-chies, GAMENet (Shang et al., 2019b) leverages a multi-relational MKG to provide richer relational context, and DKEC (Ge et al., 2024) encodes a multi-relational MKG with graph neural networks to model global relations for clinical prediction. 
+
+PKG reasoning models construct a PKG for each patient by expanding from observed EHR concepts into an MKG and perform graph reasoning over the resulting PKGs. KGxDP (Yang et al., 2023b) applies type-specific graph attention to enable in-terpretable prediction, KerPrint (Yang et al., 2023a) introduces hierarchical attention over local and global graphs for patient representation learning, and GraphCare (Jiang et al., 2024) combines LLM-extracted and KG-retrieved knowledge in a PKG-based reasoning framework to enhance clinical pre-diction. Despite these advances, most KG-enhanced models still construct and use knowledge directly from MKGs with heterogeneous relation semantics, and lack explicit task-specific knowledge selection, motivating the unified, task-guided design of Med-CPI. 
+
+3 Preliminaries 
+
+EHR Data and Patient Subgraph. Let P be the set of patients. Each patient p ∈ P has a time-ordered EHR sequence Ep = [ Vp, 1, . . . , V p,L p ] of visits, where Vp,t = ( Dp,t , Pp,t , Mp,t ) contains di-agnosis, procedure, and medication codes recorded at visit t. We represent the EHR of patient p
+
+as a patient subgraph Gehr  
+
+> p
+
+= ( V ehr  
+
+> p
+
+, R ehr , Eehr  
+
+> p
+
+),where V ehr  
+
+> p
+
+contains the patient node p, visit nodes, and the medical concept nodes appearing in Ep. We map EHR codes to UMLS concepts using SapBERT (Liu et al., 2021) and treat the 24268 aligned concepts as the medical concept nodes in 
+
+V ehr  
+
+> p
+
+. Eehr  
+
+> p
+
+links p to each visit and links each visit to its aligned concepts via relation types 
+
+Rehr (e.g., has_admission , has_diagnosis ,
+
+has_procedure , has_medication ). 
+
+Unified Medical Knowledge Graph. Given a unified MKG G = ( V, R, E) integrated from mul-tiple sources, the set of medical concepts is de-noted by V , the set of relation types by R, and 
+
+E ⊆ V × R × V is the set of triples (h, r, t ). Due to heterogeneous sources and fine-grained vocabu-laries, G contains noisy and semantically overlap-ping relations, motivating the Construct stage in Section 4.1. 
+
+Problem Setting. Let T be the set of clinical prediction tasks, and let Tτ denote the description of task τ . For each task τ ∈ T , let Iτ denote the set of prediction instances, where an instance i ∈ I τ
+
+corresponds to either a patient or a specific visit, depending on the task definition. For each instance 
+
+i associated with patient p, the goal is to predict an outcome ˆyi from the patient’s EHR history Ep,the unified MKG G, and the task description Tτ .Formally, we learn a predictor 
+
+F : (Ep, G, T τ
+
+) → ˆyi, (1) where MedCPI implements F via the three-stage framework described in Section 4. 
+
+4 Method 
+
+In this section, we present MedCPI , which is illus-trated in Figure 1. The framework consists of three stages: (i) Construct , which builds a task-specific Concept MKG from the unified MKG; (ii) Person-alize , which constructs and encodes the PKG for each patient by combining the patient EHR sub-graph with the Concept MKG; and (iii) Integrate ,which fuses the PKG and EHR representations to obtain the final prediction. 
+
+4.1 Construct: Task-Specific Concept MKG 
+
+The Construct stage presents a pipeline to construct a task-specific Concept MKG Gconcept  
+
+> τ
+
+from the unified MKG G. The resulting Gconcept  
+
+> τ
+
+serves as a shared, task-relevant knowledge pool for the subsequent Personalize stage. 
+
+Task-Guided Schema Induction. A task-guided relation schema is induced conditioned on the task description Tτ . Relations in the unified MKG are first grouped into semantic clusters shared across tasks. For a given task τ , each cluster is evaluated with respect to the task semantics by an instruction-tuned LLM, which determines relevance and as-signs a canonical relation name to each retained cluster; irrelevant clusters are discarded. After cross-cluster inconsistencies are resolved, the in-duced schema is represented by a set of canonical relation types Rτ and the task-specific mapping 
+
+fτ : R → Rτ ∪ { IGNORE }, (2) which maps each original relation type to a canoni-cal relation in Rτ , and to IGNORE otherwise. The algorithm and prompt template are provided in Ap-pendix B.2. 
+
+KG Normalization. Using the induced schema 
+
+Rτ , the unified MKG G = ( V, R, E) is normal-ized to obtain a task-normalized MKG Gτ . Each triple (h, r, t ) ∈ E is processed by applying fτ to its relation type: triples mapped to IGNORE are removed, while retained triples are rewritten us-ing their canonical relations. This results in the task-normalized triple set 
+
+Eτ = {(h, f τ (r), t ) | (h, r, t ) ∈ E ,fτ (r)̸ = IGNORE }. (3) and the corresponding task-normalized MKG 
+
+Gτ = ( V, R τ , Eτ ).
+
+Concept MKG Extraction (Global 1-Hop). 
+
+Based on Gτ , the task-specific Concept MKG is constructed by extracting a concept-centric sub-graph around EHR concepts. For each task, pa-tients are first split into training, validation, and test sets, and the Concept MKG is constructed us-ing only concepts observed in the training split. A global 1-hop expansion is then performed from these training EHR concepts over Gτ , and only triples whose endpoints are of clinically meaning-ful types Smed (defined in Appendix B.3) are re-tained. The resulting subgraph is denoted as 
+
+Gconcept  
+
+> τ
+
+= ( V concept  
+
+> τ
+
+, R τ , Econcept  
+
+> τ
+
+). (4) 
+
+4.2 Personalize: PKG Construction and Encoding 
+
+The Personalize stage constructs a PKG for each patient from their EHR and the task-specific Con-cept MKG, and encodes it into a representation for the subsequent Integrate stage. 24269 PKG Construction. For each patient p, the set of medical concepts Cp appearing in the EHR is identified. A PKG for patient p and task τ is con-structed by augmenting the patient EHR subgraph (defined in Section 3) with task-relevant knowledge from Gconcept  
+
+> τ
+
+and performing path search in Gτ .Specifically, we attach the 1-hop neighborhood of each concept c ∈ Cp from Gconcept  
+
+> τ
+
+, and further in-sert short knowledge paths between concept pairs that co-occur in the patient’s EHR. We select the maximum path length on the validation set and use 2-hop paths in all experiments. To obtain a compact and controllable PKG, constraints are applied to path selection and graph size (details are provided in Appendix B.3). The resulting PKG is denoted as 
+
+Gpkg  
+
+> p,τ
+
+= ( V pkg  
+
+> p,τ
+
+, R τ ∪ Rehr , Epkg  
+
+> p,τ
+
+), (5) which captures both patient-specific clinical events and task-specific medical knowledge. 
+
+PKG Encoder. The PKG is encoded using a multi-layer relational graph convolutional network (R-GCN) (Schlichtkrull et al., 2018). Each node 
+
+v ∈ V pkg  
+
+> p,τ
+
+is initialized with an embedding h(0)  
+
+> v
+
+,and message passing is performed over the rela-tions in the PKG. At layer l+1 , node representa-tions are updated by        
+
+> h(l+1)
+> v=σ
+> ( ∑
+> r
+> ∑
+> u∈N r(v)
+> 1
+> cv,r
+> W(l)
+> rh(l)
+> u+W(l)0h(l)
+> v
+> )
+> ,(6)
+
+where Nr(v) denotes the neighbors of v under re-lation r. After L layers, the resulting node rep-resentations {h(L) 
+
+> v
+
+| v ∈ V pkg  
+
+> p,τ
+
+} are passed to the EHR–PKG fusion module described in Section 4.3. 
+
+4.3 Integrate: EHR–PKG Fusion and Prediction 
+
+Given the EHR sequence and the PKG node rep-resentations for each patient and task, the Inte-grate stage encodes the longitudinal EHR into time-aware representations and fuses them with PKG node representations via cross-attention for predic-tion. 
+
+EHR Encoder. The EHR sequence Ep (defined in Section 3) is encoded using a Hierarchical Time-aware Transformer (HTT), inspired by the hier-archical and time-aware attention mechanism in HiTANet (Luo et al., 2020), to produce time-aware visit representations. HTT performs intra-visit con-cept aggregation followed by a time-aware Trans-former over visits. Within each visit, concepts are aggregated to form a visit embedding, and visit embeddings are then processed by the time-aware Transformer that incorporates visit order and time intervals. Let {hp, 1, . . . , hp,L p } denote the final hidden states for all visits. These representations are time-aware in the sense that temporal order and inter-visit intervals are encoded in hp,t .For patient-level tasks, attention pooling over visits is applied to obtain a single patient-level EHR representation: 
+
+zehr  
+
+> p
+
+=
+
+> Lp
+
+∑
+
+> t=1
+
+αp,t hp,t , (7) where αp,t are normalized attention weights. For visit-level tasks, each visit constitutes a prediction instance, and the corresponding representation hp,t 
+
+is used as the EHR context for that instance, with-out global pooling. 
+
+EHR–PKG Fusion. Given an EHR context rep-resentation and the PKG node representations 
+
+{h(L) 
+
+> v
+
+}v∈V pkg  
+
+> p,τ
+
+from Section 4.2, a cross-attention mechanism is applied that uses the EHR context to attend over PKG nodes, integrating longitudi-nal clinical information with structured medical knowledge. The time-aware property of this inte-gration arises from the query representation, which encodes temporal information via HTT. Both task types are described under a unified prediction-instance formulation. Let Iτ denote the set of prediction instances for task τ . For patient-level tasks, each instance corresponds to a patient and its EHR context representation is qi = zehr  
+
+> p
+
+.For visit-level tasks, each instance corresponds to a visit indexed by (p, t ), and its EHR context rep-resentation is qi = hp,t . The PKG is constructed at the patient level for each task τ . For visit-level tasks, when constructing the PKG for an instance 
+
+(p, t ), only concepts observed up to visit t are used, ensuring no future information is introduced. The resulting PKG is shared across visits of the same patient up to the corresponding prediction time. The cross-attended knowledge summary for in-stance i is computed as 
+
+ci = CrossAttn (qi, {h(L) 
+
+> v
+
+}v∈V pkg 
+
+> p,τ
+
+). (8) For visit-level tasks, cross-attention weights are indexed by prediction instances (p, t ), while for patient-level tasks they are indexed by patient p.The fused representation is then obtained by 
+
+zfuse  
+
+> i
+
+= ϕ([qi; ci]), (9) 24270 where ϕ(·) is a two-layer MLP. 
+
+Prediction. For binary tasks, the predicted prob-ability for instance i is given by 
+
+ˆyi = σ(w⊤ 
+
+> τ
+
+zfuse  
+
+> i
+
++ bτ
+
+), (10) where (wτ , b τ ) are task-specific learnable parame-ters shared across instances. The model is trained by minimizing the task loss over prediction instances: 
+
+Lτ = ∑
+
+> i∈I τ
+
+ℓτ
+
+(yi, ˆyi
+
+), (11) where ℓτ (·, ·) denotes the binary cross-entropy loss (Appendix B.4.2). 
+
+5 Experiments 
+
+In this section, we empirically evaluate MedCPI 
+
+on multiple clinical prediction tasks to answer the following research questions: • RQ1 : How does MedCPI perform compared with representative baselines across different datasets and prediction tasks? • RQ2 : How do the three stages of MedCPI (Construct , Personalize , Integrate ) contribute to predictive performance? • RQ3 : How do key design choices and model hyperparameters influence the performance and behavior of MedCPI? 
+
+5.1 Experimental Setup Prediction Tasks. We evaluate MedCPI on four clinical prediction tasks, grouped into general-purpose and disease-specific categories. The general-purpose tasks include in-hospital mortal-ity and 30-day readmission , which are defined at the visit level: each visit forms a prediction in-stance, using the patient’s prior visits as input. The disease-specific tasks include type 2 diabetes mel-litus (T2DM) onset and coronary artery disease (CAD) onset , which are defined at the patient level: each patient contributes a single instance, labeled by whether the disease occurs for the first time in the future. Detailed definitions are provided in Appendix A.2.                  
+
+> Statistic MIMIC-III MIMIC-IV
+> #Patients 7,537 100,163 #Visits 19,993 422,739 Avg. diagnoses per visit 13.02 12.26 Avg. procedures per visit 3.85 1.45 Avg. medications per visit 27.98 23.99 Avg. visits per patient 2.65 4.22 Avg. length of stay (days) 10.72 4.89
+> Table 1: Summary statistics of the MIMIC-III and MIMIC-IV datasets (patients with at least two visits).
+
+Data and Evaluation Metrics. We conduct ex-periments on two public EHR datasets, MIMIC-III (Johnson et al., 2016) and MIMIC-IV (Johnson et al., 2023). We retain patients with at least two hospital visits to ensure sufficient longitudinal his-tories. After filtering, MIMIC-III contains 7,537 patients and 19,993 visits, and MIMIC-IV contains 100,163 patients and 422,739 visits. Table 1 sum-marizes the processed cohorts and visit-level sum-mary statistics. For all tasks, patients are split into training, validation, and test sets with an 8:1:1 ratio to avoid patient overlap. We evaluate binary pre-diction performance using the area under the ROC curve (AUROC) and the area under the precision– recall curve (AUPRC). 
+
+Baselines. We compare MedCPI against three categories of baseline methods: • EHR-only models. These methods rely solely on structured EHR data without incorporating external medical knowledge. We include gen-eral sequence models such as GRU (Cho et al., 2014) and Transformer (Vaswani et al., 2017), as well as EHR-oriented models such as RE-TAIN (Choi et al., 2016) and HiTANet (Luo et al., 2020). • Static KG-enhanced models. These methods integrate external MKGs to enrich EHR repre-sentations during the encoding stage. Repre-sentative models include GRAM (Choi et al., 2017) and KAME (Ma et al., 2018). • PKG reasoning models. These methods con-struct PKGs from EHR and external knowl-edge sources and perform graph reasoning for clinical prediction. We consider Ker-Print (Yang et al., 2023a), KGxDP (Yang et al., 2023b), and GraphCare (Jiang et al., 2024) as representative approaches. 24271 Model In-hospital Mortality 30-day Readmission MIMIC-III MIMIC-IV MIMIC-III MIMIC-IV AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC 
+
+EHR-only Models 
+
+GRU (Cho et al., 2014) 0.628 (0.014) 0.177 (0.009) 0.772 (0.009) 0.072 (0.006) 0.651 (0.007) 0.460 (0.012) 0.666 (0.004) 0.503 (0.004) 
+
+RETAIN (Choi et al., 2016) 0.636 (0.013) 0.183 (0.005) 0.758 (0.005) 0.078 (0.025) 0.653 (0.023) 0.462 (0.012) 0.671 (0.003) 0.504 (0.003) 
+
+Transformer (Vaswani et al., 2017) 0.640 (0.011) 0.178 (0.010) 0.766 (0.006) 0.072 (0.009) 0.661 (0.005) 0.463 (0.008) 0.668 (0.003) 0.505 (0.005) 
+
+HiTANet (Luo et al., 2020) 0.647 (0.010) 0.202 (0.009) 0.785 (0.011) 0.105 (0.009) 0.665 (0.021) 0.464 (0.016) 0.681 (0.001) 0.515 (0.001) 
+
+Static KG-enhanced Models 
+
+GRAM (Choi et al., 2017) 0.648 (0.011) 0.201 (0.006) 0.774 (0.009) 0.094 (0.007) 0.665 (0.012) 0.465 (0.011) 0.673 (0.005) 0.512 (0.001) 
+
+KAME (Ma et al., 2018) 0.652 (0.007) 0.203 (0.004) 0.782 (0.008) 0.098 (0.013) 0.680 (0.007) 0.470 (0.014) 0.679 (0.002) 0.520 (0.009) 
+
+PKG Reasoning Models 
+
+KerPrint (Yang et al., 2023a) 0.686 (0.010) 0.217 (0.011) 0.794 (0.008) 0.153 (0.013) 0.701 (0.006) 0.483 (0.003) 0.720 (0.008) 0.572 (0.007) 
+
+KGxDP (Yang et al., 2023b) 0.672 (0.009) 0.214 (0.004) 0.796 (0.003) 0.141 (0.009) 0.709 (0.003) 0.486 (0.012) 0.728 (0.001) 0.565 (0.009) 
+
+GraphCare (Jiang et al., 2024) 0.691 (0.003) 0.224 (0.019) 0.797 (0.006) 0.142 (0.002) 0.716 (0.005) 0.487 (0.011) 0.736 (0.004) 0.585 (0.008) 
+
+MedCPI (Ours) 0.713 (0.008) 0.242 (0.018) 0.809 (0.006) 0.182 (0.012) 0.732 (0.005) 0.498 (0.010) 0.744 (0.004) 0.606 (0.007) 
+
+Table 2: Performance on two general-purpose clinical prediction tasks, in-hospital mortality (left block) and 30-day readmission (right block), on MIMIC-III and MIMIC-IV, reported in AUROC and AUPRC. Results are reported as mean (standard deviation) over 5 random seeds. 
+
+Model T2DM Onset CAD Onset MIMIC-III MIMIC-IV MIMIC-III MIMIC-IV AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC 
+
+EHR-only Models 
+
+GRU (Cho et al., 2014) 0.735 (0.024) 0.296 (0.043) 0.646 (0.012) 0.166 (0.016) 0.581 (0.044) 0.292 (0.042) 0.750 (0.008) 0.328 (0.015) 
+
+RETAIN (Choi et al., 2016) 0.750 (0.033) 0.301 (0.012) 0.671 (0.001) 0.191 (0.003) 0.598 (0.012) 0.351 (0.021) 0.743 (0.002) 0.341 (0.005) 
+
+Transformer (Vaswani et al., 2017) 0.751 (0.010) 0.327 (0.032) 0.670 (0.006) 0.192 (0.018) 0.650 (0.037) 0.347 (0.054) 0.746 (0.015) 0.336 (0.023) 
+
+HiTANet (Luo et al., 2020) 0.753 (0.024) 0.380 (0.035) 0.673 (0.012) 0.194 (0.017) 0.661 (0.026) 0.355 (0.023) 0.760 (0.006) 0.356 (0.002) 
+
+Static KG-enhanced Models 
+
+GRAM (Choi et al., 2017) 0.746 (0.014) 0.309 (0.018) 0.657 (0.012) 0.192 (0.008) 0.618 (0.009) 0.314 (0.016) 0.755 (0.007) 0.337 (0.006) 
+
+KAME (Ma et al., 2018) 0.751 (0.023) 0.312 (0.009) 0.668 (0.001) 0.197 (0.003) 0.658 (0.004) 0.352 (0.009) 0.747 (0.001) 0.352 (0.005) 
+
+PKG Reasoning Models 
+
+KerPrint (Yang et al., 2023a) 0.757 (0.012) 0.418 (0.014) 0.719 (0.011) 0.231 (0.023) 0.665 (0.014) 0.365 (0.018) 0.763 (0.011) 0.391 (0.014) 
+
+KGxDP (Yang et al., 2023b) 0.772 (0.003) 0.411 (0.008) 0.696 (0.006) 0.223 (0.003) 0.689 (0.003) 0.372 (0.008) 0.775 (0.001) 0.395 (0.004) 
+
+GraphCare (Jiang et al., 2024) 0.754 (0.014) 0.413 (0.007) 0.711 (0.001) 0.286 (0.003) 0.695 (0.005) 0.382 (0.007) 0.772 (0.004) 0.401 (0.004) 
+
+MedCPI (Ours) 0.798 (0.002) 0.425 (0.006) 0.763 (0.001) 0.313 (0.002) 0.705 (0.003) 0.405 (0.006) 0.797 (0.001) 0.418 (0.003) 
+
+Table 3: Performance on two disease prediction tasks, T2DM (left block) and CAD (right block), on MIMIC-III and MIMIC-IV, reported in AUROC and AUPRC. Results are reported as mean (standard deviation) over 5 random seeds. 
+
+Implementation Details. UMLS (Bodenreider, 2004) is used as the external medical knowledge source. Diagnosis, procedure, and medication codes are aligned to UMLS concepts using Sap-BERT (Liu et al., 2021). Task-guided schema in-duction is performed offline using GPT-5 (OpenAI, 2025), with relation texts embedded by SapBERT and clustered by agglomerative clustering. Hy-perparameters are tuned on the validation set for each dataset and task, and results are reported as mean ±standard deviation over five random seeds. Experiments are conducted on NVIDIA GH200 GPUs. The project repository is available at https: //github.com/hw146/MedCPI . Additional imple-mentation details are provided in the Appendix. 
+
+5.2 Overall Results (RQ1) 
+
+Tables 2 and 3 report the overall performance on four clinical prediction tasks across MIMIC-III and MIMIC-IV. Overall, MedCPI achieves the best re-sults in all datasets and tasks, demonstrating con-sistent gains across both general-purpose outcomes and disease onset prediction. The results suggest three key observations. First, temporal modeling plays an important role: a time-aware encoder such as HiTANet can match or out-perform static knowledge-enhanced baselines in several settings, showing that strong longitudinal sequence modeling can effectively improve perfor-mance. Second, static KG-enhancement provides limited improvements, and the gains vary across tasks and datasets. Third, PKG reasoning meth-ods are generally more robust than static enhance-ment, suggesting that medical knowledge is more effective when it is selected and used based on the patient context, rather than being added in a fixed way. Building on these insights, MedCPI integrates both complementary aspects: it constructs task-relevant, patient-specific knowledge and performs time-aware integration along the evolving patient trajectory. This joint design enables consistent im-24272 provements over both advanced EHR-only models and prior PKG reasoning approaches, supporting MedCPI as an effective framework for clinical pre-diction. 
+
+5.3 Ablation Studies (RQ2) 
+
+We conduct ablation studies to examine the role of each stage in MedCPI. Specifically, we consider the following variants: (i) w/o Construct , which re-moves task-guided schema induction and Concept MKG construction; (ii) w/o Personalize , which dis-ables patient-specific PKG construction and uses only the shared Concept MKG; (iii) w/o Integrate (PKG-only) , which makes predictions using PKG representations only; and (iv) w/o Integrate (EHR-only) , which relies solely on longitudinal EHR rep-resentations. Results on in-hospital mortality and T2DM onset are shown in Table 4; full results are in Appendix C.1. Removing Construct leads to consistent perfor-mance drops across datasets and tasks, suggesting that task-guided schema induction and Concept MKG construction help organize and filter task-relevant medical knowledge. Removing Personal-ize also degrades performance, with more notice-able drops on T2DM onset, suggesting that patient-specific knowledge selection provides additional benefits beyond shared knowledge. For the Inte-grate stage, both PKG-only and EHR-only variants underperform the full model. This shows that nei-ther structured knowledge nor longitudinal EHR modeling alone is sufficient. Overall, the full Med-CPI achieves the best results, demonstrating that the three stages contribute complementary informa-tion. 
+
+5.4 Additional Analysis (RQ3) 
+
+We provide additional analyses to examine key de-sign choices and to better understand how MedCPI leverages structured medical knowledge. We study (i) sensitivity to the maximum path length in PKG construction and (ii) cross-attention distributions over relation types for interpretability. 
+
+Effect of Maximum Path Length. Figure 2 re-ports performance under different maximum path lengths used in PKG construction. Across both MIMIC-III and MIMIC-IV, performance improves when increasing the maximum path length from 1 to 2, and then gradually declines as longer paths are allowed. This trend is consistent across tasks, indicating that short knowledge paths are gener-  
+
+> (a) MIMIC-III (b) MIMIC-IV
+> Figure 2: Performance (AUROC) under different maxi-mum path lengths on MIMIC-III and MIMIC-IV.
+> (a) In-hospital Mortality (b) T2DM Onset
+> Figure 3: Cross-attention distribution over relation types for in-hospital mortality and T2DM onset.
+
+ally sufficient for effective knowledge enrichment. Based on this observation, we set the maximum path length to 2 in all experiments. 
+
+Cross-attention over Relation Types. Figure 3 shows the distribution of cross-attention mass over relation types for in-hospital mortality and T2DM onset. The attention mass for each rela-tion type is obtained by averaging cross-attention weights over all prediction instances in the test set, where prediction instances follow the task-specific definition described in Section A.2. The attention patterns differ across tasks: mortality pre-diction assigns higher weights to relations such as has_complication and treated_by , whereas T2DM onset emphasizes has_risk_factor and 
+
+diagnosed_by . These results suggest that MedCPI selectively attends to task-relevant medical rela-tions, providing an interpretable view of how struc-tured knowledge is leveraged for different tasks. 
+
+6 Conclusion 
+
+This paper presents MedCPI , a unified Construct– Personalize–Integrate framework for knowledge-enhanced clinical prediction. MedCPI addresses key limitations of existing KG-enhanced ap-proaches by (1) constructing a task-specific Con-24273 Variant In-hospital Mortality T2DM Onset MIMIC-III MIMIC-IV MIMIC-III MIMIC-IV AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC w/o Construct 0.684 (0.007) 0.219 (0.010) 0.792 (0.005) 0.155 (0.012) 0.771 (0.006) 0.412 (0.008) 0.728 (0.004) 0.276 (0.006)                                 
+
+> w/o Personalize 0.689 (0.006) 0.223 (0.011) 0.797 (0.004) 0.162 (0.010) 0.778 (0.004) 0.418 (0.006) 0.736 (0.003) 0.284 (0.005)
+> w/o Integrate (PKG-only) 0.660 (0.008) 0.205 (0.012) 0.770 (0.006) 0.138 (0.010) 0.755 (0.006) 0.400 (0.010) 0.707 (0.005) 0.255 (0.008)
+> w/o Integrate (EHR-only) 0.655 (0.010) 0.205 (0.012) 0.775 (0.008) 0.110 (0.010) 0.748 (0.012) 0.372 (0.018) 0.680 (0.009) 0.205 (0.014)
+> Full MedCPI 0.713 (0.008) 0.242 (0.018) 0.809 (0.006) 0.182 (0.012) 0.798 (0.002) 0.425 (0.006) 0.763 (0.001) 0.313 (0.002)
+
+Table 4: Ablation results of MedCPI for in-hospital mortality and T2DM onset on MIMIC-III and MIMIC-IV. 
+
+cept MKG through task-guided schema induction and normalization, (2) building patient-specific PKGs via controlled local expansion and short path search, and (3) integrating structured medical knowledge with longitudinal EHR representations through time-aware encoding and cross-attention. Experiments on MIMIC-III and MIMIC-IV across four clinical prediction tasks demonstrate that Med-CPI consistently outperforms EHR-only models, static KG-enhanced methods, and prior PKG rea-soning approaches. Ablation studies confirm that the three stages contribute complementary benefits, while additional analyses provide further insights into effective knowledge utilization. Overall, Med-CPI provides a principled and effective approach for incorporating task-relevant and patient-specific medical knowledge into clinical prediction, high-lighting the importance of task-aware construction and time-aware integration of knowledge. 
+
+Limitations 
+
+We discuss several limitations that mainly reflect the scope of this work and suggest directions for future extensions. First, we focus on task-guided construction of Concept MKGs and PKGs based on structured relations in the underlying MKG. Ex-tending the framework to incorporate richer knowl-edge sources, such as additional ontologies and cu-rated resources, and to support alternative schema design choices is an important direction. Second, our Personalize stage adopts fixed, interpretable constraints to keep PKG construction controllable and efficient. An important direction is to develop adaptive personalization strategies that adjust these constraints based on task requirements or patient context, while maintaining interpretability and effi-ciency. Third, we primarily study structured EHRs together with KGs. Incorporating unstructured clin-ical text and other modalities is a natural extension, and may further improve performance in settings where such information is critical. Finally, we evaluate MedCPI on MIMIC-III and MIMIC-IV. Broader validation on additional datasets, care set-tings, and healthcare systems will be necessary to further assess generalization and practical applica-bility. 
+
+Ethical Considerations 
+
+This work follows the ACL Code of Ethics. We obtained access to MIMIC-III and MIMIC-IV through PhysioNet 1 by completing the required human-subjects training and signing the corre-sponding data use agreements, and we adhere to all PhysioNet requirements for data access, stor-age, and use. The datasets are de-identified; we do not attempt re-identification or linkage to exter-nal sources, and we do not share any patient-level data with external APIs or third-party services. Our method is intended for retrospective research and should not be used as a standalone clinical decision-making tool; any real-world deployment would re-quire careful external validation, monitoring for subgroup disparities, and appropriate clinical over-sight. 
+
+Acknowledgments 
+
+This work is partially supported by the UKRI SLAIDER project and the MRC SLAIDER-QA project. The authors acknowledge the use of re-sources provided by the Isambard-AI National AI Research Resource (AIRR). Isambard-AI is oper-ated by the University of Bristol and is funded by the UK Government’s Department for Sci-ence, Innovation and Technology (DSIT) via UK Research and Innovation, and the Science and Technology Facilities Council [ST/AIRR/I-A-I/1023] (McIntosh-Smith et al., 2024). 
+
+References 
+
+Ali Amirahmadi, Mattias Ohlsson, and Kobra Etminani. 2023. Deep learning prediction models based on ehr trajectories: A systematic review. Journal of biomedical informatics , 144:104430. 
+
+> 1https://physionet.org/
+
+24274 Olivier Bodenreider. 2004. The unified medical lan-guage system (umls): integrating biomedical termi-nology. Nucleic acids research , 32(suppl_1):D267– D270. Kyunghyun Cho, Bart Van Merriënboer, Caglar Gul-cehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, and Yoshua Bengio. 2014. Learning phrase representations using rnn encoder-decoder for statistical machine translation. arXiv preprint arXiv:1406.1078 .Edward Choi, Mohammad Taha Bahadori, Le Song, Walter F Stewart, and Jimeng Sun. 2017. Gram: graph-based attention model for healthcare represen-tation learning. In Proceedings of the 23rd ACM SIGKDD international conference on knowledge dis-covery and data mining , pages 787–795. Edward Choi, Mohammad Taha Bahadori, Jimeng Sun, Joshua Kulas, Andy Schuetz, and Walter Stewart. 2016. Retain: An interpretable predictive model for healthcare using reverse time attention mechanism. 
+
+Advances in neural information processing systems ,29. Edward Choi, Cao Xiao, Walter Stewart, and Jimeng Sun. 2018. Mime: Multilevel medical embedding of electronic health records for predictive healthcare. 
+
+Advances in neural information processing systems ,31. Edward Choi, Zhen Xu, Yujia Li, Michael Dusenberry, Gerardo Flores, Emily Xue, and Andrew Dai. 2020. Learning the graphical structure of electronic health records with graph convolutional transformer. In 
+
+Proceedings of the AAAI conference on artificial in-telligence , volume 34, pages 606–613. Junyoung Chung, Caglar Gulcehre, KyungHyun Cho, and Yoshua Bengio. 2014. Empirical evaluation of gated recurrent neural networks on sequence model-ing. arXiv preprint arXiv:1412.3555 .Xueren Ge, Abhishek Satpathy, Ronald Dean Williams, John Stankovic, and Homa Alemzadeh. 2024. Dkec: domain knowledge enhanced multi-label classifica-tion for diagnosis prediction. In Proceedings of the 2024 conference on empirical methods in natural language processing , pages 12798–12813. Pengcheng Jiang, Cao Xiao, Adam Cross, and Jimeng Sun. 2024. Graphcare: Enhancing healthcare predic-tions with personalized knowledge graphs. In The Twelfth International Conference on Learning Repre-sentations .Alistair EW Johnson, Lucas Bulgarelli, Lu Shen, Alvin Gayles, Ayad Shammout, Steven Horng, Tom J Pol-lard, Sicheng Hao, Benjamin Moody, Brian Gow, and 1 others. 2023. Mimic-iv, a freely accessible elec-tronic health record dataset. Scientific data , 10(1):1. Alistair EW Johnson, Tom J Pollard, Lu Shen, Li-wei H Lehman, Mengling Feng, Mohammad Ghassemi, Benjamin Moody, Peter Szolovits, Leo Anthony Celi, and Roger G Mark. 2016. Mimic-iii, a freely accessi-ble critical care database. Scientific data , 3(1):1–9. Zeljko Kraljevic, Dan Bean, Anthony Shek, Rebecca Bendayan, Harry Hemingway, Joshua Au Yeung, Alexander Deng, Alfred Balston, Jack Ross, Esther Idowu, and 1 others. 2024. Foresight—a genera-tive pretrained transformer for modelling of patient timelines using electronic health records: a retrospec-tive modelling study. The Lancet Digital Health ,6(4):e281–e290. Isotta Landi, Benjamin S Glicksberg, Hao-Chih Lee, Sarah Cherng, Giulia Landi, Matteo Danieletto, Joel T Dudley, Cesare Furlanello, and Riccardo Miotto. 2020. Deep representation learning of elec-tronic health records to unlock patient stratification at scale. NPJ digital medicine , 3(1):96. Jin Li, Benjamin J Cairns, Jingsong Li, and Tingting Zhu. 2023. Generating synthetic mixed-type longitu-dinal electronic health records for artificial intelligent applications. NPJ digital medicine , 6(1):98. Yikuan Li, Mohammad Mamouei, Gholamreza Salimi-Khorshidi, Shishir Rao, Abdelaali Hassaine, Dexter Canoy, Thomas Lukasiewicz, and Kazem Rahimi. 2022. Hi-behrt: hierarchical transformer-based model for accurate prediction of clinical events us-ing multimodal longitudinal electronic health records. 
+
+IEEE journal of biomedical and health informatics ,27(2):1106–1117. Fangyu Liu, Ehsan Shareghi, Zaiqiao Meng, Marco Basaldella, and Nigel Collier. 2021. Self-alignment pretraining for biomedical entity representations. In 
+
+Proceedings of the 2021 conference of the North American chapter of the association for computa-tional linguistics: human language technologies ,pages 4228–4238. Junyu Luo, Muchao Ye, Cao Xiao, and Fenglong Ma. 2020. Hitanet: Hierarchical time-aware attention net-works for risk prediction on electronic health records. In Proceedings of the 26th ACM SIGKDD interna-tional conference on knowledge discovery & data mining , pages 647–656. Fenglong Ma, Radha Chitta, Jing Zhou, Quanzeng You, Tong Sun, and Jing Gao. 2017. Dipole: Diagnosis prediction in healthcare via attention-based bidirec-tional recurrent neural networks. In Proceedings of the 23rd ACM SIGKDD international conference on knowledge discovery and data mining , pages 1903– 1911. Fenglong Ma, Quanzeng You, Houping Xiao, Radha Chitta, Jing Zhou, and Jing Gao. 2018. Kame: Knowledge-based attention model for diagnosis pre-diction in healthcare. In Proceedings of the 27th ACM international conference on information and knowledge management , pages 743–752. Liantao Ma, Chaohe Zhang, Yasha Wang, Wenjie Ruan, Jiangtao Wang, Wen Tang, Xinyu Ma, Xin Gao, and 24275 Junyi Gao. 2020. Concare: Personalized clinical fea-ture embedding via capturing the healthcare context. In Proceedings of the AAAI conference on artificial intelligence , volume 34, pages 833–840. Chengsheng Mao, Liang Yao, and Yuan Luo. 2022. Medgcn: Medication recommendation and lab test imputation via graph convolutional networks. Jour-nal of Biomedical Informatics , 127:104000. Simon McIntosh-Smith, S. R. Alam, and Christopher Woods. 2024. Isambard-ai: a leadership class super-computer optimised specifically for artificial intelli-gence. arXiv preprint arXiv:2410.11199 .OpenAI. 2025. Gpt-5 system card. https://cdn.op enai.com/gpt-5-system-card.pdf .Alvin Rajkomar, Eyal Oren, Kai Chen, Andrew M Dai, Nissan Hajaj, Michaela Hardt, Peter J Liu, Xiaobing Liu, Jake Marcus, Mimi Sun, and 1 others. 2018. Scalable and accurate deep learning with electronic health records. NPJ digital medicine , 1(1):18. Michael Schlichtkrull, Thomas N Kipf, Peter Bloem, Rianne Van Den Berg, Ivan Titov, and Max Welling. 2018. Modeling relational data with graph convolu-tional networks. In European semantic web confer-ence , pages 593–607. Springer. Junyuan Shang, Tengfei Ma, Cao Xiao, and Jimeng Sun. 2019a. Pre-training of graph augmented transform-ers for medication recommendation. arXiv preprint arXiv:1906.00346 .Junyuan Shang, Cao Xiao, Tengfei Ma, Hongyan Li, and Jimeng Sun. 2019b. Gamenet: Graph augmented memory networks for recommending medication combination. In proceedings of the AAAI Conference on Artificial Intelligence , volume 33, pages 1126– 1133. Nenad Tomašev, Xavier Glorot, Jack W Rae, Michal Zielinski, Harry Askham, Andre Saraiva, Anne Mot-tram, Clemens Meyer, Suman Ravuri, Ivan Protsyuk, and 1 others. 2019. A clinically applicable approach to continuous prediction of future acute kidney injury. 
+
+Nature , 572(7767):116–119. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. Advances in neural information processing systems , 30. Cao Xiao, Edward Choi, and Jimeng Sun. 2018. Oppor-tunities and challenges in developing deep learning models using electronic health records data: a sys-tematic review. Journal of the American Medical Informatics Association , 25(10):1419–1428. Yongxin Xu, Xu Chu, Kai Yang, Zhiyuan Wang, Peinie Zou, Hongxin Ding, Junfeng Zhao, Yasha Wang, and Bing Xie. 2023. Seqcare: Sequential training with external medical knowledge graph for diagnosis pre-diction in healthcare data. In Proceedings of the ACM Web Conference 2023 , pages 2819–2830. Kai Yang, Yongxin Xu, Peinie Zou, Hongxin Ding, Junfeng Zhao, Yasha Wang, and Bing Xie. 2023a. Kerprint: local-global knowledge graph enhanced di-agnosis prediction for retrospective and prospective interpretations. In Proceedings of the AAAI Con-ference on Artificial Intelligence , volume 37, pages 5357–5365. Zongbao Yang, Yuchen Lin, Yinxin Xu, Jinlong Hu, and Shoubin Dong. 2023b. Interpretable disease pre-diction via path reasoning over medical knowledge graphs and admission history. Knowledge-Based Sys-tems , 281:111082. Zhihao Yu, Chu Xu, Yujie Jin, Yasha Wang, and Junfeng Zhao. 2024. Smart: Towards pre-trained missing-aware model for patient health status prediction. Ad-vances in Neural Information Processing Systems ,37:63986–64009. Muhan Zhang, Christopher R King, Michael Avidan, and Yixin Chen. 2020. Hierarchical attention prop-agation for healthcare representation learning. In 
+
+Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining ,pages 249–256. 24276 A Data and Tasks 
+
+A.1 EHR Data Preprocessing and Cohort Construction 
+
+We build patient-level inputs from raw MIMIC records by aggregating events within each visit into a visit, ordering visits by admission time, and removing duplicate codes within a visit. We ex-clude patients with fewer than two visits and apply task-specific cohort criteria. The patient EHR sub-graph Gehr  
+
+> p
+
+follows the definition in Section 3 and is illustrated in Figure 4. After preprocessing, diagnosis, procedure, and medication codes are aligned to UMLS concepts us-ing SapBERT, and the aligned concepts are used as anchors for subsequent KG construction. Table 6 summarizes the resulting aligned EHR statistics on MIMIC-III and MIMIC-IV. These counts corre-spond to the final aligned EHR views used in the Construct stage. 
+
+A.2 Prediction Tasks and Label Construction 
+
+We derive task labels from visit timestamps (ad-mission and discharge times, and mortality times-tamps) and diagnosis ICD codes. For all tasks, input features are constructed strictly from records available before the prediction time to avoid label leakage. 
+
+General-purpose tasks (visit-level). For each visit, we create one prediction instance using the patient’s prior visits as input. For in-hospital mor-tality , the label is positive if death occurs during the target visit, determined by comparing the mor-tality timestamp with the admission and discharge timestamps. For 30-day readmission , the label is positive if the patient has a subsequent visit within 30 days after discharge from the target visit; vis-its with no subsequent visits within 30 days are labeled negative. 
+
+Disease-specific tasks (patient-level). Each pa-tient contributes one instance with an observation window of 12 months followed by a prediction win-dow of 12 months. We perform incident prediction by excluding patients with any record of the target disease before the end of the observation window, and assigning a positive label if the target disease first appears within the prediction window. T2DM is identified by ICD codes, namely ICD-9 250 .x 0
+
+and 250 .x 2 in MIMIC-III, and ICD-10 E11 .∗ in MIMIC-IV. CAD is identified by ICD code ranges,   
+
+> Figure 4: Illustration of the patient EHR subgraph Gehr
+> p.
+
+namely ICD-9 410 –414 in MIMIC-III, and ICD-10 
+
+I20 –I25 in MIMIC-IV. Table 5 further reports the split-wise instance counts for the final task-specific prediction in-stances used in all experiments. 
+
+B Technical Details 
+
+B.1 Notation 
+
+Table 7 summarizes the notation used throughout the paper. We use calligraphic letters (e.g., P, T )to denote sets, bold lowercase letters (e.g., z) to denote vector representations, and superscripts to distinguish different graph variants (e.g., unified MKG, task-specific Concept MKG, and PKGs). Unless otherwise specified, all learnable parame-ters are shared across patients and are task-specific only when explicitly indexed by τ .
+
+B.2 Schema Induction B.2.1 Algorithm 
+
+We provide the end-to-end algorithm for inducing a task-specific canonical relation schema Rτ and the mapping fτ : R → Rτ ∪ { IGNORE } used in Section 4.1. 
+
+Relation Embedding and Clustering. We embed each relation r ∈ R by encoding a short text xr that includes the relation name and a small set of representative triples (Algorithm 1, lines 2– 5). Relation texts are encoded with SapBERT (SapBERT-from-PubMedBERT-fulltext ; max length 128; encoder batch size 32). Specifically, we sample up to S = 5 triples instantiating r from 
+
+E, remove duplicates, and serialize each triple as a compact head–relation–tail snippet appended to the relation name. We then apply agglomerative clustering on the normalized relation embeddings using cosine distance and average linkage, with distance threshold 0.15 , to obtain global semantic clusters {Ki}mi=1 shared across tasks. For each cluster Ki, we form a summary si by listing 24277 Dataset Task Train (total) Valid (total) Test (total)                         
+
+> MIMIC-III In-hospital mortality 9,992 1,216 1,248 30-day readmission 9,992 1,216 1,248 T2DM onset 1,419 177 178 CAD onset 1,214 151 153 MIMIC-IV In-hospital mortality 258,983 31,460 32,133 30-day readmission 258,983 31,460 32,133 T2DM onset 38,367 4,795 4,797 CAD onset 38,612 4,826 4,827
+
+Table 5: Train/validation/test instance counts for the final task-specific prediction instances. All splits are patient-level disjoint.                   
+
+> Statistic MIMIC-III MIMIC-IV
+> #Patients 7,537 100,163 #Visits 19,993 422,739 Mapped diagnoses 253,991 5,078,670 Mapped procedures 76,463 607,773 Mapped medications 558,225 10,132,439 Diagnosis missing mapping 6,264 104,963 Procedure missing mapping 582 3,197 Medication non-drug supply 1,144 9,145
+
+Table 6: Aligned EHR statistics after concept normal-ization. Counts are reported on the final patient-level aligned EHR views used for downstream Construct and Personalize stages. 
+
+its member relation names and up to M = 12 
+
+representative triples sampled from the union of triples covered by relations in Ki (lines 6–9). 
+
+Prompting and Canonical Relation Naming. 
+
+For each task τ , we prompt an instruction-tuned LLM with the task description Tτ and each cluster summary si to decide task relevance and assign a canonical relation name to relevant clusters (Algo-rithm 1, lines 10–15). We use the prompt template in Fig. 5, which constrains the output to a compact JSON object with a binary keep decision and a single canonical_name .
+
+Consistency Resolution and Task-Specific Map-ping. We normalize canonical names by low-ercasing and enforcing snake_case , and merge clusters that receive the same normalized name to resolve cross-cluster inconsistencies. The task schema is then defined as Rτ = {name τ [i] |
+
+name τ [i]̸ = IGNORE }, and the task-specific map-ping fτ assigns each original relation r to the canonical name of its cluster, or to IGNORE oth-erwise (Algorithm 1, lines 16–22). 
+
+B.3 KG Construction Concept MKG construction (global 1-hop). 
+
+Given the task-normalized KG Gτ = ( V, R τ , Eτ ),the Concept MKG Gconcept  
+
+> τ
+
+is constructed via a global 1-hop expansion from EHR concepts. For each task τ , patients are first split into training, validation, and test sets at the patient level. The Concept MKG is constructed using only medical concepts observed in the training split (including diagnoses, procedures, and medications after code normalization). Diagnosis, procedure, and medication codes in the EHR are aligned to UMLS concepts using SapBERT (Liu et al., 2021) (SapBERT-from-PubMedBERT-fulltext ) to en-able concept-level linking to the MKG. All triples in Gτ whose head or tail matches these training concepts are collected. Among them, only triples whose endpoints belong to clinically meaningful semantic types Smed are retained, where Smed is implemented using three coarse UMLS semantic groups: Disorders , Procedures , and Chemicals & Drugs . In the local UMLS SemGroups resource used by our pipeline, findings and signs/symptoms are covered by Disorders . Duplicate edges after canonical-relation rewriting are removed to obtain 
+
+Gconcept  
+
+> τ
+
+, which is shared across patients for task τ and serves as the knowledge pool for personalization. Table 8 reports the resulting Construct-stage statistics. For each dataset–task pair, we report the retained schema size, the number of training-split anchor concepts, and the final size of the extracted Concept MKG. As described in Section 4.1, the relation schema is task-specific but shared across datasets. For the onset tasks, we use a more con-servative relation mapping so that diagnosis- and treatment-adjacent relation families are represented with fewer label-proximal variants. 
+
+PKG construction. For each patient p and task 
+
+τ , we construct a PKG Gpkg  
+
+> p,τ
+
+by selecting a patient-centric subgraph from Gconcept  
+
+> τ
+
+and augmenting it with task-relevant multi-hop paths. For visit-level tasks (in-hospital mortality and 30-day read-mission), we use the concepts observed up to the 24278 Symbol Description 
+
+Patients, tasks, prediction instances, and EHR sequences 
+
+P, p Patient set and patient index. 
+
+T , τ, T τ Task set, task index, and task description. 
+
+Iτ , i Prediction instance set for task τ and instance index. 
+
+Ep = [ Vp, 1, . . . , V p,L p ], L p Patient p’s time-ordered visit sequence and its length. 
+
+Vp,t = ( Dp,t , Pp,t , Mp,t ) Visit t with diagnosis/procedure/medication code sets. 
+
+Dp,t , Pp,t , Mp,t Diagnosis, procedure, and medication code sets at visit t.
+
+yi, ˆyi Ground-truth and predicted outcome/probability for prediction instance i.
+
+EHR graph and patient concepts 
+
+Gehr  
+
+> p
+
+= ( V ehr  
+
+> p
+
+, R ehr , Eehr  
+
+> p
+
+) Patient EHR subgraph with visit/concept nodes and visit-concept edges. 
+
+V ehr  
+
+> p
+
+, R ehr , Eehr  
+
+> p
+
+Node set, EHR edge types (e.g., has_diagnosis /has_procedure /has_medication ), and edges. 
+
+Cp Medical concepts appearing in patient p’s EHR. 
+
+Unified MKG, schema induction, and normalization 
+
+G = ( V, R, E) Unified medical knowledge graph (MKG) integrated from multiple sources. 
+
+V, R, E Concept set, relation-type set, and triple set E ⊆ V × R × V with triples (h, r, t ).
+
+Rτ , f τ Task-induced canonical relation schema and relation mapping. 
+
+fτ : R → Rτ ∪ { IGNORE } Maps each original relation to a canonical one (or IGNORE ). 
+
+Gτ = ( V, R τ , Eτ ), Eτ Task-normalized MKG and its normalized triples after applying fτ .
+
+Concept MKG and PKG 
+
+Smed Clinically meaningful concept types used to filter Concept MKG triples. 
+
+Gconcept  
+
+> τ
+
+= ( V concept  
+
+> τ
+
+, R τ , Econcept  
+
+> τ
+
+) Task-specific Concept MKG extracted by global 1-hop expansion around EHR concepts. 
+
+Gpkg  
+
+> p,τ
+
+= ( V pkg  
+
+> p,τ
+
+, R τ ∪ Rehr , Epkg  
+
+> p,τ
+
+) PKG for patient p and task τ .
+
+V pkg  
+
+> p,τ
+
+, Epkg  
+
+> p,τ
+
+Node set and edge/triple set of the PKG. 
+
+PKG encoder (R-GCN) 
+
+h(0)  
+
+> v
+
+, h(l) 
+
+> v
+
+, h(L) 
+
+> v
+
+Initial, layer-l, and final node representations for node v in the PKG. 
+
+Nr (v), c v,r Neighbors of v under relation r, and normalization constant. 
+
+W(l) 
+
+> r
+
+, W(l)0 , σ (·) Relation-specific/self-loop transforms and activation in R-GCN. 
+
+EHR encoder (HTT) and pooling 
+
+hp,t , α p,t , zehr  
+
+> p
+
+Visit hidden state, visit attention weight, and pooled patient-level EHR representation. 
+
+EHR–PKG fusion and prediction 
+
+qi EHR context representation for prediction instance i.
+
+ci Cross-attended PKG summary for instance i.
+
+zfuse  
+
+> i
+
+Fused EHR–PKG representation for instance i.
+
+ϕ(·), wτ , b τ Fusion MLP and task-specific prediction head parameters. 
+
+ℓτ (·, ·), Lτ Pointwise loss and overall training loss for task τ .
+
+Key hyperparameters 
+
+Knbr , K path , L Max 1-hop neighbors per anchor, max 2-hop paths per anchor pair, and R-GCN layers. 
+
+Table 7: Summary of notation for MedCPI. 
+
+current visit as patient anchors; for patient-level onset tasks (T2DM onset and CAD onset), we use the concepts observed within the task-defined ob-servation window as anchors. Starting from these anchor concepts, we take the induced 1-hop pa-tient subgraph from Gconcept  
+
+> τ
+
+and then insert addi-tional multi-hop paths returned by the path selec-tion procedure described below. The final Gpkg  
+
+> p,τ
+
+is the union of the 1-hop patient subgraph and the selected paths, with duplicated edges removed. 
+
+Path selection and graph size control. To keep 
+
+Gpkg  
+
+> p,τ
+
+compact, we control both the 1-hop expan-sion and the insertion of multi-hop paths. For the 1-hop induced subgraph, we cap the number of 1-hop neighbors per anchor concept by Knbr and remove duplicate edges. For multi-hop augmenta-tion, we only insert 2-hop bridging paths between anchor concepts that co-occur in the patient EHR. Let Cp be the anchor concepts of patient p. For each anchor pair (ci, c j ) with ci, c j ∈ Cp, we enu-merate 2-hop paths on Gτ , i.e., ci → u → cj (or the reverse), remove duplicates, and keep at most 
+
+Kpath paths per anchor pair. To ensure compara-ble PKG sizes across tasks and datasets, we fix 24279 Dataset Task #Rel. Train Anchor Concepts #Nodes #Edges                                 
+
+> MIMIC-III In-hospital mortality 10 6,729 21,231 78,312 30-day readmission 86,729 25,500 99,450 T2DM onset 93,455 16,912 36,200 CAD onset 83,459 16,859 35,971 MIMIC-IV In-hospital mortality 10 35,426 27,419 123,887 30-day readmission 835,426 33,679 152,536 T2DM onset 918,818 25,955 64,870 CAD onset 819,097 25,885 65,475
+
+Table 8: Construct-stage statistics for the final task-specific Concept MKGs. For each dataset–task pair, we report retained schema size, training-split anchor concepts, and final graph size.              
+
+> Hyperparameter Candidates Embedding dim d{64, 128, 256} Hidden dim {64, 128, 256} #HTT layers N{1, 2, 3} #R-GCN layers L{1, 2, 3} Learning rate {1e −4, 3e −4, 1e −3} Weight decay {0, 1e −5, 1e −4} Dropout {0.0, 0.1, 0.3} Batch size {32, 64, 128} Max path length (PKG) {1, 2, 3, 4, 5}
+
+Table 9: Hyperparameter search space for tuning Med-CPI on each dataset–task pair (selected by validation AUROC). 
+
+Knbr = 30 and Kpath = 2 in all experiments. 
+
+B.4 Model and Training B.4.1 Model Architecture Summary 
+
+MedCPI consists of (i) a time-aware EHR encoder (HTT) that maps the visit sequence to a patient representation, (ii) a PKG encoder implemented as an L-layer R-GCN with relation-specific mes-sage passing, and (iii) a cross-attention fusion mod-ule that uses the EHR representation as the query and PKG node representations as keys/values, fol-lowed by a two-layer MLP for prediction. Padding masks are applied to handle variable-length visit sequences and variable-size PKGs. 
+
+B.4.2 Training Protocol and Implementation Details 
+
+All tasks are binary prediction. For task τ , given the logit si and probability ˆyi, we minimize the binary cross-entropy loss and implement it with 
+
+BCEWithLogitsLoss for numerical stability. We train a separate MedCPI model for each dataset– task pair. Hyperparameters are tuned on the vali-dation set and selected by validation AUROC. We optimize all parameters end-to-end using AdamW, apply early stopping based on validation AUROC (patience 10; max 30 epochs), and report mean ±std over five random seeds. Dropout is applied in the EHR encoder, R-GCN layers, and the fusion MLP. 
+
+B.4.3 Hyperparameter Search for MedCPI 
+
+For each dataset–task pair, we tune MedCPI hyper-parameters on the validation set and select the best configuration by validation AUROC; the selected configuration is then retrained and evaluated on the test set following the protocol in Appendix B.4.2. Table 9 summarizes the search space. The maxi-mum PKG path length is selected on the validation set, and we use 2-hop paths in the final model. All other PKG construction rules are kept fixed (Ap-pendix B.3) to ensure comparable graph sizes. 
+
+C Additional Experiments and Analysis 
+
+C.1 Additional Ablations 
+
+Table 10 reports the same ablation variants as Ta-ble 4 in the main text, but on the remaining two tasks (30-day readmission and CAD onset) across MIMIC-III and MIMIC-IV. We follow the same training and evaluation protocol and report mean (standard deviation) over five random seeds. 
+
+C.2 Schema-Induction Robustness and Construct Statistics 
+
+We further examine the robustness of the schema-induction procedure used in the Construct stage. Specifically, we compare the GPT-5-based pipeline with alternative LLM backbones and two non-LLM schema-induction baselines while keeping the clus-tering and post-processing pipeline fixed. Table 11 summarizes schema-level agreement and retained schema size across the four tasks. 
+
+C.3 Alternative Integration Strategies 
+
+To quantify the contribution of the current Integrate 
+
+design, we compare the default cross-attention fu-sion with three alternative strategies while keeping 
+
+Construct , Personalize , and the training protocol fixed. The alternatives include: (i) Late fusion ,which concatenates the pooled EHR and PKG rep-resentations followed by the same prediction head; (ii) Gated fusion , which learns a task-dependent 24280 Variant 30-day Readmission CAD Onset MIMIC-III MIMIC-IV MIMIC-III MIMIC-IV AUROC AUPRC AUROC AUPRC AUROC AUPRC AUROC AUPRC w/o Construct 0.710 (0.002) 0.482 (0.040) 0.730 (0.003) 0.578 (0.009) 0.680 (0.003) 0.372 (0.008) 0.770 (0.004) 0.395 (0.003) 
+
+w/o Personalize 0.713 (0.006) 0.484 (0.011) 0.733 (0.005) 0.581 (0.007) 0.684 (0.001) 0.375 (0.007) 0.773 (0.008) 0.398 (0.002) 
+
+w/o Integrate (PKG-only) 0.655 (0.008) 0.440 (0.012) 0.670 (0.006) 0.500 (0.005) 0.655 (0.006) 0.350 (0.010) 0.740 (0.005) 0.375 (0.011) 
+
+w/o Integrate (EHR-only) 0.662 (0.010) 0.461 (0.014) 0.678 (0.008) 0.512 (0.010) 0.658 (0.012) 0.352 (0.014) 0.757 (0.002) 0.353 (0.009) 
+
+Full MedCPI 0.732 (0.005) 0.498 (0.010) 0.744 (0.004) 0.606 (0.007) 0.705 (0.003) 0.405 (0.006) 0.797 (0.001) 0.418 (0.003) 
+
+Table 10: Ablation results of MedCPI for 30-day readmission and CAD onset on MIMIC-III and MIMIC-IV. 
+
+Method Jaccard (Rτ ) ↑ Keep Agree ↑ Map Agree ↑ #Ret. Rel. 
+
+LLM backbones 
+
+GPT-5 (default) 1.000 (1.000) 1.000 (1.000) 1.000 (1.000) 8.75 (8) GPT-4o 0.926 (0.889) 0.949 (0.917) 0.934 (0.889) 8.25 (7) Llama 3.1-70B-Instruct 0.861 (0.778) 0.891 (0.847) 0.872 (0.806) 7.50 (6) Qwen2.5-72B-Instruct 0.887 (0.833) 0.913 (0.876) 0.904 (0.861) 8.00 (7) 
+
+Non-LLM alternatives 
+
+Embedding-based clustering 0.655 (0.455) 0.533 (0.474) 0.431 (0.312) 6.00 (6) Statistical association filtering 0.542 (0.364) 0.473 (0.404) 0.382 (0.290) 5.00 (5) 
+
+Table 11: Schema-induction robustness and method comparison, reported as mean (minimum) over the four tasks. We compare canonical relation sets, cluster-level KEEP/IGNORE decisions, relation-level mappings, and retained schema size. 
+
+Method Mort. AUROC Mort. AUPRC T2DM AUROC T2DM AUPRC Cross-attn. (default) 0.713 0.242 0.798 0.425 Late fusion 0.707 0.234 0.783 0.401 Gated fusion 0.711 0.240 0.794 0.418 FiLM modulation 0.709 0.237 0.789 0.409 
+
+Table 12: Comparison of integration strategies on MIMIC-III in-hospital mortality and T2DM onset. 
+
+gate over the EHR and PKG representations before prediction; and (iii) FiLM-style modulation , which uses the PKG representation to generate feature-wise modulation parameters for the EHR represen-tation. Table 12 reports predictive performance on two representative MIMIC-III tasks: in-hospital mortality and T2DM onset. 24281 Algorithm 1 Task-guided schema induction. 
+
+Input : relation types R, triples E; task descriptions 
+
+{Tτ }τ ∈T 
+
+Parameter : samples S; cluster examples M ;
+
+Embed( ·); Cluster( ·)
+
+Output : {(Rτ , f τ )}τ ∈T , where fτ : R → Rτ ∪{IGNORE }
+
+1: (Shared) relation embedding and clustering 
+
+2: for r ∈ R do 
+
+3: xr ← Summarize( r, E, S )
+
+4: er ← Embed( xr)
+
+5: end for 
+
+6: {Ki}mi=1 ← Cluster( {er}r∈R)
+
+7: for i = 1 to m do 
+
+8: si ← Summarize( Ki, E, M )
+
+9: end for 
+
+10: (Per-task) canonical naming and mapping con-struction 
+
+11: for τ ∈ T do 
+
+12: for i = 1 to m do 
+
+13: (keep , name ) ← LLM( Tτ , s i)
+
+14: name τ [i] ← name if keep else IGNORE 
+
+15: end for 
+
+16: name τ ← ResolveConsistency(name τ )
+
+17: Rτ ← { name τ [i] | name τ [i]̸ = IGNORE }
+
+18: for r ∈ R do 
+
+19: i ← cluster( r)
+
+20: fτ (r) ← name τ [i] fτ (r) = IGNORE if cluster i is discarded 
+
+21: end for 
+
+22: end for 
+
+23: return {(Rτ , f τ )}τ ∈T 
+
+You are an expert in clinical informatics and medical knowledge graphs. Your task is to assess whether a cluster of relation types is useful for a given clinical prediction task. If the cluster is useful, assign a single canonical relation name. 
+
+Inputs: 
+
+(1) Task description: {TASK_DESCRIPTION Tτ }(2) Relation cluster summary: 
+
+{CLUSTER_SUMMARY si}
+
+Decision criteria: 
+
+• Set keep=true only if the relations in the cluster provide task-relevant clinical knowledge that can plausibly support prediction for the given task (directly or via short clinical reasoning). 
+
+• Otherwise set keep=false and output canonical_name="IGNORE". 
+
+Naming rules (only if keep=true): 
+
+• Use lower_snake_case .
+
+• Use a verb-like relation name (e.g., treated_by, diagnosed_by, has_risk_factor, has_complication, has_symptom). 
+
+• Use at most four words .
+
+• Prefer specific, clinically meaningful names when possible; avoid overly vague names unless a broader association label is needed to capture the retained relation family. 
+
+• Output one canonical name only. 
+
+Output (return only a JSON object; no extra text): { "keep": true/false, "canonical_name": "<name or IGNORE>" } 
+
+Figure 5: Prompt template for task-guided relevance filtering and canonical relation naming. 24282
