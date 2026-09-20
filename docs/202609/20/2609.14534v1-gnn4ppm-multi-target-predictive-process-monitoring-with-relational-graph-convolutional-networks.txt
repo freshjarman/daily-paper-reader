@@ -1,0 +1,330 @@
+Title: GNN4PPM: Multi-Target Predictive Process Monitoring with Relational Graph Convolutional Networks
+
+URL Source: https://arxiv.org/pdf/2609.14534v1
+
+Published Time: Tue, 15 Sep 2026 01:24:39 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+> PREPRINT
+
+# GNN4PPM: Multi-Target Predictive Process Moni-toring with Relational Graph Convolutional Networks 
+
+Ana Costa 1[0000 −0001 −9241 −5614] ,Johannes Mäkelburg 1[0009 −0001 −3821 −7817] , and Luise Pufahl 1[0000 −0002 −5182 −2587] 
+
+Technical University of Munich, School of Computation, Information and Technology Heilbronn, Germany 
+
+a.costa@tum.de, johannes.maekelburg@tum.de, luise.pufahl@tum.de 
+
+Abstract. Predictive Process Monitoring (PPM) aims at predicting at run-time and as early as possible the future states of a process execution. Common tasks include predicting the next event, the time to completion of a trace, and outcomes. Existing approaches typically consider an event from the perspec-tive of the executed activities along with their timestamps and case identifiers. This leads to the disadvantage that in real-life settings, there is much more in-formation recorded in the event log that is not captured or completely ignored when performing prediction tasks. We introduce GNN4PPM, an approach that predicts all next events along with their complete data payload at once. We represent event information in a heterogeneous knowledge graph that captures the event log as an RDF semantics, and train the embeddings with a Rela-tional Graph Convolutional Network (R-GCN). Our approach is promising in comparison to existing solutions, and experiments with state-of-the-art solu-tions prove the accuracy and applicability of GNN4PPM in complex settings. 
+
+Keywords: Predictive Process Monitoring · Heterogeneous Graph Neural Networks · Relational Graph Convolutional Networks · Next Event Prediction 
+
+1 Introduction 
+
+Predictive Process Monitoring (PPM) is a branch of process mining that focuses on forecasting the future of an ongoing business process case [8]. Information from historical event data for each case is recorded, such as the order of executed activities, their timestamp, and additional attributes [25]. Instead of looking only at what has happened, predictive monitoring helps in understanding what will happen next, allowing process stakeholders to intervene before issues occur. PPM uses as input data an event log, a structured collection of event traces that record how individual process cases evolve [17]. Each event refers to an executed activity and includes at least a case identifier and a timestamp, optionally enriched with event attributes while traces themselves may contain case-level attributes. One of the tasks in PPM, the next event prediction, focuses on predicting se-quences of future activities and related data payloads [8]. These data payloads refer to attributes associated with events, such as the timestamp or the resource performing the next activity. A naive approach is to consider only the recorded activity within its arXiv:2609.14534v1 [cs.LG] 13 Sep 2026 PREPRINT  
+
+> 2A. Costa et al.
+
+case, along with its timestamps [17]. This leads to the disadvantage that in real-life settings, there is much extra information recorded in the event log that is not captured or is completely ignored when performing prediction tasks , such as the resource of the event, its role, the characteristics of the case, and other relevant attributes [13]. For example, in the loan application process at a financial institution, loan acceptance depends on a combination of application characteristics, such as application type, loan goal, requested amount, and other institutional context [14]. Considering only the activity along with the timestamp ordering for prediction provides poor information on a loan acceptance or rejection. Even though business processes are traditionally represented and discovered in process models as graph structures with their activities, execution relations, and case in-formation [20], predictive approaches do not properly capture the interrelations between events, case attributes, and event attribute s. As a result, contextual information avail-able in logs is not fully exploited during the prediction. Many deep learning approaches do not take advantage of the dependencies between events since the prefix is embedded into a single vector. Therefore, features of each execution can be overwritten [37]. In predictive process monitoring, the prediction target can vary across different event attributes (e.g., activity, resource, loan risk value), yet most approaches focus on a single target attribute [7]. As a result, separate models must be trained from scratch for each attribute on the same event log [42], leading to increased manual effort and training time. When in reality, prediction models are so target-specific that even when using the same event log with a different target, the model needs to be completely retrained [26]. We consider that event and case attributes should participate in triggering the fu-ture events and their attributes. We predict, therefore, in our multi-target model, all the next events along with the complete data payload of the event log at once. This enables the model to capture inter-attribute dependencies that are ignored by single-target approaches while reducing the retraining effort required for different prediction targets. To incorporate the contextual relations among event attributes into the learning process [46] and the sequence aspects of the traces [47], our prediction model combines sequential information and graph embeddings into the Graph Neural Network (GNN) training. In principle, neighbours can be aggregated for more informative node embed-dings [2] by using a Relational Graph Convolutional Network (R-GCN) architecture, which is designed to handle such heterogeneous graphs [41]. The strong performance of this type of neural network on graph-structured data [9, 41] and their ability to handle highly multi-relational data characteristics motivate our interest in exploring the architecture. Our contributions include, therefore (1) the design of a heterogeneous knowledge graph capable of including the complete data payload of the event log and its relations, (2) the combination of sequential information and RDF2Vec embeddings for representation of trace characteristics, and (3) the prediction of all next event attributes using an R-GCN architecture with focus on the attributes neighborhood relations. The paper is organized as follows. Section 2 and 3 describe recent achievements in literature, preliminaries, and problem definition. Section 4 describes our approach, section 5 describes the experimental setup and evaluation results, and finally, section 6 presents the conclusion and future work. PREPRINT  
+
+> GNN4PPM 3
+
+2 Related Work 
+
+Although previous studies in PPM focus on exploring different model architectures for next event prediction [6, 38], few approaches consider the prediction of more than one event attribute in the same model. [16] addresses the prediction of the next event, showing that Recurrent Neural Networks (RNNs) can capture sequential dependencies in event logs, but focusing on one event attribute. [42] investigates Long Short-Term Memory (LSTMs) for the prediction of the next event and its timestamp, and [7] studies how to train RNNs with LSTMs to predict the next activity, its timestamp, and the associated resource as separate events. While [43] focuses on predicting one attribute of the event by enhancing a discovered Petri net model with time decay functions, [11] and [31] propose Convolutional Neural Network (CNN) architectures specifically for Next Activity Prediction (NAP). This architecture is further explored by other authors, who predict the next activity by enriching instance graphs [10] or by adding an explainable layer after the prediction [5]. Recent studies focus on suffix prediction mainly using activity as the event attribute [3]. While [47] addresses full-context-aware (i.e., considering also event attributes) suffix prediction, [34] proposes an LLM method to generate the sequence of future activities from a given prefix. Using a graph-based representation, [35] introduces an explainable approach that handles the next activity prediction, but [13] integrates activities, timestamps, resources, and shows superiority in terms of accuracy compared to the previous method with a similar architecture. The few approaches that extend next event prediction to other attributes within the same model include, therefore, the timestamp of the activity or its resource [13]. The reasoning behind this lack of event attribute consideration emphasizes that current deep learning architectures, such as RNNs and LSTMs, represent the events as sequential data rather than with the multi-target view that GNNs can capture. Some authors, such as [33, 32], recognize the problem by presenting multiple process perspectives in a multi-view setting, but target again, only the prediction of one event at a time. Other authors, such as [24], extend next activity prediction to incorporate other attributes, but disregard time or numerical attributes. Since graph-based approaches facilitate the identification of the behavioral patterns [37], some authors have investigated GNNs for both next activity prediction [46, 10, 45] and remaining time [15, 4]. Therefore, approaches are still limited to having as a target attribute one or a few attributes. Several graph-based approaches target next-event prediction using homogeneous graphs [46, 10, 45]. Two approaches extend this architecture to heterogeneous graphs, which encode multiple node and edge types [35, 13]. The advantage of using hetero-geneous graphs is that they directly embrace the multi-target representation of event data [35], which is what an event log with multiple event attributes contains. However, these previous approaches opt for Graph Attention Networks (GAT) instead of R-GCN. Since R-GCNs are developed specifically to handle the highly multi-relational data characteristic of realistic knowledge bases [41], we scale the relational data of our graphs by applying this neural architecture, which, to our knowledge, has not been explored before for the multi-target prediction problem within PPM. PREPRINT 
+
+4 A. Costa et al. 
+
+3 Preliminaries 
+
+This section describes the essential definitions used in the approach, as well as the problem statement. We first introduce the formal definitions of the key data constructs of PPM, such as events, traces, prefixes, and logs, drawing on established literature [30]. 
+
+Definition 1 (Event). An event is a tuple e = ( a, cid ,t,v 1,...,v n) where a ∈ A
+
+represents the activity label, cid ∈C is the unique identifier for the case, also called 
+
+case ID , t ∈ T represents the event’s timestamp and v1,...,v n are the event-specific attributes, where ∀1≤k ≤n:vk ∈V k is the domain of the kth attribute. These variables create a multi-dimensional space for the universe of events E.
+
+Definition 2 (Trace). A trace σ ∈ E ∗ is a finite sequence of unique events σ =
+
+⟨e1,e 2,...,e |σ|⟩, where |σ| indicates the number of events in the trace, also called the 
+
+trace length . The events are ordered chronologically and share the case identifier cid .
+
+Similarly to the event-specific attributes , each trace contains a set of trace-specific attributes , which remain constant throughout the entire trace. Every trace mandatorily includes the case ID , and may optionally include trace-specific attributes w1,...,w m,where each wj ∈ W j belongs to the domain of the jth attribute. We define the set of all traces by S ⊆E ∗, with each trace σ ∈S .
+
+Definition 3 (Prefix and Suffix). The prefix and suffix are specific types of partial traces, obtained by employing the hd i(σ) and tl i(σ) functions, respectively. This is realized with a selection operator (·) : σ(i) = ei,∀i ∈ [1 ,|σ|] ⊂ N, such that hd i(σ) = 
+
+⟨e1,e 2,...,e min( i, |σ|)⟩ and tl i(σ)= ⟨ey,e y+1 ,...,e |σ|⟩, where y =max(1 ,|σ|− i+1) .
+
+Definition 4 (Event Log). An event log L is a set of traces denoted by L =
+
+{σ1,σ 2,...,σ z} and σi ∈S for 1≤i≤z, z ∈N+. Each σi is a trace as previously defined. 
+
+In this work, we make use of knowledge graphs derived from an event log. Follow-ing the Resource Description Framework (RDF) standard [39], a knowledge graph (KG) [22] is a collection of (subject, predicate, object) triples. Subjects and predicates are Internationalized Resource Identifiers (IRIs), while objects can either be IRIs representing entities or literals with a specific datatype (e.g., strings or integers). 
+
+Definition 5 (Knowledge Graph). A knowledge graph is a set of triples KG ⊆ 
+
+(IRI ×IRI ×(IRI ∪Literal )) , where each triple (s,p,o ) ∈ KG consists of a subject s, a predicate p, and an object o.
+
+In the context of logs, events, cases, and categorical attributes are represented as entities, whereas numerical values, such as timestamps, are represented as literals. 
+
+Problem definition Given an event log L = {σ1,σ 2,...,σ z} where each trace σ =
+
+⟨e1,e 2,...,e |σ|⟩ consists of events ei =( ai,cid i,t i,v 1i ,...,v ni ) , and an event prefix hd i(σ)
+
+with i< |σ|. The task is to learn a predictive function f :hd i(σ)→ˆei+1 that predicts the next event ˆei+1 , such that ˆei+1 approximates the ground-truth ei+1 . The prediction target includes the activity label, timestamp, and all event-specific attributes. PREPRINT 
+
+GNN4PPM 5
+
+4 GNN4PPM 
+
+In this section, we present our graph-based approach, GNN4PPM. The solution predicts the next events along with the complete data payload of the event log by following the steps presented in Fig. 1. In the offline phase, an event log is first loaded, preprocessed, and transformed into a knowledge graph using an event log ontology and mapping rules. RDF2Vec embeddings are generated from the knowledge graph structure to capture semantic relationships between entities. These embeddings serve as initial node features for an R-GCN, which learns to predict event attributes by propagating information through the graph’s type edges. The trained R-GCN model is applied to validation cases in the online phase to generate predictions. 
+
+Fig. 1: Pipeline of GNN4PPM 
+
+4.1 Event Log Knowledge Graph Construction 
+
+To enable relational learning over event logs, we transform the tabular event log representation into a multi-relational knowledge graph. This representation preserves the structural dependencies among cases, events, and attributes and enables relational message parsing in the R-GCN model. In contrast to purely sequential encoding, the graph structure allows explicit modeling of temporal dependencies between attribute values and cross-attribute interactions. The first step of the pipeline transforms the event log into a structured knowledge graph while preserving its semantics and temporal relations. During preprocessing, we extend the classical definition of an event e by introducing a unique event identifier 
+
+eid ∈N+, reflecting the execution order within a case. Modeling eid as an explicit node in the KG, as shown in Fig. 2, prevents identical activity labels across different cases from being merged and ensures that relational dependencies are captured at the level of concrete event instances. An event is thus represented as e=( eid ,cid ,a,t,v 1,...,v n).
+
+All other components of the tuple follow Definition 1. Furthermore, the event attributes v1,...,v n, and trace attributes w1,...,w m, are classified into numerical or 
+
+categorical to facilitate the embedding and training. 
+
+Event Log Knowledge Graph. Given an event log L={σ1,...,σ z}, we construct an event log knowledge graph KG L consisting of RDF triples. The graph represents the structural relations between cases, events, and attribute values contained in the event log. PREPRINT 
+
+6 A. Costa et al. 
+
+Each trace σ = ⟨e1,e 2,...,e |σ|⟩ consists of events e = ( eid ,cid ,a,t,v 1,...,v n) and trace-level attributes (cid ,w 1,...,w m), as defined in Section 3. The knowledge graph is constructed by generating RDF triples describing event attributes, trace relations, and temporal dependencies between events. For each event e, we create triples linking the event identifier to its activity label, timestamp, and attribute values: 
+
+Te ={(eid ,r a,a ),(eid ,r t,t )}∪{ (eid ,r vk ,v k)|1≤k ≤n}, (1) These triples connect the event node to the nodes representing its activity label and attribute values. Trace-level relations connect events to their corresponding case ID and represent trace attributes: 
+
+Tσ ={(cid ,r wj ,w j)|1≤j ≤m}∪{ (cid ,r contains ,eid i)|ei ∈σ, 1≤i≤| σ|} , (2) These triples associate each case with its trace attributes and the events belonging to that trace. Temporal ordering within a trace is represented through a directly-follows 
+
+relation. For each pair of consecutive events ei and ei+1 in a trace σ, we add triples that connect the values of the same attribute types across both events: For every attribute x ∈ { a,t,v 1,...,v n} we denote by x(ei) the value of attribute x in event ei.The set of directly-follows triples is then formally defined as: 
+
+Tdf ={(x(ei),r dF ,x (ei+1 )) |ei,e i+1 ∈σ, i< |σ|, σ ∈L, x ∈{ a,t,v 1,...,v n}} . (3) This relation captures how attribute values evolve from one event to the next within the same trace. Modeling directly-follows at the attribute level, enables capturing temporal dependencies not only between events but also between evolving attribute values. Unlike sequential models that receive a prefix as input, GNN4PPM encodes prefix context implicitly. The knowledge graph contains, e.g., directlyFollows edges linking consecutive attribute values across events, so the R-GCN aggregates multi-hop neighborhood information from earlier events into the embedding during message passing. The prediction head then operates on the resulting embedding of the node, which carries the accumulated context of the preceding trace. This design allows learning how specific attribute combinations influence subsequent attribute values. Additionally, type triples are added to associate each instance with its corresponding domain class. The resulting event log knowledge graph is given by: 
+
+KG L =Te ∪Tσ ∪Tdf . (4) The knowledge graph can be interpreted as a directed labeled graph GL =( VL,E L)
+
+where the nodes VL correspond to the entities and literals appearing in the triples and the edges EL correspond to the triples themselves. Besides the entity relations shown in Fig. 2, the class relations in the event log on the left indicate that eid contains its event attributes, and cid contains eid s
+
+and their case attributes. In the figure, the edges indicate the direction, and the edge labels indicate the relation type. Additionally, all other attributes of the log were classified into other numerical or other categorical . Although their instances are unique, this classification was fundamental for the embeddings and loss calculation in the neural network. The class hierarchy and conceptual relations of the event log PREPRINT 
+
+GNN4PPM 7
+
+Fig. 2: Knowledge graph representation of the entity relations of an event log. are defined through an ontology inspired by the XES standard [19]. The ontology defines node types CaseID , EventID , categorical attribute nodes, and numerical literals, connected by structural and temporal predicates. Instance-level triples are generated by YARRRML-Mappings [44] and RML-Mappings [12], which transfer each combination of instances of the event log into RDF triples, allowing the event data to be represented as a knowledge graph. Since a detailed explanation of the ontology is not the purpose of this work, a formalization of the ontological structure is left for future work. The resulting knowledge graph serves as the structured input for embedding generation. Moreover, the constructed graph can be related to object-centric settings, in which object types correspond to attribute types with their own relational struc-ture. Both approaches make use of heterogeneous graphs, which are well-suited for expressing inter-dependencies between objects. 
+
+4.2 Knowledge Graph Embeddings 
+
+Knowledge graph embeddings are created using RDF2Vec, which learns low-dimensional representations of entities by performing biased random walks over the RDF graph and training a Word2Vec model on the resulting sequences [40]. This embedding technique was chosen because it captures multiple paths from each entity, encoding rich contextual information from the neighbouring nodes and predicates. Since the learned embeddings preserve similar entities close to each other [28], event attributes for each event instance can be kept closer in the vector space, making RDF2Vec a suitable embedding for the given prediction task. Performing biased walks instead of random walks allows us to prioritize event attributes and directly follow relations according to breadth-first and depth-first parameters [18]. This is important when representing our event logs since uniform random walks would pick any neighbor with equal probability without following the temporal sequence of traces. After the biased walks are performed on the graph, we train the resulting sequences with Continuous Bag of Words (CBOW) to predict the center token from its surrounding context window [27]. For example, in a walk such as [caseID:173688 , has , eventID:1 , directly follows , eventID:2 ], CBOW learns eventID:1 
+
+from the context of both its case and its next event simultaneously (see Fig. 2). PREPRINT 
+
+8 A. Costa et al. 
+
+Since the embedding quality depends on walk and CBOW settings (e.g., walk length, window size, embedding size), we perform unsupervised model selection by clus-tering the embeddings with K-Means and choosing hyperparameters that maximize the silhouette score on the training set, so that similar entities land close together in the embedding space. The silhouette-based selection is performed exclusively on training-set entities, as both the random walks and the Word2Vec training are restricted to the training graph, ensuring that no information from validation cases influences the embedding hyperparameter choice. These pre-trained embeddings are stored with a cor-responding id mapping and serve as initial node features for training with the R-GCN. 
+
+4.3 Training with R-GCN 
+
+This section describes the R-GCN architecture used for representation learning and the multi-target objective employed for model training. 
+
+Model Architecture. The RDF2Vec entity embeddings serve as initial node fea-tures for the R-GCN encoder. During training, R-GCN receives these embeddings along with the graph structure (edge index and edge types). We use R-GCN because the event log knowledge graph contains multiple semantic relation types, and R-GCN explicitly models relation-specific message passing in heterogeneous graphs. Unlike conventional heterogeneous GNN frameworks that define distinct aggregation oper-ators (e.g., GraphSAGE or GAT) per relation type, our model applies a uniform aggregation function across all edge types. Relation-type heterogeneity is captured through the relation-specific transformation matrices, which are parameterized via basis decomposition to keep the number of learnable parameters controlled across the large number of RDF predicate types in the knowledge graph. Architectures without explicit relation modeling would treat all edges uniformly and cannot distinguish between temporal and contextual dependencies. The encoder consists of three R-GCN layers with layer normalization, residual connections, and ReLU activations, ϕ. Three layers were chosen to allow sufficient neighborhood aggregation depth, capturing event, case, and attribute-level context. A residual connection from the first to the second layer, combined with layer normaliza-tion after each of the first two layers, preserves node-specific information and stabilizes training, mitigating the risk of over-smoothing. In the forward pass, each R-GCN layer aggregates messages from neighboring nodes, with separate transformation matrices for each relation type. To handle the multiple relation types in our event log knowledge graphs, we employ basis decomposition, which represents relation-specific weight matrices as linear combinations of a smaller set of basis matrices. Formally, the forward propagation of each R-GCN layer follows the update rule proposed by [41]. For a node i at layer l, the updated representation h(l+1)  
+
+> i
+
+is computed as: 
+
+h(l+1)  
+
+> i
+
+=ϕ
+
+X
+
+> r∈R
+
+X 
+
+> j∈N ri
+
+1
+
+ci,r 
+
+W (l) 
+
+> r
+
+h(l) 
+
+> j
+
++ W (l)0 h(l)
+
+> i
+
+, (5) where N ri is the set of neighbors of i under relation r, W (l) 
+
+> r
+
+is the relation-specific transformation matrix, W (l)0 is the self-loop weight, ϕ(·) is the ReLU activation PREPRINT 
+
+GNN4PPM 9
+
+function, and ci,r =|N ri | is a degree-based normalization constant equal to the number of neighbors connected to node i through relation r. This formulation enables the model to learn different aggregation patterns for different relation types, making relations such as directly-follows or has-resource more meaningful during information propagation. 
+
+Training Objective. The model is trained in a multi-target setting, predicting all categorical and numerical attributes of the next event. Since these attributes differ fundamentally in their type and scale, a unified loss function would not adequately capture their prediction objectives; therefore, multiple loss functions are required. For categorical attributes, we use cross-entropy loss with inverse frequency class weighting to address class imbalance [21]. Cross-entropy is well-suited for multi-class prediction, as it directly optimizes the likelihood of the correct class while producing calibrated probability estimates. Event logs typically have an unbalanced attribute value distribution. Inverse frequency weighting compensates these imbalances and prevents the model from biased predictions. For a categorical attribute k, the loss, 
+
+LCE , is defined as: 
+
+L(k)CE =CE 
+
+
+
+ˆy(k),y (k),w k
+
+
+
+, (6) where wk denotes the inverse-frequency class weights. For the timestamp, we apply the mean squared error (MSE) on log-transformed and normalized values. Time differ-ences in real-world processes are often unbalanced. Therefore, applying a logarithmic transformation compresses large time gaps and prevents them from dominating during training [29]. After normalization, we define the timestamp loss Lt using MSE, which provides a simple and effective regression objective for continuous time prediction, since the values are now distributed more balanced. For other numerical attributes, we employ Huber Loss [23] to improve robustness against outliers. For a numerical attribute k, the corresponding loss L(k)Huber is defined as: 
+
+Lt =MSE 
+
+
+
+ˆy(t),y (t)
+
+, L(k)Huber =Huber 
+
+
+
+ˆy(k),y (k)
+
+. (7) Unknown or missing target values are masked and excluded from gradient computation. The total loss is computed as a weighted aggregation of the individual task losses: 
+
+Ltotal =L(act) CE +λtLt +λc
+
+X
+
+> k∈C
+
+L(k)CE +λn
+
+X
+
+> k∈N
+
+L(k)Huber , (8) where C and N denote the sets of categorical and numerical attributes, respectively, and λt, λc, and λn are task-specific balancing coefficients optimized via hyperparam-eter search. 
+
+5 Evaluation 
+
+In this section, we evaluate the performance of GNN on several real-world event logs. Our evaluation addresses: (Q1) How does GNN4PPM perform on the next activity prediction task compared to the state-of-the-art methods; (Q2) How accurately can the model predict the additional attributes of the next event; and (Q3) How does each event attribute influence the prediction performance. We first describe the PREPRINT 
+
+10 A. Costa et al. 
+
+Table 1: Structural characteristics of the event logs and constructed knowledge graph information.                                                 
+
+> Dataset #Traces #Events #Variants #Case attr. #Event attr. Triples Entities Predicates
+> BPIC12A 13,087 60,849 17 13597,071 144,870 10 BPIC12W 9,658 170,107 2921 131,554,389 360,122 10 BPIC12WC 9,658 72,413 2963 13685,039 164,741 10 BPIC13O 819 2,351 108 3632,925 5,985 14 BPIC20P 10,500 56,437 896 85254,401 59,081 16 BPIC20R 6,886 36,796 76 34368,206 110,655 7
+
+datasets and experimental setup, then compare with state-of-the-art approaches. We then analyze the results of our defined multi-target task, and lastly, investigate the influence of individual event attributes on the prediction performance. The source code is available online 1.
+
+5.1 Datasets 
+
+We used six real-life event logs to evaluate our solution (see Table 1). All used logs are publicly available at 4TU Centre for Research [1] and contain processes performed in different domains. The datasets BPIC12A, BPIC12W, and BPIC12WC describe the application process for a personal loan or overdraft at a Dutch Financial Institute. The first contains the complete lifecycle traces of the subprocess ’Application’, the second contains the subprocess ’Work’, and the third contains the complete lifecycle traces of the subprocess ’Work’. The event log BPIC13O consists of the open problems in the problem management process at VolvoIT Belgium, which includes the activities required to diagnose the root cause of incidents and to secure the resolution of those problems. While BPIC20P contains events pertaining to two years of travel expense claims, BPIC20R contains events related to the request for payments. 
+
+5.2 Experimental Setup 
+
+This section describes the experimental configuration, including data handling, train-ing procedure, hyperparameter optimization and evaluation. All experiments were conducted on a compute node using one NVIDIA H100 GPU with 96 GB of memory. 
+
+Data Handling and Splits. The prediction task is formulated as event-to-event prediction. For each consecutive pair (ei,e i+1 ) within a trace, the model uses the graph representation at event ei to predict the attributes of ei+1 . Data were split at the case level (80% training, 20% validation) using a fixed random seed, following the random case-level split convention used in benchmark studies in this domain [36]. All embeddings and graph structures were constructed exclusively from training cases. 
+
+Hyperparameter Optimization. Model hyperparameters were selected using automated Bayesian optimization with 15 trials and early pruning to discard under-performing configurations. The search space included: hidden dimension {64 ,128 ,256 }, 
+
+> 1
+
+https://github.com/ana-luisa-costa/GNN4PPM.git PREPRINT  
+
+> GNN4PPM 11
+
+prediction head hidden dimension {64 ,128 ,256 }, number of basis functions [5 ,15] ,dropout rate [0 .1,0.5] , learning rate [10 −4,10 −2] (log scale), and task-specific loss weights for multi-task balancing. Each trial was trained for 100 epochs, and the configuration with the lowest validation loss was selected for final training. The task-specific loss balancing coefficients were optimized over the following search ranges: 
+
+λt ∈[0 .1,1.0] , λc ∈[0 .3,1.0] , and λn ∈[0 .1,0.5] .
+
+RDF2Vec Configuration. The walk length, CBOW context window size, and embedding dimensionality were selected through unsupervised Bayesian optimization, maximizing the silhouette score on K-Means training embeddings. The correspond-ing search spaces were [6 ,12] for walk length, [3 ,8] for context window size, and 
+
+{64 ,128 ,256 } for embedding dimensionality. 
+
+Training Configuration. Training was performed using the Adam optimizer with cosine annealing. We applied early stopping with a patience of 30 epochs, gradient clipping with a maximum norm of 1.0. Models were trained for up to 100 epochs. 
+
+Evaluation Metrics. Categorical attributes are evaluated using macro-averaged precision, recall, F1-score, and accuracy. Numerical attributes are evaluated using Mean Absolute Error (MAE) in normalized log-space. All reported metrics were computed exclusively on the validation set. 
+
+5.3 Comparison against State-of-the-Art 
+
+To put our performance into perspective and address (Q1), we compare our approach against a set of state-of-the-art methods. All compared approaches focus on the NAP task since they do not allow for the prediction of the other attributes in the same training. In contrast, our approach predicts the next event together with its associated attributes. However, to ensure comparability with existing work, we report NAP accuracy in this section. The most recent approaches [13, 34, 35, 38] were implemented and executed by us for all datasets. The older approaches [7, 16, 42, 43] were run by us for datasets BPIC13O, BPIC20P, and BPIC20R. For the other three datasets, we rely on the results of [36], who performed an extensive benchmark on these logs. For each method, we followed the training configuration and evaluation protocol recommended in the respective publication, including the specified data splits, cross-validation procedures, and, where available, hyperparameter settings. For datasets on which certain ap-proaches were not originally evaluated, we applied the same configuration strategy proposed by the authors and conducted additional experiments accordingly. In these cases, hyperparameters were selected according to published guidelines or the default settings provided in the official implementations. Table 2 summarizes the accuracy results across all benchmark datasets. Other measures such as F1 score, precision, and recall, are available in the data file online 2.Overall, GNN4PPM achieves the best performance on BPIC12A, BPIC12WC, and BPIC13O, and remains competitive on the remaining three. BPIC13O is the smallest dataset in terms of traces and events, but it contains a relatively high number of case and event attributes relative to its size. On this dataset, GNN4PPM outper-forms all competing methods. Both BPIC12A and BPIC12WC, while larger, exhibit  
+
+> 2https://figshare.com/s/cde2c35c6ab3f7ca5422 PREPRINT
+
+12 A. Costa et al. 
+
+Table 2: Accuracy of the Next Activity Prediction Task compared to different approaches. Best result per dataset highlighted in bold; second-best is underlined. 
+
+Approach BPIC12A BPIC12W BPIC12WC BPIC13O BPIC20P BPIC20R 
+
+SEPHIGRAPH [13] 67.8 78.6 46.6 20.2 73.8 76.5 LUPIN [34] 19.3 35.7 21.2 24.4 39.7 51.1 PROPHET [35] 76.7 89.2 80.3 62.0 83.8 87.8 BEST [38] 76.1 69.0 40.0 48.8 86.9 89.0 CAMARGO [7] 75.9 76.4 68.9 77.2 84.4 91.9 
+
+EVERMANN [16] 75.8 75.4 67.5 65.1 88.9 90.5 TAX [42] 79.5 85.3 69.8 60.9 84.4 89.0 THEIS [43] 65.5 86.2 80.1 59.3 83.2 89.7 
+
+Our approach 
+
+GNN4PPM 88.8 80.8 83.2 78.1 80.4 87.8 
+
+a moderate number of event attributes and a high number of traces. GNN4PPM also achieves the strongest performance on these datasets, indicating that the ap-proach performs particularly well on small to medium-sized event logs. In contrast, BPIC12W contains more events and a low number of event attributes. On this dataset, PROPHET achieves the best performance. This suggests that while certain approaches may benefit from very large logs, our approach maintains stable performance across different scales. BPIC20P and BPIC20R contain a larger number of activities and more case and event attributes. On these datasets, Evermann and Camargo achieve the strongest results, while GNN4PPM remains competitive, especially on BPIC20R. The results show that GNN4PPM performs well across different log sizes with mul-tiple event attributes, while remaining competitive on larger, more complex datasets. These results demonstrate that predicting the complete data payload positively affects activity prediction performance while achieving competitive results across all datasets. 
+
+5.4 Multi-Target Prediction 
+
+To address the question (Q2) and the problem definition in Section 3, our approach predicts the next event together with its complete data payload. Fig. 3 shows the number of distinct attributes per dataset and Table 3 summarizes the prediction Table 3: Multi-target prediction results across datasets given as accuracy for event attributes and as normalized MAE for timestamp.                                            
+
+> Dataset activity resourcecountry org_resource lifecycle org_group org_role timestamp (MAE)
+> BPIC12A 88.75 64.20 100 –––0.3184 BPIC12W 80.34 56.76 83.46 –––0.5476 BPIC12WC 83.19 14.83 100 –––0.7667 BPIC13O 78.15 63.16 67.04 97.78 87.14 91.85 0.7100 BPIC20P 80.44 99.38 ––88.67 –0.3785 BPIC20R 87.79 99.58 ––90.53 –0.6400 PREPRINT
+
+GNN4PPM 13 
+
+results across all datasets. Since not all datasets contain the same event attributes, some entries are not applicable. For the timestamp prediction results the prediction with lowest errors are ob-served for BPIC12A (0.3184) and BPIC20P (0.3785), while BPIC13O (0.7100) and BPIC12WC (0.7667) have relatively large errors. This can be due to how regular the intervals between timestamp is in each process. While BPIC12A and BPIC20P have more consistent intervals between events, BPIC13O and BPIC12WC have times that range from seconds to days, making them harder to predict. Another influencing factor is the number of targets in the prediction task, as BPIC13O has the most categorical prediction heads, so the encoder must balance multiple classification gradients. 10 161 57136 7360 170092 6160 72408 3511 240 26 14 2349 29 2814070 19 2830141 activity org_resource timestamp lifecycle_transition org_role org_group resourcecountry BPIC12_A BPIC12_W BPIC12_WC BPIC13_O BPIC20_P BPIC20_R Attributes scale 
+
+> 12345Event attributes
+
+Fig. 3: Number of distinct event attributes For predictions in which attributes are classes, the number of distinct values highly influences the results. In datasets like BPIC20P and BPIC20R, where the number of distinct org_resource -values is low, the accuracy is very high (99.38% and 99.56% respectively), in comparison to datasets with many distinct resources. The same effect is observed in the prediction of the lifecycle 
+
+and org_role attributes. BPIC13O shows the lowest accuracy among the datasets, but also has the most distinct values for these attributes. Overall, the results indicate that the prediction difficulty of individual attributes is influenced by attribute cardinality, the number of distinct values per class, and consistency on intervals be-tween events, indicating that datasets with lower concept drift would perform better in the multi-target task. Attributes with few distinct identifiers can be predicted reliably, whereas those with very large numbers, such as resources or role, remain challenging. 
+
+5.5 Attribute Influence 
+
+To address the question (Q3), we analyze how individual event attributes influence the prediction performance. Fig. 4 illustrates the influence of individual event attributes on the activity prediction accuracy across the datasets. The values ( ∆) represent the difference in accuracy when a specific attribute is not in the model. For the comparison, the attribute was removed from the raw dataset, and the model was retrained with the new setting. Negative values, therefore, indicate that the attribute contributes positively to prediction performance, while positive values indicate that removing the attribute improves accuracy. Across most datasets, the timestamp attribute positively influences prediction accuracy. Removing it leads to a decrease in performance, particularly in BPIC20P (∆=−0.1821 ) and BPIC20R ( ∆=−0.1272 ). The org_resource and org_role at-tributes also improves prediction performance. For example, removing the first reduces accuracy in BPIC12W ( ∆=−0.1027 ) and BPIC20P ( ∆=−0.0694 ), while removing PREPRINT 
+
+14 A. Costa et al. 
+
+Fig. 4: Influence of each event attribute on activity prediction accuracy when removed from the model the second results in large decreases in accuracy ( ∆=−0.2937 and ∆=−0.3314 ). At the same time, some attributes show small positive values, meaning that removing them slightly improves prediction performance. This effect appears, for example, in BPIC12WC, where removing timestamp (∆=0 .0182 ) or lifecycle_transition 
+
+(∆=0 .0105 ) slightly increases accuracy. These attributes either have high cardinality or weak correlations with the control flow, which may introduce noise into the model. The results indicate that temporal information, resources, and organizational roles provide the strongest predictive targets, while some higher-level attributes may contribute little information. Therefore, including case and event attributes as context in the knowledge graph improves the prediction performance of the next activity prediction task, achieving better accuracy across many datasets when compared with an architecture that considers fewer attributes. 
+
+6 Conclusion 
+
+We introduce GNN4PPM, an approach to multi-target predictions that captures contextual relations among event and case attributes that sequential models do not preserve. Despite these promising results, several limitations must be acknowledged. Experiments showed that GNN4PPM performs well on small to medium-sized event logs but is less competitive on larger logs that contain fewer attributes, such as the BPIC12W. Furthermore, prediction accuracy is directly related to attribute cardinality, since attributes with many distinct values, such as resources and roles, remain difficult to predict regardless of the model architecture. The timestamp prediction is also sensitive to the process irregularity of time intervals. Additionally, a direct baseline comparison for the multi-target task is not possible since other approaches do not predict the complete data payload of the next event. Finally, the evaluation is further PREPRINT GNN4PPM 15 
+
+limited by the absence of an independent test set and by being conducted on six publicly available event logs, all drawn from a limited set of domains, which restricts the generalization of the findings to other processes where attribute structures differ. Future work includes first extending GNN4PPM from next-event to suffix pre-diction, which allows predicting complete sequences of future events with their full data payloads. Second, there is a potential for applying the approach to the pre-diction of objects in object-centric logs. Our heterogeneous graph structure, which is better suited for expressing inter-dependencies between attributes, indicates the applicability of GNN4PPM to object-centric event logs, where event attributes are objects with different type relations in the knowledge graph. Third, formalizing in detail the event log knowledge graph ontology and schema and automating the graph construction. Additionally, incorporating explainability into the R-GCN predictions, for example, through graph attention or post-hoc explanation methods, would allow identifying which attribute relations influence individual predictions. Lastly, evalu-ating GNN4PPM on a broader set of domains, which include multiple targets to be predicted, would strengthen the generalization of the findings. 
+
+References 
+
+1. 4TU.ResearchData: 4tu.researchdata: An international research data repository. https://data.4tu.nl/ (2026) 2. Agarwal, C., Queen, O., Lakkaraju, H., Zitnik, M.: Evaluating explainability for graph neural networks. Scientific Data 10 (1), 144 (2023) 3. Ali, M.A., Dumas, M., Milani, F.: Enhancing the accuracy of predictors of activity sequences of business processes. In: International Conference on Research Challenges in Information Science. pp. 149–165. Springer (2024) 4. Amiri Elyasi, K., van der Aa, H., Stuckenschmidt, H.: Pgtnet: A process graph transformer network for remaining time prediction of business process instances. In: International Conference on Advanced Information Systems Engineering. Springer (2024) 5. Aversano, L., Bernardi, M.L., Cimitile, M., Iammarino, M., Verdone, C.: A data-aware explainable deep learning approach for next activity prediction. Engineering Applications of Artificial Intelligence 126 , 106758 (2023) 6. Bukhsh, Z.A., Saeed, A., Dijkman, R.M.: Processtransformer: Predictive business process monitoring with transformer network. arXiv:2104.00721 (2021) 7. Camargo, M., Dumas, M., González-Rojas, O.: Learning accurate lstm models of business processes. In: Hildebrandt, T., Van Dongen, B.F., Röglinger, M., Mendling, J. (eds.) Business Process Management, LNCS, vol. 11675. Springer (2019) 8. Ceravolo, P., Comuzzi, M., De Weerdt, J., Di Francescomarino, C., Maggi, F.M.: Predictive process monitoring: Concepts, challenges, and future research directions. Process Science 1(1), 2 (2024) 9. Chen, Y., Zou, L., Qin, Z.: Gated relational graph neural network for semi-supervised learning on knowledge graphs. In: Web Information Systems Engineering – WISE 2019. LNCS, vol. 11881, pp. 617–629. Springer, Cham (2019) 10. Chiorrini, A., Diamantini, C., Genga, L., Potena, D.: Multi-perspective enriched instance graphs for next activity prediction through graph neural network. Journal of Intelligent Information Systems 61 (1), 5–25 (2023) 11. Di Mauro, N., Appice, A., Basile, T.M.A.: Activity prediction of business process instances with inception cnn models. In: Alviano, M., Greco, G., Scarcello, F. (eds.) AI 2019 – Advances in Artificial Intelligence, LNCS, vol. 11946, pp. 348–361. Springer (2019) PREPRINT 16 A. Costa et al. 12. Dimou, A., Vander Sande, M., Colpaert, P., Verborgh, R., Mannens, E., Van de Walle, R.: Rml: A generic language for integrated rdf mappings of heterogeneous data. Ldow 
+
+1184 (2014) 13. Dissegna, S., Di Francescomarino, C., Ronzani, M.: Multi-perspective next event prediction in ppm via heterogeneous graph neural networks. In: Research Challenges in Information Science, LNBIP, vol. 547. Springer (2025) 14. van Dongen, B.: Bpi challenge 2017 (2017). https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b 15. Duong, L.T., Travé-Massuyès, L., Subias, A., Merle, C.: Remaining cycle time prediction with graph neural networks for predictive process monitoring. In: Proceedings of the 2023 8th International Conference on Machine Learning Technologies. ACM (2023) 16. Evermann, J., Rehse, J.R., Fettke, P.: Predicting process behaviour using deep learning. Decision Support Systems 100 , 129–140 (2017) 17. Francescomarino, C.D., Ghidini, C.: Predictive process monitoring. In: Process Mining Handbook, LNBIP, vol. 448, pp. 320–346. Springer, Cham (2022) 18. Grover, A., Leskovec, J.: node2vec: Scalable feature learning for networks. In: Proceedings of the 22nd ACM SIGKDD international conference on Knowledge discovery and data mining. pp. 855–864 (2016) 19. Gunther, C.W., Verbeek, H.: Xes standard definition version 2.0. Technical Report BPM-14-09, Technische Universiteit Eindhoven / BPMcenter.org (2014) 20. Harl, M., Weinzierl, S., Stierle, M., Matzner, M.: Explainable predictive business process monitoring using gated graph neural networks. Journal of Decision Systems 29 (sup1), 312–327 (2020) 21. He, H., Garcia, E.A.: Learning from imbalanced data. IEEE Transactions on knowledge and data engineering 21 (9), 1263–1284 (2009) 22. Hogan, A., Blomqvist, E., Cochez, M., d’Amato, C., Melo, G.D., Gutierrez, C., Kirrane, S., Gayo, J.E.L., Navigli, R., Neumaier, S., et al.: Knowledge graphs. ACM Computing Surveys (Csur) 54 (4), 1–37 (2021) 23. Huber, P.J.: Robust estimation of a location parameter. In: Breakthroughs in statistics: Methodology and distribution, pp. 492–518. Springer (1992) 24. Lin, L., Wen, L., Wang, J.: Mm-pred: A deep predictive model for multi-attribute event sequence. In: Proceedings of the 2019 SIAM international conference on data mining. pp. 118–126. SIAM (2019) 25. Maggi, F.M., Di Francescomarino, C., Dumas, M., Ghidini, C.: Predictive monitoring of business processes. In: Advanced Information Systems Engineering (CAiSE 2014). Lecture Notes in Computer Science, vol. 8484, pp. 457–472. Springer (2014) 26. Mehdiyev, N., Majlatow, M., Fettke, P.: Interpretable and explainable machine learning methods for predictive process monitoring: A systematic literature review. Artificial Intelligence Review 58 (12), 378 (2025) 27. Mikolov, T., Chen, K., Corrado, G., Dean, J.: Efficient estimation of word representations in vector space. arXiv:1301.3781 (2013) 28. Mäkelburg, J., Peng, Y., Alam, M., Weller, T., Acosta, M.: Markov process–based graph convolutional networks for entity classification in knowledge graphs. In: 17th International Conference on Agents and Artificial Intelligence (ICAART 2025). Proceedings of ICAART, vol. 2, pp. 429–440 (2025) 29. Osborne, J.: Notes on the use of data transformations. Practical assessment, research, and evaluation 8(1) (2002) 30. Oyamada, R.S., Tavares, G.M., Junior, S.B., Ceravolo, P.: Enhancing Predictive Process Monitoring with Time-Related Feature Engineering. In: Advanced Information Systems Engineering, vol. 14663, pp. 71–86. Springer Nature Switzerland, Cham (2024) PREPRINT 
+
+GNN4PPM 17 31. Pasquadibisceglie, V., Appice, A., Castellano, G., Malerba, D.: Using convolutional neural networks for predictive process analytics. In: 2019 International Conference on Process Mining (ICPM). pp. 129–136. IEEE (2019) 32. Pasquadibisceglie, V., Appice, A., Castellano, G., Malerba, D.: Leveraging multi-view deep learning for next activity prediction. In: Proceedings of the 3rd International Workshop on Artificial Intelligence for Business Process Management. CEUR Workshop Proceedings, vol. 2952. CEUR-WS.org (2021) 33. Pasquadibisceglie, V., Appice, A., Castellano, G., Malerba, D.: A multi-view deep learn-ing approach for predictive business process monitoring. IEEE Transactions on Services Computing 15 (4), 2382–2395 (2022). https://doi.org/10.1109/TSC.2021.3051771 34. Pasquadibisceglie, V., Appice, A., Malerba, D.: Lupin: A llm approach for activity suffix prediction in business process event logs. In: Proceedings of the 6th International Conference on Process Mining (ICPM). pp. 1–8. IEEE (2024) 35. Pasquadibisceglie, V., Scaringi, R., Appice, A., Castellano, G., Malerba, D.: Prophet: Explainable predictive process monitoring with heterogeneous graph neural networks. IEEE Transactions on Services Computing 17 (6), 4111–4124 (2024) 36. Rama-Maneiro, E., Vidal, J., Lama, M.: Deep learning for predictive business process monitoring: Review and benchmark. IEEE Transactions on Services Computing (2022) 37. Rama-Maneiro, E., Vidal, J.C., Lama, M.: Embedding graph convolutional networks in recurrent neural networks for predictive monitoring (2021) 38. Rauch, S., Frey, C.M.M., Maldonado, A., Seidl, T.: Best: Bilaterally expanding subtrace tree for event sequence prediction. In: Senderovich, A., Cabanillas, C., Vanderfeesten, I., Reijers, H.A. (eds.) Business Process Management, Lecture Notes in Computer Science, vol. 16044, pp. 415–432. Springer (2026) 39. RDF Working Group: Rdf standard model: W3c recommendations (2024), https://www.w3.org/RDF/ 40. Ristoski, P., Paulheim, H.: Rdf2vec: Rdf graph embeddings for data mining. In: Pro-ceedings of the 10th International Conference on Semantic Systems. pp. 498–507 (2016) 41. Schlichtkrull, M., Kipf, T.N., Bloem, P., van den Berg, R., Titov, I., Welling, M.: Modeling relational data with graph convolutional networks. In: The Semantic Web — ESWC 2018. LNCS, vol. 10843, pp. 593–607. Springer (2018) 42. Tax, N., Verenich, I., La Rosa, M., Dumas, M.: Predictive business process monitoring with lstm neural networks. In: Advanced Information Systems Engineering (CAiSE 2017). Lecture Notes in Computer Science, vol. 10253, pp. 477–492. Springer (2017) 43. Theis, J., Darabi, H.: Decay replay mining to predict next process events. IEEE Access 
+
+7, 119787–119803 (2019) 44. Van Assche, D., Delva, T., Heyvaert, P., De Meester, B., Dimou, A.: Towards a more human-friendly knowledge graph generation & publication. In: ISWC2021, The International Semantic Web Conference. vol. 2980. CEUR (2021) 45. Venugopal, I., Töllich, J., Fairbank, M., Scherp, A.: A comparison of deep-learning methods for analysing and predicting business processes (2021) 46. Weinzierl, S.: Exploring gated graph sequence neural networks for predicting next process activities. In: Marrella, A., Weber, B. (eds.) Business Process Management Workshops, Lecture Notes in Business Information Processing, vol. 436. Springer (2022) 47. Wuyts, B., Vanden Broucke, S., De Weerdt, J.: Sutran: An encoder-decoder transformer for full-context-aware suffix prediction of business processes. In: Proceedings of the 6th International Conference on Process Mining (ICPM). pp. 17–24. IEEE (2024)

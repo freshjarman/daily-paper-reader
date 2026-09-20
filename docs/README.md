@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-09-13</span>
+      <span class="dpr-home-dashboard-kicker">2026-09-20</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 1 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 3 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>0</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-09-13 22:00:34 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-09-20 21:23:16 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今天精读 1 篇论文，聚焦动态潜在空间建模与泊松网络过程，单篇评分 8.0。</p>
-<p>值得看的方向是把非齐次泊松网络过程放进动态潜在空间里，用于刻画国际关系这类随时间演化的网络结构。</p>
-<p>普通读者若关注国际关系或网络数据，可先了解&quot;潜在空间＋时间演化&quot;这套思路，再看它如何落到具体双边关系数据上。</p>
+<p>2026-09-20 日报：3 篇论文中精读 1 篇、速读 2 篇，主线覆盖交叉验证、图神经网络流程监控与连续时间机器学习。</p>
+<p>最值得看的是 8.0 分的《Cross Validation for the log Gaussian Cox Process》，速读可关注 7.0 分的《GNN4PPM》中关系图卷积用于多目标预测性流程监控的方向。</p>
+<p>普通读者建议先精读 8.0 那篇，再按兴趣从两篇速读中选读，重点看方法如何落到预测与验证问题。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -83,7 +83,7 @@
     <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations">Dynamic Latent Space Modeling of Inhomogeneous Poisson Network Processes with Applications to International Relations</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Cross Validation for the log Gaussian Cox Process">Cross Validation for the log Gaussian Cox Process</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>1</strong></span></div>
 </section>
@@ -93,12 +93,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">0 篇</strong>
+    <strong class="dpr-home-dashboard-count">2 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="GNN4PPM: Multi-Target Predictive Process Monitoring with Relational Graph Convolutional Networks">GNN4PPM: Multi-Target Predictive Process Monitoring with Relational Graph Convolutional Networks</span></li><li><span class="dpr-home-dashboard-paper-title" title="Continuous-Time Machine Learning: A Unified Mathematical Perspective">Continuous-Time Machine Learning: A Unified Mathematical Perspective</span></li></ul>
   </div>
-
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
 </section>
 </div>
 
