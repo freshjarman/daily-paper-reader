@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-09-20</span>
+      <span class="dpr-home-dashboard-kicker">2026-09-27</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 3 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 2 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>2</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>0</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-09-20 21:23:16 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-09-27 21:52:22 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>2026-09-20 日报：3 篇论文中精读 1 篇、速读 2 篇，主线覆盖交叉验证、图神经网络流程监控与连续时间机器学习。</p>
-<p>最值得看的是 8.0 分的《Cross Validation for the log Gaussian Cox Process》，速读可关注 7.0 分的《GNN4PPM》中关系图卷积用于多目标预测性流程监控的方向。</p>
-<p>普通读者建议先精读 8.0 那篇，再按兴趣从两篇速读中选读，重点看方法如何落到预测与验证问题。</p>
+<p>今日精读两篇均分 8.0 的论文：一篇提出融合异构上下文的 Universal Multi-Modal Traceformer 用于流程事件预测，一篇将空间点过程的 mark 距离相关函数从矩基拓展到分布型 mark 摘要特征。两篇都值得关注，前者适合流程预测与多模态建模读者，后者适合空间统计方法研究者。建议普通读者先读 Traceformer 了解多模态上下文如何提升预测，再按兴趣决定是否深入空间点过程方法。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -80,12 +78,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">1 篇</strong>
+    <strong class="dpr-home-dashboard-count">2 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Cross Validation for the log Gaussian Cox Process">Cross Validation for the log Gaussian Cox Process</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Universal Multi-Modal Traceformer: Integrating Heterogeneous Context for Process Event Prediction">Universal Multi-Modal Traceformer: Integrating Heterogeneous Context for Process Event Prediction</span></li><li><span class="dpr-home-dashboard-paper-title" title="Mark distance correlation functions: from moment-based to distributional mark summary characteristics in spatial point processes">Mark distance correlation functions: from moment-based to distributional mark summary characteristics in spatial point processes</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -93,12 +91,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">2 篇</strong>
+    <strong class="dpr-home-dashboard-count">0 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="GNN4PPM: Multi-Target Predictive Process Monitoring with Relational Graph Convolutional Networks">GNN4PPM: Multi-Target Predictive Process Monitoring with Relational Graph Convolutional Networks</span></li><li><span class="dpr-home-dashboard-paper-title" title="Continuous-Time Machine Learning: A Unified Mathematical Perspective">Continuous-Time Machine Learning: A Unified Mathematical Perspective</span></li></ul>
+<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">tpp-es <strong>2</strong></span></div>
+
 </section>
 </div>
 

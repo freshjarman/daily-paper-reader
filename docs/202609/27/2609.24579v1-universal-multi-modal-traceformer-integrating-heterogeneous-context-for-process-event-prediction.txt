@@ -1,0 +1,464 @@
+Title: Universal Multi-Modal Traceformer: Integrating Heterogeneous Context for Process Event Prediction
+
+URL Source: https://arxiv.org/pdf/2609.24579v1
+
+Published Time: Tue, 22 Sep 2026 02:42:25 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Universal Multi-Modal Traceformer: Integrating Heterogeneous Context for Process Event Prediction 
+
+Fabian Spaeh Celonis 
+
+f.spaeh@celonis.com 
+
+Jingxing Fang Celonis 
+
+j.fang@celonis.com 
+
+Shandian Zhe Celonis 
+
+s.zhe@celonis.com 
+
+Bin Shen Celonis 
+
+b.shen@celonis.com 
+
+September 2026 
+
+Abstract 
+
+Event logs arise in a wide range of real-world processes, capturing not only event activities and timestamps but also multi-modal contextual information. Existing event-sequence models, including many temporal point process approaches, primarily model event activities and timestamps while overlooking heterogeneous context, such as numerical measurements, categorical attributes, textual descriptions, and metadata associated with individual events and entire traces. In this paper, we propose Universal Multi-Modal Traceformer (UMT), a unified framework for incorporating heterogeneous process context into next-event prediction. Built on a Transformer backbone, UMT introduces a universal feature encoder that maps diverse feature types into a shared representation space and handles contextual information at both the event and trace levels. UMT further develops a per-event Perceiver module that dynamically weights contextual features and adaptively integrates them into event-token representations. To accommodate the heavy-tailed and potentially multi-modal distribution of inter-arrival times, UMT represents each interval at multiple temporal scales and jointly predicts the corresponding scale-specific quantities. Experiments on 13 real-world event logs show that UMT improves both next-event activity and time prediction over existing approaches. 
+
+# 1 Introduction 
+
+Event logs arise in a wide range of event-driven applications, including e-commerce platforms, online service workflows, healthcare portals, IT service desks, and similar web-facing systems. Each log records timestamped sequences of user and system actions (searches, transactions, support tickets, content edits). Beyond the activity and timestamp of each event, these logs often contain multi-modal contextual information associated with both individual events and their traces, i.e., event sequences. Such information may include textual descriptions, participant identities or roles, trace-level metadata, numerical measurements, and categorical attributes. Two research communities have studied this prediction task. In temporal point processes [10], conditional intensity functions capture dependencies within and across event activities [4, 18, 25, 45], with recent extensions including intensity-free [32] and generative approaches [20, 23]. These models jointly predict event activities and times but typically represent each event by its activity and timestamp alone, with few exceptions that incorporate structured covariates [26]. In predictive process monitoring [35], Transformer and recurrent architectures have been applied to activity prefixes of event logs [5, 13, 34], and several methods incorporate structured attributes such as resources [6], numerical and categorical event fields [27, 36], or textual descriptions [31]. 1arXiv:2609.24579v1 [cs.LG] 21 Sep 2026 However, these approaches typically concatenate or discretize a log-specific subset of columns, assume a fixed schema, and predict the next activity with a simple scalar duration head. Neither line of work provides a single architecture that (i) ingests mixed numerical, categorical, and textual fields at both the event and trace level, including missing and previously unseen values, (ii) weights those fields adaptively for each event, and (iii) models inter-arrival times whose mass may span minutes to weeks. As a result, deploying a next-event predictor on a new log still requires log-specific feature selection and preprocessing, limiting the practical applicability of existing methods. To address this limitation, we propose the Universal Multi-Modal Traceformer (UMT), a framework that incorporates heterogeneous contextual information into joint next-event activity and inter-arrival time prediction, and can be applied to new event logs without log-specific feature engineering. Our main contributions are threefold. First, we introduce a universal feature encoder that maps heterogeneous inputs, including text, categorical attributes, and numerical measurements, into a shared latent space. Modality-specific encoding paths handle the characteristics of each feature type while supporting missing or previously unseen values. The encoder processes fields at both the event and trace level, so the same architecture applies regardless of which columns a particular log contains. Second, we develop a per-event Perceiver module for dynamic feature weighting and inte-gration. For each event, an embedding of its activity and observed inter-arrival time serves as a query that cross-attends to the associated contextual features. This mechanism adaptively weights features according to their relevance, allowing the model to exploit informative fields and ignore irrelevant or absent ones without manual column selection. A causal Transformer then models the resulting event sequence to predict the activity and time of the next event. Third, we introduce a multi-scale representation and prediction scheme for inter-arrival times to better accommodate their heavy-tailed and potentially multi-modal distributions. Each interval is decomposed across temporal scales, such as days, hours, and minutes, and the model jointly predicts the corresponding scale-specific quantities. Cyclic components, such as hours and minutes, are represented as angles and trained with a cosine-based loss that avoids discontinuities at temporal boundaries. We evaluate UMT on 13 real-world event logs spanning business processes, IT incidents, energy consumption, healthcare, food safety, and transportation. UMT achieves the highest next-activity accuracy on 11 of 13 datasets and the lowest duration MAE on 9 of 13 (Tables 2–3), with MAE reductions of 27%–40% over the strongest baseline on several metadata-rich logs. Ablations confirm that each component contributes: the multi-scale time head reduces MAE by 12% on average over a log-normal baseline (Table 7), and the feature encoder adds up to 18 accuracy points on logs with rich contextual fields (Table 4). Perceiver-based fusion proves robust to irrelevant context: when padded to 100 columns, it loses at most 3 .6 accuracy points, compared with 13 .5 for additive fusion (Table 6). 
+
+# 2 Related Work 
+
+Temporal point processes [10, 11] are the dominant framework for event modeling. Early approaches often rely on Poisson processes [7, 15–17, 21], which assume independent increments and therefore do not model interactions among events in a trace. Hawkes processes [18] relax this assumption by capturing excitation effects between events, leading to numerous extensions and applications in influence modeling, scalability, and structured event prediction [4, 29, 30, 37, 38, 41, 44]. More recently, neural point processes have used deep architectures to parameterize conditional intensity functions. Representative models encode event histories with recurrent neural networks or continuous-time recurrent states, such as RMTPP [12] and Neural Hawkes Processes [25], or model cumulative intensities with monotonic networks to avoid explicit numerical integration [28, 2Activity 
+
+> Head
+> Activity
+> Head
+> Activity ID
+> Time Lag
+> Event-Level
+> Context at
+> LM + Projection
+> Embedding Lookup
+> MLP
+> Text
+> Categorical
+> Numerical
+> Trace-Level
+> Context
+> LM + Projection
+> Embedding Lookup
+> MLP
+> Text
+> Categorical
+> Numerical
+> Activity Embedding
+> Multi-Scale
+> Embedding
+> Feature Encoders
+> Trace Tokens  Event Tokens
+> Positional
+> Encoding
+> Multi-Head Attention
+> Feed-Forward Network
+> Multi-Head Attention
+> Feed-Forward Network
+> Transformer Backbone
+> (Causal Masked Attention)
+> Activity
+> Head
+> Time
+> Head
+> Next Activity
+> Next Time Lag
+> Fused
+> Token
+> Cross-
+> Attention
+> MLP
+
+Figure 1: Architecture overview. Universal feature encoders map trace-level and event-level fields to individual tokens. For each event, an activity–time query cross-attends to the available feature tokens in a Perceiver module, producing a context-aware event token. A causal Transformer then processes the resulting sequence and feeds separate next-event-activity and multi-scale inter-arrival-time prediction heads. 33]. Attention-based variants, including Transformer Hawkes Processes [45], Self-Attentive Hawkes Processes [43], and Attentive Neural Hawkes Processes [40], represent events and their types as tokens and use causal attention to encode historical dependencies. Other recent work combines structured and neural point-process components [42], while EasyTPP provides an open-source benchmark for neural point-process models [39]. Another line of work develops intensity-free generative models for temporal event generation, including approaches based on normalizing flows [32], diffusion models [22, 23], and flow matching [20, 24]. Process mining analyzes event logs to discover, monitor, and improve operational pro-cesses [35]. Within this field, predictive process monitoring uses prefixes of ongoing traces to forecast future activities, timestamps, remaining times, and process outcomes. Early deep-learning approaches use LSTMs to encode activity sequences [13, 34], with later work adopting Transformer backbones [5]. Several methods go beyond activity and time by incorporating additional event attributes: Navarin et al. use numerical features for remaining-time predic-tion [27]; Camargo et al. embed resource roles alongside activities [6]; MiTFM discretizes all event-log columns and fuses them via multi-head attention [36]; and Pegoraro et al. encode textual event descriptions with a language model [31]. In the TPP literature, TransFeat-TPP incorporates structured covariates into a Transformer point process and learns feature-importance rankings [26]. However, these methods are generally designed for particular feature types or prediction tasks: each targets a specific combination of input modalities, assumes a fixed schema, or handles only part of the prediction problem (e.g., next activity without time, or remaining time without next activity). UMT differs in three respects: it maps mixed numerical, categorical, and textual fields into a shared token space without requiring a fixed schema; it uses a Perceiver module whose event-conditioned cross-attention adapts to whichever fields are present; and it jointly predicts next-event activity and inter-arrival time through a multi-scale time head designed for heavy-tailed durations. 33 Methodology 
+
+3.1 Problem Formulation and Model Overview 
+
+Let an event log contain a collection of traces. We represent each trace as Γ = 
+
+> (
+
+c, ((at, ∆t, xt))Tt=1 
+
+> )
+
+, (1) where c = ( c1, . . . , c J ) denotes trace-level contextual fields, at ∈ A is the activity of the t-th event, ∆t ≥ 0 is its inter-arrival time from the preceding event, and xt = ( xt, 1, . . . , x t,K t ) collects the event-level contextual fields. Both c and xt may include heterogeneous fields, such as numerical measurements, categorical attributes, and textual descriptions. For simplicity, we set ∆ 1 = 0. Given a trace prefix Γ ≤t, our goal is to predict the activity at+1 and inter-arrival time ∆ t+1 
+
+of the next event. The proposed Universal Multi-Modal Traceformer (UMT) consists of four main components. A universal feature encoder first maps heterogeneous contextual fields into a shared latent space. A per-event Perceiver module then dynamically weights and integrates the available context into each event representation. A causal Transformer captures temporal dependencies across the resulting event sequence. Finally, separate prediction heads estimate the next-event activity and its inter-arrival time, with the latter represented through a multi-scale decomposition. 
+
+3.2 Universal Multi-Modal Feature Encoder 
+
+At event position t, we collect the event-level fields in xt together with the trace-level fields in c.Let ut,j range over the combined set {c1, . . . , c J , x t, 1, . . . , x t,K t }. UMT applies a feature-specific encoder gj and maps each field to the common model dimension d:
+
+ft,j = gj (ut,j ) ∈ Rd. (2) The form of gj depends on the modality of the field. A categorical value is mapped through a learnable embedding table containing dedicated entries for missing and previously unseen categories. A numerical value is represented jointly with its missing-value indicator and transformed by a small multilayer perceptron. Textual content is encoded using a lightweight pretrained language model, pooled into a fixed-dimensional representation, and projected to the model dimension. Additional modalities can be incorporated by introducing corresponding encoding paths without changing the subsequent architecture. The encoded fields are retained as individual feature tokens: 
+
+Ft = [ ft, 1; . . . ; ft,N t ] ∈ RNt×d, (3) where Nt = J + Kt is the total number of fields at event t. Each trace-level field is encoded once and its token appears identically in Ft for all t, allowing the downstream Perceiver to weight trace-level attributes differently at each event rather than committing to a single static summary. Mapping all modalities to a shared space provides a uniform interface for downstream fusion. Preserving each field as a separate token avoids premature aggregation and retains feature-specific information for adaptive fusion. 
+
+3.3 Per-Event Perceiver Fusion 
+
+The importance of a contextual field may vary across events and traces. For example, a customer comment may be particularly informative for one activity, whereas a numerical measurement may be more useful for another. We therefore develop a per-event Perceiver [19] module that performs event-conditioned soft weighting and integration of contextual features. 4For each observed event, we construct an event-specific query based solely on its activity and inter-arrival time: 
+
+qt = Wq
+
+> [
+
+ea(at); e∆(∆ t)
+
+> ]
+
++ bq ∈ Rdq , (4) where ea is a learnable activity embedding and e∆ encodes the observed interval ∆ t using the multi-scale representation introduced later. The event query cross-attends to all contextual feature tokens: Kt = FtWk, Vt = FtWv,and 
+
+αt = softmax  
+
+> (
+
+Ktqt
+
+> √
+
+dq
+
+> )
+
+∈ RNt , st = α⊤ 
+
+> t
+
+Vt. (5) The cross-attention weights αt provide a soft, event-dependent measure of feature importance. The model can thus adaptively integrate different subsets of contextual information. We then combine the fused context with the original activity and inter-arrival-time embeddings to form the event token: 
+
+zt = Wz
+
+> [
+
+st; ea(at); e∆(∆ t)
+
+> ]
+
++ bz . (6) This design has two additional advantages. First, it supports varying numbers and types of contextual fields across datasets. Second, a single event query attends to the feature tokens, so the attention computation grows linearly rather than quadratically in the number of contextual features. The resulting zt serves as a context-aware representation of event t.
+
+3.4 Causal Trace Modeling 
+
+After contextual fusion, positional embeddings are added to the event representations, and the sequence is processed by an L-layer causal Transformer: (h1, . . . , hT ) = Transformer causal (z1 + p1, . . . , zT + pT ),
+
+where causal masking ensures that ht depends only on the prefix through event t. Thus, 
+
+ht summarizes both the historical event sequence and the heterogeneous context relevant to predicting the next event. The next-event activity distribution is produced by 
+
+p(at+1 | Γ≤t) = softmax ( Waht + ba) . (7) The causal architecture allows predictions for all trace prefixes to be trained in parallel while preventing information leakage from future events. 
+
+3.5 Multi-Scale Inter-Arrival Time Modeling 
+
+Inter-arrival times in real-world processes are often highly skewed and may span several orders of magnitude, from minutes to multiple days or weeks. A single regression or distributional head must then capture both frequent short intervals and rare long delays. This is difficult for both statistical modeling and numerical optimization. UMT addresses these challenges by decomposing each interval into components with different statistical structures. Let Sd = 86 ,400, Sh = 3 ,600, and Sm = 60 denote the numbers of seconds in a day, hour, and minute. For each inter-arrival time ∆ t (measured in seconds), we define 
+
+Dt = 
+
+> ⌊
+
+∆t
+
+Sd
+
+> ⌋
+
+, Ht = 
+
+> ⌊
+
+∆t − DtSd
+
+Sh
+
+> ⌋
+
+, Mt = ∆t − DtSd − HtSh
+
+Sm
+
+.
+
+5Thus, Dt ∈ Z≥0, Ht ∈ { 0, . . . , 23 }, and Mt ∈ [0 , 60), with ∆t = Dt · Sd + Ht · Sh + Mt · Sm. (8) This decomposition separates the unbounded and heavy-tailed day count from the bounded within-day components. It therefore allows each prediction head to focus on a substantially narrower and more appropriate target space. 
+
+Day-scale prediction. The day component is a nonnegative and potentially overdispersed count. From ht, a day-scale head fd produces two unconstrained outputs. These are transformed elementwise into the positive mean μt and dispersion rt of a Negative Binomial (NB) distribution: (μt, r t) = softplus ( fd(ht)) . (9) Under the mean–dispersion parameterization, we model 
+
+Dt+1 ∼ NB( μt, r t), (10) whose variance is μt + μ2 
+
+> t
+
+/r t. Unlike a Poisson model, this parameterization allows the variance to exceed the mean. It is therefore better suited to overdispersed and long-tailed delays while still providing a full predictive distribution. 
+
+Cyclic hour- and minute-scale prediction. The residual hour and minute components are bounded and periodic. Treating them as ordinary scalar targets introduces artificial discontinuities at their wraparound boundaries; for example, minute values near 59 and 0 are numerically far apart despite being adjacent on the underlying cycle. We therefore represent both components as unit vectors. Their target representations are 
+
+uh,t +1 =
+
+> [
+
+cos  
+
+> (
+
+2πH t+1 
+
+24 
+
+> )
+
+, sin  
+
+> (
+
+2πH t+1 
+
+24 
+
+> )]
+
+,
+
+um,t +1 =
+
+> [
+
+cos  
+
+> (
+
+2πM t+1 
+
+60 
+
+> )
+
+, sin  
+
+> (
+
+2πM t+1 
+
+60 
+
+> )]
+
+. (11) Two prediction heads, fh and fm, map the contextual representation ht to normalized two-dimensional vectors: ̂
+
+us,t +1 = fs(ht)
+
+∥fs(ht)∥2
+
+, s ∈ { h, m }. (12) This circular representation preserves proximity across scale boundaries when combined with the corresponding higher-scale component. It also enables a bounded and smooth cosine-based objective. Direct scalar regression near wraparound boundaries can produce disproportionately large errors; the circular formulation avoids this. 
+
+3.6 Learning and Prediction 
+
+For each prefix ending at event t, the activity loss is 
+
+La,t = − log p(at+1 | Γ≤t). (13) The multi-scale time loss combines the Negative Binomial negative log-likelihood with two cosine-distance terms: 
+
+L∆,t = − log pNB (Dt+1 | μt, r t)+ λh
+
+> (
+
+1 −̂ u⊤
+
+> h,t +1
+
+uh,t +1 
+
+> )
+
++ λm
+
+> (
+
+1 −̂ u⊤
+
+> m,t +1
+
+um,t +1 
+
+> )
+
+. (14) 6Table 1: Dataset statistics. All datasets are publicly available.                                                                                
+
+> Dataset Num. cases Num. events Num. act. Mean ev./case Max ev./case Mean dur. (d)
+> BPI-2012 13087 262200 24 24 175 8.6 BPI-2013 7553 65532 44123 12.1 BPI-2015-1 1199 52217 398 44 101 95.7 BPI-2015-2 830 44352 410 53 132 160.5 BPI-2017-Off 42995 193849 85519.1 BPI-2020-Dom 10366 56303 17 524 11.7 BPI-2020-Int 6449 72151 34 11 27 86.5 BPI-2020-Req 6814 36724 19 520 12.1 National-Grid 1827 43829 524 26 1.0 IT-Incidents 3317 16347 13 520 32.2 Medical-Appts 6830 19699 43916.8 Chicago-Food 44167 264066 99 6682 1286.4 Train-Delays 54423 406113 3724 0.04
+
+For a trace of length T , the complete training objective, averaged over its T − 1 valid prediction positions, is 
+
+L = 1
+
+T − 1 
+
+> T−1
+
+∑
+
+> t=1
+
+(La,t + λ∆L∆,t 
+
+) . (15) During mini-batch training, we compute this objective for each trace and average it across all traces in the mini-batch. At inference, the next activity is selected from Equation (7). For time prediction, the day component is summarized by the mean of the Negative Binomial distribution. The hour and minute components are recovered from the predicted angles: ̂
+
+Ht+1 = 24 2π [atan2(( ̂ uh,t +1 )2, (̂ uh,t +1 )1)] 2π ,̂
+
+Mt+1 = 60 2π [atan2(( ̂ um,t +1 )2, (̂ um,t +1 )1)] 2π , (16) where [ ·]2π maps an angle to [0 , 2π). The final interval prediction is reconstructed as ̂
+
+∆t+1 =̂ Dt+1 · Sd +̂ Ht+1 · Sh +̂ Mt+1 · Sm. (17) Together, these four components let UMT incorporate heterogeneous context from event logs with different modalities and feature sets. 
+
+# 4 Experiments 
+
+We evaluate our model on the standard next-event prediction task, i.e. given a prefix of events (a1, t 1), . . . , (at, t t) in a running case, jointly predict the activity label at+1 and the duration ∆tt+1 = tt+1 − tt until the next event. We first compare against established neural point-process baselines on a diverse benchmark of 13 event logs (Section 4.3), then isolate the contribution of each architectural component through targeted ablations (Section 4.5). 
+
+4.1 Experimental Setup 
+
+Datasets We evaluate on 13 publicly available event logs from several domains with different temporal scales (Table 1). Eight logs come from the Business Process Intelligence (BPI) Challenges [2]: loan applications (BPI-2012, BPI-2017-Off), IT incident management (BPI-2013), 7Table 2: Next-activity prediction accuracy ( ↑) on 13 real-world event logs. Bold indicates the best result per dataset. ( †) denotes feature-stripped variants that receive only activity and time embeddings. Results are mean ± standard deviation over 5 seeds.                                                                                                                                                                                                                                                                           
+
+> UMT Neural H. Trans. H. IFTPP GRU UMT ( †)GRU ( †)BPI-2012 0.86 ±0.00 0.69 ±0.01 0.18 ±0.13 0.82 ±0.01 0.03 ±0.02 0.84 ±0.00 0.02 ±0.01 BPI-2013 0.76 ±0.00 0.55 ±0.00 0.42 ±0.04 0.60 ±0.00 0.37 ±0.11 0.60 ±0.01 0.18 ±0.14 BPI-2015-1 0.53 ±0.01 0.13 ±0.06 0.03 ±0.01 0.31 ±0.01 0.00 ±0.01 0.53 ±0.01 0.00 ±0.01 BPI-2015-2 0.49 ±0.02 0.12 ±0.03 0.00 ±0.00 0.37 ±0.02 0.01 ±0.01 0.54 ±0.01 0.00 ±0.00 BPI-2017-Off 0.92 ±0.00 0.83 ±0.00 0.82 ±0.01 0.74 ±0.00 0.92 ±0.00 0.75 ±0.00 0.75 ±0.00 BPI-2020-Dom 0.89 ±0.00 0.86 ±0.00 0.43 ±0.15 0.89 ±0.00 0.08 ±0.11 0.89 ±0.00 0.15 ±0.23 BPI-2020-Int 0.89 ±0.00 0.86 ±0.00 0.24 ±0.13 0.88 ±0.00 0.06 ±0.05 0.88 ±0.00 0.02 ±0.05 BPI-2020-Req 0.90 ±0.00 0.86 ±0.00 0.35 ±0.21 0.88 ±0.00 0.04 ±0.05 0.88 ±0.00 0.11 ±0.14 National-Grid 0.86 ±0.03 0.80 ±0.00 0.79 ±0.01 0.74 ±0.02 0.20 ±0.10 0.81 ±0.00 0.21 ±0.12 IT-Incidents 0.71 ±0.01 0.59 ±0.01 0.34 ±0.13 0.66 ±0.00 0.16 ±0.12 0.69 ±0.00 0.12 ±0.10 Medical-Appts 1.00 ±0.00 0.98 ±0.00 0.66 ±0.23 0.94 ±0.00 0.31 ±0.14 0.94 ±0.00 0.23 ±0.14 Chicago-Food 0.76 ±0.00 0.72 ±0.00 0.41 ±0.00 0.42 ±0.00 0.00 ±0.01 0.42 ±0.00 0.01 ±0.02 Train-Delays 0.96 ±0.00 0.91 ±0.00 0.89 ±0.00 0.91 ±0.00 0.41 ±0.45 0.91 ±0.00 0.08 ±0.04
+
+building permits (BPI-2015-1, BPI-2015-2), and travel and reimbursement workflows (BPI-2020-Dom, BPI-2020-Int, BPI-2020-Req). For BPI-2015 we adopt the coarsened activity vocabulary that groups fine-grained administrative steps into high-level phases; for BPI-2020-Req we use the publicly recommended preprocessing that removes auxiliary labels. Beyond these process-mining benchmarks, we include five additional public event logs: 
+
+National-Grid [9], hourly electricity consumption from a national grid discretized into consumption-level activities; IT-Incidents [1], a university IT service desk log; Medical-Appts [14], a patient appointment lifecycle log including no-shows; Chicago-Food [8], food-establishment inspection histories from the Chicago Department of Public Health; and Train-Delays [3], NJ Transit and Amtrak rail operations with per-event delay measurements. Full dataset statistics are given in Table 1. For every dataset we sort cases by their start timestamp and reserve the most recent 15% as the held-out test set. The remaining 85% of cases is further split 85/15 (uniformly at random, seed 42) into training and validation folds. Splitting by case avoids leakage between training and test events that would otherwise occur with a naive event-level split. The temporal ordering preserves the realistic deployment setting where past cases are used to predict future ones. Sequences longer than the 95-th percentile of training case lengths are left-truncated, with an absolute upper cap of 150 events. 
+
+Evaluation metrics We report standard process-prediction metrics: accuracy for next-activity prediction, and mean absolute error (MAE) for the predicted inter-event time ̂ ∆t versus the ground truth ∆ t. Both metrics are computed over all non-padded positions except the first position of each trace (which has no preceding context). The unit of MAE is chosen per dataset according to its characteristic time scale and is indicated in parentheses: (h) = hours, (d) = days, (min) = minutes. An entry of ∞ indicates that the model produced numerically divergent predictions (e.g., NaN or infinite values), rendering the MAE undefined. IFTPP produced divergent duration predictions on 11 of 13 datasets; the sole exception is BPI-2013 (87 .01 ±140 .15 days). Because the column would consist almost entirely of ∞ entries, we omit IFTPP from Table 3. We repeat all experiments 5 times with different random seeds and report the mean and standard deviation. MAE is computed from the mean of the predicted inter-arrival time distribution: the Negative Binomial mean μt for the day component in our multi-scale head and the log-normal median for the baseline head. The best validation epoch is selected by the joint rank-sum of validation accuracy and validation MAE (in the respective dataset unit). This 8Table 3: Inter-arrival time MAE ( ↓) on 13 real-world event logs. Unit column: h = hours, d = days, min = minutes. Bold indicates the best result per dataset. ( †) denotes feature-stripped variants. IFTPP is omitted because it produced numerically divergent time predictions on 11 of 13 datasets. Results are mean ± standard deviation over 5 seeds.                                                                                                                                                                                                                                                         
+
+> Unit UMT Neural H. Trans. H. GRU UMT ( †)GRU ( †)BPI-2012 h7.56 ±0.07 7.23 ±0.24 13.24 ±2.38 9.69 ±0.03 8.26 ±0.07 9.68 ±0.00 BPI-2013 d0.57 ±0.04 0.89 ±0.04 1.75 ±0.29 1.11 ±0.00 0.84 ±0.01 1.11 ±0.00 BPI-2015-1 h26.55 ±2.45 22.47 ±2.47 98.20 ±122.82 32.71 ±0.00 27.64 ±1.02 32.71 ±0.00 BPI-2015-2 h28.76 ±3.23 25.45 ±1.49 ∞38.83 ±0.00 28.17 ±1.62 38.83 ±0.00 BPI-2017-Off d3.76 ±0.07 5.51 ±0.09 6.04 ±0.21 4.03 ±0.13 4.47 ±0.02 4.44 ±0.01 BPI-2020-Dom h53.81 ±0.26 55.31 ±0.59 55.49 ±5.61 66.24 ±3.57 54.53 ±0.31 68.96 ±1.00 BPI-2020-Int d4.42 ±0.18 5.86 ±0.23 6.38 ±0.92 4.65 ±0.15 4.28 ±0.13 4.71 ±0.10 BPI-2020-Req h65.09 ±0.31 66.57 ±0.82 68.75 ±7.00 80.21 ±6.19 67.30 ±1.83 84.62 ±1.81 National-Grid h0.54 ±0.12 92.12 ±136.08 2.61 ±3.24 0.02 ±0.01 0.48 ±0.08 0.03 ±0.02 IT-Incidents d5.04 ±0.06 6.56 ±0.59 12.70 ±3.56 5.26 ±0.02 5.24 ±0.00 5.26 ±0.01 Medical-Appts d89.92 ±0.09 105.94 ±1.50 135.21 ±40.98 141.94 ±0.05 96.41 ±0.15 142.11 ±0.28 Chicago-Food d81.50 ±1.35 111.25 ±7.66 120.27 ±18.37 136.37 ±5.35 121.34 ±1.47 131.89 ±3.74 Train-Delays min 3.97 ±0.04 5.36 ±0.04 5.01 ±0.54 5.96 ±0.94 4.59 ±0.01 4.97 ±0.23
+
+avoids biasing model selection towards either head. 
+
+4.2 Methods 
+
+UMT (ours) We train UMT with dmodel = 64, a 4-layer, 4-head pre-norm causal Transformer with feed-forward width 64 and dropout 0 .1. Perceiver fusion uses 4-head cross-attention with feed-forward width 256. Textual fields are embedded by a frozen distilbert-base-uncased 
+
+(mean-pooled, 768-d) and projected to dmodel . Training uses AdamW at a constant learning rate of 10 −3, weight decay 0 .03, batch size 256, gradient-norm clipping at 1 .0, time-loss weight 
+
+λ∆ = 0 .1, and early stopping with patience 50 (max 1000 epochs). All models are trained on a single NVIDIA L40S GPU. 
+
+Baselines We compare against four neural baselines that span the dominant paradigms for next-event prediction in temporal point processes: • Neural Hawkes [25]: A continuous-time LSTM that models mutually exciting event dynamics, using a neurally parameterized intensity function with exponential memory kernels. • Transformer Hawkes [45]: A self-attention-based point process that replaces the recurrent backbone of Neural Hawkes with a Transformer encoder and temporal positional encodings. • IFTPP [32]: An intensity-free model that directly parameterizes the conditional inter-event time distribution using normalizing flows, bypassing intensity-function integration. • GRU [12]: A GRU-based recurrent marked temporal point process that embeds event history into a fixed-size vector for next-event prediction. All baselines are trained on the identical splits and evaluation protocol described above. We additionally include feature-stripped variants of our own model and the GRU baseline (denoted †
+
+in Tables 2–3). These variants receive only the activity token and time embedding as input, isolating the effect of our multimodal feature encoder from the remaining architecture. 94.3 Main Results 
+
+Table 2 reports next-activity accuracy and Table 3 reports duration MAE for all methods. The bold entry per row marks the best result on that dataset. 
+
+Activity prediction UMT achieves the highest next-activity accuracy on 11 of 13 datasets, often by a large margin. On BPI-2013, National-Grid, and Medical-Appts it exceeds the strongest baseline by 7–21 points; on BPI-2017-Off it exceeds Neural Hawkes by 8 .9 points; on four of the BPI-2020 datasets and Train-Delays the gains are 1–5 points. The two exceptions are BPI-2015-2, where the feature-stripped variant UMT ( †) slightly outperforms UMT, and BPI-2020-Dom, where IFTPP matches our model. Neural Hawkes is the most competitive baseline overall. Transformer Hawkes and GRU frequently collapse to near-zero accuracy on datasets with large activity vocabularies (BPI-2015, Chicago-Food), suggesting that these architectures do not scale well with the number of activities. 
+
+Duration prediction On MAE, UMT is best on 9 of 13 datasets. The largest relative improvements appear on datasets whose inter-event times span multiple orders of magnitude: Medical-Appts ( −15% vs. Neural Hawkes), Chicago-Food ( −27%), BPI-2013 ( −36%), and BPI-2017-Off ( −32%). Neural Hawkes achieves the lowest MAE on the two BPI-2015 municipalities and slightly outperforms UMT on BPI-2012 (7 .23 vs. 7 .56 hours). GRU achieves the lowest MAE on National-Grid (0 .02), a nearly periodic dataset with fixed hourly spacing where a constant predictor already performs well. IFTPP is excluded from the MAE table because it produced numerically divergent time predictions on 11 of 13 datasets. 
+
+Effect of multimodal features Comparing the full model against the feature-stripped variant UMT ( †) within the same table shows the contribution of our multimodal feature encoder. On metadata-rich datasets the gap is large: +16 accuracy points on BPI-2013, +34 on Chicago-Food, and +5 on Train-Delays. MAE drops by 15–33% on Chicago-Food, Medical-Appts, and BPI-2013. On datasets where the activity dynamics are already near-Markov (e.g., BPI-2020-Dom, BPI-2015-2), features provide little or no benefit. This is consistent with the detailed ablation in Section 4.5. 
+
+4.4 What the model attends to 
+
+The preceding results establish when context and sequence modeling improve prediction. We next inspect the attention distributions used by the trained model. The Perceiver produces one distribution over context fields for each event, while each causal Transformer layer distributes attention over the observed prefix. We record both distributions for the four ablation datasets over three seeds. These models reproduce the corresponding accuracy results in Table 4 within 0.3 points. 
+
+Perceiver cross-attention. Figure 2 shows the Perceiver cross-attention matrix for a four-event BPI-2017-Off prefix: rows are the four observed events, columns are the twelve context fields available at each event. These include the activity name, the handling employee ( Resource ), the event subsystem ( Origin : Application, Offer, or Workflow), the task state ( Lifecycle : e.g. complete, start), and several case-level loan attributes. The bottom row is the prediction position from which the model forecasts the fifth event. There, the Perceiver assigns 95% of its mass to CreditScore and predicts Accepted with probability 1 .00. Replacing only this value with one from another case reduces that probability to zero and changes the prediction to Refused .This pattern generalizes beyond a single trace. Across the four ablation datasets, the rank correlation between each column’s mean attention mass and its mutual information (MI) with the next activity is positive (Spearman ρ = +0 .37 to +0 .63), and on BPI-2012 all five of the five 10 1 Create Offer 2 Created 3 Sent 4 Returned Action Activity Resource Origin Accepted Selected Lifecycle CreditScore 1stWithdrawal MonthlyCost NumTerms OfferedAmt 
+
+> context field
+
+Figure 2: Perceiver cross-attention for a four-event BPI-2017-Off prefix (trace #3864). Darker blue indicates higher attention weight. The bottom row (event 4) is the position from which the model forecasts the fifth event; there, the fusion concentrates 95% of its mass on CreditScore .
+
+> 1 Submitted 2 Partly Sub. 3 Pre-accepted 4 Complete 5 Complete 6 Accepted 7 Finalized 8 Selected 9 Created 10 Sent 11 Follow-up 12 Complete 13 Follow-up 14 Follow-up 15 Follow-up
+> 1 2 3 4 5 6 7 8 9 101112131415 key position
+
+Figure 3: Layer-4 causal self-attention for a 15-event BPI-2012 prefix (trace #1097); color scale as in Figure 2. Attention patterns vary by position; the bottom row (event 15) spreads mass across the prefix, reaching back to semantically relevant application-finalization events rather than attending only locally. highest-MI columns are among the five most attended. The Perceiver thus recovers an MI-like ranking without ever being trained on it. Yet it also departs from MI in one systematic way: the activity name, which has the highest MI of any column, receives less than chance attention because the backbone already receives the activity as its input token. A static MI-based selection would retain this redundant feature; the Perceiver learns to ignore it and spend its capacity on columns whose information is not already in the token stream. On datasets where context features are uninformative (BPI-2015), the fusion stays near-uniform rather than forcing a selection, matching the ablation findings of Table 4. We validate these attention patterns with a causal intervention: for each of 48 high-confidence prediction positions per dataset, we replace one attribute at a time (i.e., one column in Figure 2, such as CreditScore or Resource ) with the corresponding value from a different case and measure the drop in predicted probability. If attention were uninformative, the most-attended attribute would coincide with the most damaging one only at the chance rate of 1 /N (20% for 5 fields on BPI-2012, 8 .3% for 12 on BPI-2017-Off). In practice the agreement is 94% and 83%, respectively, and replacing the most-attended field drops the predicted probability by 0 .79 and 0 .34 on average, 11 Table 4: Feature-modality ablation: next-activity accuracy (mean over five seeds). The first row is our full model in absolute percent; every row below is the change when the input is restricted to one modality. Positive ∆accuracy means the restriction is better .                                
+
+> Restriction BPI-2012 BPI-2015-1 BPI-2015-2 BPI-2017-Off
+> Ours (%) 86 .03 51 .03 50 .29 92 .41
+> No context −1.90 +1 .02 +3 .82 −17 .95 Categorical only −0.07 +0 .16 −0.73 −2.94 Numerical only −1.97 +0 .95 +1 .73 −7.17 Textual only −2.07 +0 .28 +1 .32 −18 .10 Case-level only −1.60 +0 .33 −0.04 −0.00 Event-level only −0.46 +0 .50 +0 .26 −18 .13
+
+while replacing a median-attended field has no measurable effect. On the two BPI-2015 logs, where context contributes little, the correspondence is weaker but still above chance. 
+
+Backbone attention. Figure 3 shows the full lower-triangular self-attention matrix from the final layer (layer 4 of 4) of the causal Transformer backbone for a 15-event BPI-2012 prefix. Row i
+
+records how query i distributes attention over keys ≤ i. The matrix reveals position-dependent patterns: some events attend primarily to their immediate predecessors, while others spread mass across the full observed prefix. Notably, the prediction row (row 15) reaches back to semantically relevant events such as the two application-finalization steps rather than relying on local context alone. Aggregated across all prediction positions, the three long-trace datasets place 47–59% of backbone mass on events at least four positions back, confirming that the model is not a Markov reader. 
+
+4.5 Ablation Study 
+
+The main results establish that UMT outperforms existing baselines; we now investigate the contribution of each component. Specifically: (1) Does the multi-scale inter-arrival head improve time prediction over standard point-process likelihood heads, and at what cost to activity accuracy? (2) Does the universal feature encoder improve performance, and which modalities carry the signal? (3) Does the Perceiver fusion mechanism enable scaling to many attributes without degradation? (4) Are the results sensitive to model capacity or hyperparameter choice? Each ablation changes one design decision against the fixed reference configuration described in Section 4.2. All ablations are trained and evaluated under the temporal-split protocol of Section 4.1. We run every ablation on four datasets (Table 1), chosen to span two regimes. BPI-2017-Off is metadata-dominated (12 attribute columns, 7 categorical and 5 numerical, with only 8 activity types; 31 ,063/6 ,450 train/test cases). The two BPI-2015 municipalities are the opposite extreme ( ≈400 activity types and 23–24 columns over fewer than 900 training traces). BPI-2012 lies in between (24 activities, 5 columns, 9 ,454/1 ,964 train/test). Averaging over all datasets would hide this contrast. In all tables below, positive ∆accuracy means the ablation is better, and positive ∆MAE means the ablation is worse .
+
+Does the universal feature encoder improve performance, and which modalities carry the signal? Is encoding heterogeneous case and event attributes beneficial? And is the four-way treatment (categorical / numerical / textual × case-level / event-level) of Section 3.2 necessary, or is a single modality sufficient? Table 4 restricts the input to one modality at a time. No single modality is sufficient, and which one matters varies across datasets. On BPI-2017-Off the signal is entirely case-level and non-textual. Case attributes alone reproduce the full model 12 Table 5: Feature-modality ablation: inter-arrival MAE (same runs and reading convention as Table 4; positive ∆MAE means the ablation is worse ). Units: hours for BPI-2012/2015-1/2015-2, days for BPI-2017-Off.                                 
+
+> Restriction BPI-2012 BPI-2015-1 BPI-2015-2 BPI-2017-Off
+> Ours 7.93 28 .74 31 .36 3.71
+> No context +0 .19 −0.50 −1.99 +0 .79 Categorical only −0.04 +0 .05 +3 .31 +0 .01 Numerical only +0 .19 −1.92 −2.22 +0 .44 Textual only +0 .28 −1.23 −0.79 +0 .79 Case-level only +0 .40 −1.33 +1 .58 −0.02 Event-level only −0.16 −0.29 +0 .12 +0 .83
+
+Table 6: Scaling to a fixed context width. Each log is padded with synthetic, label-independent 
+
+distractor columns until it has exactly 100 context columns; the left number of each pair is the log’s own attribute count, the right one is 100. The two panels differ only in the modality of the padding: high-cardinality categorical columns and standardised numerical ones. Next-activity accuracy in percent, mean over three seeds, all other settings as in the reference configuration. The last row is the same model with every context column switched off.                                                                      
+
+> BPI-2012 BPI-2015-1 BPI-2015-2 BPI-2017-Off # context columns 5100 23 100 24 100 12 100
+> Categorical distractor columns
+> Additive sum 85 .89 85 .12 52 .06 40 .45 50 .13 36 .62 92 .38 92 .21 Perceiver, time query 85 .70 85 .94 51 .21 50 .88 46 .28 46 .23 92 .41 92 .39 Perceiver, act.+time query (ours) 86 .09 85 .42 51 .18 49 .61 51 .65 49 .24 92 .46 92 .37
+> Numerical distractor columns
+> Additive sum 85 .89 85 .80 52 .06 50 .90 50 .13 47 .52 92 .38 92 .25 Perceiver, time query 85 .70 85 .84 51 .21 51 .04 46 .28 45 .56 92 .41 92 .33 Perceiver, act.+time query (ours) 86 .09 85 .53 51 .18 48 .87 51 .65 48 .08 92 .46 92 .37 No context features at all 84 .11 84 .11 52 .12 52 .12 53 .56 53 .56 74 .36 74 .36
+
+(−0.00), while event attributes alone drop to the no-feature baseline ( −18 .13). Categorical or numerical alone recover only 15 and 11 of the 18 points. On BPI-2012 the ordering reverses and event-level attributes are the best single restriction ( −0.46) while numerical or textual alone lose ≈2 points. Every restriction costs accuracy somewhere. The MAE panel shows that these activity effects do not trade off against time prediction: removing all context features raises BPI-2017-Off MAE by 0 .79 days (21%), whereas it reduces MAE by 1 .7% and 6 .3% on BPI-2015-1/2, the two logs where removing context also improves accuracy. The shared encoder also feeds the time head (Table 3: 81 .5 → 121 .3 days on Chicago-Food without features). On the two BPI-2015 municipalities, however, features are neutral-to-harmful (+1 .0 and +3 .8 points without them), because 23–24 columns over fewer than 900 traces with ≈400 activity types present primarily an overfitting risk; Table 2 shows the same pattern across all 16 datasets. The useful modality is dataset-dependent and no single one suffices. A universal encoder that ingests all four kinds without per-dataset engineering is therefore well-motivated. 
+
+Does the Perceiver fusion support scaling to many attributes? The encoder accepts any number of heterogeneous columns; does accuracy survive as that number grows? No log contains hundreds of informative attributes, so we pad each of the four ablation logs with synthetic, label-independent distractor columns until every log carries exactly 100 context columns (Table 6) — a 4 × widening for the two municipal logs and a 20 × one for BPI-2012. 13 Table 7: Inter-arrival time head. First row: our head, absolute MAE in days; every row below is the change in MAE (percent) when that head is swapped in on the same backbone, features and training budget. Next-activity accuracy is within 1 .1 points of the reference throughout.                                
+
+> Time head BPI-2012 BPI-2015-1 BPI-2015-2 BPI-2017-Off
+> Ours: multi-scale (d) 0.331 1.208 1.326 3.728
+> LogNormal +6 .8+14 .1+23 .4+4 .3Mixture of LogNormal k=1 +6 .5+14 .1+27 .6+7 .2Mixture of LogNormal k=3 +7 .1+9 .7+17 .6+5 .1Mixture of LogNormal k=5 +6 .6+9 .2+21 .4+4 .8Poisson day count +5 .8+20 .8+52 .7+4 .3
+
+The experiment is run twice, once with high-cardinality categorical padding and once with standardised numerical padding, because the two modalities enter the encoder differently. Every column is drawn independently of the label, so the ideal behaviour is to be unchanged. As a comparison, additive fusion directly sums all encoded field vectors and combines that aggregate with the activity and time embeddings; unlike the Perceiver, it applies no event-conditioned weighting or normalization across fields. Over the eight padding conditions per fusion variant (four logs × two modalities), additive summation loses up to 13 .5 accuracy points, whereas the time-query Perceiver loses at most 0 .72 points, with a median loss of 0 .07 points. The activity-and-time-query configuration used in the main tables loses at most 3 .6 points. Additive fusion is not merely diluted by padding: with categorical padding, it falls to 40 .5 and 36 .6 on the two municipal logs, 11 .7 and 16 .9 points below its own no-feature baseline. Both Perceiver variants remain within 0 .8 points of their native-width accuracy on BPI-2012 and BPI-2017-Off, the two logs whose context features carry signal. 
+
+Multi-scale inter-arrival head versus standard point-process heads. Is the day-count plus within-day decomposition of Section 3.5 better than the log-normal and mixture-log-normal likelihood heads used by intensity-free temporal point-process models? And does it cost activity accuracy? Table 7 swaps the head and leaves everything else fixed. Next-activity accuracy remains within 1 .1 points of the reference for every head variant (only the five-component mixture drops by 1 .05 points). The comparison is therefore about time. There the decomposition wins on every dataset against every baseline head, by 9 .9% to 13 .8% MAE. The largest gaps appear on the two long-tailed BPI-2015 datasets (up to +28%). Additional mixture components do not close this gap. The deficit is structural rather than due to limited capacity. Over-dispersion is the key factor: replacing the negative-binomial day count of Equation (10) by a Poisson costs 20 .9% MAE and 52 .7% on BPI-2015-2 (1 .33 → 2.00 days). The multi-scale head thus produces the duration results of Table 3 at no cost in accuracy. Its over-dispersed day count is essential. 
+
+Model capacity and hyperparameter sensitivity. Are the reported results an artifact of model capacity or hyperparameter choice? We vary width ( dmodel ∈ { 16 , 32 , 64 , 128 }), depth (2–8 layers), learning rate (10 −4 to 3 ·10 −3), and weight decay (0 to 0 .1) around the reference configuration. Performance is insensitive to these choices except at the extremes of the grid. The sensitivity that remains is confined to the two BPI-2015 datasets with ≈400 activity types. Reducing capacity degrades performance ( dmodel = 16: −9.8 and −11 .2 points on BPI-2015-1/2; 
+
+dmodel = 32: −4.6; 2 layers: −2.3), as does reducing the learning rate (10 −4: ≈ − 2). Every other setting stays within 1 .5 points of the reference on every dataset. MAE spans just −1.8% to +4 .9% across the whole grid. Increasing the width does not help ( dmodel = 128: +0 .49 points at four times the parameters, with 4 .9% worse MAE). The reference configuration therefore lies on a performance plateau rather than at a tuned optimum. No setting in this grid yields 14 more than half an accuracy point or 2% MAE improvement, well below the architectural effects reported above (1 .6–18 points, 10–55% MAE). 
+
+# 5 Conclusion 
+
+We presented Universal Multi-Modal Traceformer (UMT), a unified framework for next-event prediction that integrates heterogeneous contextual information from event logs. UMT combines three contributions: a universal feature encoder that maps categorical, numerical, and textual fields into a shared latent space; a per-event Perceiver module that adaptively weights con-textual features through event-conditioned cross-attention; and a multi-scale inter-arrival time representation that decomposes intervals into an overdispersed day count and cyclic within-day components. Experiments on 13 real-world event logs (spanning business workflows, IT incident man-agement, healthcare, food safety, and rail operations) show that UMT achieves the highest next-activity accuracy on 11 of 13 datasets and the lowest duration MAE on 9 of 13. Ablations confirm that each component contributes distinctly: the multi-scale time head reduces MAE by 12% on average over a log-normal head, and multimodal features add up to 18 accuracy points on attribute-rich logs. The Perceiver-based fusion degrades 6.8 × more slowly than additive alternatives as the number of input attributes grows, removing the need for per-dataset feature engineering. Together, these results demonstrate that a single architecture can ingest arbitrary combinations of event- and trace-level metadata across domains without hand-crafted feature pipelines, addressing a key obstacle to deploying process prediction in heterogeneous enterprise environments. Several directions remain. First, UMT currently predicts one step ahead; extending it to multi-step or remaining-time forecasting would cover additional process-monitoring tasks common in operations research and service management. Second, the universal encoder handles categorical, numerical, and textual fields; incorporating additional modalities such as images, audio, or graph-structured inter-case relations would broaden its applicability. Third, the Perceiver cross-attention weights provide per-feature importance scores at each event position that could support interpretability requirements in regulated domains such as healthcare and finance. 
+
+# Ethical Considerations 
+
+All datasets used in this work are publicly available and anonymized by their providers. Event logs may contain sensitive attributes; deployments on proprietary logs should include appro-priate access controls and privacy safeguards. Because the model ingests all available features, practitioners should audit inputs for personally identifiable information. Next-event predictions in domains such as loan processing or healthcare could reproduce biases present in the training data and should support, not replace, human decisions. All experiments ran on a single NVIDIA L40S GPU with a total compute budget of under 100 GPU-hours. Code and preprocessing scripts will be released upon acceptance to facilitate reproducibility. We encourage practitioners to perform bias audits and fairness evaluations before deploying predictions from UMT or similar models in high-stakes decision pipelines. No personal data was collected or generated by this study. 
+
+# References 
+
+[1] 2025. IT Incidents Event Log. Zenodo, https://zenodo.org/records/15484999 .15 [2] 4TU.ResearchData. 2012–2020. Business Process Intelligence Challenge event logs. 4TU.ResearchData, https://data.4tu.nl/ . Event-log collection; each yearly challenge is registered under its own DOI (prefix 10.4121). [3] Pranav Badami. 2018. NJ Transit Amtrak NEC Performance. Kaggle, https://www. kaggle.com/datasets/pranavbadami/nj-transit-amtrak-nec-performance .[4] Charles Blundell, Jeff Beck, and Katherine A Heller. 2012. Modelling reciprocating rela-tionships with Hawkes processes. In Advances in Neural Information Processing Systems .2600–2608. [5] Zaharah Allah Bukhsh, Aaqib Saeed, and Remco M. Dijkman. 2021. ProcessTransformer: Predictive Business Process Monitoring with Transformer Network. CoRR abs/2104.00721 (2021). [6] Manuel Camargo, Marlon Dumas, and Oscar González-Rojas. 2019. Learning Accurate LSTM Models of Business Processes. In Business Process Management (BPM) (Lecture Notes in Computer Science, Vol. 11675) . Springer, 286–302. doi: 10.1007/978-3-030-26619-6_19 
+
+[7] Laurent Charlin, Rajesh Ranganath, James McInerney, and David M Blei. 2015. Dynamic Poisson factorization. In Proceedings of the 9th ACM Conference on Recommender Systems .155–162. [8] City of Chicago. 2023. Food Inspections. Chicago Data Portal, https://data. cityofchicago.org/Health-Human-Services/Food-Inspections/4ijn-s7e5 . Public Domain. [9] Stefan Comanita. 2024. Hourly Electricity Consumption and Pro-duction. Kaggle, https://www.kaggle.com/datasets/stefancomanita/ hourly-electricity-consumption-and-production . CC0-1.0. [10] Daryl J Daley and David Vere-Jones. 2003. An introduction to the theory of point processes, volume 1: Elementary theory and methods. Verlag New York Berlin Heidelberg: Springer 
+
+(2003). [11] Daryl J Daley and David Vere-Jones. 2008. An introduction to the theory of point processes: volume II: general theory and structure . Springer. [12] Nan Du, Hanjun Dai, Rakshit Trivedi, Utkarsh Upadhyay, Manuel Gomez-Rodriguez, and Le Song. 2016. Recurrent marked temporal point processes: Embedding event history to vector. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining . 1555–1564. [13] Joerg Evermann, Jana-Rebecca Rehse, and Peter Fettke. 2017. Predicting Process Behaviour Using Deep Learning. Decision Support Systems 100 (2017), 129–140. doi: 10.1016/j.dss. 2017.04.003 
+
+[14] Carolina Gonzalez Galtier. 2024. Medical Appointment Scheduling Sys-tem. Kaggle, https://www.kaggle.com/datasets/carogonzalezgaltier/ medical-appointment-scheduling-system . CC BY 4.0. [15] Prem Gopalan, Laurent Charlin, and David M Blei. 2014. Content-based recommendations with Poisson factorization. Advances in neural information processing systems 27 (2014). [16] Prem Gopalan, Jake M Hofman, and David M Blei. 2015. Scalable recommendation with hierarchical poisson factorization.. In UAI . 326–335. 16 [17] Jan Grandell. 1976. Doubly stochastic Poisson processes . Lecture Notes in Mathematics, Vol. 529. Springer Berlin Heidelberg. doi: 10.1007/BFb0077758 
+
+[18] Alan G Hawkes. 1971. Spectra of some self-exciting and mutually exciting point processes. 
+
+Biometrika 58, 1 (1971), 83–90. [19] Andrew Jaegle, Felix Gimeno, Andy Brock, Oriol Vinyals, Andrew Zisserman, and João Carreira. 2021. Perceiver: General Perception with Iterative Attention. In ICML (Proceedings of Machine Learning Research, Vol. 139) . PMLR, 4651–4664. [20] Gavin Kerrigan, Kai Nelson, and Padhraic Smyth. 2026. EventFlow: Forecasting Temporal Point Processes with Flow Matching. In The 29th International Conference on Artificial Intelligence and Statistics . https://openreview.net/forum?id=QXqKGOE2JW 
+
+[21] Jerald Franklin Lawless. 1987. Regression methods for Poisson process data. J. Amer. Statist. Assoc. 82, 399 (1987), 808–815. [22] Haitao Lin, Lirong Wu, Guojiang Zhao, Liu Pai, and Stan Z. Li. 2022. Exploring Generative Neural Temporal Point Process. Transactions on Machine Learning Research (2022). 
+
+https://openreview.net/forum?id=NPfS5N3jbL 
+
+[23] David Lüdke, Marin Bilo vs, Oleksandr Shchur, Marten Lienen, and Stephan Günnemann. 2023. Add and thin: Diffusion for temporal point processes. Advances in Neural Information Processing Systems 36 (2023), 56784–56801. [24] David Lüdke, Marten Lienen, Marcel Kollovieh, and Stephan Günnemann. 2026. Edit-Based Flow Matching for Temporal Point Processes. In The Fourteenth International Conference on Learning Representations . https://openreview.net/forum?id=FNf9IV1P2L 
+
+[25] Hongyuan Mei and Jason M Eisner. 2017. The neural hawkes process: A neurally self-modulating multivariate point process. In Advances in Neural Information Processing Systems . 6754–6764. [26] Zizhuo Meng, Boyu Li, Xuhui Fan, Zhidong Li, Yang Wang, Fang Chen, and Feng Zhou. 2024. TransFeat-TPP: An Interpretable Deep Covariate Temporal Point Processes. In ECAI (Frontiers in Artificial Intelligence and Applications, Vol. 392) . IOS Press, 810–817. [27] Nicolò Navarin, Beatrice Vincenzi, Mirko Polato, and Alessandro Sperduti. 2017. LSTM Networks for Data-Aware Remaining Time Prediction of Business Process Instances. In 
+
+2017 IEEE Symposium Series on Computational Intelligence (SSCI) . IEEE, 1–7. doi: 10. 1109/SSCI.2017.8285184 
+
+[28] Takahiro Omi, Kazuyuki Aihara, et al. 2019. Fully neural network based model for general temporal point processes. In Advances in Neural Information Processing Systems . 2122– 2132. [29] Zhimeng Pan, Zheng Wang, Jeff M Phillips, and Shandian Zhe. 2021. Self-adaptable point processes with nonparametric time decays. Advances in Neural Information Processing Systems 34 (2021), 4594–4606. [30] Zhimeng Pan, Zheng Wang, and Shandian Zhe. 2020. Scalable nonparametric factorization for high-order interaction events. In International Conference on Artificial Intelligence and Statistics . PMLR, 4325–4335. [31] Marco Pegoraro, Merih Seran Uysal, David Benedikt Georgi, and Wil M. P. van der Aalst. 2021. Text-Aware Predictive Monitoring of Business Processes. In Business Information Systems . TIB Open Publishing, 221–232. doi: 10.52825/bis.v1i.62 
+
+17 [32] Oleksandr Shchur, Marin Bilos, and Stephan Günnemann. 2020. Intensity-Free Learning of Temporal Point Processes. In ICLR . OpenReview.net. [33] Joseph Sill. 1997. Monotonic networks. Advances in neural information processing systems 
+
+10 (1997). [34] Niek Tax, Ilya Verenich, Marcello La Rosa, and Marlon Dumas. 2017. Predictive Busi-ness Process Monitoring with LSTM Neural Networks. In Advanced Information Sys-tems Engineering (Lecture Notes in Computer Science, Vol. 10253) . Springer, 477–492. doi: 10.1007/978-3-319-59536-8_30 
+
+[35] Wil M. P. van der Aalst. 2016. Process Mining: Data Science in Action (2 ed.). Springer, Berlin, Heidelberg. doi: 10.1007/978-3-662-49851-4 
+
+[36] Jiaxing Wang, Chengliang Lu, Bin Cao, and Jing Fan. 2023. MiTFM: A Multi-View Information Fusion Method Based on Transformer for Next Activity Prediction of Business Processes. In Proceedings of the 14th Asia-Pacific Symposium on Internetware . ACM, 281–291. doi: 10.1145/3609437.3609442 
+
+[37] Yichen Wang, Xiaojing Ye, Hongyuan Zha, and Le Song. 2017. Predicting user activity level in point processes with mass transport equation. In Advances in Neural Information Processing Systems . 1644–1654. [38] Hongteng Xu, Dixin Luo, Xu Chen, and Lawrence Carin. 2018. Benefits from superposed hawkes processes. In International Conference on Artificial Intelligence and Statistics .PMLR, 623–631. [39] Siqiao Xue, Xiaoming Shi, Zhixuan Chu, Yan Wang, Hongyan Hao, Fan Zhou, Caigao JIANG, Chen Pan, James Y Zhang, Qingsong Wen, et al. 2024. EasyTPP: Towards Open Benchmarking Temporal Point Processes. In The Twelfth International Conference on Learning Representations .[40] Chenghao Yang, Hongyuan Mei, and Jason Eisner. 2022. Transformer Embeddings of Irregularly Spaced Events and Their Participants. In Proceedings of the Tenth International Conference on Learning Representations (ICLR) .[41] Jiasen Yang, Vinayak A Rao, and Jennifer Neville. 2017. Decoupling Homophily and Reciprocity with Latent Space Network Models.. In UAI .[42] Ruoxin Yuan and Guanhua Fang. 2025. Residual TPP: A Unified Lightweight Approach for Event Stream Data Analysis. In Forty-second International Conference on Machine Learning .[43] Qiang Zhang, Aldo Lipani, Omer Kirnap, and Emine Yilmaz. 2020. Self-attentive hawkes process. In International Conference on Machine Learning . PMLR, 11183–11193. [44] Shandian Zhe and Yishuai Du. 2018. Stochastic Nonparametric Event-Tensor Decomposition. In Advances in Neural Information Processing Systems . 6856–6866. [45] Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, and Hongyuan Zha. 2020. Transformer hawkes process. In International Conference on Machine Learning . PMLR, 11692–11702. 18
