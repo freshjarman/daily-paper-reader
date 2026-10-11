@@ -1,0 +1,1988 @@
+Title: Bayesian Soft-Tree Poisson Process Model for Covariate-Dependent Point Patterns
+
+URL Source: https://arxiv.org/pdf/2610.11343v1
+
+Published Time: Fri, 09 Oct 2026 00:51:53 GMT
+
+Number of Pages: 37
+
+Markdown Content:
+# Bayesian Soft-Tree Poisson Process Model for Covariate-Dependent Point Patterns 
+
+## Pulong Ma Department of Statistics, Iowa State University Ames, IA 50011, USA 
+
+Abstract 
+
+Estimating covariate-dependent intensity functions from spatial point pattern is challenging when the integrated intensity function cannot be evaluated analytically. This challenge becomes even worse in Bayesian inference due to repeated integration of the intensity function over the high-dimensional covariate space. This paper develops a Bayesian soft-tree Poisson process model that combines adaptive covariate partitioning with smooth intensity function. The key idea is to use soft gating functions to smooth transitions between partition boundaries in a tree generating process while preserving analytic evaluation of integrated intensity. A Bayesian CART prior is adopted to learn the partition structure from data. Given the partition tree, conjugate priors are assigned on leaf parameters to enable analytic marginal likelihood computation. This paper also develops a reversible-jump Markov chain Monte Carlo (RJ-MCMC) algorithm for posterior inference. Posterior consistency is established for the proposed model with respect to the Hellinger distance. Extensive simulation studies and an application to wildfire data confirm the advantages of the proposed method over existing methods. 
+
+Keywords: Data augmentation; Soft decision tree; Point process; Posterior consis-tency 
+
+# 1 Introduction 
+
+Spatial point patterns are often collected in many scientific disciplines including climate science, ecology, biology, seismology (Cressie, 1993; Diggle, 2014; Gelfand and Schliep, 2018). Statistical analysis of these point pattens often relies on point processes. A popular class of point processes is Poisson (point) process (PP). Let X ∼ P P (λ) denote a Poisson process with intensity function λ on a domain D ⊂ Rd, where λ : D 7 → (0, ∞) is a locally integrable function. A constructive definition for PP is as follows. For any bounded subset B ⊂ D, the number of points in B, denoted by N(B), is Poisson distributed with rate Λ(B) := R 
+
+> B
+
+λ(x)dx; given N(B), the points in B are independently and identically distributed with location density f (x) := λ(x)/Λ(B). Here Λ(B) is referred to as total intensity (over B); see Møller and Waagepetersen (2004) for some backgrounds. If λ(·) is constant over D, X is called a homogeneous PP, otherwise X is an inhomogeneous PP. Modeling spatial point patterns requires flexible modeling for the intensity function. Given a realization x1: n := {x1, . . . , xn} ⊂ D of X, the likelihood given the intensity 1arXiv:2610.11343v1 [stat.ME] 8 Oct 2026 function is L(λ; x1: n) = exp (−Λ(D)) ∏ni=1 λ(xi). Several statistical methods have been proposed to model the intensity function. A well-known approach is to model the intensity function with a latent Gaussian process via a link function, resulting in so called the log-Gaussian Cox process (LGCP) (Møller et al., 1998) when a log link function is used. In LGCP, the mean function of the Gaussian process (GP) often incorporates covariates and the covariance function is used to capture spatial dependence. This class of models is often applied to environmental data with spatial locations, where covariance function is defined over a spatial domain. A potential limitation of this approach to deal with multiple (or high-dimensional) covariates is that these covariates are required to be known to calculate the random integral. To perform inference, a standard practice to compute this random integral is to use quadrature approaches with a dense grid points over spatial domain. Most often, the covariates are sparsely observed over finite number of spatial locations. A preprocessing step is often used to interpolate these covariates over the spatial domain so that the nu-merical integral can be approximated over the quadrature grids; see Møller et al. (1998); Rue et al. (2009); Simpson et al. (2016). Potential challenges in LGCP include the numerical approximation error for approximating the random integral and the lack of uncertainty quantification when interpolated environmental variables are used. For instance, GP related challenges arise when the number of quadrature grid points is large and the under-lying smoothness of intensity is controlled by the smoothness of GP, which is often chosen to be second-order stationary in practice despite the fact that environmental processes often have heterogeneous spatial dependence structure over the entire domain. To address the computational challenges associated with LGCP, several strategies have been proposed in the literature. For GP challenges, efficient GP models such as Gaussian Markov random field (Rue et al., 2009) have been used to exploit sparse matrix operations for efficient computations (Rue et al., 2009; Simpson et al., 2016). To bypass the numerical integration problem in likelihood, data augmentation techniques are also exploited to allow efficient inference (Adams et al., 2009; Donner and Opper, 2018), where sigmoid GP is used for modeling intensity function via the sigmoid link function. Another approach for modeling the intensity functions is focused on domain partition-ing methods. Earlier methods include Voronoi tessellation (e.g., Barr and Schoenberg, 2010; Hinde and Miles, 1980; Meijering, 1953). More recently, tree-based methods (Lamprinakou et al., 2023; Lu et al., 2026; Ma, 2026) have been used for modeling intensity functions. Voronois tessellation method often assumes the piecewise constant over Voronoi cells; in contrast, tree-based methods represent the intensity function over a single tree or additive trees that are formed by random recursive partitioning of the domain so that partition tree can be learnt from the data. In particular, Ma (2026) represents the intensity function as piecewise constants in a single tree structure that is formed by Bayesian CART prior (Chipman et al., 1998, 2002). Lamprinakou et al. (2023) develop a statistical model called BART-PP that uses Bayesian additive regression trees (BART; Chipman et al., 2010) for log-intensity functions. Anon-Bayesian formulation is given by Lu et al. (2026) who develop a statistical model called XGBoostPP that uses XGBoost (Chen and Guestrin, 2016; Natekin and Knoll, 2013). 2Additive tree ensembles such as XGBoostPP and BART-PP are generally more flexible than single tree models for function approximation. A potential limitation for XGBoostPP is that it does not provide uncertainty estimates for intensity function from the model; in contrast, BART-PP can provide Bayesian uncertainty quantification. However, BART-PP does not learn hyperparameters in leaf nodes but fixes them a priori , which would underestimate the uncertainty. A key benefit of tree-based methods is its ability to deal with potentially high-dimensional covariate space without requiring fully observed covariates over the domain since tree-based methods such as Ma (2026) and Lamprinakou et al. (2023) can obtain closed form formula in evaluating the random integral in the likelihood function due to piecewise constants assumptions. Recognizing the benefits of tree-based models, this paper focuses on modeling the intensity function directly through a tree structure. As noted in Ma (2026), a potential limitation in using a hard-split tree is that the resulting posterior of the intensity function can have very sharp transitions across partition boundaries. To address this limitation, this paper exploits the ideas (Irsoy et al., 2012; Jordan and Jacobs, 1994; Linero and Yang, 2018) to use a soft-gating function to enable smooth transitions across partition boundaries, where the degrees of smoothness across the boundary transitions will be estimated in a Bayesian paradigm. While it may seem that this would destroy the analytic expressions of the random integral, this paper will design a strategy to maintain analytic expression for the random integral, thus reducing the integral to one-dimensional closed-form factors, with numerical fallback when needed for stability. To allow adaptive estimation of the partitions, this paper couples the Bayesian CART prior (Chipman et al., 1998, 2002) with soft gating strategy to learn the partition. This leads to a hierarchical specification for the proposed model. To make Bayesian inference, this paper develops a novel data-augmentation strategy to address the computational challenges since with soft-gating functions, the likelihood of the intensity parameter with each leaf node is not conjugate to its prior distribution. This computational challenge is addressed by introducing a latent variable for each observation to mark their memberships within a node. Under this augmentation, the augmented likelihood is shown to allow conjugate update for intensity parameters so that Bayesian inference could be performed efficiently. 
+
+Contributions: The contributions of this paper ranging from statistical method, compu-tational algorithm, and theory. In particular, this paper builds a Bayesian soft Poisson point process tree ( S-PPT ) model for modeling point patterns in a potentially high-dimensional covariate space, for which many existing methods fail to cope with in many real-world applications. The paper also develops an efficient Bayesian inference procedure through a data-augmentation technique to allow conjugate updates for intensity parameters. Finally the paper also establishes strong consistency of the resulting posterior distribution under Hellinger distance in an asymptotic framework. 32 Statistical Method 
+
+## 2.1 Bayesian Soft Poisson Process Tree 
+
+Let D = ∏dj=1[aj, bj] be the domain of interest. Suppose that we observe a realization 
+
+x1: n := {x1, . . . , xn} of X on D. Let T denote a tree drawn from the Bayesian CART prior 
+
+π(T) with some hyperparameters. Its detailed specification is given later on. Then the intensity function λ(·) is assumed to be a piecewise smooth function over the leaf nodes of the tree. Write L = L(T) for the leaves and I = I(T) for the internal nodes. The proposed soft Poisson process tree ( S-PPT ) model can be specified hierarchically as follows. 
+
+X ∼ P P (λ), (1) 
+
+λ(x) = ∑
+
+> v∈L
+
+λvϕv(x; γ), (2) 
+
+λv|T, κ, ξ iid 
+
+∼ Ga (κ, κ/ξ), γ ∼ π(γ) (3) 
+
+T ∼ π(T), (4) where ϕv(·; γ) is a soft gating function with γ = ( γ1, . . . , γd)⊤ denoting the vector of all dimension-specific gating parameters with γjiid 
+
+∼ Ga (a0, b0). Equation (2) has piecewise constants λv at each leaf that are smoothed by the gating function ϕv(·; γ).
+
+Bayesian CART prior The Bayesian CART prior (Chipman et al., 1998, 2002) recursively splits the domain v = D according to a partition rule defined by a splitting random variable 
+
+S(v) ∼ Bern (ρ), axis selection random variable J(v) ∼ Cat (ζ), and a cutting point random variable L(v) = aj + Uv(bj − aj) with Uv ∼ FL, where ρ is the (prior) splitting probability, 
+
+ζ = ( ζ1, . . . , ζd)⊤ is the vector of prior selection probabilities satisfying ζi > 0, ∑di=1 ζi = 1. In Bayesian CART, FL is chosen to be the quantiles of the covariate values along selected axis in Chipman et al. (2002). Starting with root node v = D, Bayesian CART prior firsts draw S(v) ∼ Bern (ρ) with ρ(v) := α0(1 + depth (v)) −β0 . If S(v) = 0, then the node v is terminal; otherwise, draw J(v) = j from its prior distribution Cat (ζ) to select an axis and a cutting point U = u ∼ FL with L(v) = c = aj + u(bj − aj) so that v is split into two child nodes vl, vr:
+
+vl = [ a1, b1] × · · · × [aj, c] × · · · [ad, bd] vr = [ a1, b1] × · · · × [c, bj] × · · · [ad, bd].Then this procedure is applied recursively for each child node. 
+
+Soft gating The Bayesian CART prior recursively partitions the space with hard splits at the boundaries of subregions causing sharp changes that may not be desirable. To allow gradual transitions across split boundaries, we replace binary routing decision with a smooth gating function. Each observation thus receives weights from multiple terminal nodes rather than belonging exclusively to one terminal region. This construction comes 4from hierarchical mixtures of experts (Jordan and Jacobs, 1994) and soft decision trees (Irsoy et al., 2012; Linero and Yang, 2018). The gating function ϕv(·; γ) is constructed recursively. Let Wj = bj − aj > 0 be the width of the root domain along coordinate j. At an internal node u with splitting coordinate 
+
+ju and cut cu, define the right-routing function 
+
+gu(t; γ) = 
+
+(
+
+1 + exp 
+
+"
+
+−γju
+
+t − cu
+
+Wju
+
+#) −1
+
+, γju > 0. The root width is used at every node, so all gates on coordinate j share the slope γj/Wj.Each cut is strictly inside its node’s interval on the selected coordinate. The left-routing function is 1 − gu(t; γ), and hard routing is recovered away from the cut as γju → ∞.Starting with ϕroot = 1, set 
+
+ϕul (x) = ϕu(x){1 − gu(xju ; γ)}, ϕur (x) = ϕu(x)gu(xju ; γ).Thus ϕul + ϕur = ϕu and ∑v∈L ϕv(x) = 1. For a node v, let ↓ v contain its internal ancestors and let δuv ∈ { 0, 1 } indicate whether its path turns right at u. Then 
+
+ϕv(x) = ∏
+
+> u∈↓ v
+
+gu(xju ; γ)δuv {1 − gu(xju ; γ)}1−δuv .The following result gives the closed-form expression for Iv := R 
+
+> D
+
+ϕv(x; γ) dx. 
+
+> PROPOSITION
+
+1. Let T be finite and use the root-width gates above on D = ∏dj=1[aj, bj]. Then Iv = ∏dj=1 Jvj . If the path has no split on coordinate j, then J vj = Wj. Otherwise, suppress v , jand denote its m cuts and turn indicators by c 1, . . . , cm and δ1, . . . , δm. Put W = Wj, γ = γj,r = ∑mk=1 δk, and qk = exp 
+
+ γ
+
+W
+
+
+
+ck − aj + bj
+
+2
+
+ 
+
+, C = ∏ 
+
+> k:δk=0
+
+qk, Ak = C(−qk)r−1
+
+∏ℓ̸ =k(qℓ − qk) .
+
+The interior-cut condition makes these cuts distinct along the path, and Jvj = W
+
+γ
+
+(
+
+γ1{r=0} +
+
+> m
+
+# ∑
+
+> k=1
+
+Ak log eγ/2 + qk
+
+e−γ/2 + qk
+
+)
+
+.The proof is given in Appendix S.1.1. The formula applies to rectangular regions under axis-aligned partitions. The routing identities also give Iul + Iur = Iu and ∑v∈L Iv = ∏j Wj.52.2 Likelihood Computation 
+
+Given n points x1: n and model parameters T, λ, γ, the likelihood function under S-PPT is given by 
+
+p(x1: n|λ, γ, T) = exp − ∑
+
+> v∈L
+
+λv Iv
+
+!
+
+×
+
+> n
+
+# ∏
+
+> i=1
+
+(
+
+# ∑
+
+> v∈L
+
+λvϕv(xi)
+
+)
+
+, (5) where λ := ( λv)v∈L is the collection of all intensity parameters at the leaf nodes of the tree. In this likelihood function, N(D) = n is omitted for notational simplicity whenever there is no scope of confusion since N(D) = n is a realization from a Poisson distribution resulting from a Poisson process. This likelihood has a product-summation form and it can be evaluated analytically; however, the conjugate prior for λv does not ease the posterior update for λv since the conditional posterior p(λv|x1: n, T, γ, λ−v) ∝ p(x1: n|λ, γ, T)π(λv) is not a standard distribution to be sampled from, where λ−v denotes the collection of all λu
+
+for u ∈ L \ { v}. As λv is defined for each node for a given tree, posterior inference for λ
+
+becomes extremely challenging and slow. 
+
+## 2.3 Posterior Inference 
+
+Under the likelihood function (5), the joint posterior of T, γ, λ is 
+
+p(T, γ, λ|x1: n) ∝ p(x1: n|λ, γ, T)π(λ|T)π(T)π(γ). (6) where π(λ|T) = ∏v∈L p(λv|T) with λv ∼ Ga (κ, κ/ξ). As discussed in Section 2.2, directly updating λ is challenging. This paper develops a data-augmentation technique (Tanner and Wong, 1987) to address this challenge. 
+
+2.3.1 Data Augmentation 
+
+For each point xi, let zi denote the latent leaf label assigned to xi. Let nv := #{i : zi = v}
+
+be the number of points in node v. Conditional on N(D) = n and (T, λ, γ), before conditioning on the locations, the labels zi are independent with probabilities Pr (zi =
+
+v|T, λ, γ) = λv Iv/{∑u∈L λu Iu}.Given these latent variables, the likelihood function (5) can be augmented: Given all points in v and the label zi = v, the conditional probability of all points in v has the Poisson process likelihood. Thus, given tree T, the augmented likelihood function over all n points becomes 
+
+p(x1: n, z|λ, γ, T) = ∏
+
+> v∈L
+
+e−λv Iv λnv 
+
+> v
+
+# ∏ 
+
+> i:zi=v
+
+ϕzi (xi). (7) where z := ( z1, . . . , zn)⊤. This augmented likelihood function has a product form over each node. It is immediate that integrating out the intensity λv with respect to its prior 6π(λv) = Ga (κ, κ/ξ) yields a closed form expression: 
+
+p(x1: n, z|γ, T) = 
+
+> Z
+
+p(x1: n, z|λ, γ, T) ∏
+
+> v∈L
+
+π(λv)dλ = ∏
+
+> v∈L
+
+h(nv, Iv)
+
+> n
+
+# ∏
+
+> i=1
+
+ϕzi (xi) (8) where h(m, I) := ( κ/ξ)κ Γ(κ + m)/{Γ(κ)( κ/ξ + I)κ+m}. This integrated likelihood func-tion can be used to design a collapsed Gibbs sampler. The following proposition gives the collapsed full conditional distribution of each allocation zi: 
+
+> PROPOSITION
+
+2. For i = 1, . . . , n, denote the number of points in v except the ith point by n−iv := #{j̸ = i : zj = v}, the conditional probability of z i = v given z −i, x1: n, T, γ is Pr (zi =
+
+v|z−i, x1: n, T, γ) ∝ ϕv(xi)( κ + n−iv )/(κ/ξ + Iv).The proof is given in Appendix S.1.2. The factor (κ + n−iv )/(κ/ξ + Iv) is the mean of the Ga (κ + n−iv , κ/ξ + Iv) distribution which is the posterior of λv computed from other observations. The term κ + n−iv implies that leaves that already hold many points are more likely to receive point i.
+
+2.3.2 Partially Collapsed Gibbs Sampler 
+
+The joint posterior distribution of T, z, γ, λ is 
+
+p(T, z, γ, λ|x1: n) ∝ p(x1: n, z|λ, γ, T)π(λ|T) × π(T)π(γ) (9) Following van Dyk and Jiao (2015) and van Dyk and Park (2008), use the following partially collapsed scan. The z step restores the labels after they are marginalized in the γ step. Proposition 2 gives a separate collapsed allocation conditional. • Update λ: Sample λv|T, z, γ, x1: n ∼ Ga (κ + nv, κ/ξ + Iv) for v ∈ L ;• Update γ: Use a joint Metropolis–Hastings step on log γ targeting 
+
+p(γ | T, λ, x1: n) ∝ π(γ)p(x1: n | λ, γ, T),with adaptation during warm-up only; see Appendix S.1.4. • Update z: Sample zi from a Categorical distribution with Pr (zi = v|λ, T, γ, x1: n) ∝
+
+λvϕv(xi) for i = 1, . . . , n.• Update (T, z): Holding γ fixed and integrating out λ, use a joint Metropolis–Hastings update targeting πc(T, z) ∝ π(T)p(x1: n, z | γ, T), with the integrated likelihood in Eq. (8). The GROW, PRUNE, and CHANGE proposals and their acceptance probabilities are given in Appendix S.1.3. After the tree step, refresh λ from its Gamma full conditional before recording a retained draw. This restores the joint posterior from the rate-marginal state. 73 Posterior Consistency 
+
+This section studies the frequentist property of Bayes posterior under the proposed model. 
+
+## 3.1 Notation and Preliminaries 
+
+Let μ be a fixed diffuse Borel measure (Daley and Vere-Jones, 2008, Proposition 9.1.III(i)) on D = [ 0, 1 ]d with fixed d and 0 < μ(D) < ∞. Then μ({x}) = 0 for every x ∈ D. Denote the space of nonnegative and integrable intensities by 
+
+Θ :=
+
+
+
+λ : D 7 → [0, ∞) :
+
+> Z
+> D
+
+λdμ < ∞
+
+
+
+.and its Borel σ-algebra under the L1(μ) norm by B(Θ). Write π for the joint prior on 
+
+(T, λ, γ) in the Soft PPT model, and Π for the induced law of λ on Θ.For λ ∈ Θ, write 
+
+Pλ = P P (λμ ), Q = P P (μ), pλ = dPλ
+
+dQ .The density exists by Leskel¨ a (2024, Theorem 3). Let P0 = Pλ0 and p0 = pλ0 for the true intensity λ0. The intensity Hellinger distance is 
+
+dH (λ, λ0) = 
+
+Z
+
+> D
+
+(√λ − pλ0)2 dμ
+
+1/2 
+
+.Let X1, X2, . . . ∼ P0 be independent copies of the process X, and set 
+
+X(k) = ( X1, . . . , Xk), P(k) 
+
+> λ
+
+= P⊗k 
+
+> λ
+
+, P(k) 
+
+> 0
+
+= P(k) 
+
+> λ0
+
+, P∞ 
+
+> 0
+
+= P⊗N 
+
+> 0
+
+.Write E(k) 
+
+> λ
+
+for expectation under P(k) 
+
+> λ
+
+, and E(k) 
+
+> 0
+
+when λ = λ0. This is the iid framework of Ghosal and van der Vaart (2017, Ch. 6.4). For B ∈ B (Θ) and Sk = Ski=1 Xi,
+
+Π(B | X(k)) = 
+
+R 
+
+> B
+
+∏ki=1 pλ(Xi) Π(dλ)
+
+R 
+
+> Θ
+
+∏ki=1 pλ(Xi) Π(dλ) = Π(B | Sk), (10) 
+
+P∞ 
+
+> 0
+
+-almost surely. 
+
+DEFINITION 1 (Ghosal and van der Vaart (2017, Definition 6.1)) . Let A ϵ := {λ ∈ Θ :
+
+dH (λ, λ0) > ϵ}. The posterior is said to be strongly consistent at λ0 with respect to d H if 
+
+P∞ 
+
+> 0
+
+{∀ ϵ > 0 : lim k→∞ Π(Aϵ | X(k)) = 0} = 1.
+
+This posterior consistency can be verified via three sufficient conditions with the framework laid out by Ghosal and van der Vaart (2017) which are given as follows. 83.2 Sufficient Conditions 
+
+Denote the Kullback-Leibler (KL) divergence from p0 to pλ by K(p0; pλ) := R p0 log (p0/pλ)dQ =R
+
+> D
+
+{λ0 log (λ0/λ) − λ0 + λ}μ(dx), where the second equation due to Theorem 6 of Leskel¨ a(2024). The following three conditions are as follows. 
+
+C1 . Prior mass condition. For every ϵ > 0, Π{λ : K(p0; pλ) < ϵ} > 0. 
+
+C2 . Sieve condition. For each fixed ϵ > 0, there exist Borel sets Fk ⊂ Θ and a constant 
+
+c1 > 0 such that Π(F ck ) ≤ e−c1k for all sufficiently large k.
+
+C3 . Test condition. For the same ϵ and sieve sequence, there exist measurable tests 
+
+ψk = ψk(X(k)) ∈ [0, 1 ] and constants c2, c3 > 0 such that 
+
+E(k) 
+
+> 0
+
+[ψk] ≤ e−c2k, sup  
+
+> λ∈F k∩Aϵ
+
+E(k) 
+
+> λ
+
+[1 − ψk] ≤ e−c3k
+
+for all sufficiently large k. The sieves and constants in C2–C3 may depend on ϵ.If a posterior satisfies these three conditions, Theorem 6.17 of Ghosal and van der Vaart (2017) implies that the posterior is consistent in the sense of Definition 1. Verification of these conditions for the soft PPT model is given in the Appendix. The assertion of the consistency of the posterior under these three conditions is also verified. Next, assumptions on the truth intensity function, model priors are stated explicitly. 
+
+## 3.3 Main Theoretical Result 
+
+ASSUMPTION 1. Assume that the true intensity function is continuous, i.e., λ0 ∈ C (D), and is also bounded away from zero and ∞, i.e., 0 < λ− ≤ λ0(x) ≤ λ+ < ∞, ∀x ∈ D for some constants λ−, λ+. Let μ be a diffuse measure with μ(D) ∈ (0, ∞).ASSUMPTION 2. Let α0 ∈ (0, 1/2 ) be fixed. Under Bayesian CART prior, for any node v at depth h, assume that ρ(v) = αh+10 for h = 0, 1, . . .. FU (( 0, 1 )) = 1 and FU (( 1/2 − e, 1/2 +
+
+e)) > 0 for every e ∈ (0, 1/2 ).REMARK 1. Note that the splitting probability assumption follows Roˇ ckov´ a and Saha (2019), which is different from the employed prior in the model. Any of the following cut distributions FU satisfy the above assumption: (i) FU = δ1/2 , (ii) FU = Unif (0, 1 ), and (iii) 
+
+FU = ∑Mi=1 wiδui where ui ∈ (0, 1 ), wi > 0, ∑Mi=1 wi = 1, and ui = 1/2 for at least one i.Here δa denotes a point mass at a.ASSUMPTION 3. Let κ, ξ ∈ (0, ∞) be fixed. Assume that FU (( 1/2 − ϵ, 1/2 + ϵ)) > 0 for every ϵ ∈ (0, 1/2 ). Suppose that the prior on γ has a Lebesgue density on (0, ∞)d that has positive support on (0, ∞)d.Under these assumptions, posterior consistency can be shown to hold true and is stated in the following result. 
+
+THEOREM 1. If Assumptions 1, 2, and 3 hold true, the posterior distribution (10) is strongly consistent at λ0 with respect to Hellinger distance d H.
+
+9REMARK 2. This result provides theoretical guarantee that the proposed soft-tree PPT model can estimate the intensity well under the proposed asymptotic framework. As illustrated in Section 4, intensity function under the S-PPT model can be well estimated. 
+
+# 4 Numerical Illustrations 
+
+The goal of numerical examples is to study its performance under both low-dimensional covariate space and high-dimensional covariate space. In low-dimensional space ( d ≤ 2), we can compare the proposed model with the widely-used LGCP since there is not available implementation for higher-dimensional space with d > 2. In particular, we will use the INLA-approximated LGCP available in the R package inlabru (Lindgren et al., 2024). For 
+
+d > 2, BART-PP (Lamprinakou et al., 2023) and PPT (Ma, 2026) are closely related Bayesian competitors, however there is no available software code available for BART-PP. However, the code for XGBoostPP (Lu et al., 2026) is available online and will be used for comparison in higher dimensions. The PPT model is very similar to the proposed model except that PPT uses hard split for the model and sequential Monte Carlo (SMC) method for inference. It is implemented in the R package poistree 1.To evaluate performance of the proposed model, we will mainly focus on comparing the estimated intensity function via scaled root mean square error (sRMSE) and log posterior predictive density (lppd) over testing datasets. Their formulas are given in Appendix S.2.1. sRMSE assesses the property of mean estimator of intensity function while lppd assess the predictive performance for the entire predictive distribution which is a desirable metric for evaluating Bayesian models. Smaller sRMSE indicates better estimation of intensity function while larger lppd indicates better performance of predictive distribution for the intensity. All the numerical experiments are performed on a 24GB memory Macbook Pro with Apple M4 Pro chip and 20 cores. All the timing results are reported in minutes. 
+
+## 4.1 2-D Example 
+
+This example is simulated from an inhomogeneous Poisson point process on the unit square [0, 1 ]2, with a smooth multi-scale spatially varying intensity λ0(x) = C0 f (x) with their specific formulas given in Appendix S.2.2. This example generates about 2500 random points using the Poisson thinning algorithm (Møller and Waagepetersen, 2004, p 11). Figure 1 compares the estimated intensity functions under LGCP, PPT, and S-PPT with the truth intensity function. As we can see from Figure 1, both S-PPT and LGCP performs better than PPT and XGBoostPP, however S-PPT gives a much closer intensity surface to the truth. The INLA-LGCP approximates the latent GP with Mat´ ern-driven stochastic partial differential equation, which shows over-smooth behaviors. Both S-PPT and PPT show good performance in capturing the sharp changes in the truth, however S-PPT allows smoother transitions than PPT. XGBoostPP shows some clearly sharp changes even though it is an ensemble tree method. This suggests that the Bayesian tree method with soft gating      
+
+> 1The Rpackage poistree is available at https://github.com/pulongma/poistree
+
+10 in S-PPT can better smooth over partition boundaries. Table 1 confirms that S-PPT gives best performance in terms of sRMSE and lppd, although it takes much longer computing time than the other two methods. Here, S-PPT is run with 5,000 burn-in iterations and additional 10,000 iterations for two MCMC chains. INLA−LGCP XGBoostPP Truth PPT S−PPT 0 0.5 1 0 0.5 10 0.5 100.5 100.5 1Intensity 
+
+> 2500 5000 7500
+
+Figure 1: Comparison of estimated intensities 
+
+## 4.2 10-D Example 
+
+For x = ( x1, . . . , x10 ) ∈ [0, 1 ]10 , the true intensity function is of the form λ0(x) = n0 f10 (x) 
+
+> Z
+
+,where Z = R 
+
+> D
+
+f10 (x) dx the normalizing constant and n0 = 15,000 is expected number of 11 Table 1: Performance in the 2-d example 
+
+Model sRMSE lppd Time PPT 0.290 2736 0.02 S-PPT 0.190 2742 3.77 LGCP 0.234 2738 0.68 XGBoostPP 0.233 2739 0.01 points. The expression for f10 (·) is given in Appendix S.2.3. combines a discontinuous three-level effect, two smooth oscillatory effects, a continuous cusp, a polynomial bump, and two bivariate terms with different regularity so that a nonlinear intensity with different degrees of smoothness imposed on different variables. The variables x1, . . . , x8 are active while x9 and x10 are inactive. The dataset is simulated over the domain using thinning algorithm with n0 expected number of points. The dataset is randomly split into 80/20% for training and testing. Table 2 shows that S-PPT performs best in terms of sRMSE and lppd. This example is encouraging since S-PPT is a single tree model and XGBoostPP is an ensemble tree model. One possible explanation is that its posterior distribution under S-PPT is an average of individual posterior distributions across posterior tree samples; as a result, any posterior estimates from S-PPT would behave somewhat like an estimate from an ensemble tree model. This might justify the better performance of S-PPT over XGBoostPP in this particular example. Both S-PPT and XGBoostPP perform better than the PPT model because the underlying intensity favors a smoother intensity model unlike PPT. Table 2: Performance in the 10-d example 
+
+Model sRMSE lppd Time PPT 0.221 21789 0.06 S-PPT 0.184 21818 131 XGBoostPP 0.213 21791 0.02 Figure 2 also shows that S-PPT gives reasonable well estimates for the intensity function as the estimated intensity against true intensity aligns well along the 45 degree line. In Appendix S.2.3, we also demonstrate how the relationship between intensity function and each variable is captured. In general, Figure S.2 shows both S-PPT and XGBoost can estimate several simple relationships well and S-PPT can correctly identify flat (or constant) relationship. For some marginal relationships such as x5, both S-PPT and XGBoostPP did not capture it very well. 12 PPT S−PPT XGBoostPP 10000 20000 30000 10000 20000 30000 10000 20000 30000 20000 40000 60000 True intensity Estimated intensity Figure 2: 10-d example scatterplot 
+
+## 4.3 Real Data 
+
+BCI forestry dataset: This dataset refers to the classic tropical forest research data of tree species information collected in Barro Colorado Island (BCI), Panama which was used to study tree populations, forest dynamics, and biodiversity. This paper is focused on modeling spatial locations of a single tree species of Beilschmiedia pendula from the R dataset bei in the package spatstat.data . This dataset, originally analyzed by Møller and Waagepetersen (2007), consists of 3,604 spatial locations of tree species with 8 environ-mental covariates in a 1000m × 500m observation window: elevation (elev), magnitude of the elevation gradient (grad), Soil copper content (Cu), Nitrogen mineralization measure (Nmin), Soil phosphorus content (P), Soil acidity (pH), incoming solar radiation index (solar), topographical wetness index (twi). Computing time is measured in minutes. 
+
+California wildfires dataset: There is an increasing interest in modeling wildfires and understanding how wildfire occurrence varies across space and seasons for different envi-ronmental conditions. We consider 8,178 recorded wildfires events within the California study region during 2024 (Short, 2026). This dataset is obtained from the seventh edi-tion of the Fire Program Analysis Fire-Occurrence Database. This analysis is focused on nine covariates: easting, northing, elevation, monthly mean daily maximum temperature, monthly precipitation, monthly mean vapor-pressure deficit, monthly mean wind speed, and sine/cosine terms representing the annual seasonal cycle. These weather covariates are derived from gridMET data product. These covariate information can be used to assess 13 spatial and seasonal wildfire occurrence patterns and how this pattern was associated with weather and elevation in California during 2024. This dataset is then used to evaluate the performance under PPT, S-PPT, and XGBoostPP using a 80/20 split for training and testing. S-PPT is run with 5,000 burn-in iterations and additional 20,000 iterations for posterior inference. Table 3: Performance of models on different datasets. Each dataset is randomly split into 80% for training and 20% for testing. Data Model sRMSE lppd Time Bei PPT 0.340 4545 0.08 S-PPT 0.245 4701 6.00 XGBoostPP 0.264 4688 0.00 Wildfire PPT 0.194 12192 2.52 S-PPT 0.140 12350 64.3 XGBoostPP 0.173 12583 0.07 The results in Table 3 also confirm that S-PPT model gives best sRMSE and lppd for Bei dataset but only give best sRMSE for wildfire data. One potential limitation of XGBoostPP compared to Bayesian models is that it does not provide confidence intervals for the intensity estimator but provide confidence intervals for counts; in contrast, Bayesian models provide a straightforward uncertainty assessment for any functional form of intensity function. Figure 3 shows the 18 cell counts with its confidence/credible intervals over a 5 by 5 cell regions over the study domain. For both S-PPT and XGBoostPP, their interval estimates look much better than that from PPT. In addition, Figure S.3 also shows the spatial map of estimated intensity functions. It is clear that this posterior mean of intensity function under S-PPT look much smoother than both XGBoostPP and PPT. 
+
+# 5 Concluding Remarks 
+
+This paper develops a Bayesian soft Poisson process tree (S-PPT) model for estimating intensity functions in a possibly high-dimensional covariate space. The proposed model ex-ploits the Bayesian CART prior for learning tree partitions and integrates the soft-decision tree idea to smooth over partition boundaries. To carry out efficient Bayesian inference, this paper develops a data augmentation technique to allow closed-form conjugate sampling for intensity parameters in a partially collapsed Gibbs sampler. The theoretical result also shows strong consistency of the posterior distribution for estimating continuous intensity functions, thus providing good frequentist property of the proposed model with a slight modification on the tree prior. There are also several future research directions that could be pursued. First this model can be extended to an additive tree method to exploit the benefits of ensemble methods. 14 PPT S−PPT XGBoostPP 0 100 200 300 0 100 200 300 0 100 200 300 0100 200 300 400 Observed held−out count Predictive median and 95% interval Figure 3: Estimated count intensity function for California wildfire data under PPT, S-PPT, and XGBoostPP. Current computational strategy with closed-form random integral evaluation relies on axis-aligned partitions for rectangular regions. This might be relaxed if the domain is convex but not necessarily rectangular. Finally, the tree update with standard RJ-MCMC algorithm could be further improved using better proposals (e.g., Pratola, 2016) for more efficient tree search or the sequential Monte Carlo method (Ma, 2026). 
+
+# References 
+
+Adams, R. P., Murray, I., and MacKay, D. J. C. (2009). Tractable nonparametric Bayesian inference in poisson processes with Gaussian process intensities. In Proceedings of the 26th Annual International Conference on Machine Learning , ICML’09, page 9–16, New York, NY, USA. Association for Computing Machinery. Barr, C. D. and Schoenberg, F. P. (2010). On the Voronoi estimator for the intensity of an inhomogeneous planar Poisson process. Biometrika , 97(4):977–984. Chen, T. and Guestrin, C. (2016). XGBoost: A scalable tree boosting system. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining ,pages 785–794. Association for Computing Machinery. Chipman, H. A., George, E. I., and McCulloch, R. E. (1998). Bayesian CART model search. 
+
+Journal of the American Statistical Association , 93(443):935–948. 15 Chipman, H. A., George, E. I., and McCulloch, R. E. (2002). Bayesian treed models. Machine Learning , 48(1):299–320. Chipman, H. A., George, E. I., and McCulloch, R. E. (2010). BART: Bayesian additive regression trees. The Annals of Applied Statistics , 4(1):266–298. Cressie, N. (1993). Statistics for Spatial Data . John Wiley & Sons, Inc, Hoboken, NJ, revised edition edition. Daley, D. J. and Vere-Jones, D. (2008). An Introduction to the Theory of Point Processes. Volume II: General Theory and Structure . Springer, 2 edition. Diggle, P. J. (2014). Statistical Analysis of Spatial and Spatio-Temporal Point Patterns . CRC Press, Boca Raton, 3rd edition. Donner, C. and Opper, M. (2018). Efficient Bayesian inference of sigmoidal Gaussian Cox processes. Journal of Machine Learning Research , 19(67):1–34. Gelfand, A. E. and Schliep, E. M. (2018). Bayesian Inference and Computing for Spatial Point Patterns , volume 10 of NSF-CBMS Regional Conference Series in Probability and Statistics .Institute of Mathematical Statistics and American Statistical Association. Ghosal, S. and van der Vaart, A. (2017). Fundamentals of Nonparametric Bayesian Inference .Cambridge Series in Statistical and Probabilistic Mathematics. Cambridge University Press, Cambridge. Gugushvili, S. and Spreij, P. (2013). A note on non-parametric Bayesian estimation for Poisson point processes. arXiv:1304.7353. Hinde, A. L. and Miles, R. E. (1980). Monte Carlo estimates of the distributions of the random polygons of the Voronoi tessellation with respect to a Poisson process. Journal of Statistical Computation and Simulation , 10(3-4):205–223. Irsoy, O., Yildiz, O. T., and Alpaydin, E. (2012). Soft decision trees. Proceedings of the 21st International Conference on Pattern Recognition (ICPR2012) , pages 1819–1822. Jordan, M. I. and Jacobs, R. A. (1994). Hierarchical mixtures of experts and the EM algorithm. Neural Computation , 6(2):181–214. Lamprinakou, S., Barahona, M., Flaxman, S., Filippi, S., Gandy, A., and McCoy, E. J. (2023). BART-based inference for Poisson processes. Computational Statistics & Data Analysis ,180:107658. Leskel¨ a, L. (2024). Information divergences and likelihood ratios of Poisson processes and point patterns. IEEE Transactions on Information Theory , 70(12):9084–9101. Lindgren, F., Bachl, F., Illian, J., Suen, M. H., Rue, H., and Seaton, A. E. (2024). inlabru: software for fitting latent Gaussian models with non-linear predictors. arXiv: 2407.00791. 16 Linero, A. R. and Yang, Y. (2018). Bayesian regression tree ensembles that adapt to smoothness and sparsity. Journal of the Royal Statistical Society: Series B , 80(5):1087–1110. Lu, C., Guan, Y., van Lieshout, M. C., and Xu, G. (2026). XGBoostPP: Tree-based estimation of point process intensity functions. Journal of Computational and Graphical Statistics ,35(1):229–240. Ma, P. (2026). A sequential Monte Carlo method for Bayesian Poisson process trees. Under revision. Meijering, J. L. (1953). Interface area, edge length, and number of vertices in crystal aggregation with random nucleation. Philips Research Reports , 8:270–290. Møller, J., Syversveen, A. R., and Waagepetersen, R. P. (1998). Log Gaussian Cox processes. 
+
+Scandinavian Journal of Statistics , 25(3):451–482. Møller, J. and Waagepetersen, R. P. (2004). Statistical Inference and Simulation for Spatial Point Processes . Monographs on Statistics and Applied Probability. Chapman and Hall/CRC, Boca Raton, FL. Møller, J. and Waagepetersen, R. P. (2007). Modern statistics for spatial point processes. 
+
+Scandinavian Journal of Statistics , 34(4):643–684. Natekin, A. and Knoll, A. (2013). Gradient boosting machines, a tutorial. Frontiers in Neurorobotics , 7:21. Pratola, M. T. (2016). Efficient Metropolis–Hastings proposal mechanisms for Bayesian regression tree models. Bayesian Analysis , 11(3):885–911. Roˇ ckov´ a, V. and Saha, E. (2019). On theory for BART. In Proceedings of the Twenty-Second International Conference on Artificial Intelligence and Statistics , volume 89 of Proceedings of Machine Learning Research , pages 2839–2848. PMLR. Rue, H., Martino, S., and Chopin, N. (2009). Approximate Bayesian inference for latent Gaussian models by using integrated nested Laplace approximations. Journal of the Royal Statistical Society: Series B (Statistical Methodology) , 71(2):319–392. Short, K. C. (2026). Spatial wildfire occurrence data for the United States, 1992–2024 [FPA FOD 20260615]. Fort Collins, CO: Forest Service Research Data Archive. 7th edition. Simpson, D., Illian, J. B., Lindgren, F., Sørbye, S. H., and Rue, H. (2016). Going off grid: computationally efficient inference for log-Gaussian Cox processes. Biometrika , 103(1):49– 70. Stanley, R. P. (1999). Enumerative Combinatorics , volume 2. Cambridge University Press. Tanner, M. A. and Wong, W. H. (1987). The calculation of posterior distributions by data augmentation. Journal of the American Statistical Association , 82(398):528–540. 17 van der Vaart, A. W. and Wellner, J. A. (1996). Weak Convergence and Empirical Processes: With Applications to Statistics . Springer Series in Statistics. Springer, New York. van Dyk, D. A. and Jiao, X. (2015). Metropolis–Hastings within partially collapsed Gibbs samplers. Journal of Computational and Graphical Statistics , 24(2):301–327. van Dyk, D. A. and Park, T. (2008). Partially collapsed Gibbs samplers: Theory and methods. Journal of the American Statistical Association , 103(482):790–796. Vihola, M. (2012). Robust adaptive Metropolis algorithm with coerced acceptance rate. 
+
+Statistics and Computing , 22(5):997–1008. 18 Supplementary Material S.1 Model Construction 
+
+This section derives the analytic exposure integral and the allocation probabilities, and gives details of posterior computation. 
+
+## S.1.1 Proof of Proposition 1 
+
+Proof. Observe that 
+
+Iv =
+
+> d
+
+# ∏
+
+> j=1
+
+Z bj
+
+> aj
+
+# ∏
+
+> u∈↓ vju=j
+
+gu(t)δuv {1 − gu(t)}1−δuv dt
+
+| {z }
+
+> Jvj
+
+.where an empty product reduce to Jvj = Wj. Applying a changes-of-variables technique yields 
+
+u = exp 
+
+ γ
+
+W
+
+
+
+t − aj + bj
+
+2
+
+ 
+
+, dt = W
+
+γ
+
+duu , u± = e±γ/2 .The right and left factors become u/(u + qk) and qk/(u + qk). Since the qk are distinct, direct calculation yields 
+
+Jvj = W
+
+γ
+
+Z u+
+
+> u−
+
+Cu r−1
+
+∏mk=1(u + qk) du = W
+
+γ
+
+Z u+
+
+> u−
+
+( 1{r=0}
+
+u +
+
+> m
+
+# ∑
+
+> k=1
+
+Ak
+
+u + qk
+
+)
+
+du. (S.1) where 
+
+Ak := lim 
+
+> u→− qk
+
+(u + qk)R(u) = lim 
+
+> u→− qk
+
+Cu r−1
+
+∏ℓ̸ =k(u + qℓ) = C(−qk)r−1
+
+∏ℓ̸ =k(qℓ − qk) .Note that 
+
+Z u+
+
+> u−
+
+Ak
+
+u + qk
+
+du = Ak log u+qk
+
+u− + qk
+
+.Thus it follows from direct calculation and log (u+/u−) = γ that 
+
+Jvj = W
+
+γ
+
+(
+
+γ1{r=0} +
+
+> m
+
+# ∑
+
+> k=1
+
+Ak log eγ/2 + qk
+
+e−γ/2 + qk
+
+)
+
+,as desired. S.1 S.1.2 Proof of Proposition 2 
+
+Proof. It follows from Eq. (8) that terms independent of v would be canceled and thus Pr (zi = v | z−i, x1: n, T, γ) ∝ ϕv(xi) h(n−iv + 1, Iv)
+
+h(n−iv , Iv) = ϕv(xi) κ + n−iv
+
+κ/ξ + Iv
+
+.
+
+## S.1.3 Tree updates 
+
+Let G(T) be the splittable leaves and C(T) the nodes with two leaf children. Let qv(r) be the normalized admissible rule prior for r = ( j, u), determined by the parent cell and fixed covariates, independently of its current rule and labels. Define 
+
+H(T, z) = ∏
+
+> v∈L (T)
+
+h(nv, Iv), si(r) = ϕvl (xi; r)
+
+ϕv(xi) ,using the complete h in Eq. (8); si(r) is evaluated under split r. Choose 
+
+M ∼ Unif {GROW, PRUNE, CHANGE }.If the selected move has no eligible node, (T, z) is retained. 1. GROW: split one leaf. 
+
+v ∼ Unif {G (T)}, r∗ ∼ qv, T∗ = Grow (T, v, r∗),
+
+z∗ 
+
+> i
+
+∼ Cat (vl,vr){si(r∗), 1 − si(r∗)}, i : zi = v.2. PRUNE: merge two leaf children. 
+
+v ∼ Unif {C (T)}, T∗ = Prune (T, v), z∗ 
+
+> i
+
+= v, i : zi ∈ { vl, vr}.3. CHANGE: replace one split rule. 
+
+v ∼ Unif {C (T)}, r∗ ∼ qv, T∗ = Change (T, v, r∗),
+
+z∗ 
+
+> i
+
+∼ Cat (vl,vr){si(r∗), 1 − si(r∗)}, i : zi ∈ { vl, vr}.The routing factors cancel against the label-proposal probabilities. A proposed value 
+
+(T∗, z∗) is accepted with probability 
+
+α = min 
+
+
+
+1, π(T∗)H(T∗, z∗)
+
+π(T)H(T, z) RM
+
+
+
+,S.2 where RM =
+
+
+
+|G (T)||C (T∗)|qv(r∗) , M = GROW, 
+
+|C (T)|qv(r)
+
+|G (T∗)| , M = PRUNE, 
+
+qv(r)
+
+qv(r∗) , M = CHANGE. Here r is the current or removed rule. On rejection, (T, z) is retained. 
+
+## S.1.4 Gate update 
+
+Fix T, λ and set η = log γ componentwise. With the shape–rate Gamma prior, the log target, including the Jacobian, is 
+
+ℓ(η) = log p(x1: n | λ, eη, T) + 
+
+> d
+
+# ∑
+
+> j=1
+
+(a0ηj − b0eηj ).At iteration t = 1, 2, . . ., propose and accept with probability 
+
+u ∼ Nd(0, Id), η∗ = η + Ltu, αγ,t = min {1, eℓ(η∗)−ℓ(η)},where Lt L⊤ 
+
+> t
+
+is the proposal covariance. On acceptance, set η = η∗; otherwise retain η. Set 
+
+γ = eη and restore z as in the main scan. The stated prior permits every γj > 0. Thus, any additional lower bound is a prior truncation and proposals outside it are rejected. During warm-up, robust adaptive Metropolis (Vihola, 2012) uses 
+
+Lt+1 L⊤ 
+
+> t+1
+
+= Lt
+
+"
+
+Id + ωt(αγ,t − 0.234 ) uu ⊤
+
+∥u∥2
+
+#
+
+L⊤ 
+
+> t
+
+, ωt = min {1, dt −0.7 }.Initialize L1 = diag (s1, . . . , sd) with proposal standard deviations sj > 0. Freeze Lt after 
+
+tadapt ≤ tburn ; the implementation default is tadapt = ⌊0.8 tburn ⌋. If a Cholesky update fails numerically, the previous factor is retained. 
+
+# S.2 Numerical Examples 
+
+## S.2.1 Performance Metrics 
+
+Let xtrain and xtest denote the observed training and test patterns. Let x∗
+
+> 1
+
+, . . . , x∗ 
+
+> M
+
+∈ D be evaluation sites and θ = ( T, λ, γ). Write bλ for the posterior mean intensity. The metrics are sRMSE =
+
+r 
+
+> 1
+> M
+
+∑Mm=1
+
+nbλ(x∗
+
+> m
+
+) − λ0(x∗
+
+> m
+
+)
+
+o21 
+
+> M
+
+∑Mm=1 λ0(x∗
+
+> m
+
+) .S.3 lppd = log 
+
+Z
+
+p(xtest | θ) p(θ | xtrain ) dθ
+
+= log 
+
+Z
+
+exp 
+
+(
+
+# ∑
+
+> x∈xtest
+
+log λθ (x) −
+
+Z
+
+> D
+
+λθ (x) dx
+
+)
+
+p(θ | xtrain ) dθ.
+
+## S.2.2 2-d Example 
+
+The true intensity is of the form λ0(x) = C0 f (x), x ∈ [0, 1 ]2. where f (·) is a multi-scale function varying in space and C0 is chosen to normalize the intensity so that the expected number of counts is 2500 in the simulation example. In particular, the function f is chosen according to the gating function structures at multiple scales of the form 
+
+f (x) = b +
+
+> 2
+
+# ∑
+
+> s=15
+
+# ∑
+
+> k=1
+
+(βs,k − βs,k−1)
+
+> k
+
+# ∏
+
+> h=1
+
+ℓs,h(x)
+
+where ℓs,k(x) = 1 + exp {− (2δs,k − 1)γjk (xjk − cs,k)}−1, δs,k = 0 or 1 selects the left or right child, and jk, cs,k are cutting axes and cut locations. (γ1, γ2) = ( 78, 48 ). Then C0 is chosen as 
+
+C0 = n0
+
+m−2 m
+
+# ∑
+
+> i=1
+> m
+
+# ∑
+
+> j=1
+
+f
+
+ i − 1/2 
+
+m , j − 1/2 
+
+m
+
+ , n0 = 2500, m = 500, so that R 
+
+> D
+
+λ0(x) dx ≈ 2500. This function f represents a multiscale structure through ws,k := βs,k − βs,k−1 and tree partitions, where 
+
+β1,0 = β2,0 = 0.3, 
+
+(β1,1 , . . . , β1,5 ) = ( 0.80, 1.70, 3.25, 5.95, 11.15 ),
+
+(β2,1 , . . . , β2,5 ) = ( 0.50, 0.90, 1.65, 3.20, 7.40 ).For the tree partitions, the cut axis is chosen as jk = 1 + (( k − 1) mod 2 ), k = 1, . . . , 5. Let As,0 = D = [ 0, 1 ]2 and As,k−1 = ∏2
+
+> j=1
+
+[as,k−1, j, bs,k−1, j]. The recursive formulas for cut location cs,k and As,k are given by 
+
+cs,k = as,k−1, jk + Us,k(bs,k−1, jk − as,k−1, jk ), As,k = As,k−1 ∩ { x : (2δs,k − 1)( xjk − cs,k) ≥ 0}
+
+where 
+
+(u1, . . . , u5) = ( 0.42, 0.58, 0.47, 0.55, 0.38 ),
+
+(U1,1 , . . . , U1,5 ) = ( u1, u3, u2, u3, u5), (δ1,1 , . . . , δ1,5 ) = ( 0, 1, 0, 1, 1 ),
+
+(U2,1 , . . . , U2,5 ) = ( u1, u4, u4, u3, u5), (δ2,1 , . . . , δ2,5 ) = ( 1, 1, 1, 1, 1 ),S.4 PPT S−PPT XGBoostPP INLA−LGCP 0 5K 10K 15K 0 5K 10K 15K 0 5K 10K 15K 0 5K 10K 15K 05K 10K 15K True intensity Estimated intensity Figure S.1: 2-d example scatterplot S.5 S.2.3 10-d Example 
+
+For x = ( x1, . . . , x10 ) ∈ [0, 1 ]10 , the true intensity function is of the form λ0(x) = n0 f10 (x)
+
+Z ,where Z = R
+
+D f10 (x) dx, n0 = 15,000, and f10 (x) = 0.15 + 0.3 ∑5
+
+j=1 qj(xj) + 0.6 q67 (x6, x7) + 
+
+0.6 q78 (x7, x8).The component functions are 
+
+q1(u) = 
+
+
+
+0, 0 ≤ u < 0.25, 1, 0.25 ≤ u < 0.65, 0.45, 0.65 ≤ u ≤ 1, 
+
+q2(u) = 1 + sin (2πu)
+
+2 , q3(u) = 1 + cos (3πu)
+
+2 ,
+
+q4(u) = |u − 0.3 |
+
+0.7 , q5(u) = 16 u2(1 − u)2,
+
+q67 (u, v) = 1{u≥1/2 }1{v≥1/2 }, q78 (u, v) = sin 2(πu) sin 2(πv),for u, v ∈ [0, 1 ].x9 x10 x5 x6 x7 x8 x1 x2 x3 x4 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 14000 15000 16000 17000 18000 13000 14000 15000 16000 17000 13000 14000 15000 16000 17000 18000 19000 12500 15000 17500 13000 14000 15000 16000 17000 13000 14000 15000 16000 17000 18000 14700 15000 15300 15600 13000 14000 15000 16000 17000 13000 14000 15000 16000 17000 15000 16000 17000 Covariate value Marginal intensity PPT S−PPT XGBoostPP 
+
+Figure S.2: Estimation of marginal relationships between intensity function and each variable. S.6 S.2.4 Real Application 
+
+Figure S.3: Spatial map of log of estimated intensity function for California wildfire data under PPT, S-PPT, and XGBoostPP. S.7 S.3 Proof of Posterior Consistency 
+
+## S.3.1 Verification of Condition C1 
+
+As in Section 3, let D = [ 0, 1 ]d and write V = μ(D). For functions, ∥ · ∥ p denotes the 
+
+Lp(μ) norm, including the essential supremum for p = ∞; for vectors, ∥ · ∥ ∞ denotes the maximum norm. 
+
+LEMMA 1 (Kullback–Leibler support) . Under Assumptions 1, 2, and 3, 
+
+Π{λ : K(p0; pλ) < ϵ} > 0 (ϵ > 0).
+
+Proof. We construct a finite-tree approximation and a parameter neighborhood of positive prior probability that preserves it; see Ghosal and van der Vaart (2017, Example 7.6) and Linero and Yang (2018, Appendix B, (8)). The approximation below is specific to the S-PPT gates. 
+
+Step 1. Reduce KL support to uniform approximation. Fix ϵ > 0 and choose 0 < e < min 
+
+(
+
+λ−
+
+2 ,
+
+r ϵλ −
+
+2V
+
+)
+
+.If ∥λ − λ0∥∞ < e, then λ > λ− − e > λ−/2 μ-almost everywhere. Since (Vλ0)( μ/V) = λ0μ and (Vλ)( μ/V) = λμ , An application of Appendix A of Gugushvili and Spreij (2013) with reference measure μ/V and intensities Vλ0 and Vλ
+
+yields that 
+
+K(p0; pλ) ≤
+
+> Z
+> D
+
+(λ0 − λ)2
+
+λ dμ ≤ V∥λ − λ0∥2
+
+> ∞
+
+λ− − e < 2Ve 2
+
+λ−
+
+< ϵ, (S.2) where the remaining inequalities follow from ∥λ − λ0∥∞ < e, λ ≥ λ− − e, and the choice of e.
+
+Step 2. Construct a finite-tree approximation. Let 
+
+ω0(t) = sup 
+
+> x,y∈D
+> ∥x−y∥∞≤t
+
+|λ0(x) − λ0(y)|.It follows from the continuity of λ0 on compact D that ω0(t) → 0 as t ↓ 0. 
+
+(a) Tree and leaf values. For r ≥ 1, let Tr be the complete binary tree of depth dr , with 
+
+ju = 1 + ( depth (u) mod d), U0 
+
+> u
+
+= 1/2, u ∈ I (Tr).Write the box at node v as A0 
+
+> v
+
+= ∏j[a0
+
+> vj
+
+, b0
+
+> vj
+
+] and set h = 2−r, J = 2dr . Every leaf path has 
+
+r midpoint splits per coordinate, so there are J leaves, each with side length h. Choose 
+
+xv ∈ A0 
+
+> v
+
+for each leaf and set λ0 
+
+> v
+
+= λ0(xv) and γ0 
+
+> j
+
+= G > 0. For u ∈↓ v, let δuv be the S.8 right-turn indicator defined above. Then 
+
+c0 
+
+> u
+
+= ( a0 
+
+> u,ju
+
++ b0 
+
+> u,ju
+
+)/2, ϕ0
+
+> v
+
+(x) = ∏
+
+> u∈↓ v
+
+n
+
+1 + exp 
+
+h
+
+−(2δuv − 1)G(xju − c0
+
+> u
+
+)
+
+io −1
+
+,
+
+# ∑ 
+
+> v∈L (Tr)
+
+ϕ0 
+
+> v
+
+= 1, λr,G = ∑ 
+
+> v∈L (Tr)
+
+λ0(xv)ϕ0
+
+> v
+
+.
+
+(b) Distant representatives. The ancestral cuts give 
+
+a0 
+
+> vj
+
+= max  {0} ∪ { c0 
+
+> u
+
+: u ∈↓ v, ju = j, δuv = 1},
+
+b0 
+
+> vj
+
+= min  {1} ∪ { c0 
+
+> u
+
+: u ∈↓ v, ju = j, δuv = 0}.If ∥x − xv∥∞ > 2h, some coordinate j satisfies 
+
+xj < xvj − 2h ≤ a0 
+
+> vj
+
+− h or xj > xvj + 2h ≥ b0 
+
+> vj
+
++ h.The relevant endpoint lies inside (0, 1 ) and is an ancestral cut. Thus some u ∈↓ v satisfies 
+
+(2δuv − 1)( xju − c0
+
+> u
+
+) < −h. Since all routing factors lie in [0, 1 ],
+
+ϕ0
+
+> v
+
+(x) ≤ exp {(2δuv − 1)G(xju − c0
+
+> u
+
+)} ≤ e−Gh .
+
+(c) Total approximation error. By Assumption 1 and the partition of unity, 
+
+|λr,G(x) − λ0(x)| ≤ ∑
+
+> v
+
+ϕ0
+
+> v
+
+(x)|λ0(xv) − λ0(x)|≤ ω0(2h) + 2λ+ ∑
+
+> ∥x−xv∥∞>2h
+
+ϕ0
+
+> v
+
+(x)
+
+≤ ω0(2h) + 2λ+ Je −Gh .Choose r with ω0(21−r) < e/4 and G > max {1, h−1 log (8λ+ J/e)}. Then sup 
+
+> x∈D
+
+|λr,G(x) − λ0(x)| < e/2. 
+
+Step 3. Preserve the approximation in a parameter neighborhood. Keep Tr and its axes fixed, and write 
+
+θ =  (Uv)v∈I (Tr ), λ, γ, θ0 = (( 1/2 )v, (λ0
+
+> v
+
+)v, (G)j).Choose 0 < δ0 < min {1/4, G/2, λ−/2 } and let 
+
+K = {θ : ∥θ − θ0∥∞ ≤ δ0}.On K, every cut fraction lies in [1/4, 3/4 ], so cuts remain strictly inside their node intervals. The recursion 
+
+cv = ( 1 − Uv)av,jv + Uvbv,jv
+
+S.9 ensures the continuity of the endpoints and cuts in the cut fractions. The root-width gate predictor γjv (xjv − cv) is therefore continuous in (θ, x). Hence (θ, x) 7 → λθ (x) is uniformly continuous on K × D.Choose 0 < δ < δ0 such that sup 
+
+> ∥θ−θ0∥∞<δ
+
+sup 
+
+> x∈D
+
+|λθ (x) − λr,G(x)| < e/2. It follows from the triangle inequality and Steps 1–2 that 
+
+∥θ − θ0∥∞ < δ =⇒ K(p0; pλθ ) < ϵ.
+
+Step 4. Verify positive prior probability. Let Uδ fix the selected topology and axes and impose 
+
+∥θ − θ0∥∞ < δ. Let f∗ denote the Ga (κ, κ/ξ) density. Then 
+
+π(Uδ) = ∏ 
+
+> u∈I (Tr)
+
+ρ(u)ζju ∏ 
+
+> v∈L (Tr)
+
+(1 − ρ(v)) FU (( 1/2 − δ, 1/2 + δ)) J−1
+
+×
+
+Z 
+
+> (G−δ,G+δ)d
+
+π(γ) dγ ∏ 
+
+> v∈L (Tr)
+
+Z λ0
+
+> v+δλ0
+> v−δ
+
+f∗(t) dt > 0. By Assumption 2, the tree and cut factors are positive. By Assumption 3, the integrals are positive because their densities are continuous and strictly positive on the corresponding compact boxes. Therefore, 0 < π(Uδ) ≤ Π{λ : K(p0; pλ) < ϵ}.
+
+## S.3.2 Sieve construction 
+
+We specify one sieve sequence and verify C2–C3 by following the sieve and finite-cover testing strategy in Ghosal and van der Vaart (2017, proof of Theorem 6.23); see also Roˇ ckov´ aand Saha (2019, Section 7) and Linero and Yang (2018, Supplement, Section S.2). Define: 
+
+Gc,τ (y) = {1 + e−(y−c)/τ }−1, gv(x) = Gcv,τv (xjv ), cv ∈ [0, 1 ], τv > 0. For a topology T with L leaves and axes j, let ϕgv denote the routing weights determined by its gates g. For a leaf-count bound J ∈ N and a leaf-intensity bound B > 0, define 
+
+EJ,B = [ 
+
+> (T,j):|L (T)|≤ J
+
+ ∑
+
+> v∈L (T)
+
+λvϕgv : λ ∈ [0, B]L, c ∈ [0, 1 ]L−1, τ ∈ (0, ∞)L−1
+
+ , FJ,B = EJ,BL1(μ).Here the bar denotes closure in L1(μ). For the kth sieve, we choose the bounds Jk and Bk
+
+S.10 as follows. Fix ϵ > 0 for C2–C3 and set 
+
+∆ = 1 − e−ϵ2/2 , δ = ∆2/128, Jk = max 
+
+
+
+1, 
+
+ δk
+
+log (k + 1)
+
+ 
+
+, Bk = 2ξk
+
+κ , Fk = FJk,Bk .Since Jk = δk/ log (k + 1) + O(1), we have 
+
+Jk log kk → δ, Jk log Jk
+
+k → δ, Jk
+
+k → 0. (S.3) 
+
+## S.3.3 Verification of Condition C2 
+
+LEMMA 2 (Tail bound for the number of leaves) . Under Assumption 2, T is finite π-almost surely and, for constants C T, cT > 0,
+
+π{|L (T)| > J} ≤ CT e−cT J log J , J ∈ N, J ≥ 2. 
+
+Proof. If Zh counts nodes at depth h, the independent splitting rule gives 
+
+Eπ [Zh] = 
+
+> h−1
+
+# ∏
+
+> i=0
+
+2αi+10 = 2hαh(h+1)/2 0 , π{| T| = ∞} ≤ π(Zh > 0) ≤ Eπ [Zh] → 0. The rule ρ(v) = α1+depth (v) 
+
+> 0
+
+, 0 < α0 < 1/2, belongs to the depth-exponential family in Roˇ ckov´ a and Saha (2019, Section 5.2, (20)). Their Corollary 5.2 gives the tail bound. The independent axis and cut distributions do not alter the branching law. The result follows by enlarging CT to cover all integers J ≥ 2. 
+
+LEMMA 3 (Verification of C2) . The sets Fk are Borel in Θ. Under Assumptions 2 and 3, for every 0 < c1 < min {cT δ, 1 },
+
+Π(F ck ) ≤ e−c1k for all sufficiently large k .
+
+Proof. The sets Fk are L1(μ)-closed, hence Borel. Each model gate belongs to this class: take τv = 1/ γjv and its original cut cv, so that 
+
+Gcv,τv (xjv ) = {1 + e−γjv (xjv −cv)}−1.Thus {|L (T)| ≤ Jk, max v∈L (T) λv ≤ Bk} implies λ ∈ F k. For Z ∼ Ga (κ, κ/ξ), Markov’s inequality gives 
+
+E[eκZ/(2ξ)] = 2κ, Pr (Z > Bk) ≤ 2κ e−k.The conditional union bound and Lemma 2 yield 
+
+Π(F ck ) ≤ π{|L (T)| > Jk} + Jk Pr (Z > Bk) ≤ CT e−cT Jk log Jk + 2κ Jke−k (S.4) S.11 for all large k. It follows from (S.3) that lim sup 
+
+> k→∞
+
+1
+
+k log Π(F ck ) ≤ max {− cT δ, −1} < −c1.
+
+## S.3.4 Verification of Condition C3 
+
+Write N(t, F , d) for the minimum number of closed d-balls of radius t, centered in F ,needed to cover F , with value ∞ if no finite cover exists (Ghosal and van der Vaart, 2017, Appendix C.1). 
+
+LEMMA 4 (Verification of C3) . For the sieves Fk, there exist measurable tests ψk ∈ [0, 1 ] such that, for all sufficiently large k, 
+
+E(k) 
+
+> 0
+
+[ψk] ≤ e−k∆2/16 , sup  
+
+> λ∈F k∩Aϵ
+
+E(k) 
+
+> λ
+
+[1 − ψk] ≤ e−k∆2/8 .
+
+Proof. We cover the gates and leaf coefficients, bound the resulting sieve entropy, and com-bine local tests. The product-cover strategy follows Linero and Yang (2018, Supplement, Section S.2, proof of Lemma 1(1)); the testing argument follows Ghosal and van der Vaart (2017, proof of Theorem 6.23). 
+
+Step 1. Cover the gates. Let μj be the jth coordinate marginal of the probability measure 
+
+μ/V. Set 
+
+G =
+
+
+
+Gc,τ (y) := 11 + exp {− (y − c)/τ} : c ∈ [0, 1 ], τ > 0
+
+
+
+, H = {y 7 → by + c : (b, c) ∈ R2}.By van der Vaart and Wellner (1996, Lemma 2.6.15), dim (H) = 2 implies subgraph VC index at most 4. For 0 < a < 1, 
+
+a < Gc,τ (y) ⇐⇒ log a
+
+1 − a < y − c
+
+τ ,
+
+
+
+y 7 → y − c
+
+τ
+
+
+
+∈ H .Membership is fixed for a /∈ (0, 1 ), so G also has subgraph VC index at most 4. Applying Theorem 2.6.7 of van der Vaart and Wellner (1996), with envelope 1 and r = 1, yields, 
+
+N(u, G, L1(μj)) ≤ C0u−3, 0 < u < 1for a universal constant C0.To ensure the covering centers belong to G, we can take u = η/2 for η ∈ (0, 1 ). Then by covering property, there exists functions f1, . . . , fm such that m ≤ C0(η/2 )−3 and 
+
+G ⊂ ∪ mi=1{ f : ∥ f − fi∥L1(μj) ≤ η/2 }.S.12 Discard balls that do not intersect G and relabel the remaining centers. Their number still satisfies the same bound. From each remaining ball choose Gi ∈ G such that ∥Gi −
+
+fi∥L1(μj) ≤ η/2. For any G ∈ G , select i satisfying ∥G − fi∥L1(μj) ≤ η/2 then 
+
+∥G − Gi∥L1(μj) ≤ ∥ G − fi∥L1(μj) + ∥ fi − Gi∥L1(μj) ≤ η.Thus G1, . . . , Gm ∈ G form an η-cover of G and 
+
+N(η, G, L1(μj)) ≤ m ≤ CVC η−3.for η ∈ (0, 1 ), where CVC = max {1, 8 C0}.
+
+Step 2. Cover the sieve. Fix t > 0 and consider Fk = FJk,Bk . Since 0 < η := t2
+
+2BkV J k
+
+= κt2
+
+4ξVkJ k
+
+≤ κt2
+
+4ξVk −→ 0, take k sufficiently large that η < 1 throughout this step. Fix (T, j) with L ≤ Jk leaves. Write 
+
+f = ∑
+
+> v∈L (T)
+
+λvϕgv , f ′ = ∑
+
+> v∈L (T)
+
+λ′
+
+> v
+
+ϕg′ 
+
+> v
+
+.If the leaf coefficients agree and g, g′ differ only at node v, the routing recursion gives 
+
+f − f ′ = ϕv(gv − g′
+
+> v
+
+)( fv,r − fv,l ), 0 ≤ ϕv ≤ 1, 0 ≤ fv,l , fv,r ≤ Bk,where fv,l , fv,r are the child-subtree intensities, with initial routing weight 1 at each child. Enumerate the internal nodes as v1, . . . , vm, where m = L − 1. Let f (i) use the new gates at v1, . . . , vi, the original gates elsewhere, and the original leaf coefficients. Then 
+
+f (0) = f , f (m) = ∑
+
+> v∈L
+
+λvϕg′ 
+
+> v
+
+, f ′ = ∑
+
+> v∈L
+
+λ′
+
+> v
+
+ϕg′ 
+
+> v
+
+.Observe that | f (i−1)(x) − f (i)(x)| ≤ Bk|gvi (x) − g′ 
+
+> vi
+
+(x)|. Then telescoping sum yields 
+
+∥ f − f ′∥1 =
+
+Z
+
+> D
+
+| f (x) − f ′(x)|μ(dx)=
+
+Z
+
+> D
+> m
+
+# ∑
+
+> i=1
+
+[ f (i−1)(x) − f (i)(x)] + ∑
+
+> v∈L
+
+(λv − λ′
+
+> v
+
+)ϕg′ 
+
+> v
+
+(x) μ(dx)
+
+≤
+
+> m
+
+# ∑
+
+> i=1
+
+Z
+
+> D
+
+| f (i−1)(x) − f (i)(x)|μ(dx) + 
+
+Z 
+
+> D
+
+# ∑
+
+> v∈L
+
+|λv − λ′
+
+> v
+
+|ϕg′ 
+
+> v
+
+(x)μ(dx)
+
+≤ Bk ∑
+
+> v∈I
+
+∥gv − g′
+
+> v
+
+∥1 + V∥λ − λ′∥∞
+
+where the last inequality uses ∑v∈L ϕg′ 
+
+> v
+
+(x) = 1 and V = R 
+
+> D
+
+1μ(dx).S.13 We allocate at most t2/2 to each term in the preceding L1(μ) bound. For the coefficient term, this requires 
+
+V∥λ − λ′∥∞ ≤ t2
+
+2 ⇐⇒ ∥λ − λ′∥∞ ≤ t2
+
+2V .Set 
+
+a = t2
+
+2V , At = {ia : i = 0, . . . , ⌊Bk/a⌋} ∪ { Bk}.The gap between consecutive grid points is at most a. For every λ ∈ [0, Bk]L, choosing 
+
+λ′ 
+
+> v
+
+= a⌊λv/a⌋ ∈ A t gives 0 ≤ λv − λ′ 
+
+> v
+
+< a, V∥λ − λ′∥∞ ≤ Va = V t2
+
+2V = t2
+
+2 .The product grid for the L coefficients has cardinality 
+
+|A Lt | = |A t|L ≤
+
+ Bk
+
+a
+
+
+
++ 2
+
+L
+
+≤
+
+
+
+2 + Bk
+
+a
+
+L
+
+=
+
+
+
+2 + 2BkVt2
+
+L
+
+.For the gates, write gv(x) = Gv(xjv ) and g′
+
+> v
+
+(x) = G′
+
+> v
+
+(xjv ), with Gv, G′ 
+
+> v
+
+∈ G . A gate cover of radius η in L1(μjv ) permits a choice satisfying 
+
+∥gv − g′
+
+> v
+
+∥1 = V∥Gv − G′
+
+> v
+
+∥L1(μjv ) ≤ Vη.There are L − 1 internal nodes, so the choice η = t2/(2BkV J k) ensures 
+
+Bk ∑
+
+> v∈I (T)
+
+∥gv − g′
+
+> v
+
+∥1 ≤ BkV(L − 1)η ≤ BkV J kη = BkV J k
+
+t2
+
+2BkV J k
+
+= t2
+
+2 .Since 0 < η < 1, Step 1 bounds the number of choices at each node by 
+
+N(η, G, L1(μjv )) ≤ CVC η−3 = CVC 
+
+ 1
+
+t2/(2BkV J k)
+
+3
+
+= CVC 
+
+ 2BkV J k
+
+t2
+
+3
+
+.Taking the product of these covers over the L − 1 internal nodes therefore gives at most 
+
+(
+
+CVC 
+
+ 2BkV J k
+
+t2
+
+3)L−1
+
+gate configurations. Every f has an approximating intensity f ′ formed from the coefficient grid and these gate covers, with 
+
+∥ f − f ′∥1 ≤ V∥λ − λ′∥∞ + Bk ∑
+
+> v∈I (T)
+
+∥gv − g′
+
+> v
+
+∥1 ≤ t2
+
+2 + t2
+
+2 = t2.S.14 The Catalan count (Stanley, 1999, Exercise 6.19(d)) gives 
+
+> Jk
+
+# ∑
+
+> L=1
+
+1
+
+L
+
+2L − 2
+
+L − 1
+
+
+
+dL−1 ≤ Jk(4d)Jk −1.Using L ≤ Jk in the coefficient and gate bound and multiplying by the topology and axis count yield λ1, . . . , λN ∈ E Jk,Bk ⊆ F k, with N bounded by the right-hand side of (S.6). Note that ∀ f ∈ E Jk,Bk , there exists i ∈ { 1, . . . , N} : ∥ f − λi∥1 ≤ t2. Thus 
+
+EJk,Bk ⊆
+
+> N[
+> i=1
+
+{λ ∈ L1(μ) : ∥λ − λi∥1 ≤ t2}.For each i, the reverse triangle inequality gives 
+
+∥λ − λi∥1 − ∥ λ′ − λi∥1 ≤ ∥ λ − λ′∥1.Thus λ 7 → ∥ λ − λi∥1 is continuous in L1(μ), so each displayed ball is closed. Their union is closed because N < ∞. Taking the L1(μ) closure of the first inclusion therefore yields 
+
+Fk ⊆
+
+> N[
+> i=1
+
+{λ ∈ L1(μ) : ∥λ − λi∥1 ≤ t2}.For λ, λ′ ∈ Θ, we adapt the argument in the proof of Ghosal and van der Vaart (2017, Lemma B.1(i)–(ii), pp. 517–518), stated there for probability densities, to the present nonnegative, integrable intensities. First, for a, b ≥ 0, 
+
+|√a − √b| ≤ √a + √b, (√a − √b)2 ≤ | √a − √b|(√a + √b) = |a − b|.Taking a = λ(x) and b = λ′(x) for μ-a.e. x and integrating gives 
+
+d2 
+
+> H
+
+(λ, λ′) = 
+
+> Z
+> D
+
+(√λ − √λ′)2 dμ ≤
+
+> Z
+> D
+
+|λ − λ′| dμ = ∥λ − λ′∥1. (S.5) Moreover, integrability gives 
+
+∥√λ∥22 =
+
+> Z
+> D
+
+λ dμ < ∞, ∥√λ′∥22 =
+
+> Z
+> D
+
+λ′ dμ < ∞.Thus |√λ − √λ′| and √λ + √λ′ belong to L2(μ). It follows from Cauchy–Schwarz and the L2(μ) triangle inequality that 
+
+∥λ − λ′∥1 =
+
+> Z
+> D
+
+|√λ − √λ′|(√λ + √λ′) dμ
+
+≤
+
+Z
+
+> D
+
+(√λ − √λ′)2 dμ
+
+1/2 Z
+
+> D
+
+(√λ + √λ′)2 dμ
+
+1/2 
+
+S.15 = dH (λ, λ′)∥√λ + √λ′∥2
+
+≤ dH (λ, λ′) ∥√λ∥2 + ∥√λ′∥2
+
+.In particular, (S.5) gives 
+
+∥λ − λi∥1 ≤ t2 =⇒ dH (λ, λi) ≤ t.The previously constructed cover therefore satisfies 
+
+Fk ⊆
+
+> N
+
+[
+
+> i=1
+
+{λ ∈ Θ : dH (λ, λi) ≤ t}, λi ∈ F k.For each topology and axis assignment with L ≤ Jk leaves, the coefficient and gate covers give at most 
+
+2 + 2BkVt2
+
+L
+
+(CVC η−3)L−1
+
+centers. There are L−1(2L−2 
+
+> L−1
+
+)dL−1 such topology–axis combinations. The resulting closed 
+
+L1(μ)-balls also cover Fk and lead to a Hellinger cover of radius t since d2 
+
+> H
+
+≤ ∥ · ∥ 1.For each fixed t > 0 and sufficiently large k, we have 0 < η < 1 and CVC η−3 ≥ 1. Thus 
+
+N(t, Fk, dH ) ≤
+
+> Jk
+
+# ∑
+
+> L=1
+
+1
+
+L
+
+2L − 2
+
+L − 1
+
+
+
+dL−1
+
+
+
+2 + 2BkVt2
+
+L
+
+(CVC η−3)L−1
+
+≤
+
+
+
+2 + 2BkVt2
+
+Jk
+
+(CVC η−3)Jk −1
+
+> Jk
+
+# ∑
+
+> L=1
+
+(4d)L−1
+
+≤ Jk(4d)Jk −1
+
+
+
+2 + 2BkVt2
+
+Jk
+
+(
+
+CVC 
+
+ 2BkV J k
+
+t2
+
+3)Jk −1
+
+, (S.6) where we used L−1(2L−2 
+
+> L−1
+
+) ≤ 4L−1 and η = t2/(2BkV J k).
+
+Step 3. Bound the entropy growth. The leaf-intensity bound remains Bk = 2ξk/κ, as in Step 2. For fixed t > 0, this choice and Jk ≤ k eventually give log (2 + 2BkV/t2) = log k + Ot(1), log (2BkV J k/t2) ≤ 2 log k + Ot(1).Here the constants in Ot(·) may depend on t and the fixed model parameters, but not on k.It follows from Eqs. (S.3) and (S.6) that log N(t, Fk, dH ) ≤ 7Jk log k + Ot(Jk + log Jk), lim sup 
+
+> k→∞
+
+1
+
+k log N(t, Fk, dH ) ≤ 7δ = 7∆2
+
+128 < ∆2
+
+16 .
+
+Step 4. Construct and combine tests. We use the finite-cover testing construction in Ghosal and van der Vaart (2017, proof of Theorem 6.23, p. 142). For probability densities p, q with S.16 respect to Q, write dTV (p, q) = 12 ∥p − q∥L1(Q). The Poisson affinity formula in Leskel¨ a(2024, Theorem 7), together with Ghosal and van der Vaart (2017, Lemma B.1(i)–(ii)), gives 1 − e−d2  
+
+> H(λ,λ′)/2
+
+≤ dTV (pλ, pλ′ ), dTV (pλ, pλ′ ) ≤
+
+q
+
+1 − e−d2  
+
+> H(λ,λ′)
+
+≤ dH (λ, λ′). (S.7) Recall ∆ = 1 − e−ϵ2/2 and put 
+
+Ek = Fk ∩ Aϵ, Nk = N(∆/8, Fk, dH ).By Step 3, log Nk ≤ k∆2/16 for all sufficiently large k. If Ek = ∅, take ψk = 0. Otherwise, take an Nk-ball cover of Fk of radius ∆/8. Retain only balls intersecting Ek, let Mk be their number, and choose a new center λk,j in each intersection. The triangle inequality increases the covering radius to at most ∆/8 + ∆/8 = ∆/4, so 
+
+Ek ⊆
+
+> Mk
+
+[
+
+> j=1
+
+{λ ∈ Θ : dH (λ, λk,j) ≤ ∆/4 }, λk,j ∈ Ek, Mk ≤ Nk.For each j = 1, . . . , Mk, (S.7) gives 
+
+dTV (p0, pλk,j ) ≥ 1 − e−d2  
+
+> H(λ0,λk,j)/2
+
+> ∆, dH (λ, λk,j) ≤ ∆/4 =⇒ dTV (pλ, pλk,j ) ≤ ∆/4 < ∆/2. On the convex class of all Q-densities, total variation balls are convex, since dTV (p, q) =  
+
+> 12
+
+∥p − q∥L1(Q). Moreover, dTV (p, q) ≤ ∥ √p − √q∥L2(Q) by Ghosal and van der Vaart (2017, Lemma B.1(i)). Thus it follows from Ghosal and van der Vaart (2017, Proposition D.8, p. 540) that 
+
+d = dTV , p = p0, q = pλk,j , n = k, ε = ∆, c = 1, which yields measurable tests ψk,j = ψk,j(X(k)) ∈ [0, 1 ].By the preceding implication, these tests satisfy 
+
+E(k) 
+
+> 0
+
+[ψk,j] ≤ e−k∆2/8 , sup  
+
+> λ∈Θ
+> dH(λ,λk,j)≤∆/4
+
+E(k) 
+
+> λ
+
+[1 − ψk,j] ≤ e−k∆2/8 .Define ψk = max 1≤j≤Mk ψk,j. Using ψk ≤ ∑j ψk,j, 1 − ψk ≤ 1 − ψk,j, and the cover of Ek
+
+yields 
+
+E(k) 
+
+> 0
+
+[ψk] ≤ Mke−k∆2/8 ≤ exp {log Nk − k∆2/8 } ≤ e−k∆2/16 ,sup 
+
+> λ∈Ek
+
+E(k) 
+
+> λ
+
+[1 − ψk] ≤ max 
+
+> 1≤j≤Mk
+
+sup  
+
+> λ∈Θ
+> dH(λ,λk,j)≤∆/4
+
+E(k) 
+
+> λ
+
+[1 − ψk,j] ≤ e−k∆2/8 .Thus C3 holds with c2 = ∆2/16 and c3 = ∆2/8. S.17 S.3.5 Proof of Theorem 1 
+
+Proof of Theorem 1. We first verify measurability of the KL neighborhoods. Suppose λn, λ ∈
+
+Θ and ∥λn − λ∥L1(μ) → 0. It follows from Equations (S.5) and (S.7) that 
+
+∥pλn − pλ∥L1(Q) ≤ 2dH (λn, λ) ≤ 2∥λn − λ∥1/2  
+
+> L1(μ)
+
+−→ 0. Note that Ghosal and van der Vaart (2017, Lemma B.4, p. 520) proves 
+
+K(p0; pλ) ≤ lim inf  
+
+> n→∞
+
+K(p0; pλn ).For a ∈ R, set Ca = {λ ∈ Θ : K(p0; pλ) ≤ a}. The preceding inequality implies 
+
+λn ∈ Ca, ∥λn − λ∥L1(μ) → 0 =⇒ K(p0; pλ) ≤ lim inf  
+
+> n
+
+K(p0; pλn ) ≤ a.Thus Ca is closed in the metric space Θ. The Borel σ-field B(Θ) contains closed sets and their countable unions; therefore, for every η > 0, 
+
+{λ ∈ Θ : K(p0; pλ) < η} =
+
+> ∞
+
+[
+
+> m=1
+
+Cη−1/ m ∈ B (Θ).It follows from Lemma 1 and Assumptions 1–3, that C1 holds true: 
+
+Π{λ : K(p0; pλ) < η} > 0 (η > 0).Fix ϵ > 0 and use the sieve construction and Lemmas 3–4 with radius ϵ/2. To specify the density model in the consistency theorem, let 
+
+P = {pλ : λ ∈ Θ} ⊂ L1(Q),with densities identified Q-almost everywhere and P equipped with the subspace topology inherited from L1(Q). The map 
+
+(Θ, ∥ · ∥ L1(μ)) −→ (P, ∥ · ∥ L1(Q)), λ 7 −→ pλ,is one-to-one by (S.7). Therefore, 
+
+pλ = pλ′ Q-a.e. =⇒ 1 − e−d2  
+
+> H(λ,λ′)/2
+
+= 0 =⇒ λ = λ′ μ-a.e. Its continuity follows from the first display of the proof. Conversely, it follows from (S.7) and the Cauchy–Schwarz bound proved in Lemma 4 that 
+
+∥pλn − pλ∥L1(Q) → 0 =⇒ 0 ≤ 1 − e−d2  
+
+> H(λn,λ)/2
+
+≤ 12 ∥pλn − pλ∥L1(Q) → 0, 
+
+dH (λn, λ) → 0, ∥λn − λ∥L1(μ) ≤ dH (λn, λ){dH (λn, λ) + 2∥√λ∥L2(μ)} → 0. S.18 Thus the inverse is continuous. The displayed map is a homeomorphism between these two metric spaces. In particular, it carries Borel sets of Θ to Borel sets of P.Define, within P,
+
+Uϵ = {pλ : dH (λ, λ0) < ϵ}, Pk,1 = {pλ : λ ∈ F k}, Pk,2 = {pλ : λ ∈ F ck }.The preceding bounds show that dH and the L1(μ) metric induce the same topology on Θ.Consequently, (U1/ m)m≥1 is a countable open neighborhood base at p0, and Pk,1 , Pk,2 form a Borel partition of P. Moreover, 
+
+{λ : pλ ∈ P k,1 ∩ Uc
+
+> ϵ
+
+} = Fk ∩ { λ : dH (λ, λ0) ≥ ϵ} ⊆ F k ∩ Aϵ/2 .Choose 0 < C < min {c1, c2, c3}, with the constants from C2–C3 at radius ϵ/2. For all sufficiently large k, we have 
+
+E(k) 
+
+> 0
+
+[ψk] ≤ e−c2k < e−Ck ,sup 
+
+> pλ∈P k,1 ∩Uc
+> ϵ
+
+E(k) 
+
+> λ
+
+[1 − ψk] ≤ sup  
+
+> λ∈F k∩Aϵ/2
+
+E(k) 
+
+> λ
+
+[1 − ψk] ≤ e−c3k < e−Ck ,
+
+Π{λ : pλ ∈ P k,2 } = Π(F ck ) ≤ e−c1k < e−Ck .Define the induced prior on P by 
+
+ΠP (B) := Π{λ : pλ ∈ B}, B ∈ B (P ).By C1 and the preceding bounds, Ghosal and van der Vaart (2017, Theorem 6.17, final assertion, pp. 139–140) applies. Bayes’ formula then gives 
+
+Π{λ : dH (λ, λ0) ≥ ϵ | X(k)} = ΠP (Uc 
+
+> ϵ
+
+| X(k)) −→ 0 P∞ 
+
+> 0
+
+-a.s. For m ≥ 1, put 
+
+Em = { lim  
+
+> k→∞
+
+Π(A1/ m | X(k)) = 0}.Then 
+
+P∞ 
+
+> 0
+
+(Em) = 1, P∞
+
+> 0
+> ∞
+
+\
+
+> m=1
+
+Em
+
+!
+
+= 1. On this intersection, for every ϵ > 0 choose m such that 1/ m < ϵ. Since Aϵ ⊆ A1/ m,0 ≤ Π(Aϵ | X(k)) ≤ Π(A1/ m | X(k)) −→ 0. This proves strong consistency as defined in Definition 1. S.19

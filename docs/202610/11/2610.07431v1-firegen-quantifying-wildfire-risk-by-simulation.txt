@@ -1,0 +1,805 @@
+Title: FireGen: Quantifying Wildfire Risk by Simulation
+
+URL Source: https://arxiv.org/pdf/2610.07431v1
+
+Published Time: Wed, 07 Oct 2026 00:37:59 GMT
+
+Number of Pages: 78
+
+Markdown Content:
+# FireGen: Quantifying Wildfire Risk by Simulation 
+
+Allyson Hineman 1, William Kleiber 2, Stephan Sain 3, and Alexis Hoffman 4
+
+July 20, 2026 
+
+Abstract 
+
+Wildfire regimes in Northern California exhibit strong spatio-temporal variability, heavy-tailed fire size distributions, and sensitivity to climatic conditions. We develop a hierarchical statistical framework to model wildfire occurrence, geometry, and burned area in Northern California from 1984-2023. Fire centroids are modeled as a spatio-temporal point process with covariate-driven intensity, extended by a multiplicative gamma-based stochastic shock to better capture the distribution of monthly fire counts. Conditional on fire location, burned area polygons are represented using a parametric ellipse model that separates scale, shape, and orientation, with ellipse parameters estimated from standardized fire perimeters. Total burned area is modeled using a heteroskedastic lognormal regression incorporating climatic and spatial covariates, including vapor pressure deficit anomalies. The framework enables Monte Carlo simulation of wildfire processes and provides a probabilistic tool for assessing wildfire risk and cumulative burned area under observed climate variability. Keywords: Wildfire modeling; spatio-temporal point processes; hierarchical models; ellipse approximation; lognormal regression; Monte Carlo simulation 
+
+# 1 Introduction 
+
+Wildfires are a major ecological and societal hazard throughout many regions of the world, with particularly severe impacts in the western United States. In California, wildfire activity has increased 
+
+> 1
+
+Department of Applied Mathematics, University of Colorado Boulder. Author e-mail: 
+
+allyson.hineman@colorado.edu 
+
+> 2
+
+Department of Applied Mathematics, University of Colorado Boulder. Author e-mail: 
+
+william.kleiber@colorado.edu 
+
+> 3
+
+Jupiter Intelligence. Author e-mail: steve.sain@jupiterintel.com 
+
+> 4
+
+Jupiter Intelligence. Author e-mail: alexis.hoffman@jupiterintel.com 
+
+1arXiv:2610.07431v1 [stat.AP] 5 Oct 2026 substantially in recent decades, contributing to widespread ecological damage, infrastructure loss, smoke-related air quality issues, and threats to human health and safety (Westerling et al., 2006; Abatzoglou and Williams, 2016; Williams et al., 2019). The Intergovernmental Panel on Climate Change (IPCC) and the U.S. National Climate Assessment identify wildfire as a key climate-sensitive hazard in western North America, with increasing fire weather and expanding exposure jointly amplifying risk (Intergovernmental Panel on Climate Change, 2021; U.S. Global Change Research Program, 2023). A substantial body of work attributes increasing wildfire activity to warming temperatures, increased atmospheric moisture demand, prolonged drought, declining snowpack, and shifts in vegetation and fuel aridity (Abatzoglou and Williams, 2016; Holden et al., 2018; Williams et al., 2019). These changes have lengthened fire seasons and increased fire-conducive conditions, while continued expansion of the wildland–urban interface has increased human exposure to wildfire hazards (Dong et al., 2022; Radeloff et al., 2018). As a result, both wildfire hazard and societal exposure are increasing across much of the western United States. Wildfire behavior emerges from complex interactions among climate, fuels, vegetation, topog-raphy, ignition processes, and human activity across multiple spatial and temporal scales (Moritz et al., 2005; Littell et al., 2009). Consistent with this complexity, fire size distributions are highly skewed and heavy-tailed, with a small number of large fires accounting for a disproportionate share of total burned area (Strauss et al., 1989; Malamud et al., 1998). This inherent variability makes probabilistic methods well suited for wildfire risk assessment (Reed and Hughes, 2002), highlighting that aggregate wildfire impacts are dominated by extreme events. 
+
+# 1.1 Mechanistic and Statistical Wildfire Modeling 
+
+Mechanistic approaches to wildfire modeling explicitly simulate the processes governing wildfire spread. These models typically integrate fuels, weather, and topographic information to represent fire behavior (Finney, 2006). Mechanistic modeling encompasses physical, empirical, and stochas-2tic representations of fire dynamics (Sullivan, 2009a,b,c). Recent developments have incorporated probabilistic representations of uncertainty through Bayesian and stochastic fire spread models (Yoo and Wikle, 2024; Grieshop and Wikle, 2024). Related frameworks such as FSim address large-scale risk assessment by simulating thousands of hypothetical fire seasons, but similarly require extensive environmental data and computational resources (Finney et al., 2011). Statistical models have played a central role in large-scale wildfire analysis by relating wildfire occurrence and burned area to climatic and environmental drivers. Such approaches have demon-strated strong links between climate variability, anthropogenic warming, and wildfire activity across diverse ecosystems (Preisler et al., 2004; Littell et al., 2009; Turco et al., 2018). These studies show that statistical models can effectively capture broad climate-fire relationships without explicitly resolving fire spread dynamics. More recently, machine learning and deep learning methods have been applied to wildfire prediction and climate-fire interaction modeling, including work by Richards et al. (2023) on extreme Mediterranean wildfires. However, many such approaches prioritize predictive accuracy over generative consistency and are not designed to produce coherent stochastic realizations of wildfire events or full probabilistic representations of uncertainty. A complementary statistical framework for wildfire occurrence is based on spatial and spatio-temporal point processes. Inhomogeneous Poisson point process models allow wildfire intensity to vary continuously over space and time as a function of environmental and climatic drivers (Diggle, 2013; Baddeley et al., 2015), and such models have been widely applied to wildfire ignition and occurrence data (Hering et al., 2009; Serra et al., 2014). Notably, wildfire occurrence often exhibits clustering and variability beyond standard Poisson assumptions, so stochastic extensions such as Cox processes, log-Gaussian Cox processes, and hierarchical Bayesian models have been developed to represent latent environmental variability and multiscale dependence (Cox, 1955; Møller et al., 1998; Diggle et al., 2013; Wikle, 2003; Banerjee et al., 2014). Separate statistical models have also been developed for wildfire burned area distributions. Due 3to the inherent variability, uncertainty, and complex behavior of wildfire growth, burned area is commonly modeled using statistical distributions with heavy tails to capture the extreme skewness of observed fire sizes (Ricotta et al., 1999; Reed and McKelvey, 2002; Schoenberg et al., 2003; Cumming, 2001; Joseph et al., 2019). Further work shows that incorporating climate variability and drought indices improves explanation of regional fire size dynamics (Barbero et al., 2015; Wang et al., 2020). In particular, vapor pressure deficit has emerged as a key driver linking atmospheric dryness to both ignition probability and fire growth potential (Abatzoglou and Williams, 2016; Williams et al., 2019). Despite these advances, wildfire occurrence and burned area are often modeled separately rather than within a unified generative framework. In addition, relatively few statistical wildfire models explicitly generate spatial burned area polygons suitable for simulation-based risk analysis. Many instead reduce fire outcomes to scalar summaries such as counts or total burned area, limiting their usefulness for exposure and impact modeling. Simulation frameworks that generate ensembles of full wildfire realizations provide a natural alternative, preserving spatial dependence while enabling Monte Carlo estimation of downstream risk (Williams et al., 2026). 
+
+# 1.2 Overview of This Study 
+
+This study focuses on generative models of wildfire characteristics, including locations, burned area and burn pattern geometry. This should be contrasted against predictive approaches that focus on wildfire spread that can be used in real-time forecasting. Our goal is to capture distributional behavior of fire that can be used in offline risk assessment efforts. Wildfire occurrence is mod-eled as a spatio-temporal point process whose intensity depends on environmental covariates and seasonal forcing. To account for extreme wildfire months beyond what is captured by determin-istic climate covariates alone, we introduce a multiplicative stochastic shock process that varies over time. Conditional on wildfire occurrence, burned area polygons are represented through a simplified geometric approximation in which fire perimeters are modeled as randomly-oriented 4ellipses with stochastic area and shape parameters. This representation separates wildfire geom-etry into interpretable components, including orientation, elongation, and scale, while remaining computationally tractable for large-scale simulation. The framework is illustrated using wildfire perimeter data together with climate covariates. It supports direct simulation of complete wildfire realizations under observed or future climate conditions, enabling probabilistic characterization of wildfire risk and its associated uncertainty over time. Our approach complements recent stochastic simulators such as WULFFSS (Williams et al., 2026), which simulate wildfire activity at a monthly grid-cell level, by modeling individual wildfire events and jointly generating their occurrence, burned area, and spatial geometry within a unified hierarchical statistical model. By generating ensembles of plausible wildfire realizations, our model captures both typical wildfire behavior and rare high-impact events while preserving event-level spatial structure relevant for risk assessment and impact modeling. The remainder of this paper is organized as follows. Section 2 introduces the study region and wildfire and other datasets used in the analysis. Section 3 presents the hierarchical statistical framework for wildfire occurrence, burned area, and geometric fire representation together with estimation procedures. Section 4 evaluates model performance and illustrates simulation behav-ior across Northern California. Finally, Section 5 concludes with discussion of the framework, limitations, and directions for future work. 
+
+# 2 Data 
+
+This section describes the study region, wildfire dataset, and covariate data used in our analysis. 
+
+# 2.1 Study Region 
+
+Our analysis focuses on a portion of Northern California bounded by longitudes −124 .5𝑜 to −120 𝑜 
+
+and latitudes 38 .3𝑜 to 42 𝑜 . This bounding box encompasses a diversity of landscapes, including 5coastal ranges, interior valleys, and forested mountain regions, capturing the range of conditions under which wildfires occur in the region. To contextualize fire occurrence within ecological and fire management zones, we intersected the bounding box with pyrome boundaries, as shown in Figure 1. Pyromes are spatial regions defined by similar historical wildfire regimes, based on observed patterns of fire frequency, size, and behavior (Short et al., 2020). Only the portions of each pyrome that fall within the study region are retained. Fires are assigned to a pyrome if the centroid of the burned area polygon falls within the corresponding pyrome region intersecting the study bounding box. 
+
+Figure 1: Pyrome boundaries within the Northern California study region. 
+
+# 2.2 MTBS 
+
+Wildfire occurrence and burned area data are obtained from the Monitoring Trends in Burn Severity (MTBS) dataset, which provides spatially explicit fire perimeter polygons and ignition dates for large fires across the United States (U.S. Geological Survey and U.S. Forest Service, 2025). In the western U.S., MTBS defines a fire as an event burning at least 1,000 acres (approximately 405 ha), while in the eastern U.S., the threshold is 500 acres (approximately 202 ha). For this study, we restrict fires to the Northern California subregion defined in Section 2.1 during 1984–2023. Only fires classified by MTBS as wildfire or unknown are retained; prescribed 
+
+6burns and wildland fire use incidents are excluded to focus on unplanned wildfire events. Wildfire characteristics include ignition date, burned area and location defined by the polygon’s centroid. 
+
+# 2.3 ERA5 
+
+Climate covariates are obtained from the ECMWF Reanalysis 5th Generation ERA5 product, a global atmospheric dataset produced by the European Centre for Medium-Range Weather Fore-casts (Hersbach et al., 2020). Monthly fields of mean temperature, maximum temperature, wind speed, total precipitation, mean and minimum relative humidity, standardized precipitation evapo-transpiration index (SPEI), and vapor pressure deficit (VPD) are extracted at 0 .25 ◦ × 0.25 ◦ spatial resolution and aggregated to each pyrome by averaging grid-cell values within the pyrome boundary. For each climate variable, monthly climatologies are calculated by averaging values from 1983– 2024 within each calendar month. Climate anomalies are then defined as departures from these monthly climatologies. In particular, VPD anomalies represent deviations from the long-term monthly mean, providing a measure of anomalous atmospheric moisture demand. To account for delayed wildfire responses, lagged climate metrics are also computed as averages over the preceding one-, two-, and three-month periods. To assess sensitivity to different representations of atmospheric moisture demand, additional candidate predictors include multiple summaries of monthly VPD, including the mean, minimum, maximum, median, and 25th and 75th percentile values. 
+
+# 2.4 Elevation 
+
+Elevation is included as a spatial covariate to capture topographic influences on wildfire occur-rence and behavior. Higher or lower elevations can affect vegetation types, fuel availability, and microclimate conditions, all of which may influence fire risk and spread. Gridded elevation data are obtained from the MERIT digital elevation model and resampled to 100m spatial resolution (Yamazaki et al., 2017). 73 Methods 
+
+In this section, we detail a statistical model for wildfire burned areas, a proposed estimation procedure, and how the model can be used to simulate burned area polygons under different climate conditions. The model includes distinct components for fire occurrence (location) and fire size (burned area). We refer to ‘burned area’ as the spatial extent of a wildfire event, represented as a polygon in geospatial data. 
+
+# 3.1 Model 
+
+We propose a hierarchical approach to modeling wildfire burned area polygons, consistent with general hierarchical spatial modeling frameworks (Wikle, 2003; Banerjee et al., 2014). At the first level, we model the spatio-temporal distribution of fire event locations represented by the centroids of burned area polygons. For each event, we assume the resulting burned area polygon is approximately elliptical, a simplifying assumption sometimes used in wildfire spread modeling (Anderson, 1983). Conditional on time and location, the second level specifies a simple geometric model for the shape of the burned area polygon consistent with this elliptical assumption, and the final layer simulates the total area burned. 
+
+3.1.1 Fire Location Model 
+
+The first level of the hierarchical model concentrates on the location of fires. We represent wildfire occurrences as a spatio-temporal point pattern observed over a spatial domain S ⊂ R2
+
+and a temporal interval T ⊂ R, where R denotes the set of real numbers and R+ = (0, ∞) the positive real line. Point process models are widely used for wildfire occurrence data and related environmental applications (Diggle, 2013; Baddeley et al., 2015). Points are interpreted as the centroid (i.e., the geometric center) of a burned area polygon. Let 𝑋 = {( s𝑖 , 𝑡 𝑖 )} 𝑁 𝑖 =1 denote the points within S × T where s𝑖 ∈ S is the spatial location of the 𝑖 -th wildfire centroid, 𝑡 𝑖 ∈ T denotes 8the time of occurrence, and 𝑁 is the total number of wildfires within S × T .We start with a baseline model for for the space-time point process 𝑋 , assuming it is an inhomogeneous Poisson point process, characterized by an intensity function 𝜆 (s, 𝑡 ) : S × T → R+
+
+(Diggle, 2013). The intensity function defines the expected rate of wildfire occurrence across space and time, with higher values indicating regions and periods with greater expected fire activity. The baseline intensity is specified using a log-linear form 
+
+𝜆 (s, 𝑡 ) = exp ©«
+
+𝛽 0 +
+
+> 𝐽
+
+∑︁ 
+
+> 𝑗 =1
+
+𝛽 𝑍, 𝑗 𝑍 𝑗 (s) + 
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+𝛽 𝑌 ,𝑘 𝑌 𝑘 (𝑡 )ª®¬
+
+where {𝑍 𝑗 (s)} 𝐽 𝑗 =1 represent spatial covariates defined on S, {𝑌 𝑘 (𝑡 )} 𝐾 𝑘 =1 represent temporal covari-ates defined on T , and 𝛽 0, {𝛽 𝑍, 𝑗 }𝐽 𝑗 =1, and {𝛽 𝑌 ,𝑘 }𝐾 𝑘 =1 are parameters to be estimated. The log-linear specification is standard in spatio-temporal point process modeling (Diggle, 2013) and includes a separable intensity function with distinct spatial and temporal components. The spatial covariates control relative variation across space while temporal covariates scale the spatial intensity surface over time. Although nonseparable intensity functions can be imagined, we find a separable model works well for our example below. While the baseline model allows for spatial and temporal variation in the mean event rate, it maintains the Poisson property that variance equals the mean conditional on the intensity. Introducing stochastic behavior in the intensity surface is a common approach, which are broadly referred to as Cox models (Cox, 1955). We consider a simple extension of the baseline model specific to our application by introducing a multiplicative stochastic shock term to the intensity surface that varies in time. Specifically, the full model has intensity function 𝑈 𝑡 𝜆 (s, 𝑡 ), where 
+
+𝑈 𝑡 = 𝐺 𝛾 𝑡 , 𝐺 𝑡 ∼ Gamma (𝛼, 𝛼 ), (1) with rate 𝛼 > 0 controlling the variability in fire activity over time and 𝛾 ≥ 0 controlling how strongly the shock influences the intensity. We model the variables {𝑈 𝑡 |𝑡 ∈ T } as independent over 9the index 𝑡 . Conditional on 𝑈 𝑡 , the process remains Poisson, but this relaxes the strict mean–variance relationship implied by the baseline model (see Supplement Section S1). Such excess temporal variability and departures from simple Poisson assumptions are commonly observed in wildfire occurrence data (Littell et al., 2009; Turco et al., 2018). The shock term can therefore accommodate temporal fluctuations in wildfire activity that are not explained by the observed covariates alone. The scientific motivation for introducing the time-varying (but not spatially-varying) stochastic shock term is that the climate variables in our application are monthly averages, whereas wildfire occurrence is often influenced by higher-frequency local weather variation and other unobserved factors. Consequently, 𝑈 𝑡 may be interpreted as a latent temporal adjustment capturing residual variability in wildfire activity beyond that explained by the observed temporal covariates {𝑌 𝑘 (𝑡 )} .
+
+3.1.2 Shape and Area Model 
+
+Conditional on the location of fire occurrence, we turn to modeling burned area and polygon shape. Burned area polygons exhibit complicated edge patterns that depend on local land characteristics and firefighter response behavior. Mechanistic fire spread models such as FARSITE are widely used to simulate these dynamics in physically based settings (Finney, 1998; Sullivan, 2009a,b,c) In this work we consider a simplified representation of burned area polygons that aims to cap-ture the area and general orientation of burns. Specifically, we approximate the complex polygonal geometries using parametric ellipses capturing key geometric features including orientation, ec-centricity, and scale, following classical wind-driven fire shape approximations (Anderson, 1983). To this end, we develop separate models for the area and shape of the burned area. An ellipse can be parameterized geometrically by its semi-major axis 𝑎 > 0, semi-minor axis 
+
+𝑏 > 0 with 𝑎 > 𝑏 , centroid (𝑥 0, 𝑦 0), and rotational angle 𝜙 ∈ [ 0, 𝜋 ), where 𝜙 denotes the angle between the semi-major axis and the positive 𝑥 axis. In this parameterization, the area of an ellipse is 𝐴 = 𝜋𝑎𝑏 , so scaling the axes directly affects area, while axis ratio and orientation (rotation, center, and elongation) determine the shape. Equivalently, area can be cleanly separated from 10 the shape and elongation of the ellipse. To separate shape from scale, we fit ellipses to unit-area standardized polygons, yielding standardized axes 𝑎 ′, 𝑏 ′ satisfying 𝜋𝑎 ′𝑏 ′ = 1. Under this constraint, 
+
+𝑏 ′ is uniquely determined by 𝑏 ′ = 1/( 𝜋𝑎 ′), so the shape (up to rotation) can be summarized by the single axis parameter 𝑎 ′, with orientation captured separately by 𝜙 .We therefore model the triplet (𝜙, 𝑎 ′, 𝐴 ), representing orientation, shape, and scale, respectively. The full ellipse is obtained by rescaling the unit-area ellipse to area 𝐴 , which implies semi-axes 
+
+𝑎 = 𝑎 ′√𝐴 and 𝑏 = 𝑏 ′√𝐴 . Further, we assume each triplet (𝜙, 𝑎 ′, 𝐴 ) is independent across fires. Under the constraint 𝜋𝑎 ′𝑏 ′ = 1, we develop a stochastic model for the (standardized) semi-major axis 𝑎 ′ and rotational angle 𝜙 . We propose using a shifted gamma distribution for 𝑎 ′, with space-time constant parameters. Given the unit area constraint and the ordering 𝑎 ′ ≥ 𝑏 ′, 𝑎 ′ is bounded below by 𝐿 = 1/√𝜋 , so we model the shifted variable 𝑎 ′ − 𝐿 with a gamma distribution. This formulation respects the geometric lower bound, ensures positive axis lengths, and allows for right-skewed variability in ellipse elongation. The rotational angle 𝜙 summarizes the predominant orientation of each fire. We propose the simple model 𝜙 ∼ 𝑈 (0, 𝜋 ), which works well for our data domain, although more flexible Beta models can be envisioned. The total burned area 𝐴 is modeled as a spatio-temporal random variable indexed by spatial unit (pyrome) 𝑝 and time 𝑡 . To account for the strong right-skew typically observed in burned area, we assume that the shifted response follows a lognormal model: log ( 𝐴 ( 𝑝, 𝑡 ) − 𝑐 ) ∼ N ( 𝜇 ( 𝑝, 𝑡 ), 𝜎 2 ( 𝑝 )) 
+
+where 𝑐 is a positive constant shift applied prior to the transformation, 𝜇 ( 𝑝, 𝑡 ) is the conditional mean structure, and 𝜎 2 ( 𝑝 ) is a group-specific residual variance parameter. This formulation aligns with distributional approaches emphasizing heavy-tailed wildfire size behavior (Reed and Hughes, 2002; Reed and McKelvey, 2002; Joseph et al., 2019). The mean structure is specified as: 
+
+𝜇 ( 𝑝, 𝑡 ) = 𝜂 0 +
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+𝜂 𝑘 𝑌 𝑘 (𝑡 ) + 𝜔 ( 𝑝 ),
+
+11 where 𝑌 𝑘 (𝑡 ) denotes a set of temporally varying covariates, 𝜔 ( 𝑝 ) represents spatially varying group effects, and 𝜼 = (𝜂 0, 𝜂 1, . . . , 𝜂 𝐾 )⊤ is the vector of regression coefficients. This formulation separates temporal and spatial sources of variability in the burned area pro-cess. Temporal variation is represented through time-dependent covariates in the mean structure, allowing the expected burned area to evolve systematically in response to seasonal and climatic forcing. Spatial heterogeneity is incorporated through group-specific mean effects and through heteroskedastic residual variances 𝜎 2 ( 𝑝 ), permitting different regions to exhibit distinct levels of unexplained variability. The resulting model provides a stochastic representation of burned area that captures systematic spatio-temporal structure while preserving residual stochastic variability. 
+
+# 3.2 Estimation 
+
+The parameters to estimate are those associated with the point process model and the shape model. In particular, assume data are available with fire centroid locations 𝑋 = {( s𝑖 , 𝑡 𝑖 )} 𝑛 𝑖 =1, and associated burned area polygons. 
+
+3.2.1 Point Process Model Estimation 
+
+We fit the model separately for each pyrome (Banerjee et al., 2014; Cressie, 1993). Recall that there are two competing point process models – the baseline model as an inho-mogeneous Poisson process, and the full model that includes a stochastic shock amplification to the baseline’s intensity function. Both baseline and full models begin with estimating parameters controlling the space–time intensity function 𝜆 (s, 𝑡 ) by maximum likelihood. Let W ⊆ S × T 
+
+denote the spatio-temporal observation window, then the corresponding log-likelihood function for 
+
+𝜆 (𝑠, 𝑡 ) takes the standard form (Diggle, 2013; Baddeley et al., 2015): 
+
+ℓ( 𝜷 ) =
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+log 𝜆 (s𝑖 , 𝑡 𝑖 ) − 
+
+∫
+
+> W
+
+𝜆 (s, 𝑡 ) ds d𝑡 
+
+12 where 𝜷 includes all regression parameters of the log intensity surface, 𝜆 . All continuous covariates are standardized prior to estimation by subtracting their sample mean and dividing by their sample standard deviation. This scaling improves numerical stability and allows coefficient magnitudes to be compared on a common scale. The integral term in the likelihood does not have a closed-form expression; we approximate it numerically using a fine-pixel quadrature scheme, in which W is discretized into small space-time pixels of equal area 𝑞 and the intensity is evaluated at pixel centroids (Møller et al., 1998; Baddeley et al., 2015). In particular, 
+
+ℓ( 𝜷 ) ≈ 
+
+> 𝑀
+
+∑︁ 
+
+> 𝑖 =1
+
+[𝑛 𝑖 log 𝜆 (s𝑖 , 𝑡 𝑖 ) − 𝑞 𝜆 (s𝑖 , 𝑡 𝑖 )] 
+
+where 𝑛 𝑖 is the number of data points falling in the 𝑖 -th pixel (either 0 or 1) and 𝑀 is the number of pixels. The resulting approximate log-likelihood can be maximized using a L-BFGS quasi-Newton optimization algorithm (Liu and Nocedal, 1989; Nocedal and Wright, 2006). The full model includes a temporal shock process, whose parameters must also be estimated. The genesis of including such a shock process is to capture fire distribution features for which the standard Poisson process framework is inadequate (e.g., excess variability and frequent large counts), consistent with Cox process formulations (Cox, 1955; Møller et al., 1998; Diggle et al., 2013). In particular, the baseline Poisson model imposes a rigid coupling between the mean and variance of event counts, so that increased variability cannot be accommodated without distorting the mean intensity. Introducing a stochastic multiplicative shock relaxes this constraint by allowing the intensity to fluctuate over time. This decouples the mean and variance by attributing part of the dispersion to latent changes in intensity rather than the deterministic covariate-driven structure. However, these distributional qualities are difficult to investigate analytically due to the latent intensity, motivating a simulation-based framework conditional on ˆ 𝜷 .For a particular (𝛼, 𝛾 ) pair in the stochastic shock model (1), we propose simulating many space-13 time trajectories of fire counts over S × T . Then, calculate a weighted composite goodness-of-fit score defined as 
+
+𝐺𝑂𝐹 total (𝛼, 𝛾 ) = 𝑤 1 ˜𝐷 𝑄 + 𝑤 2 ˜𝐷 𝐶 + 𝑤 3 ˜𝐷 0 + 𝑤 4 ˜𝐷 1 + 𝑤 5 ˜𝐷 𝑚𝑎𝑥 
+
+where ˜ 𝐷 denotes a rescaled version of each discrepancy statistic to place all components on a com-parable scale. In particular, 𝐷 𝑄 is rescaled by its mean over the parameter grid, while 𝐷 𝐶 , 𝐷 0, 𝐷 1,
+
+and 𝐷 max are rescaled using the observed total count, observed proportions, and observed maxi-mum count, respectively. The estimates of (𝛼, 𝛾 ) are those that minimize 𝐺𝑂𝐹 total (𝛼, 𝛾 ). Due to sampling variability, we recommend calculating the composite goodness-of-fit over a grid of plau-sible parameter pairs, {( 𝛼 𝑖 , 𝛾 𝑖 )} 𝑁 𝑖 =1 from which a minimizing value can be approximated by fitting a thin plate spline to {𝐺𝑂𝐹 total (𝛼 𝑖 , 𝛾 𝑖 )} 𝑁 𝑖 =1. This provides a computationally efficient approach to optimization by avoiding an exhaustive search over a dense parameter grid. The component error statistics include a weighted quantile distance, 𝐷 𝑄 , which compares the empirical quantiles of the simulated and observed counts, following extreme-value calibration approaches (Reed and Hughes, 2002; Reed and McKelvey, 2002; Joseph et al., 2019). For quantiles 
+
+𝑝 𝑘 ∈ { 0.25 , 0.5, 0.75 , 0.90 , 0.95 , 0.99 }, the discrepancy is 
+
+𝐷 𝑄 =
+
+> 6
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑞 𝑘 (𝑄 𝑜𝑏𝑠 ( 𝑝 𝑘 ) − 𝑄 𝑠𝑖𝑚 ( 𝑝 𝑘 )) 2,
+
+where the weights 𝑞 𝑘 = {1, 1, 2, 3, 4, 7} emphasize the upper quantiles, giving additional impor-tance to extreme events. To ensure the overall magnitude of fire activity is captured, the total count error is defined as 
+
+𝐷 𝐶 =∑︁ 
+
+> 𝑡
+
+𝑁 𝑠𝑖𝑚,𝑡 −∑︁ 
+
+> 𝑡
+
+𝑁 𝑜𝑏𝑠,𝑡 ,
+
+where 𝑁 𝑠𝑖𝑚,𝑡 and 𝑁 𝑜𝑏𝑠,𝑡 denote the simulated and observed counts over time. To capture the frequency of low activity time periods, we define the proportions of time with exactly 𝑘 fires in the 14 observed and simulated data as PropObs (𝑘 ) = 1
+
+𝑇 
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+1{𝑁 obs ,𝑡 = 𝑘 }, PropSim (𝑘 ) = 1
+
+𝑇 
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+1{𝑁 sim ,𝑡 = 𝑘 }
+
+where 𝑁 obs ,𝑡 and 𝑁 sim ,𝑡 denote the observed and simulated number of wildfires in time period 𝑡 ,respectively, and 1{·} is the indicator function. The absolute discrepancies in these proportions are 
+
+𝐷 0 = |PropSim (0) − PropObs (0)| , 𝐷 1 = |PropSim (1) − PropObs (1)| .
+
+Finally, to account for months with unusually high wildfire activity, we also include the maximum count error 
+
+𝐷 𝑚𝑎𝑥 = max  
+
+> 𝑡
+
+𝑁 𝑠𝑖𝑚,𝑡 − max  
+
+> 𝑡
+
+𝑁 𝑜𝑏𝑠,𝑡 .
+
+Each discrepancy metric is included in the goodness-of-fit score, motivated by diagnostic com-parisons between simulated and observed fire-count distributions. Initial calibration based solely on weighted quantile distance produces simulations that inadequately reproduce other important distri-butional characteristics, including total counts, sparsity, and tail behavior. Additional discrepancy metrics are incorporated sequentially until the simulated distributions provide a better represen-tation of the observed distribution across extreme-event frequency, central tendency, sparsity, and tail behavior (Malamud et al., 1998; Reed and McKelvey, 2002; Schoenberg et al., 2003). We treat the weights (𝑤 1, . . . , 𝑤 5) in 𝐺𝑂𝐹 total (𝛼, 𝛾 ) as spatially-dependent hyperparameters. To propose different weight vectors per spatial region, we use a space-filling design, producing a diverse set of candidate weight vectors. For each candidate vector, we evaluate model performance using 4-fold cross-validation across decades: for each fold, we simulate counts over a grid of plausible (𝛼, 𝛾 ) values and compute the normalized discrepancy components. These components are combined according to the candidate weights to yield a fold-specific fit score. Aggregating the mean total fire count errors across folds and across multiple data subsets, we have a grid of plausible parameters to which we fit a thin plate spline and select the weight vector that minimizes 15 the average discrepancy in total fire counts. These methods are consistent with spatio-temporal validation practices (Wikle, 2003). 
+
+3.2.2 Burned Area Extent Model Estimation 
+
+Estimation of the burned area extent parameters, those governing the ellipse and the fire area model, proceeds in three main steps: polygon standardization, empirical ellipse fitting, followed by estimation of model parameters including those of the random ellipse and total burned area. These components are then combined to simulate elliptical burned area polygons that preserve the statistical structure of fire shape and size. 
+
+Polygon Standardization. To separate shape from size, each fire polygon is first standardized to unit area and centered at the origin. For a polygon with area 𝐴 and coordinates C which is a set of spatial coordinate pairs defining the polygon boundary, the standardized polygon is ˜C = C − c
+
+√𝐴 .
+
+where c = (𝑐 𝑥 , 𝑐 𝑦 ) is the centroid of the polygon. For a simple polygon with vertices (𝑥 𝑖 , 𝑦 𝑖 ),
+
+𝑖 = 1, . . . , 𝑛 , the centroid is 
+
+𝑐 𝑥 = 16𝐴 
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+(𝑥 𝑖 + 𝑥 𝑖 +1)( 𝑥 𝑖 𝑦 𝑖 +1 − 𝑥 𝑖 +1 𝑦 𝑖 ), 𝑐 𝑦 = 16𝐴 
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+(𝑦 𝑖 + 𝑦 𝑖 +1)( 𝑥 𝑖 𝑦 𝑖 +1 − 𝑥 𝑖 +1 𝑦 𝑖 )
+
+with (𝑥 𝑛 +1, 𝑦 𝑛 +1) = (𝑥 1, 𝑦 1). Some burned area polygons consist of multiple disjoint parts. For such multipolygons (sets of one or more polygons represented as as single feature), the centroid is computed as the area-weighted average of the centroids of the component polygons. Scaling and translation are applied to every point, ensuring that the centroid is at the origin and the polygon has area 1, following classical spatial geometry methods (Cressie, 1993). For the purpose of ellipse fitting, we treat each fire polygon as a single object, applying the 16 standardization and fitting procedure to all parts collectively, and ultimately only fitting one ellipse per fire regardless of the number of multipolygon components. This ensures that even complex geometries are summarized by a single parametric shape while preserving the overall spatial extent and orientation of the fire. 
+
+Empirical Estimation of Ellipses. Each standardized polygon is approximated by an ellipse using a constrained nonlinear least-squares optimization procedure implemented via an augmented Lagrangian method. This is consistent with nonlinear constrained optimization methods (Nocedal and Wright, 2006). Although each polygon is first centered at the origin during standardization, the optimization still includes the centroid location (𝑥 0, 𝑦 0) as free parameters to improve the fit to irregular boundary geometries and to reduce residual mismatch after scaling. The semi-axes are both estimated subject to a unit-area constraint, 𝑎 ′𝑏 ′ − 1/𝜋 = 0, which is enforced during optimization using an equality-constrained augmented Lagrangian formulation. The optimization is performed over the parameter vector 𝜽 = (𝑥 0, 𝑦 0, 𝑎 ′, 𝑏 ′, 𝜙 ), representing the standardized ellipse centroid, semi-axis lengths, and rotational angle, respectively. This ensures that all fitted ellipses preserve unit area while still allowing variation in shape and orientation. Let C = {( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑁 𝐶  
+
+> 𝑖 =1
+
+denote the coordinates of the standardized polygon boundary points. Polygon points are first translated and rotated into the ellipse-aligned coordinate system: 
+
+©«
+
+𝑥 rot ,𝑖 
+
+𝑦 rot,i 
+
+ª®®¬
+
+= ©«
+
+cos 𝜙 sin 𝜙 
+
+− sin 𝜙 cos 𝜙 
+
+ª®®¬©«
+
+𝑥 𝑖 − 𝑥 𝑦 𝑖 − 𝑦 
+
+ª®®¬
+
+for 𝑖 = 1, . . . , 𝑁 𝐶 . Residuals are defined as 
+
+𝑟 𝑖 =
+
+ 𝑥 rot ,𝑖 
+
+𝑎 
+
+2
+
++
+
+ 𝑦 rot ,𝑖 
+
+𝑏 
+
+2
+
+− 1.
+
+so that a perfect elliptical polygon yields zero residuals. The objective function is to minimize the 17 sum of squared residuals, 
+
+𝑓 (𝜽 ) =
+
+> 𝑁 𝐶
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑟 2 
+
+> 𝑖
+
+.
+
+Optimization is performed using a gradient-based augmented Lagrangian method in R via the 
+
+nloptr package (Nocedal and Wright, 2006), with analytic gradients supplied to improve conver-gence (see supplement Section S2). In cases where the initial ellipse fitting procedure fails to converge, we apply a single retry step to improve numerical stability. Failures typically occur for geometrically complex or high-vertex-count polygons that produce unstable optimization gradients. The polygon is first simplified using 
+
+st simplify in R’s sf package, after which the constrained nonlinear least squares fit is rerun. This additional pass resolves previously failed fits without further iteration. 
+
+Estimation of Model Parameters. We treat the empirical estimates of { ˆ𝑎 ′ 
+
+> 𝑖
+
+} from all wildfires from the prior step as independent samples from a shifted gamma distribution, whose parameters are estimated by maximum likelihood. The burned-area model parameters, including regression coefficients 𝜼 , group-specific mean effects 𝜔 ( 𝑝 ), and heteroskedastic residual variance parameters 𝜎 2 ( 𝑝 ), are estimated by maximum likelihood methods within the generalized least squares framework, treating observed fire areas as conditionally independent given the covariates and variance structure. Because the burned area model is specified using a lognormal distribution, some simulated realizations produce unrealistically large areas in the upper tail. To prevent simulated fires from exceeding the spatial extent of the modeling domain, burned area is capped above by the total area of the pyrome in which the fire occurred. In addition, simulated burned area polygons are cropped to intersect pyrome boundaries, ensuring that simulated perimeters remained spatially consistent with the environmental regions used to construct the model. We view these constraints as ecologically reasonable and necessary for maintaining realistic large-fire behavior in simulation. 18 4 Results 
+
+In this section we detail the specific modeling choices for the northern California data and illustrate performance on each component of the model hierarchy. 
+
+# 4.1 Point Process Model Feature Selection 
+
+Modeling pyromes as independent allows baseline wildfire intensity and covariate effects to vary across fire regimes, while avoiding the assumption of a single homogeneous process over the entire study region. Table 1 below summarizes wildfire occurence across the ten pyromes during the 1984–2023 study period, and lists pyrome abbreviations used throughout the paper. The summaries show substantial regional variation in average fire activity and extreme monthly counts, with highly active pyromes such as KM contrasting with lower-activity regions such as SNIRHB and CCV. These differences motivate the inclusion of spatial structure in the intensity model. The intensity model includes two distinct classes of covariates. Spatial covariates defined over the domain, S, capture geographic variation in wildfire occurrence and include latitude, longitude, their interaction and quadratic terms, and elevation. These covariates vary across space but are constant in time. We also consider incorporating land use and land cover classifications as spatial covariates. However, these variables are ultimately excluded from the final model because they do not substantially improve predictive performance and introduce several interpretability challenges. In particular, wildfire activity occasionally occurs in seasonally wet areas, leading to misleading associations between water-related classes and fire occurrence. Additionally, while forested regions account for a large proportion of wildfire activity in Northern California overall, a simple indicator for forest cover is not consistently informative across pyromes, especially in less forested regions where other environmental and spatial factors play a larger role. Temporal covariates, defined over the temporal domain T , include large-scale climate conditions 19 that vary from month to month and drive the intensity surface up and down. In addition, monthly harmonic terms specified as cyclical sine and cosine functions of month encode the smooth annual fire seasonality and capture recurring within-year temporal patterns in wildfire activity. Monthly climate variables are spatially averaged over the pyrome domain to produce a single value per month, reflecting region-wide atmospheric and moisture conditions (for example). Numerous ERA5-derived climate variables are considered, including measures of temperature, precipitation, wind speed, humidity, vapor pressure deficit, and drought conditions, together with associated climatologies, anomalies, and lagged values. Many of these variables capture related physical processes and exhibit strong collinearity. Our exploratory analysis of various candidate climate covariates, paired with literature precedent, identified average monthly vapor pressure deficit anomaly (VPDa) as a useful feature for the model (Abatzoglou and Williams, 2016; Williams et al., 2019). Figure 2 shows monthly VPDa for two representative pyromes: KM and SF. Both series exhibit substantial interannual variability and a gradual upward trend, indicating increasingly anomalous atmospheric dryness over the study period relative to the historical monthly climatology. 
+
+Figure 2: Monthly VPDa in KM (solid purple) and SF (dashed brown). VPD captures the effect of current atmospheric dryness on wildfire likelihood and is computed 20 from daily ERA5 temperature 𝑇 (◦𝐶 ) and relative humidity 𝑅𝐻 (%) data using 
+
+𝑉 𝑃𝐷𝑎 = 𝑒 𝑠 (𝑇 )
+
+
+
+1 − 𝑅𝐻 
+
+100 
+
+
+
+where 𝑒 𝑠 (𝑇 ) is the saturation vapor pressure computed using the Magnus–Tetens approximation: 
+
+𝑒 𝑠 (𝑇 ) = 0.6108 exp 
+
+ 17 .27 𝑇 𝑇 + 237 .3
+
+
+
+,
+
+with 𝑒 𝑠 (𝑇 ) in kPa. VPD values are then averaged to the monthly scale. VPDa are defined as deviations from the long-term monthly climatological mean, representing departures from the typical seasonal cycle. In the following sections, we highlight the Klamath Mountains (KM) and Northern Sierran Foothills and Tuscan Flows (SF) pyromes as examples of regions exhibiting contrasting wildfire activity patterns. Results for all other pyromes are in the supplement, Section S5. 
+
+# 4.2 Point Process Model Illustration 
+
+Estimation proceeds in two stages. First, parameters controlling the baseline space–time intensity function 𝜆 (𝑠, 𝑡 ) are estimated under an inhomogeneous Poisson process model described in Section 3.2.1. Table 2 reports maximum likelihood estimates, standard errors, and Wald statistics for the KM pyrome. All covariates are standardized prior to fitting allowing effect sizes to be compared on a common scale. Spatial coefficient estimates represent the multiplicative change in baseline intensity from a one standard deviation increase in a covariate, given by exp ( ˆ𝛽 ), while temporal effects similarly scale intensity across all locations at a given time. The fitted baseline model for the KM pyrome identifies several significant spatial and climatic drivers of wildfire occurrence intensity. Monthly VPDa exhibits a positive and statistically sig-nificant association with wildfire occurrence, conditional on the other covariates in the model, 21 indicating that anomalously dry atmospheric conditions correspond to increased wildfire activ-ity. Elevation is negatively associated with wildfire occurrence intensity, suggesting reduced fire activity at higher elevations. Significant longitude and quadratic longitude effects also indicate persistent large-scale spatial gradients across the region. The harmonic seasonal covariates are highly significant, indicating strong annual wildfire sea-sonality throughout all pyromes in Northern California. The sine and cosine terms jointly capture smooth within-year temporal variation, representing the primary wildfire season from approxi-mately June through October or November. Despite capturing broad spatial and seasonal structure, the baseline model does not fully re-produce the observed distribution of monthly wildfire counts displayed in Figure 3. In particular, months of unusually high wildfire counts and periods of unusually low activity occur more fre-quently than expected under a deterministic Poisson intensity surface where the count variance equals the mean. The stochastic shock term addresses this limitation by allowing the intensity to fluctuate randomly through time while retaining the estimated spatial and seasonal structure encoded in 𝜆 (s, 𝑡 ).
+
+Figure 3: Monthly wildfire counts in the KM pyrome, 1984–2023. Across pyromes, VPDa estimates are generally positive and physically interpretable, reflecting increased wildfire likelihood under anomalously dry atmospheric conditions. However, several 22 pyromes (NSN, SF, NCCFACM, and SNIRHB) produce negative but generally non-significant VPDa coefficients under the baseline specification, likely reflecting residual collinearity, sparse wildfire occurrence, and limitations of the deterministic Poisson intensity surface in capturing localized temporal variability. These inconsistencies further motivate the inclusion of the stochastic shock process in the second-stage model. In the second stage of estimation, a multiplicative shock term 𝑈 𝑡 is introduced to capture overdispersion beyond the Poisson baseline. Months with unusually high counts relative to baseline intensity are common, and the shock term allows additional variance while retaining 𝜆 (𝑠, 𝑡 ) as the baseline structure. Parameters (𝛼, 𝛾 ) are estimated using simulation-based inference described in Section 3.2.1. Model performance is evaluated using a composite goodness-of-fit score based on distributional summaries of observed monthly counts. The GOF components address Poisson limitations: 𝐷 𝑄 
+
+emphasizes upper quantiles to capture high-fire months, 𝐷 𝐶 preserves total fire magnitude, 𝐷 0
+
+and 𝐷 1 capture low-activity periods, and 𝐷 max ensures accurate reproduction of extreme counts. Together, these metrics evaluate both typical and extreme fire patterns in simulated point patterns. Conditional on the optimal weights per pyrome (Supplement Section S3), we perform a grid search over shock parameters (𝛼, 𝛾 ) using 𝛼 ∈ [ 0.1, 1] and 𝛾 ∈ [ 0, 1] with increments of 0.1. For every parameter combination, 200 simulations of the spatio-temporal point process are generated by applying independent gamma-distributed multiplicative shocks to the baseline intensity field (Cox, 1955; Diggle et al., 2013; Wikle, 2003). We fit a thin plate spline to the grid evaluations and identify the optimum using the resulting smooth surface, as described in Section 3.2.1. Table 3 reports the estimates of (𝛼, 𝛾 ) per pyrome. While 𝛼 > 0 is required for a valid model, all estimated values are also less than 1. Since Var (𝐺 𝑡 ) = 1 
+
+> 𝛼
+
+, smaller values of 𝛼 correspond to increased dispersion in the latent gamma shock process for each pyrome. In this sense, 𝛼 controls the variability of the latent multiplicative environment that drives departures from a standard Poisson process. 23 Likewise, all estimated 𝛾 values satisfy 0 < 𝛾 < 1, indicating a dampening transformation of the latent shock that reduces the influence of extreme 𝐺 𝑡 values while preserving stochastic temporal variation. Consequently, 𝛼 determines the variability of the latent gamma process, while 𝛾 controls how strongly fluctuations in the latent process are transmitted to the wildfire intensity surface. Together, these parameters determine the magnitude of temporal variability and the degree to which realized wildfire activity departs from the deterministic baseline intensity. Estimated shock parameters vary across pyromes as shown in Table 3, reflecting differing wildfire regimes and environmental conditions. ONCRR exhibits the smallest 𝛼 estimate, indicating strong temporal variability in the latent intensity process, consistent with the intermittently extreme fire behavior observed in coastal environments. In contrast, HLP has a larger 𝛼 estimate, suggesting a comparatively stable baseline intensity over time. KM and EC exhibit larger 𝛾 values, implying weaker dampening of extreme shocks. These regions are characterized by highly seasonal fire regimes and occasional extreme fire years associated with hot and dry atmospheric conditions. Importantly, the shock term substantially improves the model’s ability to reproduce the observed distribution of monthly fire counts, particularly in capturing total event counts that are systematically overestimated by the baseline Poisson formulation. This improvement is illustrated in Figure 4, where simulations with the shock term better match the observed number of points. Additionally, the spread of the simulated distribution remains comparable between panels (a) and (b), even though the full model produces substantially fewer fires on average. This illustrates a key advantage of the shock term: it allows the model to reproduce observed variability without requiring the elevated mean counts implied by a standard Poisson formulation. In other words, the random shock relaxes the rigid mean–variance relationship of the Poisson model by introducing an additional source of temporal variability. To assess whether the final fitted model 𝑈 𝑡 𝜆 captures the observed spatial clustering of wildfire centroids, we computed Ripley’s K function for each pyrome (Baddeley et al., 2015). Observed K 24 (a) (b) 
+
+Figure 4: SF pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) Baseline model 𝜆 ; (b) Full model 𝑈 𝑡 𝜆 .functions are compared against simulation envelopes generated from 500 realizations under the full fitted model 𝑈 𝑡 𝜆 (Figure 5). Across all pyromes, the observed K functions lie within the simulation envelopes, indicating that the model adequately reproduces the observed spatial clustering structure of the wildfire centroids. 
+
+Figure 5: Ripley’s K function validation for the SF pyrome. Figure 6 shows the 40-year observed point pattern of the data from the SF pyrome followed by 4 simulations from the full model. Across realizations, the simulations reproduce both the observed clustering structure and the overall magnitude of point counts, suggesting that the fitted intensity 25 surface captures key first- and second-order properties of the data. 
+
+Figure 6: Observed and simulated wildfire point patterns for the SF pyrome under the fitted model with intensity 𝑈 𝑡 𝜆 .
+
+# 4.3 Burned Extent Model Illustration 
+
+The second level of hierarchy in the model focuses on the area and shape of the burn pattern. The shapes are assumed to be elliptical, where area is abstracted out and modeled separately. The burn shape model relies on elliptical fits of the empirical fire extents. Figure 7 illustrates several representative standardized polygons (some multipolygons) with their fitted ellipses. These fits capture large-scale geometric characteristics, including elongation, orientation, and overall spatial footprint, while smoothing highly irregular boundary structure. Although standardized polygons are centered at the origin prior to fitting, optimized ellipse centroids do not always align exactly with polygon centroids because centroid location is a free optimization parameter. In practice, these shifts are typically small and do not materially affect spatial fire placement, so no additional jittering or relocation of fire centers is introduced in the point process simulations. Each fitted ellipse is parameterized by its semi-major axis and rotational angle. Exploratory analysis suggests that we can pool observations across all 10 pyromes and all 480 months to estimate the empirical distributions of these parameters, treating them as spatially and temporally invariant for the purposes of model specification. See spatial variograms in supplement Section S4. The estimated standardized semi-major axes are right-skewed, indicating that most fires are moderately elongated while fewer have highly elongated geometries. A shifted gamma distribution 26 Figure 7: Examples of standardized wildfire polygons with fitted ellipses. provides a reasonable fit to the empirical distribution of standardized semi-major axes, with esti-mated shape parameter 2 .4 and rate parameter 11 .9 under the lower-bound shift 1 /√𝜋 , as shown in Figure 8(a). The rotation angles 𝜙 𝑖 are approximately uniformly distributed on [0, 𝜋 ) in Figure 8(b), suggesting no strong preferred orientation in fire elongation in Northern California. 
+
+Figure 8: Distributions of fitted ellipse parameters: (a) semi-major axis length (shifted gamma) and (b) rotation angle (uniform). 27 4.4 Burned Area Model Illustration 
+
+Wildfire burned area is modeled using a heteroskedastic lognormal generalized least squares (GLS) model with Gaussian errors on the log burned area scale and pyrome-specific residual variances. The mean structure includes VPDa, seasonal harmonic terms, and pyrome indicators to capture both temporal and regional variation in wildfire size. Pyrome-specific effects reveal regional differences in baseline fire size distributions, with CCV tending toward smaller fires and pyromes such as EC exhibiting larger fire extents (Figure 9). 
+
+Figure 9: Observed and simulated log burned areas by pyrome. The fitted model identifies significant temporal and regional structure in wildfire burned area (Table 4). Positive VPDa effects indicate that anomalously dry atmospheric conditions increase both wildfire occurrence and extent. Seasonal harmonic terms capture within-year variation in fire size, while significant pyrome effects reveal persistent regional differences after accounting for climate and seasonality. Notably, CCV exhibits substantially lower burned areas, whereas KM and SNIRHB show significant positive and negative deviations, respectively. The heteroskedastic variance structure allows residual variability to differ across pyromes, capturing regional differences in wildfire size dispersion. Some pyromes exhibit relatively stable fire behavior, while others show substantial variability around their regional mean. Figure 9 28 highlights this contrast, with KM exhibiting the greatest variability in observed fire sizes and CCV showing comparatively low variability. Simulated burned areas reproduce the strong right-skew and variability observed in empirical fire sizes, as shown in Figure 9. 
+
+# 4.5 Full Model Validation 
+
+For each month, simulated wildfires are generated iteratively. Fire counts and locations are first sampled from the point process model, followed by independent sampling of ellipse shape pa-rameters and burned areas from their fitted models. Unit area ellipses are then generated using simulated semi-major axes and rotational angles, rescaled according to the simulated burned area, and centered at the simulated points from the point process model. Figure 10 shows SF and KM wildfires, fitted ellipses, and simulations from the full hierarchical model. 
+
+Figure 10: Observed and simulated wildfire perimeters in the SF and KM pyromes. 29 In the preceding sections, we show that the component pieces of the full model adequately fit the empirical wildfire distribution. However, it remains to be seen whether, when simulated together, the resulting distribution of wildfire characteristics reasonably captures empirical behavior. For example, a key validation statistic concerns the long-term cumulative area burned (that is, over many years). To assess this, we generate 500 independent simulations spanning the full 40-year study period (1984–2023) for the SF pyrome. Within each simulation and the observed data, all simulated wildfires are intersected with the corresponding pyrome boundary to ensure spatial consistency with the study region. Figure 11 compares observed and simulated burned area in the SF pyrome at cumulative (1984– 2023) and annual time scales using 500 realizations from the fitted model. In Figure 11(a), the blue line denotes the cumulative burned area of the fitted ellipses rescaled to their original sizes, while in Figure 11(b) it shows the observed annual log (burned area + 1) values. Across both temporal scales, the observed values fall within the range of simulated outcomes, indicating that the model captures long-term burned area accumulation, year-to-year variability, and extreme fire years.  
+
+> (a) (b)
+
+Figure 11: Observed and simulated burned area in the SF pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area. A key advantage of the statistical framework is that it enables explicit uncertainty quantification via simulation. Because the fitted model generates full stochastic realizations of wildfire activity, 30 probabilities of extreme events can be estimated using Monte Carlo methods. Here, we focus on the probability that total annual burned area across Northern California exceeds 685,000 acres, approximately the 90th percentile of the historical distribution. For each year, exceedance probabilities are computed from 10,000 simulated realizations as the fraction exceeding this threshold (Figure 12). Probabilities vary substantially over time, ranging from roughly 3–5% in low-risk years to over 20% in 2023, with most years between 5–10%. This indicates that extreme burned-area outcomes are uncommon but not rare under the fitted model. The high probability in 2023 is consistent with that year exhibiting the largest VPDa across all pyromes and months in the record, indicating exceptionally fire-conducive conditions. In the lognormal burned-area model, positive VPDa effects shift the distribution toward larger fires and increase tail probability, while residual log-scale variability further amplifies uncertainty. Notably, observed exceedances of the threshold happened in 2007, 2017, 2019, and 2020, aligning with the upper tail of the simulated distribution. Overall, these results illustrate how the framework can be used to quantify the likelihood of rare but consequential wildfire outcomes. 
+
+Figure 12: Probability of exceeding 685,000 acres of annual burned area (90th percentile) estimated from 10,000 Monte Carlo simulations per year. Dashed lines indicate 95% Monte Carlo intervals. 31 5 Discussion 
+
+This study develops a generative hierarchical statistical modeling framework for wildfire occurrence, burned area, and fire geometry in a unified probabilistic setting. Wildfire counts and locations are modeled as an inhomogeneous Poisson process with a stochastic shock in the intensity to better capture observed mean and variability of fire counts. Given the location of a fire occurrence, the burn pattern is modeled as a randomly-oriented and randomly-sized ellipse. Each component of the model includes physiographic and climate covariates, allowing the framework to generalize across regions with differing climate drivers. A key contribution of the model is its ability to simulate wildfire regimes under observed and future climate scenarios, enabling Monte Carlo approximation of wildfire risk and probabilistic characterization of impacts such as total burned area (Williams et al., 2026). By simulating the full data-generating process, including event locations, temporal intensity, ellipse-based geometries, and burned areas, the model produces empirical distributions of quantities such as total burned area and fire counts. The inclusion of VPDa in both the occurrence and burned area components allows changes in atmospheric dryness to propagate through both fire frequency and size, supporting simulations under changing climate conditions derived from climate models or reanalysis products. These simulations can also serve as inputs to economic, infrastructure, and insurance risk models. Importantly, this simulation-based approach provides a direct representation of uncertainty in wildfire outcomes across spatial and temporal scales. Repeated simulations reveal substantial variability in rare, high-impact events, including extreme fire seasons and large cumulative burned areas. This variability reflects the heavy-tailed nature of wildfire activity and highlights that risk cannot be characterized by mean outcomes alone. By generating ensembles of plausible wildfire realizations, the framework enables direct estimation of extreme-event probabilities and provides a more informative risk assessment than deterministic or point-estimate approaches. The results also highlight meaningful heterogeneity across pyromes. Differences in shock parameters suggest that pyromes vary in how variable wildfire occurrence is over time, in addition 32 to differences in mean intensity and burned-area variance. Pyromes such as KM and EC show relatively higher 𝛾 values in the shock term, consistent with more variable fire activity, while NCCFACM and SNIRHB exhibit lower values, indicating more stable regimes. The burned-area model further reflects this heterogeneity, with KM associated with higher mean burned area, CCV and SNIRHB with substantially lower levels, and additional variation in variance structure across regions. These differences are naturally captured in the Monte Carlo simulations, which preserves region-specific uncertainty rather than imposing a homogeneous risk structure. Several limitations of the current model suggest directions for future research. The elliptical approximation of burned area polygons simplifies complex fire geometries and may underrepresent boundary irregularities, suggesting that more flexible representations of fire shape could improve realism, particularly in heterogeneous terrain or under strong wind-driven spread. The use of temporally independent shock variables captures overdispersion in monthly fire counts but does not reflect persistence or memory in extreme fire conditions, indicating that incorporating higher-frequency meteorological information could help better resolve short-term drivers of wildfire activity and reduce reliance on latent stochasticity. In addition, the set of climate covariates considered in the current specification may not fully capture the range of environmental controls on fire activity, motivating further exploration of alternative or higher-resolution climate variables and temporal aggregation scales. Future work could extend the framework in several directions. More flexible representations of burned area geometry could better capture complex perimeter structure beyond the elliptical approximation, improving realism and allowing fire shapes to respond to environmental features such as land cover. Incorporating dynamic feedback between wildfire occurrence and landscape would allow dependence between successive fire events and evolving fire regimes over time. In addition, integrating higher-frequency meteorological information into the shock process may improve representation of short-term drivers of extreme wildfire activity and reduce reliance on latent stochasticity. Finally, further exploration of alternative climate covariates and temporal aggregation scales could help identify more robust predictors of wildfire activity that are consistently 33 significant across pyromes. Overall, the proposed model demonstrates that a hierarchical stochastic representation of wildfire processes can simultaneously capture spatial occurrence, temporal variability, geometric structure, and burned area dynamics. Most importantly, it provides a coherent framework for Monte Carlo approximation of wildfire risk, enabling full uncertainty quantification of both typical and extreme fire outcomes. This represents a substantive step toward probabilistic wildfire modeling that is directly aligned with risk assessment and decision-making under uncertainty. 
+
+# References 
+
+Abatzoglou, J. T. and Williams, A. P. (2016), “Impact of anthropogenic climate change on wildfire across western US forests,” Proceedings of the National Academy of Sciences , 113, 11770–11775. Anderson, H. E. (1983), “Predicting Wind-Driven Wild Land Fire Size and Shape,” Research Paper INT-305, U.S. Department of Agriculture, Forest Service, Intermountain Forest and Range Experiment Station, Ogden, UT. Baddeley, A., Rubak, E., and Turner, R. (2015), Spatial Point Patterns: Methodology and Applica-tions with R , CRC Press. Banerjee, S., Carlin, B. P., and Gelfand, A. E. (2014), Hierarchical Modeling and Analysis for Spatial Data , Chapman & Hall/CRC. Barbero, R., Abatzoglou, J. T., Larkin, N. K., Kolden, C. A., and Stocks, B. (2015), “Climate change presents increased potential for very large fires in the contiguous United States,” International Journal of Wildland Fire .Cox, D. R. (1955), “Some statistical methods connected with series of events,” JRSS-B , 17, 129– 164. Cressie, N. (1993), Statistics for Spatial Data , Wiley. 34 Cumming, S. G. (2001), “A parametric model of the size-distribution of large areas burned by wildland fire,” Canadian Journal of Forest Research , 31, 1297–1303. Diggle, P. J. (2013), Statistical Analysis of Spatial and Spatio-Temporal Point Patterns , CRC Press, 3 edn. Diggle, P. J., Moraga, P., Rowlingson, B., and Taylor, B. M. (2013), “Spatial and Spatio-Temporal Log-Gaussian Cox Processes: Extending the Geostatistical Paradigm,” Statistical Science , 28, 542–563. Dong, C., Williams, A. P., Abatzoglou, J. T., Lin, K., Okin, G. S., Gillespie, T. W., Long, D., Lin, Y.-H., and MacDonald, G. M. (2022), “The season for large fires in Southern California is projected to lengthen in a changing climate,” Communications Earth & Environment , 3, 22. Finney, M. A. (1998), “FARSITE: Fire Area Simulator–Model Development and Evaluation,” Research Paper RMRS-RP-4, U.S. Department of Agriculture, Forest Service, Rocky Mountain Research Station, Ogden, UT. Finney, M. A. (2006), “An Overview of FlamMap Fire Modeling Capabilities,” in Fuels Man-agement—How to Measure Success: Conference Proceedings , eds. P. L. Andrews and B. W. Butler, Proceedings RMRS-P-41, pp. 213–220, Fort Collins, CO, USDA Forest Service, Rocky Mountain Research Station. Finney, M. A., McHugh, C. W., Grenfell, I. C., Riley, K. L., and Short, K. C. (2011), “A Simulation of Probabilistic Wildfire Risk Components for the Continental United States,” Research Paper RMRS-RP-81, USDA Forest Service, Rocky Mountain Research Station, Fort Collins, CO. Grieshop, N. and Wikle, C. K. (2024), “Data-Driven Modeling of Wildfire Spread with Stochastic Cellular Automata and Latent Spatio-Temporal Dynamics,” Spatial Statistics , 59, 100794. Hering, A., Bell, C. L., and Genton, M. G. (2009), “Modeling spatio-temporal wildfire ignition point patterns,” Environmental and Ecological Statistics , 16, 225–250. 35 Hersbach, H., Bell, B., Berrisford, P., Hirahara, S., Hor´ anyi, A., Mu˜ noz-Sabater, J., Nicolas, J., Peubey, C., Radu, R., Schepers, D., Simmons, A., Soci, C., Abdalla, S., Abellan, X., Balsamo, G., Bechtold, P., Biavati, G., Bidlot, J., Bonavita, M., De Chiara, G., Dahlgren, P., Dee, D., Diamantakis, M., Dragani, R., Flemming, J., Forbes, R., Fuentes, M., Geer, A., Haimberger, L., Healy, S., Hogan, R. J., H´ olm, E., Janiskov´ a, M., Keeley, S., Laloyaux, P., Lopez, P., Lupu, C., Radnoti, G., de Rosnay, P., Rozum, I., Vamborg, F., Villaume, S., and Th´ epaut, J.-N. (2020), “The ERA5 global reanalysis,” JRSS-B , 146, 1999–2049, Accessed: 2026-01-28. Holden, Z. A., Swanson, A., Luce, C. H., Jolly, W. M., Maneta, M., Oyler, J. W., Warren, D. A., Parsons, R., and Affleck, D. (2018), “Decreasing fire season precipitation increased recent western US forest wildfire activity,” Proceedings of the National Academy of Sciences , 115, E8349–E8357. Intergovernmental Panel on Climate Change (2021), Climate Change 2021: The Physical Science Basis , Cambridge University Press. Joseph, M. B., Rossi, M. W., Mietkiewicz, N. P., Mahood, A. L., Cattau, M. E., St. Denis, L. A., Nagy, R. C., Iglesias, V., Abatzoglou, J. T., and Balch, J. K. (2019), “Spatiotemporal prediction of wildfire size extremes with Bayesian finite sample maxima,” Ecological Applications , 29, e01898. Littell, J. S., McKenzie, D., Peterson, D. L., and Westerling, A. L. (2009), “Climate and wildfire area burned in western US ecoprovinces, 1916–2003,” Ecological Applications , 19, 1003–1021. Liu, D. C. and Nocedal, J. (1989), “Limited-memory BFGS method for large-scale optimization,” 
+
+Mathematical Programming , 45, 503–528. Malamud, B. D., Morein, G., and Turcotte, D. L. (1998), “Forest fires: an example of self-organized critical behavior,” Science , 281, 1840–1842. Møller, J., Syversveen, A. R., and Waagepetersen, R. P. (1998), “Log Gaussian Cox processes,” 
+
+Scandinavian Journal of Statistics , 25, 451–482. 36 Moritz, M. A., Morais, M. E., Summerell, L. A., Carlson, J. M., and Doyle, J. (2005), “Wildfires, complexity, and highly optimized tolerance,” PNAS , 102, 17912–17917. Nocedal, J. and Wright, S. J. (2006), Numerical Optimization , Springer, 2 edn. Preisler, H. K., Brillinger, D. R., Burgan, R. E., and Benoit, J. W. (2004), “A statistical model for the prediction of wildfire occurrence in the western United States,” Journal of Applied Meteorology ,43, 1620–1633. Radeloff, V. C., Helmers, D. P., Kramer, H. A., Mockrin, M. H., Alexandre, P. M., Bar-Massada, A., Butsic, V., Hawbaker, T. J., Martinuzzi, S., Syphard, A. D., and Stewart, S. I. (2018), “Rapid growth of the US wildland–urban interface raises wildfire risk,” PNAS , 115, 3314–3319. Reed, W. J. and Hughes, B. D. (2002), “From gene families and genera to incomes and internet file sizes: Why power laws are so common in nature,” Physical Review E , 66, 067103. Reed, W. J. and McKelvey, K. S. (2002), “Power-law behavior and the size distribution of forest fires,” Ecological Modelling , 150, 239–254. Richards, J., Huser, R., Bevacqua, E., and Zscheischler, J. (2023), “Insights into the Drivers and Spatiotemporal Trends of Extreme Mediterranean Wildfires with Statistical Deep Learning,” 
+
+Artificial Intelligence for the Earth Systems , 2, e230009. Ricotta, C., Avena, G., and Marchetti, F. (1999), “The flaming sandpile: self-organized criticality and wildfires,” Ecological Modelling , 119, 73–77. Schoenberg, F. P., Peng, R., and Woods, J. (2003), “On the distribution of wildfire sizes,” Environ-metrics , 14, 583–592. Serra, L., Saez, M., Juan, P., and Varga, D. (2014), “Spatio-temporal log-Gaussian Cox processes for modelling wildfire occurrence,” Stochastic Environmental Research and Risk Assessment ,28, 531–541. 37 Short, K. C., Grenfell, I. C., Riley, K. L., and Vogler, K. C. (2020), “Pyromes of the Conterminous United States,” Accessed: 2025-06-17. Strauss, D., Bednar, L., and Mees, R. (1989), “Do One Percent of the Forest Fires Cause Ninety-Nine Percent of the Damage?” Forest Science , 35, 319–328. Sullivan, A. L. (2009a), “Wildland surface fire spread modelling, 1990–2007. 1: Physical and quasi-physical models,” International Journal of Wildland Fire , 18, 349–368. Sullivan, A. L. (2009b), “Wildland surface fire spread modelling, 1990–2007. 2: Empirical and quasi-empirical models,” International Journal of Wildland Fire , 18, 369–386. Sullivan, A. L. (2009c), “Wildland surface fire spread modelling, 1990–2007. 3: Simulation and mathematical analogue models,” International Journal of Wildland Fire , 18, 387–403. Turco, M., Rosa-C´ anovas, J. J., Bedia, J., et al. (2018), “Exacerbated fires in Mediterranean Europe due to anthropogenic warming,” Nature Communications , 9, 3821. U.S. Geological Survey and U.S. Forest Service (2025), “Monitoring Trends in Burn Severity (MTBS) Burned Area Boundaries Dataset,” Fire perimeter and burned area polygons for large fires in the United States, 1984–2024. Accessed: 2025-04-08. U.S. Global Change Research Program (2023), “Fifth National Climate Assessment,” Tech. rep., U.S. Global Change Research Program. Wang, X., Studens, K., Parisien, M.-A., Taylor, S. W., Candau, J.-N., Boulanger, Y., and Flannigan, M. D. (2020), “Projected changes in fire size from daily spread potential in Canada over the 21st century,” Environmental Research Letters , 15, 104048. Westerling, A. L., Hidalgo, H. G., Cayan, D. R., and Swetnam, T. W. (2006), “Warming and earlier spring increase western US forest wildfire activity,” Science , 313, 940–943. Wikle, C. K. (2003), “Hierarchical Models in Environmental Science,” International Statistical Review , 71, 181–199. 38 Williams, A. P., Abatzoglou, J. T., Gershunov, A., Guzman-Morales, J., Bishop, D. A., Balch, J. K., and Lettenmaier, D. P. (2019), “Observed impacts of anthropogenic climate change on wildfire in California,” Earth’s Future , 7, 892–910. Williams, A. P., Hansen, W. D., Juang, C. S., Abatzoglou, J. T., Radeloff, V. C., Wang, B., Hall, J., Buch, J., and Madakumbura, G. D. (2026), “The Western United States Large Forest-Fire Stochastic Simulator (WULFFSS) 1.0,” Geoscientific Model Development , 19, 1157–1191. Yamazaki, D., Ikeshima, D., Tawatari, R., Yamaguchi, T., O’Loughlin, F., Neal, J. C., Sampson, C. C., Kanae, S., and Bates, P. D. (2017), “A high accuracy map of global terrain elevations,” 
+
+Geophysical Research Letters , 44, 5844–5853, Accessed: 2024-07-09. Yoo, M. and Wikle, C. K. (2024), “A Bayesian Spatio-Temporal Level Set Dynamic Model and Application to Fire Front Propagation,” The Annals of Applied Statistics , 18. 
+
+# 6 Tables 
+
+Table 1: Wildfire occurrence summary by pyrome, 1984–2023.                                          
+
+> Pyrome Abbr. Total Fires Mean Annual Max Monthly
+> Central California Valley CCV 12 0.30 2Eastern Cascades EC 84 2.10 4High Lava Plains HLP 17 0.43 2Klamath Mountains KM 216 5.40 32 North Central California Foothills and Coastal Mountains NCCFACM 99 2.48 5Northern Sierra Nevada NSN 91 2.28 8Northern Sierran Foothills and Tuscan Flows SF 54 1.35 8Outer North Coast Ranges and Redwoods ONCRR 42 1.05 12 Sierra Nevada-Influenced Ranges, Hills, and Basins SNIRHB 10 0.25 1Southern Cascades SC 36 0.90 6
+
+39 Table 2: KM point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -4.30 0.30 -14.18 < 0.001 Latitude -0.16 0.13 -1.19 0.23 Longitude -0.58 0.21 -2.76 0.006 Lat–Lon Interaction -0.53 0.48 -1.09 0.27 Latitude 2 -0.15 0.17 -0.87 0.38 Longitude 2 -1.56 0.46 -3.43 < 0.001 Elevation -0.20 0.08 -2.60 0.009 Monthly VPDa Anomaly 0.15 0.06 2.44 0.015 sin (2𝜋 (month )/ 12 ) -2.07 0.19 -10.81 < 0.001 cos (2𝜋 (month )/ 12 ) -1.81 0.18 -10.35 < 0.001 
+
+Table 3: Shock parameter estimates ( 𝛼 and 𝛾 ) for each pyrome. 
+
+Pyrome 𝜶 𝜸 
+
+CCV 0.4980 0.5025 EC 0.3080 0.7940 HLP 0.6925 0.5025 KM 0.4075 0.8744 NCCFACM 0.1724 0.1357 NSN 0.3894 0.6884 ONCRR 0.0874 0.7789 SC 0.2176 0.4221 SF 0.2040 0.4673 SNIRHB 0.3533 0.1759 
+
+Table 4: Parameter estimates for the heteroskedastic lognormal GLS burned-area model. 
+
+Covariate Estimate Std. Error t-value p-value 
+
+Intercept 7.07 0.22 31.76 < 0.001 VPDa Anomaly 0.85 0.32 2.65 0.008 sin (2𝜋 (month )/ 12 ) -0.85 0.18 -4.61 < 0.001 cos (2𝜋 (month )/ 12 ) -0.30 0.17 -1.75 0.081 KM 0.72 0.22 3.27 0.001 SC 0.28 0.37 0.77 0.444 HLP -0.17 0.57 -0.29 0.771 NSN 0.22 0.30 0.73 0.466 SF -0.11 0.31 -0.35 0.725 CCV -3.11 0.57 -5.44 < 0.001 NCCFACM 0.36 0.25 1.44 0.152 ONCRR -0.41 0.31 -1.34 0.181 SNIRHB -1.06 0.54 -1.98 0.048 
+
+40 Supplementary Material for FireGen: Quantifying Wildfire Risk by Simulation 
+
+Allyson Hineman, William Kleiber, Stephan Sain, and Alexis Hoffman October 7, 2026 
+
+This supplement provides additional methodological details, theoretical results, model-fitting procedures, and pyrome-specific diagnostics that support the analyses presented in the main manuscript. Included are proofs and derivations for components of the FireGen framework, optimal weighting parameters used in model calibration, additional spatial diag-nostics, and supplementary validation results for each pyrome. 
+
+# S1 Moment Properties of the Multiplicative Shock Model 
+
+This section derives the first and second moments of the wildfire count process under the multiplicative shock model and shows how the shock term modifies the mean–variance rela-tionship of a standard Poisson process. Let 
+
+Wt = S × { t}
+
+denote the spatial domain at time t, and define the baseline integrated intensity Λ( t) = 
+
+Z
+
+> S
+
+λ(s, t ) ds.
+
+Under the baseline model, 
+
+Nt = N (X ∩ W t)follows a Poisson distribution with parameter Λ( t). Consequently, 
+
+E[Nt] = Λ( t), Var( Nt) = Λ( t),
+
+1so that the variance is constrained to equal the mean. Under the full model, the intensity is modified by a multiplicative shock yielding Ut λ(s, t ), where 
+
+Ut = Gγt , Gt ∼ Gamma( α, α ).
+
+Conditional on Ut, the process remains Poisson with integrated intensity 
+
+Ut Λ( t).
+
+Therefore, 
+
+Nt | Ut ∼ Poisson( Ut Λ( t)) ,
+
+implying 
+
+E[Nt | Ut] = Ut Λ( t), Var( Nt | Ut) = Ut Λ( t).
+
+Applying the laws of total expectation and total variance yields 
+
+E[Nt] = E[Ut] Λ( t),
+
+and Var( Nt) = E[Var( Nt | Ut)] + Var[ E(Nt | Ut)] .
+
+Substituting the conditional moments gives Var( Nt) = E[Ut] Λ( t) + Var( Ut) Λ( t)2.
+
+Using the expression for the marginal mean, Var( Nt) = E[Nt] + Var( Ut) Λ( t)2.
+
+The first term is the usual Poisson variance, while the second term arises from temporal fluctuations in the latent shock process. It follows that Var( Nt) > E[Nt]; thus the multiplicative shock model exhibits overdispersion relative to a standard Poisson process. 2The degree of overdispersion can be expressed through the dispersion index 
+
+Dt = Var( Nt)
+
+E[Nt] = 1 + Var( Ut)
+
+E[Ut] Λ( t),
+
+which exceeds one whenever Var( Ut) > 0. Consequently, the shock process relaxes the rigid Poisson mean–variance relationship by introducing an additional source of variability through the random intensity surface. The multiplicative shock also modifies the marginal mean. Since 
+
+Ut = Gγt , Gt ∼ Gamma( α, α ),
+
+we have 
+
+E[Ut] = Γ( α + γ)Γ( α)αγ .
+
+For the parameter estimates considered in this study, 0 < γ < 1.
+
+Since the function g(x) = xγ is concave on (0 , ∞), Jensen’s inequality implies 
+
+E[Ut] = E[Gγt ] < (E[Gt]) γ .
+
+Because Gt ∼ Gamma( α, α ) satisfies 
+
+E[Gt] = 1 ,
+
+it follows that 
+
+E[Ut] < 1.
+
+Therefore, 
+
+E[Nt] = E[Ut]Λ( t) < Λ( t).
+
+In summary, the multiplicative shock model affects both the first and second moments of the count process. Relative to the baseline Poisson model, the shock term can reduce the average number of events while simultaneously introducing additional variability through a random intensity surface. This additional flexibility allows the model to reproduce observed wildfire count distributions without requiring the deterministic baseline intensity to absorb all temporal heterogeneity. 3S2 Gradients of Ellipse Objective Function 
+
+This section includes closed-form gradients of the function f (θ) from Section 3.2.2. Gradients of the objective with respect to all parameters are computed analytically. 
+
+∂f ∂θk
+
+= X
+
+> j
+
+2rj
+
+∂r j
+
+∂θk
+
+, θk ∈ { x0, y 0, a, b, ϕ }
+
+with 
+
+∂r j
+
+∂x 0
+
+= 2xrot ,j 
+
+a2 (− cos ϕ) + 2yrot ,j 
+
+b2 (sin ϕ),∂r j
+
+∂y 0
+
+= 2xrot ,j 
+
+a2 (− sin ϕ) + 2yrot ,j 
+
+b2 (− cos ϕ),∂r j
+
+∂a = −2x2rot ,j 
+
+a3 , ∂r j
+
+∂b = −2y2rot ,j 
+
+b3 ,∂r j
+
+∂ϕ = 2xrot ,j 
+
+a2
+
+  − sin ϕ(xj − x0) + cos ϕ(yj − y0) + 2yrot ,j 
+
+b2
+
+  − cos ϕ(xj − x0) − sin ϕ(yj − y0).
+
+The unit area constraint is imposed as a nonlinear equality: 
+
+g(θ) = ab − 1
+
+π = 0 ,
+
+with Jacobian 
+
+∇g = (0 , 0, b, a, 0) .
+
+# S3 Optimal weights per pyrome 
+
+Table S3.1 displays the optimal GOF weights per pyrome. 
+
+# S4 Spatial Variograms of Ellipse Parameters 
+
+Figure S4.1 shows empirical semivariograms of fitted ellipse parameters computed across all pyromes and time periods. 4Table S3.1: Optimal weighting design parameters for each pyrome based on minimum Mean-Focused rank. 
+
+Pyrome wQ wCount wP rop 0 wP rop 1 wM ax 
+
+CCV 11.6009 5.3132 12.8925 4.3190 4.2090 EC 11.4710 10.2450 3.8085 12.5986 5.5028 HLP 11.6009 5.3132 12.8925 4.3190 4.2090 KM 3.3239 4.9410 4.3806 11.7963 3.9327 NCCFACM 11.1104 12.4587 10.4859 12.0905 3.9230 NSN 12.5931 4.7572 5.4258 2.8426 5.0909 ONCRR 10.8371 12.7099 4.0583 5.1191 4.2522 SC 3.3239 4.9410 4.3806 11.7963 3.9327 SF 12.5931 4.7572 5.4258 2.8426 5.0909 SNIRHB 2.8164 4.3284 2.1902 5.6936 11.5500 
+
+(a) Semi-major axis (b) Ellipse orientation 
+
+Figure S4.1: Empirical semivariograms of fitted ellipse parameters computed across all py-romes and time periods. 
+
+# S5 Additional Pyrome Results 
+
+Figures in this section provide model fits and diagnostics for pyromes not displayed in the main manuscript. 5S5.1 Temporal VPDa Anomalies 
+
+Figure S5.1.1: Monthly VPDa in CCV. 
+
+Figure S5.1.2: Monthly VPDa in EC. 6Figure S5.1.3: Monthly VPDa in HLP. 
+
+Figure S5.1.4: Monthly VPDa in NCCFACM. 7Figure S5.1.5: Monthly VPDa in NSN. 
+
+Figure S5.1.6: Monthly VPDa in ONCRR. 8Figure S5.1.7: Monthly VPDa in SC. 
+
+Figure S5.1.8: Monthly VPDa in SNIRHB. 9S5.2 Occurrence Model Parameter Estimates 
+
+Table S5.2.1: CCV point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -7.03 2.39 -2.93 0.003 Latitude 5.25 3.61 1.45 0.146 Longitude 7.16 4.60 1.56 0.119 Lat–Lon Interaction -3.98 12.90 -0.31 0.757 Latitude 2 -4.72 5.36 -0.88 0.378 Longitude 2 1.49 10.22 0.15 0.884 Elevation 0.38 0.14 2.67 0.008 Monthly VPDa Anomaly 0.25 0.25 0.98 0.327 sin(2 π(month) /12) -1.31 0.50 -2.63 0.009 cos(2 π(month) /12) -0.77 0.41 -1.87 0.061 Table S5.2.2: EC point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -3.46 0.25 -14.13 < 0.001 Latitude 0.84 0.39 2.14 0.032 Longitude -0.00 0.39 -0.00 0.998 Lat–Lon Interaction -2.54 0.96 -2.65 0.008 Latitude 2 0.54 0.81 0.66 0.509 Longitude 2 -0.84 0.36 -2.32 0.020 Elevation 0.15 0.19 0.76 0.450 Monthly VPDa Anomaly 0.03 0.09 0.28 0.778 sin(2 π(month) /12) -0.91 0.15 -5.90 < 0.001 cos(2 π(month) /12) -0.91 0.15 -5.90 < 0.001 10 Table S5.2.3: HLP point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -6.17 1.43 -4.30 < 0.001 Latitude -2.06 1.26 -1.64 0.102 Longitude 6.95 5.23 1.33 0.184 Lat–Lon Interaction 8.16 10.31 0.79 0.429 Latitude 2 0.63 1.30 0.49 0.627 Longitude 2 -29.03 25.54 -1.14 0.256 Elevation 0.25 0.23 1.09 0.277 Monthly VPDa Anomaly 0.03 0.19 0.15 0.882 sin(2 π(month) /12) -2.17 0.72 -3.01 0.003 cos(2 π(month) /12) -1.97 0.67 -2.93 0.003 Table S5.2.4: NCCFACM point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -2.96 0.19 -15.70 < 0.001 Latitude -0.04 0.20 -0.20 0.842 Longitude 1.38 0.46 2.99 0.003 Lat–Lon Interaction -0.88 0.62 -1.43 0.154 Latitude 2 0.12 0.27 0.42 0.671 Longitude 2 0.83 1.02 0.81 0.419 Elevation 0.49 0.11 4.62 < 0.001 Monthly VPDa Anomaly -0.13 0.09 -1.34 0.181 sin(2 π(month) /12) -1.16 0.15 -7.53 < 0.001 cos(2 π(month) /12) -0.47 0.12 -3.80 < 0.001 Table S5.2.5: NSN point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -4.14 0.35 -11.68 < 0.001 Latitude 0.99 0.33 3.04 0.002 Longitude 1.10 0.64 1.72 0.085 Lat–Lon Interaction 1.06 1.09 0.97 0.331 Latitude 2 0.41 0.48 0.84 0.399 Longitude 2 2.07 0.70 2.95 0.003 Elevation -0.61 0.22 -2.74 0.006 Monthly VPDa Anomaly -0.05 0.09 -0.52 0.602 sin(2 π(month) /12) -1.71 0.24 -7.21 < 0.001 cos(2 π(month) /12) -1.33 0.21 -6.48 < 0.001 11 Table S5.2.6: ONCRR point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -4.00 0.63 -6.38 < 0.001 Latitude -0.63 0.37 -1.71 0.087 Longitude -0.76 0.78 -0.97 0.332 Lat–Lon Interaction 5.07 2.15 2.35 0.019 Latitude 2 0.93 0.51 1.81 0.071 Longitude 2 4.39 2.04 2.15 0.031 Elevation 0.59 0.20 2.97 0.003 Monthly VPDa Anomaly 0.09 0.14 0.68 0.496 sin(2 π(month) /12) -1.50 0.32 -4.63 < 0.001 cos(2 π(month) /12) -1.57 0.33 -4.73 < 0.001 Table S5.2.7: SC point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -5.74 0.83 -6.87 < 0.001 Latitude -0.21 0.50 -0.42 0.676 Longitude 0.29 0.69 0.42 0.675 Lat–Lon Interaction -0.37 2.26 -0.16 0.870 Latitude 2 -1.15 0.95 -1.21 0.225 Longitude 2 -0.50 1.67 -0.30 0.764 Elevation -0.37 0.22 -1.68 0.093 Monthly VPDa Anomaly 0.22 0.13 1.66 0.097 sin(2 π(month) /12) -2.03 0.47 -4.27 < 0.001 cos(2 π(month) /12) -2.12 0.49 -4.33 < 0.001 Table S5.2.8: SF point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -1.86 3.68 -0.51 0.612 Latitude -0.46 1.22 -0.38 0.704 Longitude -3.09 1.94 -1.59 0.112 Lat–Lon Interaction 6.28 12.44 0.50 0.614 Latitude 2 1.28 3.57 0.36 0.721 Longitude 2 2.25 10.71 0.21 0.834 Elevation 0.13 0.18 0.73 0.466 Monthly VPDa Anomaly -0.03 0.12 -0.27 0.786 sin(2 π(month) /12) -1.58 0.28 -5.56 < 0.001 cos(2 π(month) /12) -1.22 0.25 -4.91 < 0.001 12 Table S5.2.9: SNIRHB point process model estimates and standard errors. 
+
+Covariate Estimate Std. Error z-value p-value 
+
+Intercept -5.62 1.47 -3.83 < 0.001 Latitude 2.00 3.08 0.65 0.515 Longitude 0.21 4.13 0.05 0.960 Lat–Lon Interaction -53.53 32.72 -1.64 0.102 Latitude 2 -19.58 16.72 -1.17 0.242 Longitude 2 -36.54 27.18 -1.34 0.179 Elevation 0.89 0.35 2.57 0.010 Monthly VPDa Anomaly -0.47 0.26 -1.77 0.077 sin(2 π(month) /12) -1.45 0.63 -2.31 0.021 cos(2 π(month) /12) -1.30 0.61 -2.15 0.032 
+
+# S5.3 Monthly Wildfire Count Distributions 
+
+Figure S5.3.1: Monthly wildfire counts in the CCV pyrome, 1984–2023. 13 Figure S5.3.2: Monthly wildfire counts in the EC pyrome, 1984–2023. 
+
+Figure S5.3.3: Monthly wildfire counts in the HLP pyrome, 1984–2023. 14 Figure S5.3.4: Monthly wildfire counts in the NCCFACM pyrome, 1984–2023. 
+
+Figure S5.3.5: Monthly wildfire counts in the NSN pyrome, 1984–2023. 15 Figure S5.3.6: Monthly wildfire counts in the ONCRR pyrome, 1984–2023. 
+
+Figure S5.3.7: Monthly wildfire counts in the SC pyrome, 1984–2023. 16 Figure S5.3.8: Monthly wildfire counts in the SF pyrome, 1984–2023. 
+
+Figure S5.3.9: Monthly wildfire counts in the SNIRHB pyrome, 1984–2023. 17 S5.4 Shock Model Validation  
+
+> (a) (b)
+
+Figure S5.4.1: CCV pyrome observed (blue line) and simulated monthly fire counts (his-tograms from 500 realizations) over 1984–2023. (a) Baseline model λ; (b) Full model Ut λ. 
+
+> (a) (b)
+
+Figure S5.4.2: EC pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) Baseline model λ; (b) Full model Ut λ.18 (a) (b) 
+
+Figure S5.4.3: HLP pyrome observed (blue line) and simulated monthly fire counts (his-tograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ. 
+
+> (a) (b)
+
+Figure S5.4.4: KM pyrome observed (blue line) and simulated monthly fire counts (his-tograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ.19 (a) (b) 
+
+Figure S5.4.5: NCCFACM pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ. 
+
+> (a) (b)
+
+Figure S5.4.6: NSN pyrome observed (blue line) and simulated monthly fire counts (his-tograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ.20 (a) (b) 
+
+Figure S5.4.7: ONCRR pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ. 
+
+> (a) (b)
+
+Figure S5.4.8: SC pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model Ut λ.21 (a) (b) 
+
+Figure S5.4.9: SNIRHB pyrome observed (blue line) and simulated monthly fire counts (histograms from 500 realizations) over 1984–2023. (a) (a) Baseline model λ; (b) Full model 
+
+Ut λ.
+
+# S5.5 Ripley’s K Diagnostics 
+
+Figure S5.5.1: Ripley’s K function validation for the CCV pyrome. 22 Figure S5.5.2: Ripley’s K function validation for the EC pyrome. 
+
+Figure S5.5.3: Ripley’s K function validation for the HLP pyrome. 23 Figure S5.5.4: Ripley’s K function validation for the KM pyrome. 
+
+Figure S5.5.5: Ripley’s K function validation for the NCCFACM pyrome. 24 Figure S5.5.6: Ripley’s K function validation for the NSN pyrome. 
+
+Figure S5.5.7: Ripley’s K function validation for the ONCRR pyrome. 25 Figure S5.5.8: Ripley’s K function validation for the SC pyrome. 
+
+Figure S5.5.9: Ripley’s K function validation for the SNIRHB pyrome. 26 S5.6 Point Process Simulation Diagnostics 
+
+Figure S5.6.1: Observed and simulated wildfire point patterns for the CCV pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.2: Observed and simulated wildfire point patterns for the EC pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.3: Observed and simulated wildfire point patterns for the HLP pyrome under the fitted model with intensity Ut λ.27 Figure S5.6.4: Observed and simulated wildfire point patterns for the KM pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.5: Observed and simulated wildfire point patterns for the NCCFACM pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.6: Observed and simulated wildfire point patterns for the NSN pyrome under the fitted model with intensity Ut λ.28 Figure S5.6.7: Observed and simulated wildfire point patterns for the ONCRR pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.8: Observed and simulated wildfire point patterns for the SC pyrome under the fitted model with intensity Ut λ.
+
+Figure S5.6.9: Observed and simulated wildfire point patterns for the SNIRHB pyrome under the fitted model with intensity Ut λ.29 S5.7 Full Area Simulations 
+
+Figure S5.7.1: Observed and simulated wildfire perimeters in the CCV pyrome. 
+
+Figure S5.7.2: Observed and simulated wildfire perimeters in the EC pyrome. 30 Figure S5.7.3: Observed and simulated wildfire perimeters in the HLP pyrome. 
+
+Figure S5.7.4: Observed and simulated wildfire perimeters in the NCCFACM pyrome. 31 Figure S5.7.5: Observed and simulated wildfire perimeters in the NSN pyrome. 
+
+Figure S5.7.6: Observed and simulated wildfire perimeters in the ONCRR pyrome. 32 Figure S5.7.7: Observed and simulated wildfire perimeters in the SC pyrome. 
+
+Figure S5.7.8: Observed and simulated wildfire perimeters in the SNIRHB pyrome. 33 S5.8 Burned Area Validation  
+
+> (a) (b)
+
+Figure S5.8.1: Observed and simulated burned area in the CCV pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area.  
+
+> (a) (b)
+
+Figure S5.8.2: Observed and simulated burned area in the EC pyrome: (a) 1984–2023 cu-mulative burned area; (b) annual log burned area. 34 (a) (b) 
+
+Figure S5.8.3: Observed and simulated burned area in the HLP pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area.  
+
+> (a) (b)
+
+Figure S5.8.4: Observed and simulated burned area in the KM pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area. 35 (a) (b) 
+
+Figure S5.8.5: Observed and simulated burned area in the NCCFACM pyrome: (a) 1984– 2023 cumulative burned area; (b) annual log burned area.  
+
+> (a) (b)
+
+Figure S5.8.6: Observed and simulated burned area in the NSN pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area. 36 (a) (b) 
+
+Figure S5.8.7: Observed and simulated burned area in the ONCRR pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area.  
+
+> (a) (b)
+
+Figure S5.8.8: Observed and simulated burned area in the SC pyrome: (a) 1984–2023 cu-mulative burned area; (b) annual log burned area. 37 (a) (b) 
+
+Figure S5.8.9: Observed and simulated burned area in the SNIRHB pyrome: (a) 1984–2023 cumulative burned area; (b) annual log burned area. 38
